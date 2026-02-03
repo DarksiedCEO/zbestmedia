@@ -13,6 +13,11 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
+      - name: Enable pnpm (corepack)
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.0 --activate
+          pnpm --version
       - name: Enable Corepack
         run: corepack enable
       - name: Install

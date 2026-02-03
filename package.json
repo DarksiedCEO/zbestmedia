@@ -2,8 +2,9 @@
   "name": "zbest-media",
   "private": true,
   "version": "0.0.0",
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "lint": "eslint \"packages/**/src/**/*.ts\" \"packages/**/test/**/*.ts\" \"scripts/**/*.ts\"",
+    "lint": "eslint \"packages/**/src/**/*.ts\" \"packages/**/test/**/*.ts\" \"services/**/src/**/*.ts\" \"services/**/test/**/*.ts\" \"scripts/**/*.ts\"",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "schemas:gen": "tsx scripts/generate-json-schemas.ts",
