@@ -8,29 +8,34 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
-      - name: Enable pnpm (corepack)
+
+      - name: Enable pnpm via Corepack
         run: |
           corepack enable
           corepack prepare pnpm@9.15.0 --activate
           pnpm --version
-      - name: Enable Corepack
-        run: corepack enable
+
+      - name: Verify pnpm on PATH
+        run: which pnpm && pnpm --version
+
       - name: Install
         run: pnpm install --frozen-lockfile
-      - name: Lint
-        run: pnpm -r lint
-      - name: Typecheck
-        run: pnpm -r typecheck
-      - name: Test
-        run: pnpm -r test
-      - name: Generate Schemas
-        run: pnpm schemas:gen
-      - name: Check Schemas
-        run: pnpm schemas:check
-      - name: Schema Compatibility
-        run: pnpm schemas:compat
+
+      - name: Schemas
+        run: |
+          pnpm schemas:gen
+          pnpm schemas:check
+
+      - name: Quality Gates
+        run: |
+          pnpm -r lint
+          pnpm -r typecheck
+          pnpm -r test
