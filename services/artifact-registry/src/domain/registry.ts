@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { ArtifactMetaSchema, BrandTrinitySchemas } from "@zbest/brand-trinity-schemas";
 import { EvalReportSchema } from "@zbest/eval-gates-schemas";
@@ -155,7 +155,7 @@ export async function sealArtifact(prisma: PrismaClient, publisher: EventPublish
     return existing;
   }
 
-  const sealed = await prisma.$transaction(async (tx) => {
+  const sealed = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const updated = await tx.artifact.update({
       where: { artifactId: args.artifactId },
       data: { immutableAt: new Date() }
