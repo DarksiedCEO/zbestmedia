@@ -1,8 +1,17 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist"
+    "rootDir": "..",
+    "outDir": "dist",
+    "rootDirs": [
+      "src",
+      "../brand-trinity-schemas/src",
+      "../eval-gates-schemas/src"
+    ]
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "../brand-trinity-schemas/src/**/*.ts",
+    "../eval-gates-schemas/src/**/*.ts"
+  ]
 }

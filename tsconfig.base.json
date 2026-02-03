@@ -9,6 +9,21 @@
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
     "resolveJsonModule": true,
-    "noEmit": false
+    "noEmit": false,
+    "lib": [
+      "ES2020"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@zbest/brand-trinity-schemas": [
+        "packages/brand-trinity-schemas/src/index.ts"
+      ],
+      "@zbest/eval-gates-schemas": [
+        "packages/eval-gates-schemas/src/index.ts"
+      ]
+    },
+    "types": [
+      "node"
+    ]
   }
 }

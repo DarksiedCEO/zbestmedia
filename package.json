@@ -11,9 +11,10 @@
     "schemas:compat": "tsx scripts/check-schema-compat.ts"
   },
   "devDependencies": {
+    "@types/node": "^20.14.9",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
-    "eslint": "^9.7.0",
+    "eslint": "^8.57.0",
     "semver": "^7.6.3",
     "tsx": "^4.19.1",
     "typescript": "^5.6.2",
