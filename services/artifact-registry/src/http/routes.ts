@@ -1,4 +1,4 @@
-import { FastifyInstance } from "fastify";
+import { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { StoreRequestSchema, SealRequestSchema } from "./validators";
 import { prisma } from "../db/prisma";
@@ -23,7 +23,19 @@ export async function registerRoutes(app: FastifyInstance) {
         operation: "store"
       });
 
-      const artifact = await storeArtifact(prisma, publisher, body);
+      const artifact = await storeArtifact(prisma, publisher, {
+        requestId: body.requestId,
+        workspaceId: body.workspaceId,
+        brandId: body.brandId,
+        artifactType: body.artifactType,
+        artifactVersion: body.artifactVersion,
+        attempt: body.attempt,
+        input: body.input,
+        payload: body.payload,
+        meta: body.meta,
+        evalReport: body.evalReport,
+        supersedesArtifactId: body.supersedesArtifactId
+      });
       log.info({ artifactId: artifact.artifactId, durationMs: Date.now() - start }, "artifact stored");
       return reply.send({ artifactId: artifact.artifactId, immutableAt: artifact.immutableAt });
     } catch (err) {
@@ -66,7 +78,7 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 }
 
-function handleError(err: unknown, reply: FastifyInstance["reply"]) {
+function handleError(err: unknown, reply: FastifyReply) {
   if (err instanceof z.ZodError) {
     return reply.status(400).send({ error: "VALIDATION", message: err.message });
   }
