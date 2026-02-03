@@ -20,6 +20,12 @@
       ],
       "@zbest/eval-gates-schemas": [
         "packages/eval-gates-schemas/src/index.ts"
+      ],
+      "@zbest/brand-events-contracts": [
+        "packages/brand-events-contracts/src/index.ts"
+      ],
+      "@zbest/id-core": [
+        "packages/id-core/src/index.ts"
       ]
     },
     "types": [

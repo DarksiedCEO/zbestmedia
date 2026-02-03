@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Artifact {
+  artifactId           String    @id @map("artifact_id")
+  workspaceId          String    @map("workspace_id")
+  brandId              String    @map("brand_id")
+  requestId            String    @map("request_id")
+  artifactType         String    @map("artifact_type")
+  artifactVersion      String    @map("artifact_version")
+  attempt              Int
+  inputHash            String    @map("input_hash")
+  payload              Json
+  meta                 Json
+  evalReport           Json?     @map("eval_report")
+  supersedesArtifactId String?   @map("supersedes_artifact_id")
+  immutableAt          DateTime? @map("immutable_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  @@index([workspaceId, artifactType, createdAt], map: "idx_artifacts_workspace_type_created")
+  @@index([brandId, artifactType, createdAt], map: "idx_artifacts_brand_type_created")
+  @@index([requestId], map: "idx_artifacts_request")
+  @@index([supersedesArtifactId], map: "idx_artifacts_supersedes")
+  @@map("artifacts")
+}
+
+model ArtifactLineageEdge {
+  fromArtifactId String   @map("from_artifact_id")
+  toArtifactId   String   @map("to_artifact_id")
+  edgeType       String   @map("edge_type")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@id([fromArtifactId, toArtifactId, edgeType])
+  @@index([toArtifactId], map: "idx_lineage_to")
+  @@map("artifact_lineage_edges")
+}
