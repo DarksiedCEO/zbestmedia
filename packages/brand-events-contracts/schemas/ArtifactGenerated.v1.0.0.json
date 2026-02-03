@@ -1,0 +1,91 @@
+{
+  "type": "object",
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "occurredAt": {
+      "type": "string",
+      "minLength": 1
+    },
+    "eventVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "requestId": {
+      "$ref": "#/properties/eventId"
+    },
+    "artifactId": {
+      "$ref": "#/properties/eventId"
+    },
+    "artifactType": {
+      "type": "string",
+      "minLength": 1
+    },
+    "artifactMeta": {
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requestId": {
+          "$ref": "#/properties/artifactMeta/properties/artifactId"
+        },
+        "artifactType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "schemaVersion": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "lineage": {
+          "type": "object",
+          "properties": {
+            "parentArtifactIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/properties/artifactMeta/properties/artifactId"
+              }
+            },
+            "sourceEventId": {
+              "$ref": "#/properties/artifactMeta/properties/artifactId"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "parentArtifactIds",
+            "sourceEventId",
+            "attempt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "artifactId",
+        "requestId",
+        "artifactType",
+        "schemaVersion",
+        "lineage"
+      ],
+      "additionalProperties": false
+    },
+    "artifact": {}
+  },
+  "required": [
+    "eventId",
+    "occurredAt",
+    "eventVersion",
+    "requestId",
+    "artifactId",
+    "artifactType",
+    "artifactMeta"
+  ],
+  "additionalProperties": false,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

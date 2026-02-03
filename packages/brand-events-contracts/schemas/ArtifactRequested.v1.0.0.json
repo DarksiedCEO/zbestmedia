@@ -1,0 +1,51 @@
+{
+  "type": "object",
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "occurredAt": {
+      "type": "string",
+      "minLength": 1
+    },
+    "eventVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "requestId": {
+      "$ref": "#/properties/eventId"
+    },
+    "artifactType": {
+      "type": "string",
+      "minLength": 1
+    },
+    "brandId": {
+      "$ref": "#/properties/eventId"
+    },
+    "personaId": {
+      "$ref": "#/properties/eventId"
+    },
+    "targetSchemaVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "input": {},
+    "attempt": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "eventId",
+    "occurredAt",
+    "eventVersion",
+    "requestId",
+    "artifactType",
+    "brandId",
+    "targetSchemaVersion",
+    "attempt"
+  ],
+  "additionalProperties": false,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

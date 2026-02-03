@@ -1,0 +1,20 @@
+{
+  "anyOf": [
+    {
+      "type": "string",
+      "enum": [
+        "LOW_SCORE",
+        "OUT_OF_BRAND",
+        "INCOHERENT",
+        "INCOMPLETE",
+        "SAFETY_RISK",
+        "POLICY_VIOLATION"
+      ]
+    },
+    {
+      "type": "string",
+      "minLength": 1
+    }
+  ],
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

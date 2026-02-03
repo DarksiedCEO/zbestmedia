@@ -1,0 +1,174 @@
+{
+  "type": "object",
+  "properties": {
+    "reportId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "artifactId": {
+      "$ref": "#/properties/reportId"
+    },
+    "artifactType": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "overallScore": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "recommendation": {
+      "type": "string",
+      "enum": [
+        "accept",
+        "reject",
+        "regen"
+      ]
+    },
+    "gateResults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "gateId": {
+            "$ref": "#/properties/reportId"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "regen"
+            ]
+          },
+          "reasonCodes": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "LOW_SCORE",
+                    "OUT_OF_BRAND",
+                    "INCOHERENT",
+                    "INCOMPLETE",
+                    "SAFETY_RISK",
+                    "POLICY_VIOLATION"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "minLength": 1
+                }
+              ]
+            }
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "score": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "threshold": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "weight": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "notes": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "name",
+                "score",
+                "threshold",
+                "weight"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "regenDirective": {
+            "type": "object",
+            "properties": {
+              "regen": {
+                "type": "boolean"
+              },
+              "maxAttempts": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "strategy": {
+                "type": "string",
+                "enum": [
+                  "tune",
+                  "rewrite",
+                  "style-shift",
+                  "content-augment"
+                ]
+              },
+              "focusAreas": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "notes": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "regen",
+              "maxAttempts",
+              "strategy",
+              "focusAreas"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "gateId",
+          "status",
+          "reasonCodes",
+          "summary",
+          "metrics"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "reportId",
+    "artifactId",
+    "artifactType",
+    "schemaVersion",
+    "overallScore",
+    "recommendation",
+    "gateResults"
+  ],
+  "additionalProperties": false,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
