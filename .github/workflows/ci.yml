@@ -52,7 +52,7 @@ jobs:
       - name: Prisma generate (if present)
         run: |
           if ls services/*/prisma/schema.prisma >/dev/null 2>&1; then
-            pnpm -r prisma:generate --if-present
+            pnpm -r --if-present prisma:generate
           else
             echo "No Prisma schemas found"
           fi
