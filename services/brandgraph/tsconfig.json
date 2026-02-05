@@ -4,5 +4,6 @@
     "noEmit": true,
     "rootDirs": [".", "../../packages"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "exclude": ["src/generated/prisma/**"]
 }
