@@ -15,7 +15,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
     "test": "vitest run --config vitest.config.ts",
-    "prisma": "prisma"
+    "prisma": "prisma",
+    "prisma:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

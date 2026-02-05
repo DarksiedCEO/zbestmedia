@@ -129,9 +129,9 @@ export async function storeArtifact(prisma: PrismaClient, nc: NatsConnection, ar
       artifactVersion: args.artifactVersion,
       attempt: args.attempt,
       inputHash,
-      payload: args.payload,
-      meta,
-      evalReport: evalReport ?? undefined,
+      payload: args.payload as Prisma.InputJsonValue,
+      meta: meta as Prisma.InputJsonValue,
+      evalReport: (evalReport ?? undefined) as Prisma.InputJsonValue,
       supersedesArtifactId: args.supersedesArtifactId ?? undefined
     }
   });
