@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./test.db"
+}
+
+model Tenant {
+  id        String   @id
+  name      String
+  createdAt DateTime @default(now())
+}
+
+model Brand {
+  id        String   @id
+  tenantId  String
+  name      String
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@unique([tenantId, name])
+}
+
+model GraphEvent {
+  id        String   @id
+  tenantId  String
+  brandId   String?
+  eventType String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([brandId])
+  @@index([createdAt])
+}
