@@ -5,6 +5,7 @@
   },
   "include": [
     "packages/**/*",
-    "scripts/**/*"
+    "scripts/**/*",
+    "services/**/*"
   ]
 }

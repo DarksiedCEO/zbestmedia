@@ -4,9 +4,15 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,6 +45,20 @@ jobs:
 
       - name: Install
         run: pnpm install --frozen-lockfile
+
+      - name: Verify required package scripts
+        run: node .github/scripts/verify-scripts.mjs
+
+      - name: Prisma generate (if present)
+        run: |
+          if ls services/*/prisma/schema.prisma >/dev/null 2>&1; then
+            pnpm -r prisma:generate --if-present
+          else
+            echo "No Prisma schemas found"
+          fi
+
+      - name: Verify tsconfig workspace boundaries
+        run: node .github/scripts/verify-tsconfig.mjs
 
       - name: Schemas
         run: |
