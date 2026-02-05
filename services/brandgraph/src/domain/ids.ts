@@ -22,3 +22,10 @@ export function generateTenantId(name: string): string {
 export function generateEventId(): string {
   return createHash('sha256').update(Math.random().toString() + Date.now().toString()).digest('hex').substring(0, 24);
 }
+
+/**
+ * Deterministic ID for events based on stable inputs.
+ */
+export function makeEventId(input: { tenantId: string; brandId?: string; eventType: string }): string {
+  return createHash('sha256').update(JSON.stringify(input)).digest('hex').substring(0, 24);
+}
