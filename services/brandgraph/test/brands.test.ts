@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../src/server.js';
-import { prisma } from '../src/db/prisma.js';
+import { createInMemoryRepo } from '../src/domain/repo.js';
 import { generateBrandId, generateTenantId } from '../src/domain/ids.js';
 
 describe('BrandGraph CRUD', () => {
-  const app = buildServer();
+  const repo = createInMemoryRepo();
+  const app = buildServer({ repo });
 
   beforeAll(async () => {
     await app.ready();
@@ -14,7 +15,7 @@ describe('BrandGraph CRUD', () => {
 
   afterAll(async () => {
     await app.close();
-    await prisma.$disconnect();
+    // no external DB to disconnect
   });
 
   it('POST /brandgraph/brands creates a brand with deterministic ID', async () => {
@@ -38,13 +39,9 @@ describe('BrandGraph CRUD', () => {
     expect(body.name).toBe(brandName);
     expect(body.tenantId).toBe(expectedTenantId);
 
-    // Verify event was created
-    const event = await prisma.graphEvent.findFirst({
-      where: { brandId: expectedBrandId, eventType: 'BRAND_CREATED' },
-    });
+    const event = await repo.findEventByBrand(expectedBrandId, 'BRAND_CREATED');
     expect(event).toBeDefined();
-    const payload = JSON.parse(event?.payload as string);
-    expect(payload.name).toBe(brandName);
+    expect(event?.payload).toMatchObject({ name: brandName });
   });
 
   it('GET /brandgraph/brands/:id returns the brand', async () => {

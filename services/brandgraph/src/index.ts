@@ -1,11 +1,11 @@
 import { loadEnv } from "./env.js";
 import { buildServer } from "./server.js";
-import { ensureTestDbReady } from "./db/testBootstrap.js";
+import { createInMemoryRepo } from "./domain/repo.js";
 
 async function main() {
   const env = loadEnv();
-  ensureTestDbReady();
-  const app = buildServer();
+  const repo = createInMemoryRepo();
+  const app = buildServer({ repo });
   await app.listen({ port: env.PORT, host: "0.0.0.0" });
 }
 
