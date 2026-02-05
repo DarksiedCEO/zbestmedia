@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.pnpm-store/
+.DS_Store
+.idea/
+services/**/src/generated/**
+services/**/src/generated/prisma/**
+packages/**/src/generated/**
+packages/**/src/generated/prisma/**
