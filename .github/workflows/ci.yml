@@ -53,6 +53,10 @@ jobs:
         run: |
           if ls services/*/prisma/schema.prisma >/dev/null 2>&1; then
             pnpm -r --if-present prisma:generate
+            # Ensure shared Prisma client includes BrandGraph models (Tenant/Brand/GraphEvent)
+            if [ -f services/brandgraph/prisma/schema.prisma ]; then
+              pnpm -C services/brandgraph prisma:generate
+            fi
           else
             echo "No Prisma schemas found"
           fi
