@@ -3,15 +3,27 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
-model Brand {
+model Tenant {
   id        String   @id
   name      String
   createdAt DateTime @default(now())
 
+  brands Brand[]
+}
+
+model Brand {
+  id        String   @id
+  tenantId  String
+  name      String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
   @@index([name])
 }
 
@@ -19,9 +31,49 @@ model GraphEvent {
   id        String   @id
   brandId   String
   eventType String
-  payload   Json
+  payload   String
   createdAt DateTime @default(now())
 
   @@index([brandId])
   @@index([createdAt])
+}
+
+// Artifact Registry Models (Shared Client Hack)
+model Artifact {
+  artifactId           String    @id @map("artifact_id")
+  workspaceId          String    @map("workspace_id")
+  brandId              String    @map("brand_id")
+  requestId            String    @map("request_id")
+  artifactType         String    @map("artifact_type")
+  artifactVersion      String    @map("artifact_version")
+  attempt              Int
+  inputHash            String    @map("input_hash")
+  payload              String
+  meta                 String
+  evalReport           String?   @map("eval_report")
+  supersedesArtifactId String?   @map("supersedes_artifact_id")
+  immutableAt          DateTime? @map("immutable_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  @@map("artifacts")
+}
+
+model ArtifactLineageEdge {
+  fromArtifactId String   @map("from_artifact_id")
+  toArtifactId   String   @map("to_artifact_id")
+  edgeType       String   @map("edge_type")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@id([fromArtifactId, toArtifactId, edgeType])
+  @@map("artifact_lineage_edges")
+}
+
+model EventOutbox {
+  id          String    @id
+  subject     String
+  payload     String
+  createdAt   DateTime  @default(now()) @map("created_at")
+  publishedAt DateTime? @map("published_at")
+
+  @@map("event_outbox")
 }
