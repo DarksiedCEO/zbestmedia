@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { createMemoryPrisma } from "./helpers";
 import { deterministicArtifactId } from "@zbest/id-core";
 import { sealArtifact, storeArtifact } from "../src/domain/registry";
-import type { EventPublisher } from "../src/events/publisher";
 import { RegistryError } from "../src/domain/errors";
 
 function buildMeta(args: { artifactId: string; artifactType: string; requestId: string; attempt: number }) {
@@ -19,15 +18,11 @@ function buildMeta(args: { artifactId: string; artifactType: string; requestId: 
   };
 }
 
-class TestPublisher implements EventPublisher {
-  async publishArtifactStored() {}
-  async publishArtifactSealed() {}
-}
+const mockNc = {} as any;
 
 describe("artifact immutability", () => {
   it("rejects updates after sealing", async () => {
     const prisma = createMemoryPrisma();
-    const publisher = new TestPublisher();
     const input = { prompt: "immutable" };
     const artifactId = deterministicArtifactId({
       requestId: "req-3",
@@ -37,7 +32,7 @@ describe("artifact immutability", () => {
     });
     const meta = buildMeta({ artifactId, artifactType: "BrandBible", requestId: "req-3", attempt: 1 });
 
-    await storeArtifact(prisma, publisher, {
+    await storeArtifact(prisma, mockNc, {
       requestId: "req-3",
       workspaceId: "workspace-1",
       brandId: "brand-1",
@@ -59,7 +54,7 @@ describe("artifact immutability", () => {
       meta
     });
 
-    await sealArtifact(prisma, publisher, {
+    await sealArtifact(prisma, mockNc, {
       artifactId,
       sealedBy: "actor-1",
       sealedReason: "final"
@@ -78,7 +73,7 @@ describe("artifact immutability", () => {
     };
 
     await expect(
-      storeArtifact(prisma, publisher, {
+      storeArtifact(prisma, mockNc, {
         requestId: "req-3",
         workspaceId: "workspace-1",
         brandId: "brand-1",

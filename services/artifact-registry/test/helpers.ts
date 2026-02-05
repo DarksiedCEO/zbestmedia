@@ -52,6 +52,11 @@ export function createMemoryPrisma(): PrismaClient {
         return updated;
       }
     },
+    eventOutbox: {
+      upsert: async () => ({}),
+      findUnique: async () => ({ id: "any", publishedAt: new Date() }), // prevent real publishing attempt in domain tests
+      update: async () => ({})
+    },
     artifactLineageEdge: {
       upsert: async ({ where, create }: { where: { fromArtifactId_toArtifactId_edgeType: { fromArtifactId: string; toArtifactId: string; edgeType: string } }; create: EdgeRecord }) => {
         const existing = edges.find(

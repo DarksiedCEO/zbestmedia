@@ -3,7 +3,6 @@ import { createMemoryPrisma } from "./helpers";
 import { deterministicArtifactId } from "@zbest/id-core";
 import { storeArtifact, sealArtifact } from "../src/domain/registry";
 import { getLineage } from "../src/domain/lineage";
-import type { EventPublisher } from "../src/events/publisher";
 
 function buildMeta(args: { artifactId: string; artifactType: string; requestId: string; attempt: number }) {
   return {
@@ -19,15 +18,11 @@ function buildMeta(args: { artifactId: string; artifactType: string; requestId: 
   };
 }
 
-class TestPublisher implements EventPublisher {
-  async publishArtifactStored() {}
-  async publishArtifactSealed() {}
-}
+const mockNc = {} as any;
 
 describe("artifact lineage", () => {
   it("returns supersedes chain", async () => {
     const prisma = createMemoryPrisma();
-    const publisher = new TestPublisher();
 
     const inputA = { prompt: "A" };
     const artifactIdA = deterministicArtifactId({
@@ -38,7 +33,7 @@ describe("artifact lineage", () => {
     });
     const metaA = buildMeta({ artifactId: artifactIdA, artifactType: "BrandBible", requestId: "req-A", attempt: 1 });
 
-    await storeArtifact(prisma, publisher, {
+    await storeArtifact(prisma, mockNc, {
       requestId: "req-A",
       workspaceId: "workspace-1",
       brandId: "brand-1",
@@ -69,7 +64,7 @@ describe("artifact lineage", () => {
     });
     const metaB = buildMeta({ artifactId: artifactIdB, artifactType: "BrandBible", requestId: "req-B", attempt: 1 });
 
-    await storeArtifact(prisma, publisher, {
+    await storeArtifact(prisma, mockNc, {
       requestId: "req-B",
       workspaceId: "workspace-1",
       brandId: "brand-1",
@@ -92,7 +87,7 @@ describe("artifact lineage", () => {
       supersedesArtifactId: artifactIdA
     });
 
-    await sealArtifact(prisma, publisher, {
+    await sealArtifact(prisma, mockNc, {
       artifactId: artifactIdB,
       sealedBy: "actor-1",
       sealedReason: "supersedes"

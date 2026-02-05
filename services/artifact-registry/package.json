@@ -14,7 +14,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
-    "test": "vitest run --config ../../vitest.config.ts",
+    "test": "vitest run --config vitest.config.ts",
     "prisma": "prisma"
   },
   "dependencies": {
@@ -25,7 +25,8 @@
     "@zbest/id-core": "workspace:*",
     "fastify": "^4.28.1",
     "pino": "^9.3.2",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "nats": "^2.29.2"
   },
   "devDependencies": {
     "prisma": "^5.22.0",

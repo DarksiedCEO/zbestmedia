@@ -4,7 +4,9 @@ import { ArtifactMetaSchema, BrandTrinitySchemas } from "@zbest/brand-trinity-sc
 import { EvalReportSchema } from "@zbest/eval-gates-schemas";
 import { canonicalize, deterministicArtifactId, sha256Hex } from "@zbest/id-core";
 import { Errors } from "./errors";
-import { createArtifactSealedEvent, createArtifactStoredEvent, EventPublisher } from "../events/publisher";
+import { makeEventId } from "../events/eventId.js";
+import { publishOutboxOnce } from "../events/outbox.js";
+import type { NatsConnection } from "nats";
 
 const SupersedesEdge = "supersedes";
 
@@ -66,7 +68,7 @@ export type SealArgs = {
   sealedReason: string;
 };
 
-export async function storeArtifact(prisma: PrismaClient, publisher: EventPublisher, args: StoreArgs) {
+export async function storeArtifact(prisma: PrismaClient, nc: NatsConnection, args: StoreArgs) {
   const artifactId = deterministicArtifactId({
     requestId: args.requestId,
     artifactType: args.artifactType,
@@ -134,18 +136,40 @@ export async function storeArtifact(prisma: PrismaClient, publisher: EventPublis
     }
   });
 
-  const event = createArtifactStoredEvent({
-    eventVersion: "1.0.0",
+  const subject = "zbest.artifacts.stored.v1";
+  const eventId = makeEventId({
+    schemaVersion: 1,
+    eventName: "ArtifactStored",
     artifactId,
-    storageKey: `db:${artifactId}`,
-    checksum: inputHash
+    requestId: args.requestId,
+    attempt: args.attempt,
   });
-  await publisher.publishArtifactStored(event);
+
+  await publishOutboxOnce({
+    prisma,
+    nc,
+    subject,
+    eventId,
+    payload: {
+      schemaVersion: 1,
+      eventId,
+      eventName: "ArtifactStored",
+      occurredAt: new Date().toISOString(),
+      trace: { requestId: args.requestId, artifactId },
+      data: {
+        artifactType: args.artifactType,
+        attempt: args.attempt,
+        sha256: inputHash,
+        sizeBytes: (args.payload as any)?.sizeBytes ?? 1, // fallback if not present
+        supersedesArtifactId: args.supersedesArtifactId,
+      },
+    },
+  });
 
   return created;
 }
 
-export async function sealArtifact(prisma: PrismaClient, publisher: EventPublisher, args: SealArgs) {
+export async function sealArtifact(prisma: PrismaClient, nc: NatsConnection, args: SealArgs) {
   const existing = await prisma.artifact.findUnique({ where: { artifactId: args.artifactId } });
   if (!existing) {
     throw Errors.NotFound("artifact not found");
@@ -182,13 +206,31 @@ export async function sealArtifact(prisma: PrismaClient, publisher: EventPublish
     return updated;
   });
 
-  const event = createArtifactSealedEvent({
-    eventVersion: "1.0.0",
+  const subject = "zbest.artifacts.sealed.v1";
+  const eventId = makeEventId({
+    schemaVersion: 1,
+    eventName: "ArtifactSealed",
     artifactId: sealed.artifactId,
-    sealVersion: sealed.artifactVersion,
-    signer: args.sealedBy
+    requestId: sealed.requestId,
   });
-  await publisher.publishArtifactSealed(event);
+
+  await publishOutboxOnce({
+    prisma,
+    nc,
+    subject,
+    eventId,
+    payload: {
+      schemaVersion: 1,
+      eventId,
+      eventName: "ArtifactSealed",
+      occurredAt: new Date().toISOString(),
+      trace: { requestId: sealed.requestId, artifactId: sealed.artifactId },
+      data: {
+        sealedBy: args.sealedBy,
+        sealReason: args.sealedReason,
+      },
+    },
+  });
 
   return sealed;
 }

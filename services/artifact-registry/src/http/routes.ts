@@ -2,15 +2,13 @@ import { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { StoreRequestSchema, SealRequestSchema } from "./validators";
 import { prisma } from "../db/prisma";
-import { NoopPublisher } from "../events/publisher";
 import { getArtifact, sealArtifact, storeArtifact } from "../domain/registry";
 import { getLineage } from "../domain/lineage";
 import { RegistryError } from "../domain/errors";
 import { withContext } from "../log";
+import type { NatsConnection } from "nats";
 
-const publisher = new NoopPublisher();
-
-export async function registerRoutes(app: FastifyInstance) {
+export async function registerRoutes(app: FastifyInstance, nc: NatsConnection) {
   app.post("/registry/store", async (request, reply) => {
     const start = Date.now();
     try {
@@ -23,7 +21,7 @@ export async function registerRoutes(app: FastifyInstance) {
         operation: "store"
       });
 
-      const artifact = await storeArtifact(prisma, publisher, {
+      const artifact = await storeArtifact(prisma, nc, {
         requestId: body.requestId,
         workspaceId: body.workspaceId,
         brandId: body.brandId,
@@ -49,7 +47,7 @@ export async function registerRoutes(app: FastifyInstance) {
       const body = SealRequestSchema.parse(request.body);
       const log = withContext({ artifactId: body.artifactId, operation: "seal" });
 
-      const artifact = await sealArtifact(prisma, publisher, body);
+      const artifact = await sealArtifact(prisma, nc, body);
       log.info({ artifactId: artifact.artifactId, durationMs: Date.now() - start }, "artifact sealed");
       return reply.send({ artifactId: artifact.artifactId, immutableAt: artifact.immutableAt });
     } catch (err) {

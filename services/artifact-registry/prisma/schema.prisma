@@ -40,3 +40,14 @@ model ArtifactLineageEdge {
   @@index([toArtifactId], map: "idx_lineage_to")
   @@map("artifact_lineage_edges")
 }
+
+model EventOutbox {
+  id          String    @id // eventId (deterministic)
+  subject     String
+  payload     Json
+  createdAt   DateTime  @default(now()) @map("created_at")
+  publishedAt DateTime? @map("published_at")
+
+  @@index([publishedAt])
+  @@map("event_outbox")
+}
