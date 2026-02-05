@@ -39,6 +39,7 @@ export async function brandRoutes(app: FastifyInstance) {
       const event = await tx.graphEvent.create({
         data: {
           id: generateEventId(),
+          tenantId,
           brandId,
           eventType: 'BRAND_CREATED',
           payload: JSON.stringify({ name, tenantId, timestamp: new Date().toISOString() }),
