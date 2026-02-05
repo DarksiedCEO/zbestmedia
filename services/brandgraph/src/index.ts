@@ -1,11 +1,10 @@
 import { loadEnv } from "./env.js";
 import { buildServer } from "./server.js";
-import { createInMemoryRepo } from "./domain/repo.js";
+import { createBrandGraphRepo } from "./domain/repo.js";
 
 async function main() {
   const env = loadEnv();
-  const repo = createInMemoryRepo();
-  const app = buildServer({ repo });
+  const app = buildServer({ repo: createBrandGraphRepo() });
   await app.listen({ port: env.PORT, host: "0.0.0.0" });
 }
 
