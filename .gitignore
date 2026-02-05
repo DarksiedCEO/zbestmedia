@@ -5,3 +5,4 @@ dist/
 .idea/
 services/**/prisma/*.db
 services/**/prisma/dev.db
+services/**/src/generated/prisma/
