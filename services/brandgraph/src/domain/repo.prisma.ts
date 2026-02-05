@@ -1,4 +1,4 @@
-import type { PrismaClient } from "../generated/prisma/index.js";
+import { Prisma, type PrismaClient } from "../generated/prisma/index.js";
 import type { ArtifactLink, Brand, BrandGraphRepo, GraphEvent } from "./repo.js";
 
 type PrismaBrand = {
@@ -26,12 +26,6 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
         id: input.id,
         tenantId: input.tenantId,
         name: input.name,
-        tenant: {
-          connectOrCreate: {
-            where: { id: input.tenantId },
-            create: { id: input.tenantId, name: input.tenantId },
-          },
-        },
       },
     });
 
@@ -56,7 +50,7 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
             tenantId: input.tenantId,
             brandId: input.brandId,
             eventType: input.eventType,
-            payload: input.payload,
+            payload: input.payload as Prisma.InputJsonValue,
           },
         });
         return this.toGraphEvent(created);
@@ -69,7 +63,7 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
         tenantId: input.tenantId,
         brandId: input.brandId ?? null,
         eventType: input.eventType,
-        payload: input.payload,
+        payload: input.payload as Prisma.InputJsonValue,
       },
     });
 
@@ -102,7 +96,7 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
         payload: {
           artifactId: input.artifactId,
           artifactType: input.artifactType ?? null,
-        },
+        } as Prisma.InputJsonValue,
       },
     });
 
