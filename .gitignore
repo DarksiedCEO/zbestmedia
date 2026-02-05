@@ -3,3 +3,5 @@ dist/
 .pnpm-store/
 .DS_Store
 .idea/
+services/**/prisma/*.db
+services/**/prisma/dev.db
