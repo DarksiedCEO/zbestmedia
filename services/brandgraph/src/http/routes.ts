@@ -2,14 +2,20 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { generateBrandId, generateEventId, generateTenantId, makeEventId } from '../domain/ids.js';
 import type { BrandGraphRepo } from '../domain/repo.js';
+import { createArtifactLinkWorkflow } from '../workflows/artifactLink.workflow.js';
+import { WorkflowRunner } from '../workflows/runner.js';
 
 const CreateBrandSchema = z.object({
   name: z.string().min(1),
   tenantName: z.string().optional().default('Default Tenant'),
 });
 
-export async function brandRoutes(app: FastifyInstance, deps: { repo: BrandGraphRepo }) {
+export async function brandRoutes(
+  app: FastifyInstance,
+  deps: { repo: BrandGraphRepo; workflowRunner?: WorkflowRunner }
+) {
   const { repo } = deps;
+  const workflowRunner = deps.workflowRunner ?? new WorkflowRunner(repo);
   // POST /brandgraph/brands
   app.post('/brands', async (request, reply) => {
     const { name, tenantName } = CreateBrandSchema.parse(request.body);
@@ -70,6 +76,11 @@ export async function brandRoutes(app: FastifyInstance, deps: { repo: BrandGraph
       brandId,
       eventType: 'ARTIFACT_LINKED',
       payload: { artifactId: link.artifactId, artifactType: link.artifactType ?? null },
+    });
+
+    await workflowRunner.run(createArtifactLinkWorkflow(repo), {
+      tenantId: brand.tenantId,
+      brandId,
     });
 
     return reply.code(200).send(link);
