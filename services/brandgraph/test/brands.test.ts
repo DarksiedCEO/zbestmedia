@@ -109,6 +109,29 @@ describe('BrandGraph CRUD', () => {
     expect(linkRes2.statusCode).toBe(200);
   });
 
+  it('runs artifact link workflow and emits graph snapshot events', async () => {
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/brandgraph/brands',
+      payload: { tenantName: 'Acme', name: `WorkflowCo-${Date.now()}` },
+    });
+
+    expect(createRes.statusCode).toBe(201);
+    const created = JSON.parse(createRes.payload) as { id: string };
+
+    await app.inject({
+      method: 'POST',
+      url: `/brandgraph/brands/${created.id}/artifacts/link`,
+      payload: { artifactId: 'art_workflow', artifactType: 'Workflow' },
+    });
+
+    const snapshotEvent = await repo.findEventByBrand(created.id, 'GRAPH_SNAPSHOT_UPDATED');
+    expect(snapshotEvent).toBeDefined();
+
+    const workflowEvent = await repo.findEventByBrand(created.id, 'WORKFLOW_STEP_COMPLETED');
+    expect(workflowEvent).toBeDefined();
+  });
+
   it('GET /brandgraph/brands/:id/graph returns linkedArtifacts', async () => {
     const createRes = await app.inject({
       method: 'POST',
