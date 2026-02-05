@@ -1,3 +1,6 @@
+import { prisma } from "../db/prisma.js";
+import { PrismaBrandGraphRepo } from "./repo.prisma.js";
+
 export type Brand = {
   id: string;
   tenantId: string;
@@ -26,6 +29,15 @@ export interface BrandGraphRepo {
     artifactType?: string | null;
   }): Promise<ArtifactLink>;
   listArtifactLinks(brandId: string): Promise<ArtifactLink[]>;
+}
+
+const isTest = process.env.NODE_ENV === "test" || process.env.BRANDGRAPH_DB === "test";
+
+export function createBrandGraphRepo(): BrandGraphRepo {
+  if (isTest) {
+    return createInMemoryRepo();
+  }
+  return new PrismaBrandGraphRepo(prisma);
 }
 
 export function createInMemoryRepo(): BrandGraphRepo {
