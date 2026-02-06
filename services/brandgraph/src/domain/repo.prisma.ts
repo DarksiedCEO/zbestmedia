@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from "../generated/prisma/index.js";
-import { GraphSnapshot, GraphSnapshotList } from './graph';
+import { GraphQueryOptions, GraphSnapshot, GraphSnapshotList } from './graph';
 import type { ArtifactLink, Brand, BrandGraphRepo, GraphEvent } from "./repo.js";
 
 type PrismaBrand = {
@@ -113,31 +113,55 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
     return events.map((event) => this.toArtifactLink(event)).filter((link) => link.artifactId);
   }
 
-  async getGraph(brandId: string): Promise<GraphSnapshot> {
+  async getGraph(brandId: string, options: GraphQueryOptions = {}): Promise<GraphSnapshot> {
+    const DEFAULT_LIMIT = 100;
+    const {
+      limit = DEFAULT_LIMIT,
+      cursor,
+      fromTimestamp,
+      toTimestamp,
+      eventTypes,
+    } = options;
+
+    const allowedEventTypes = eventTypes?.length ? eventTypes : ['ARTIFACT_LINKED'];
+
     const events = await this.prisma.graphEvent.findMany({
-      where: { brandId, eventType: 'ARTIFACT_LINKED' },
-      orderBy: { createdAt: 'asc' },
+      where: {
+        brandId,
+        eventType: { in: allowedEventTypes },
+        ...(cursor ? { id: { gt: cursor } } : {}),
+        ...(fromTimestamp ? { createdAt: { gte: new Date(fromTimestamp) } } : {}),
+        ...(toTimestamp ? { createdAt: { lte: new Date(toTimestamp) } } : {}),
+      },
+      orderBy: [
+        { createdAt: 'asc' },
+        { id: 'asc' },
+      ],
+      take: limit,
     });
 
-    const nodes = new Map<string, { id: string; type: 'brand' | 'artifact' }>();
+    const nodes = new Map<string, { id: string; type: 'brand' | 'artifact'; label: string }>();
     const edges = [];
 
-    nodes.set(brandId, { id: brandId, type: 'brand' });
+    nodes.set(brandId, { id: brandId, type: 'brand', label: brandId });
 
     for (const e of events) {
-      const payload = e.payload as { artifactId: string };
+      const artifactId = this.getArtifactId(e.payload);
+      if (!artifactId) continue;
 
-      nodes.set(payload.artifactId, {
-        id: payload.artifactId,
+      nodes.set(artifactId, {
+        id: artifactId,
         type: 'artifact',
+        label: artifactId,
       });
 
       edges.push({
+        id: e.id,
         from: brandId,
-        to: payload.artifactId,
+        to: artifactId,
         type: 'ARTIFACT_LINKED' as const,
-        eventId: e.id,
         createdAt: e.createdAt.toISOString(),
+        eventId: e.id,
       });
     }
 
@@ -145,13 +169,35 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
       brandId,
       nodes: Array.from(nodes.values()),
       edges,
+      generatedAt: new Date().toISOString(),
     };
   }
 
-  async getGraphSnapshots(brandId: string): Promise<GraphSnapshotList> {
+  async getGraphSnapshots(brandId: string, options: GraphQueryOptions = {}): Promise<GraphSnapshotList> {
+    const DEFAULT_LIMIT = 100;
+    const {
+      limit = DEFAULT_LIMIT,
+      cursor,
+      fromTimestamp,
+      toTimestamp,
+      eventTypes,
+    } = options;
+
+    const allowedEventTypes = eventTypes?.length ? eventTypes : ['ARTIFACT_LINKED'];
+
     const events = await this.prisma.graphEvent.findMany({
-      where: { brandId, eventType: 'ARTIFACT_LINKED' },
-      orderBy: { createdAt: 'desc' },
+      where: {
+        brandId,
+        eventType: { in: allowedEventTypes },
+        ...(cursor ? { id: { gt: cursor } } : {}),
+        ...(fromTimestamp ? { createdAt: { gte: new Date(fromTimestamp) } } : {}),
+        ...(toTimestamp ? { createdAt: { lte: new Date(toTimestamp) } } : {}),
+      },
+      orderBy: [
+        { createdAt: 'asc' },
+        { id: 'asc' },
+      ],
+      take: limit,
     });
 
     return {

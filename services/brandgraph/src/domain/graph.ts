@@ -3,20 +3,23 @@ export type GraphNodeType = 'brand' | 'artifact';
 export interface GraphNode {
   id: string;
   type: GraphNodeType;
+  label: string;
 }
 
 export interface GraphEdge {
+  id: string;
   from: string;
   to: string;
   type: 'ARTIFACT_LINKED';
-  eventId: string;
   createdAt: string;
+  eventId?: string;
 }
 
 export interface GraphSnapshot {
   brandId: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
+  generatedAt: string;
 }
 
 export interface GraphSnapshotMeta {
@@ -27,4 +30,15 @@ export interface GraphSnapshotMeta {
 export interface GraphSnapshotList {
   brandId: string;
   snapshots: GraphSnapshotMeta[];
+}
+
+/**
+ * Deterministic read-only query options
+ */
+export interface GraphQueryOptions {
+  limit?: number;              // default enforced in repo
+  cursor?: string;             // eventId cursor
+  eventTypes?: Array<'ARTIFACT_LINKED'>;
+  fromTimestamp?: string;
+  toTimestamp?: string;
 }

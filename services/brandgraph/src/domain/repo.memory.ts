@@ -1,33 +1,59 @@
 import { BrandGraphRepo, ArtifactLink } from './repo';
-import { GraphSnapshot, GraphSnapshotList } from './graph';
+import { GraphQueryOptions, GraphSnapshot, GraphSnapshotList } from './graph';
 
 export class InMemoryBrandGraphRepo implements BrandGraphRepo {
   constructor(
     private readonly links: ArtifactLink[] = []
   ) {}
 
-  async createBrand(input: { id: string; tenantId: string; name: string }) { return {} as any; }
-  async getBrand(id: string) { return null; }
-  async createEvent(input: any) { return {} as any; }
-  async findEventByBrand(brandId: string, eventType: string) { return null; }
-  async linkArtifact(input: any) { return {} as any; }
-  async listArtifactLinks(brandId: string) { return []; }
+  async createBrand(_input: { id: string; tenantId: string; name: string }) { return {} as any; }
+  async getBrand(_id: string) { return null; }
+  async createEvent(_input: any) { return {} as any; }
+  async findEventByBrand(_brandId: string, _eventType: string) { return null; }
+  async linkArtifact(_input: any) { return {} as any; }
+  async listArtifactLinks(_brandId: string) { return []; }
 
-  async getGraph(brandId: string): Promise<GraphSnapshot> {
-    const nodes = new Map<string, { id: string; type: 'brand' | 'artifact' }>();
+  async getGraph(brandId: string, options: GraphQueryOptions = {}): Promise<GraphSnapshot> {
+    const DEFAULT_LIMIT = 100;
+    const { limit = DEFAULT_LIMIT, cursor, fromTimestamp, toTimestamp } = options;
+
+    let filtered = this.links.filter(l => l.brandId === brandId);
+
+    if (cursor) {
+      filtered = filtered.filter(l => l.eventId > cursor);
+    }
+
+    if (fromTimestamp) {
+      filtered = filtered.filter(l => l.createdAt >= fromTimestamp);
+    }
+
+    if (toTimestamp) {
+      filtered = filtered.filter(l => l.createdAt <= toTimestamp);
+    }
+
+    filtered = filtered
+      .sort((a, b) =>
+        a.createdAt === b.createdAt
+          ? a.eventId.localeCompare(b.eventId)
+          : a.createdAt.localeCompare(b.createdAt)
+      )
+      .slice(0, limit);
+
+    const nodes = new Map<string, { id: string; type: 'brand' | 'artifact'; label: string }>();
     const edges = [];
 
-    nodes.set(brandId, { id: brandId, type: 'brand' });
+    nodes.set(brandId, { id: brandId, type: 'brand', label: brandId });
 
-    for (const link of this.links.filter(l => l.brandId === brandId)) {
-      nodes.set(link.artifactId, { id: link.artifactId, type: 'artifact' });
+    for (const link of filtered) {
+      nodes.set(link.artifactId, { id: link.artifactId, type: 'artifact', label: link.artifactId });
 
       edges.push({
+        id: link.eventId,
         from: brandId,
         to: link.artifactId,
         type: 'ARTIFACT_LINKED' as const,
-        eventId: link.eventId,
         createdAt: link.createdAt,
+        eventId: link.eventId,
       });
     }
 
@@ -35,16 +61,38 @@ export class InMemoryBrandGraphRepo implements BrandGraphRepo {
       brandId,
       nodes: Array.from(nodes.values()),
       edges,
+      generatedAt: new Date().toISOString(),
     };
   }
 
-  async getGraphSnapshots(brandId: string): Promise<GraphSnapshotList> {
-    const snapshots = this.links
-      .filter(l => l.brandId === brandId)
-      .map(l => ({
-        eventId: l.eventId,
-        createdAt: l.createdAt,
-      }));
+  async getGraphSnapshots(brandId: string, options: GraphQueryOptions = {}): Promise<GraphSnapshotList> {
+    const DEFAULT_LIMIT = 100;
+    const { limit = DEFAULT_LIMIT, cursor, fromTimestamp, toTimestamp } = options;
+
+    let filtered = this.links.filter(l => l.brandId === brandId);
+
+    if (cursor) {
+      filtered = filtered.filter(l => l.eventId > cursor);
+    }
+
+    if (fromTimestamp) {
+      filtered = filtered.filter(l => l.createdAt >= fromTimestamp);
+    }
+
+    if (toTimestamp) {
+      filtered = filtered.filter(l => l.createdAt <= toTimestamp);
+    }
+
+    filtered = filtered.sort((a, b) =>
+      a.createdAt === b.createdAt
+        ? a.eventId.localeCompare(b.eventId)
+        : a.createdAt.localeCompare(b.createdAt)
+    );
+
+    const snapshots = filtered.slice(0, limit).map(l => ({
+      eventId: l.eventId,
+      createdAt: l.createdAt,
+    }));
 
     return { brandId, snapshots };
   }

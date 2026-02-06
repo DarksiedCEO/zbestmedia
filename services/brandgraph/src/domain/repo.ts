@@ -1,6 +1,6 @@
 import { prisma } from "../db/prisma.js";
 import { PrismaBrandGraphRepo } from "./repo.prisma.js";
-import { GraphSnapshot, GraphSnapshotList } from './graph.js';
+import { GraphQueryOptions, GraphSnapshot, GraphSnapshotList } from './graph.js';
 
 export type Brand = {
   id: string;
@@ -32,10 +32,10 @@ export interface BrandGraphRepo {
   listArtifactLinks(brandId: string): Promise<ArtifactLink[]>;
 
   /** Read-only full graph projection */
-  getGraph(brandId: string): Promise<GraphSnapshot>;
+  getGraph(brandId: string, options?: GraphQueryOptions): Promise<GraphSnapshot>;
 
   /** Historical snapshot index */
-  getGraphSnapshots(brandId: string): Promise<GraphSnapshotList>;
+  getGraphSnapshots(brandId: string, options?: GraphQueryOptions): Promise<GraphSnapshotList>;
 }
 
 const isTest = process.env.NODE_ENV === "test" || process.env.BRANDGRAPH_DB === "test";
@@ -51,6 +51,13 @@ export function createInMemoryRepo(): BrandGraphRepo {
   const brands = new Map<string, Brand>();
   const events: GraphEvent[] = [];
   const artifactLinks = new Map<string, ArtifactLink>();
+  const DEFAULT_LIMIT = 100;
+
+  const getArtifactId = (payload: unknown): string | null => {
+    if (!payload || typeof payload !== "object") return null;
+    const record = payload as Record<string, unknown>;
+    return typeof record.artifactId === "string" ? record.artifactId : null;
+  };
 
   return {
     async createBrand({ id, tenantId, name }) {
@@ -92,21 +99,62 @@ export function createInMemoryRepo(): BrandGraphRepo {
     async listArtifactLinks(brandId) {
       return Array.from(artifactLinks.values()).filter((link) => link.brandId === brandId);
     },
-    async getGraph(brandId) {
-      const nodes = new Map<string, { id: string; type: 'brand' | 'artifact' }>();
+    async getGraph(brandId, options = {}) {
+      const {
+        limit = DEFAULT_LIMIT,
+        cursor,
+        fromTimestamp,
+        toTimestamp,
+        eventTypes,
+      } = options;
+
+      let filtered = events.filter((evt) => evt.brandId === brandId);
+      const allowedEventTypes = eventTypes?.length ? new Set(eventTypes) : null;
+
+      if (allowedEventTypes) {
+        filtered = filtered.filter((evt) => allowedEventTypes.has(evt.eventType as 'ARTIFACT_LINKED'));
+      } else {
+        filtered = filtered.filter((evt) => evt.eventType === 'ARTIFACT_LINKED');
+      }
+
+      if (cursor) {
+        filtered = filtered.filter((evt) => evt.id > cursor);
+      }
+
+      if (fromTimestamp) {
+        filtered = filtered.filter((evt) => evt.createdAt >= fromTimestamp);
+      }
+
+      if (toTimestamp) {
+        filtered = filtered.filter((evt) => evt.createdAt <= toTimestamp);
+      }
+
+      filtered = filtered
+        .sort((a, b) =>
+          a.createdAt === b.createdAt
+            ? a.id.localeCompare(b.id)
+            : a.createdAt.localeCompare(b.createdAt)
+        )
+        .slice(0, limit);
+
+      const nodes = new Map<string, { id: string; type: 'brand' | 'artifact'; label: string }>();
       const edges = [];
 
-      nodes.set(brandId, { id: brandId, type: 'brand' });
+      nodes.set(brandId, { id: brandId, type: 'brand', label: brandId });
 
-      for (const link of Array.from(artifactLinks.values()).filter(l => l.brandId === brandId)) {
-        nodes.set(link.artifactId, { id: link.artifactId, type: 'artifact' });
+      for (const evt of filtered) {
+        const artifactId = getArtifactId(evt.payload);
+        if (!artifactId) continue;
+
+        nodes.set(artifactId, { id: artifactId, type: 'artifact', label: artifactId });
 
         edges.push({
+          id: evt.id,
           from: brandId,
-          to: link.artifactId,
+          to: artifactId,
           type: 'ARTIFACT_LINKED' as const,
-          eventId: link.eventId,
-          createdAt: link.createdAt,
+          createdAt: evt.createdAt,
+          eventId: evt.id,
         });
       }
 
@@ -114,15 +162,49 @@ export function createInMemoryRepo(): BrandGraphRepo {
         brandId,
         nodes: Array.from(nodes.values()),
         edges,
+        generatedAt: new Date().toISOString(),
       };
     },
-    async getGraphSnapshots(brandId) {
-      const snapshots = Array.from(artifactLinks.values())
-        .filter(l => l.brandId === brandId)
-        .map(l => ({
-          eventId: l.eventId,
-          createdAt: l.createdAt,
-        }));
+    async getGraphSnapshots(brandId, options = {}) {
+      const {
+        limit = DEFAULT_LIMIT,
+        cursor,
+        fromTimestamp,
+        toTimestamp,
+        eventTypes,
+      } = options;
+
+      let filtered = events.filter((evt) => evt.brandId === brandId);
+      const allowedEventTypes = eventTypes?.length ? new Set(eventTypes) : null;
+
+      if (allowedEventTypes) {
+        filtered = filtered.filter((evt) => allowedEventTypes.has(evt.eventType as 'ARTIFACT_LINKED'));
+      } else {
+        filtered = filtered.filter((evt) => evt.eventType === 'ARTIFACT_LINKED');
+      }
+
+      if (cursor) {
+        filtered = filtered.filter((evt) => evt.id > cursor);
+      }
+
+      if (fromTimestamp) {
+        filtered = filtered.filter((evt) => evt.createdAt >= fromTimestamp);
+      }
+
+      if (toTimestamp) {
+        filtered = filtered.filter((evt) => evt.createdAt <= toTimestamp);
+      }
+
+      filtered = filtered.sort((a, b) =>
+        a.createdAt === b.createdAt
+          ? a.id.localeCompare(b.id)
+          : a.createdAt.localeCompare(b.createdAt)
+      );
+
+      const snapshots = filtered.slice(0, limit).map((evt) => ({
+        eventId: evt.id,
+        createdAt: evt.createdAt,
+      }));
 
       return { brandId, snapshots };
     }
