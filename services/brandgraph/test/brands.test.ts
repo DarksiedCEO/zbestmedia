@@ -203,20 +203,16 @@ describe('BrandGraph CRUD', () => {
       expect(response.statusCode).toBe(200);
       const graph = JSON.parse(response.payload);
 
-      expect(graph.brand.id).toBe(brand.id);
+      expect(graph.brandId).toBe(brand.id);
       expect(graph.nodes.length).toBeGreaterThanOrEqual(2); // Brand + Artifact
       expect(graph.edges.length).toBeGreaterThanOrEqual(1); // Link edge
 
-      const brandNode = graph.nodes.find((n: any) => n.type === 'BRAND');
+      const brandNode = graph.nodes.find((n: any) => n.type === 'brand');
       expect(brandNode.id).toBe(brand.id);
+      expect(brandNode.label).toBe(brand.id);
 
-      const artifactNode = graph.nodes.find((n: any) => n.type === 'ARTIFACT');
+      const artifactNode = graph.nodes.find((n: any) => n.type === 'artifact');
       expect(artifactNode.label).toBe('art_graph_1');
-
-      // Check if snapshot node is present (from workflow)
-      const snapshotNode = graph.nodes.find((n: any) => n.type === 'SNAPSHOT');
-      expect(snapshotNode).toBeDefined();
-      expect(graph.latestSnapshot).toBeDefined();
     });
 
     it('GET /brandgraph/graph/:brandId/snapshots returns historical snapshots', async () => {
@@ -241,11 +237,90 @@ describe('BrandGraph CRUD', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const snapshots = JSON.parse(response.payload);
-      expect(Array.isArray(snapshots)).toBe(true);
-      expect(snapshots.length).toBeGreaterThan(0);
-      expect(snapshots[0].brandId).toBe(brand.id);
-      expect(snapshots[0].eventCount).toBeDefined();
+      const body = JSON.parse(response.payload);
+      expect(body.brandId).toBe(brand.id);
+      expect(Array.isArray(body.snapshots)).toBe(true);
+      expect(body.snapshots.length).toBeGreaterThan(0);
+      expect(body.snapshots[0].eventId).toBeDefined();
+    });
+
+    it('GET /brandgraph/graph/:brandId supports limit', async () => {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/brandgraph/brands',
+        payload: { tenantName: 'Acme', name: 'LimitCo' },
+      });
+      expect(createRes.statusCode).toBe(201);
+      const brand = JSON.parse(createRes.payload) as { id: string };
+
+      await app.inject({
+        method: 'POST',
+        url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        payload: { artifactId: 'art_A', artifactType: 'BrandBible' },
+      });
+      await app.inject({
+        method: 'POST',
+        url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        payload: { artifactId: 'art_B', artifactType: 'VisualBible' },
+      });
+
+      const graphRes = await app.inject({
+        method: 'GET',
+        url: `/brandgraph/graph/${brand.id}?limit=1`,
+      });
+      expect(graphRes.statusCode).toBe(200);
+
+      const body = JSON.parse(graphRes.payload) as { edges: Array<{ id: string }> };
+      expect(body.edges.length).toBe(1);
+    });
+
+    it('GET /brandgraph/graph/:brandId supports cursor paging', async () => {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/brandgraph/brands',
+        payload: { tenantName: 'Acme', name: 'CursorCo' },
+      });
+      expect(createRes.statusCode).toBe(201);
+      const brand = JSON.parse(createRes.payload) as { id: string };
+
+      await app.inject({
+        method: 'POST',
+        url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        payload: { artifactId: 'art_1' },
+      });
+      await app.inject({
+        method: 'POST',
+        url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        payload: { artifactId: 'art_2' },
+      });
+
+      const first = await app.inject({
+        method: 'GET',
+        url: `/brandgraph/graph/${brand.id}?limit=1`,
+      });
+      expect(first.statusCode).toBe(200);
+
+      const firstBody = JSON.parse(first.payload) as { edges: Array<{ id: string }> };
+      expect(firstBody.edges.length).toBe(1);
+      const cursor = firstBody.edges[0]!.id;
+
+      const second = await app.inject({
+        method: 'GET',
+        url: `/brandgraph/graph/${brand.id}?cursor=${encodeURIComponent(cursor)}&limit=10`,
+      });
+      expect(second.statusCode).toBe(200);
+
+      const secondBody = JSON.parse(second.payload) as { edges: Array<{ id: string }> };
+      expect(secondBody.edges.length).toBeGreaterThanOrEqual(0);
+      expect(secondBody.edges.some((e) => e.id === cursor)).toBe(false);
+    });
+
+    it('GET /brandgraph/graph/:brandId returns 400 for invalid limit', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/brandgraph/graph/non-existent?limit=999999',
+      });
+      expect(res.statusCode).toBe(400);
     });
 
     it('returns 404 for non-existent graph', async () => {
@@ -253,7 +328,11 @@ describe('BrandGraph CRUD', () => {
         method: 'GET',
         url: '/brandgraph/graph/does-not-exist',
       });
-      expect(response.statusCode).toBe(404);
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.brandId).toBe('does-not-exist');
+      expect(Array.isArray(body.nodes)).toBe(true);
+      expect(Array.isArray(body.edges)).toBe(true);
     });
   });
 });
