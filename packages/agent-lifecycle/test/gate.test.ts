@@ -1,0 +1,25 @@
+import { describe, expect, it } from "vitest";
+import { assertAgentActive } from "../src/gate";
+import type { AgentManifest } from "../src/manifest";
+
+const base: AgentManifest = {
+  agentId: "agent-brandyn-v1",
+  role: "Brand Trinity: Brandyn",
+  version: "v1",
+  ownerDomain: "brand-trinity",
+  createdAt: new Date("2026-02-01T00:00:00.000Z").toISOString(),
+  expiresAt: new Date("2026-12-31T00:00:00.000Z").toISOString(),
+  status: "ACTIVE",
+  memoryNamespace: "brand-trinity/brandyn"
+};
+
+describe("agent lifecycle gate", () => {
+  it("allows ACTIVE non-expired agents", () => {
+    expect(() => assertAgentActive(base, new Date("2026-02-05T00:00:00.000Z"))).not.toThrow();
+  });
+
+  it("blocks expired agents", () => {
+    const expired = { ...base, expiresAt: new Date("2026-02-01T00:00:00.000Z").toISOString() };
+    expect(() => assertAgentActive(expired, new Date("2026-02-05T00:00:00.000Z"))).toThrow();
+  });
+});
