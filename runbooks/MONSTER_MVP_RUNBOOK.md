@@ -4,16 +4,19 @@
 1. Install deps
    - `pnpm install`
 2. Generate Prisma clients
-   - `pnpm -C services/brandgraph prisma generate --schema prisma/schema.prisma`
-   - `pnpm -C services/artifact-registry prisma generate --schema prisma/schema.prisma`
+   - `pnpm run prisma:generate:all`
 3. Verify
    - `pnpm run verify`
+4. Repo sanity
+   - `pnpm run repo:doctor`
 
 ## DB Wiring (Postgres)
-- Required env: `DATABASE_URL` for BrandGraph.
+- Required env: `DATABASE_URL` for BrandGraph **only when** running `prisma db push` or runtime Postgres access.
+- Optional for local tests (tests use in-memory and/or sqlite test schema).
 - No migrations yet. Use:
   - `pnpm -C services/brandgraph prisma db push --schema prisma/schema.prisma`
 - When ready for migrations, introduce `prisma/migrations` and switch to `prisma migrate`.
+- Always run `pnpm run prisma:generate:all` after schema changes.
 
 ## CI Contract
 - `pnpm run verify` is the canonical pass/fail gate.
@@ -33,6 +36,13 @@
   - Run `pnpm run guard:eslint` (part of `verify`).
   - Fix: `pnpm add -D eslint@8.57.1`
 - Prisma client missing
-  - Fix: `pnpm run prisma:generate-all` (or run the two generate commands manually).
+  - Fix: `pnpm run prisma:generate:all`
 - Tests writing to node_modules cache
   - Ensure `cacheDir` is set in local vitest configs (already in repo).
+
+## Command Guide
+| Scenario | Command | Notes |
+| --- | --- | --- |
+| Fast local check | `pnpm run verify` | Lint + typecheck + tests + targeted suites |
+| Full pre-release | `pnpm run verify:full` | Includes schema check + Prisma generate |
+| Environment sanity | `pnpm run repo:doctor` | Detects toolchain/prisma/client issues |
