@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "../generated/prisma/index.js";
+import { GraphSnapshot, GraphSnapshotList } from './graph';
 import type { ArtifactLink, Brand, BrandGraphRepo, GraphEvent } from "./repo.js";
 
 type PrismaBrand = {
@@ -112,6 +113,56 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
     return events.map((event) => this.toArtifactLink(event)).filter((link) => link.artifactId);
   }
 
+  async getGraph(brandId: string): Promise<GraphSnapshot> {
+    const events = await this.prisma.graphEvent.findMany({
+      where: { brandId, eventType: 'ARTIFACT_LINKED' },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const nodes = new Map<string, { id: string; type: 'brand' | 'artifact' }>();
+    const edges = [];
+
+    nodes.set(brandId, { id: brandId, type: 'brand' });
+
+    for (const e of events) {
+      const payload = e.payload as { artifactId: string };
+
+      nodes.set(payload.artifactId, {
+        id: payload.artifactId,
+        type: 'artifact',
+      });
+
+      edges.push({
+        from: brandId,
+        to: payload.artifactId,
+        type: 'ARTIFACT_LINKED' as const,
+        eventId: e.id,
+        createdAt: e.createdAt.toISOString(),
+      });
+    }
+
+    return {
+      brandId,
+      nodes: Array.from(nodes.values()),
+      edges,
+    };
+  }
+
+  async getGraphSnapshots(brandId: string): Promise<GraphSnapshotList> {
+    const events = await this.prisma.graphEvent.findMany({
+      where: { brandId, eventType: 'ARTIFACT_LINKED' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      brandId,
+      snapshots: events.map(e => ({
+        eventId: e.id,
+        createdAt: e.createdAt.toISOString(),
+      })),
+    };
+  }
+
   private getArtifactId(payload: unknown): string | null {
     if (!payload || typeof payload !== "object") return null;
     const record = payload as Record<string, unknown>;
@@ -156,6 +207,8 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
       artifactId: typeof payload.artifactId === "string" ? payload.artifactId : "",
       artifactType: typeof payload.artifactType === "string" ? payload.artifactType : null,
       linkedAt: event.createdAt.toISOString(),
+      eventId: event.id,
+      createdAt: event.createdAt.toISOString(),
     };
   }
 }

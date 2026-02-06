@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma.js";
 import { PrismaBrandGraphRepo } from "./repo.prisma.js";
+import { GraphSnapshot, GraphSnapshotList } from './graph.js';
 
 export type Brand = {
   id: string;
@@ -29,6 +30,12 @@ export interface BrandGraphRepo {
     artifactType?: string | null;
   }): Promise<ArtifactLink>;
   listArtifactLinks(brandId: string): Promise<ArtifactLink[]>;
+
+  /** Read-only full graph projection */
+  getGraph(brandId: string): Promise<GraphSnapshot>;
+
+  /** Historical snapshot index */
+  getGraphSnapshots(brandId: string): Promise<GraphSnapshotList>;
 }
 
 const isTest = process.env.NODE_ENV === "test" || process.env.BRANDGRAPH_DB === "test";
@@ -76,12 +83,48 @@ export function createInMemoryRepo(): BrandGraphRepo {
         artifactId: input.artifactId,
         artifactType: input.artifactType ?? null,
         linkedAt: new Date().toISOString(),
+        eventId: "event-" + key, // Dummy eventId for compat
+        createdAt: new Date().toISOString()
       };
       artifactLinks.set(key, link);
       return link;
     },
     async listArtifactLinks(brandId) {
       return Array.from(artifactLinks.values()).filter((link) => link.brandId === brandId);
+    },
+    async getGraph(brandId) {
+      const nodes = new Map<string, { id: string; type: 'brand' | 'artifact' }>();
+      const edges = [];
+
+      nodes.set(brandId, { id: brandId, type: 'brand' });
+
+      for (const link of Array.from(artifactLinks.values()).filter(l => l.brandId === brandId)) {
+        nodes.set(link.artifactId, { id: link.artifactId, type: 'artifact' });
+
+        edges.push({
+          from: brandId,
+          to: link.artifactId,
+          type: 'ARTIFACT_LINKED' as const,
+          eventId: link.eventId,
+          createdAt: link.createdAt,
+        });
+      }
+
+      return {
+        brandId,
+        nodes: Array.from(nodes.values()),
+        edges,
+      };
+    },
+    async getGraphSnapshots(brandId) {
+      const snapshots = Array.from(artifactLinks.values())
+        .filter(l => l.brandId === brandId)
+        .map(l => ({
+          eventId: l.eventId,
+          createdAt: l.createdAt,
+        }));
+
+      return { brandId, snapshots };
     }
   };
 }
@@ -93,4 +136,6 @@ export type ArtifactLink = {
   artifactId: string;
   artifactType?: string | null;
   linkedAt: string;
+  eventId: string;
+  createdAt: string;
 };

@@ -177,4 +177,83 @@ describe('BrandGraph CRUD', () => {
     });
     expect(graphRes.statusCode).toBe(404);
   });
+
+  describe('BT-5 Graph Read APIs', () => {
+    it('GET /brandgraph/graph/:brandId returns a complete graph view', async () => {
+      const brandName = `GraphRead-${Date.now()}`;
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/brandgraph/brands',
+        payload: { tenantName: 'ReadCo', name: brandName },
+      });
+      const brand = JSON.parse(createRes.payload);
+
+      // Link an artifact
+      await app.inject({
+        method: 'POST',
+        url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        payload: { artifactId: 'art_graph_1', artifactType: 'StyleGuide' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/brandgraph/graph/${brand.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const graph = JSON.parse(response.payload);
+
+      expect(graph.brand.id).toBe(brand.id);
+      expect(graph.nodes.length).toBeGreaterThanOrEqual(2); // Brand + Artifact
+      expect(graph.edges.length).toBeGreaterThanOrEqual(1); // Link edge
+
+      const brandNode = graph.nodes.find((n: any) => n.type === 'BRAND');
+      expect(brandNode.id).toBe(brand.id);
+
+      const artifactNode = graph.nodes.find((n: any) => n.type === 'ARTIFACT');
+      expect(artifactNode.label).toBe('art_graph_1');
+
+      // Check if snapshot node is present (from workflow)
+      const snapshotNode = graph.nodes.find((n: any) => n.type === 'SNAPSHOT');
+      expect(snapshotNode).toBeDefined();
+      expect(graph.latestSnapshot).toBeDefined();
+    });
+
+    it('GET /brandgraph/graph/:brandId/snapshots returns historical snapshots', async () => {
+      const brandName = `SnapshotRead-${Date.now()}`;
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/brandgraph/brands',
+        payload: { tenantName: 'SnapshotCo', name: brandName },
+      });
+      const brand = JSON.parse(createRes.payload);
+
+      // Linking triggers snapshot update via workflow
+      await app.inject({
+        method: 'POST',
+        url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        payload: { artifactId: 'art_snap_1' },
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/brandgraph/graph/${brand.id}/snapshots`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const snapshots = JSON.parse(response.payload);
+      expect(Array.isArray(snapshots)).toBe(true);
+      expect(snapshots.length).toBeGreaterThan(0);
+      expect(snapshots[0].brandId).toBe(brand.id);
+      expect(snapshots[0].eventCount).toBeDefined();
+    });
+
+    it('returns 404 for non-existent graph', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/brandgraph/graph/does-not-exist',
+      });
+      expect(response.statusCode).toBe(404);
+    });
+  });
 });

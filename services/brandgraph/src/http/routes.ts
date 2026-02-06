@@ -101,4 +101,22 @@ export async function brandRoutes(
       linkedArtifacts,
     });
   });
+
+  // GET /brandgraph/graph/:brandId
+  app.get('/graph/:brandId', async (request, reply) => {
+    const { brandId } = request.params as { brandId: string };
+
+    const graph = await repo.getGraph(brandId);
+    if (!graph) return reply.code(404).send({ error: 'NOT_FOUND' });
+
+    return reply.code(200).send(graph);
+  });
+
+  // GET /brandgraph/graph/:brandId/snapshots
+  app.get('/graph/:brandId/snapshots', async (request, reply) => {
+    const { brandId } = request.params as { brandId: string };
+
+    const snapshots = await repo.getGraphSnapshots(brandId);
+    return reply.code(200).send(snapshots);
+  });
 }
