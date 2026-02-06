@@ -12,6 +12,9 @@ model Tenant {
   id        String   @id
   name      String
   createdAt DateTime @default(now())
+
+  manifests AgentManifest[]
+  rotationAudits RotationAudit[]
 }
 
 model Brand {
@@ -29,10 +32,46 @@ model GraphEvent {
   tenantId  String
   brandId   String?
   eventType String
-  payload   Json
+  payload   String
   createdAt DateTime @default(now())
 
   @@index([tenantId])
   @@index([brandId])
   @@index([createdAt])
+}
+
+model AgentManifest {
+  agentId          String     @id
+  tenantId         String
+  ownerDomain      String
+  role             String
+  version          String
+  status           String @default("ACTIVE")
+  createdAt        DateTime    @default(now())
+  expiresAt        DateTime
+  memoryNamespace  String
+  successorAgentId String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([expiresAt])
+  @@index([ownerDomain])
+}
+
+model RotationAudit {
+  id               String      @id @default(cuid())
+  tenantId         String
+  agentId          String
+  fromStatus       String
+  toStatus         String
+  successorAgentId String?
+  reason           String
+  createdAt        DateTime    @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, agentId])
 }

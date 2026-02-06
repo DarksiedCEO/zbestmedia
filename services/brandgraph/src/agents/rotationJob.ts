@@ -1,11 +1,17 @@
 import type { RotationStore } from "@zbest/agent-lifecycle";
 import { runRotation } from "@zbest/agent-lifecycle";
+import type { PrismaClient } from "../generated/prisma/index.js";
+import { createPrismaRotationStore } from "./rotationStore.prisma.js";
 
-export async function runBrandTrinityRotationJob(args: {
-  store: RotationStore;
-  now?: Date;
-}) {
-  return runRotation(args.store, {
+type RotationJobArgs =
+  | { store: RotationStore; now?: Date }
+  | { prisma: PrismaClient; tenantId: string; now?: Date };
+
+export async function runBrandTrinityRotationJob(args: RotationJobArgs) {
+  const store =
+    "store" in args ? args.store : createPrismaRotationStore(args.prisma, args.tenantId);
+
+  return runRotation(store, {
     ownerDomain: "brand-trinity",
     policy: {
       rotateWindowMs: 7 * 24 * 60 * 60 * 1000
