@@ -54,7 +54,7 @@ export function createInMemoryRepo(): BrandGraphRepo {
   const artifactLinks = new Map<string, ArtifactLink>();
   const DEFAULT_LIMIT = 100;
 
-  const getArtifactId = (payload: unknown): string | null => {
+  const _getArtifactId = (payload: unknown): string | null => {
     if (!payload || typeof payload !== "object") return null;
     const record = payload as Record<string, unknown>;
     return typeof record.artifactId === "string" ? record.artifactId : null;

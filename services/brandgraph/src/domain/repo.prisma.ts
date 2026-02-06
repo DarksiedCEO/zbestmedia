@@ -214,9 +214,10 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
       ],
     });
 
-    const ordered = events.sort((a, b) =>
-      a.createdAt === b.createdAt ? b.id.localeCompare(a.id) : b.createdAt.localeCompare(a.createdAt)
-    );
+    const ordered = events.sort((a, b) => {
+      const diff = b.createdAt.getTime() - a.createdAt.getTime();
+      return diff !== 0 ? diff : b.id.localeCompare(a.id);
+    });
     if (cursor) {
       const cursorIndex = ordered.findIndex((evt) => evt.id === cursor);
       if (cursorIndex === -1) {
