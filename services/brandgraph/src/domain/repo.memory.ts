@@ -1,14 +1,30 @@
-import { BrandGraphRepo, ArtifactLink } from './repo';
+import { BrandGraphRepo, ArtifactLink, Brand } from './repo';
 import { GraphQueryOptions, GraphSnapshot, GraphSnapshotList } from './graph';
 import { tenantKey } from "./tenantKey.js";
 
 export class InMemoryBrandGraphRepo implements BrandGraphRepo {
+  private readonly brands = new Map<string, Brand>();
+
   constructor(
     private readonly links: ArtifactLink[] = []
   ) {}
 
-  async createBrand(_input: { id: string; tenantId: string; name: string }) { return {} as any; }
-  async getBrand(_tenantId: string, _id: string) { return null; }
+  async createBrand(input: { id: string; tenantId: string; name: string }): Promise<Brand> {
+    const brand: Brand = {
+      ...input,
+      createdAt: new Date().toISOString()
+    };
+    this.brands.set(tenantKey(input.tenantId, input.id), brand);
+    return brand;
+  }
+
+  async getBrand(tenantId: string, id: string): Promise<Brand | null> {
+    return this.brands.get(tenantKey(tenantId, id)) ?? null;
+  }
+
+  async listBrands(tenantId: string): Promise<Brand[]> {
+    return Array.from(this.brands.values()).filter(b => b.tenantId === tenantId);
+  }
   async createEvent(_input: any) { return {} as any; }
   async findEventByBrand(_tenantId: string, _brandId: string, _eventType: string) { return null; }
   async linkArtifact(_input: any) { return {} as any; }

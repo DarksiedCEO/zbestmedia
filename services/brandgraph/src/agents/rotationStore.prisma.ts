@@ -28,7 +28,7 @@ export function createPrismaRotationStore(
         ownerDomain: row.ownerDomain,
         createdAt: row.createdAt.toISOString(),
         expiresAt: row.expiresAt.toISOString(),
-        status: row.status,
+        status: normalizeStatus(row.status),
         memoryNamespace: row.memoryNamespace,
         successorAgentId: row.successorAgentId ?? undefined
       }));
@@ -121,4 +121,11 @@ function mapStatuses(event: AuditEvent): { fromStatus: AgentStatus; toStatus: Ag
     default:
       return { fromStatus: "ACTIVE", toStatus: "ACTIVE" };
   }
+}
+
+function normalizeStatus(status: string): AgentStatus {
+  if (status === "ACTIVE" || status === "RETIRED" || status === "DISABLED") {
+    return status;
+  }
+  return "ACTIVE";
 }
