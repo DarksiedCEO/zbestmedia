@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "../generated/prisma/index.js";
+import type { PrismaClient } from "../generated/prisma/index.js";
 import { GraphQueryOptions, GraphSnapshot, GraphSnapshotList } from './graph';
 import type { ArtifactLink, Brand, BrandGraphRepo, GraphEvent } from "./repo.js";
 
