@@ -33,8 +33,8 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
     return this.toBrand(brand);
   }
 
-  async getBrand(id: string): Promise<Brand | null> {
-    const brand = await this.prisma.brand.findUnique({ where: { id } });
+  async getBrand(tenantId: string, id: string): Promise<Brand | null> {
+    const brand = await this.prisma.brand.findFirst({ where: { id, tenantId } });
     return brand ? this.toBrand(brand) : null;
   }
 
@@ -42,7 +42,7 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
     if (input.eventType === "ARTIFACT_LINKED" && input.brandId) {
       const artifactId = this.getArtifactId(input.payload);
       if (artifactId) {
-        const existing = await this.findArtifactEvent(input.brandId, artifactId);
+        const existing = await this.findArtifactEvent(input.tenantId, input.brandId, artifactId);
         if (existing) return this.toGraphEvent(existing);
 
         const created = await this.prisma.graphEvent.create({
@@ -71,9 +71,9 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
     return this.toGraphEvent(event);
   }
 
-  async findEventByBrand(brandId: string, eventType: string): Promise<GraphEvent | null> {
+  async findEventByBrand(tenantId: string, brandId: string, eventType: string): Promise<GraphEvent | null> {
     const event = await this.prisma.graphEvent.findFirst({
-      where: { brandId, eventType },
+      where: { tenantId, brandId, eventType },
       orderBy: { createdAt: "desc" },
     });
     return event ? this.toGraphEvent(event) : null;
@@ -85,7 +85,7 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
     artifactId: string;
     artifactType?: string | null;
   }): Promise<ArtifactLink> {
-    const existing = await this.findArtifactEvent(input.brandId, input.artifactId);
+    const existing = await this.findArtifactEvent(input.tenantId, input.brandId, input.artifactId);
     if (existing) return this.toArtifactLink(existing);
 
     const created = await this.prisma.graphEvent.create({
@@ -104,16 +104,16 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
     return this.toArtifactLink(created);
   }
 
-  async listArtifactLinks(brandId: string): Promise<ArtifactLink[]> {
+  async listArtifactLinks(tenantId: string, brandId: string): Promise<ArtifactLink[]> {
     const events = await this.prisma.graphEvent.findMany({
-      where: { brandId, eventType: "ARTIFACT_LINKED" },
+      where: { tenantId, brandId, eventType: "ARTIFACT_LINKED" },
       orderBy: { createdAt: "asc" },
     });
 
     return events.map((event) => this.toArtifactLink(event)).filter((link) => link.artifactId);
   }
 
-  async getGraph(brandId: string, options: GraphQueryOptions = {}): Promise<GraphSnapshot> {
+  async getGraph(tenantId: string, brandId: string, options: GraphQueryOptions = {}): Promise<GraphSnapshot> {
     const DEFAULT_LIMIT = 100;
     const {
       limit = DEFAULT_LIMIT,
@@ -127,6 +127,7 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
 
     const events = await this.prisma.graphEvent.findMany({
       where: {
+        tenantId,
         brandId,
         eventType: { in: allowedEventTypes },
         ...(cursor ? { id: { gt: cursor } } : {}),
@@ -173,7 +174,7 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
     };
   }
 
-  async getGraphSnapshots(brandId: string, options: GraphQueryOptions = {}): Promise<GraphSnapshotList> {
+  async getGraphSnapshots(tenantId: string, brandId: string, options: GraphQueryOptions = {}): Promise<GraphSnapshotList> {
     const DEFAULT_LIMIT = 100;
     const {
       limit = DEFAULT_LIMIT,
@@ -187,6 +188,7 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
 
     const events = await this.prisma.graphEvent.findMany({
       where: {
+        tenantId,
         brandId,
         eventType: { in: allowedEventTypes },
         ...(cursor ? { id: { gt: cursor } } : {}),
@@ -215,9 +217,13 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
     return typeof record.artifactId === "string" ? record.artifactId : null;
   }
 
-  private async findArtifactEvent(brandId: string, artifactId: string): Promise<PrismaGraphEvent | null> {
+  private async findArtifactEvent(
+    tenantId: string,
+    brandId: string,
+    artifactId: string
+  ): Promise<PrismaGraphEvent | null> {
     const events = await this.prisma.graphEvent.findMany({
-      where: { brandId, eventType: "ARTIFACT_LINKED" },
+      where: { tenantId, brandId, eventType: "ARTIFACT_LINKED" },
       orderBy: { createdAt: "desc" },
     });
 

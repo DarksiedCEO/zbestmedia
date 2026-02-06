@@ -1,6 +1,7 @@
 import { prisma } from "../db/prisma.js";
 import { PrismaBrandGraphRepo } from "./repo.prisma.js";
 import { GraphQueryOptions, GraphSnapshot, GraphSnapshotList } from './graph.js';
+import { tenantKey } from "./tenantKey.js";
 
 export type Brand = {
   id: string;
@@ -20,22 +21,22 @@ export type GraphEvent = {
 
 export interface BrandGraphRepo {
   createBrand(input: { id: string; tenantId: string; name: string }): Promise<Brand>;
-  getBrand(id: string): Promise<Brand | null>;
+  getBrand(tenantId: string, id: string): Promise<Brand | null>;
   createEvent(input: Omit<GraphEvent, "createdAt">): Promise<GraphEvent>;
-  findEventByBrand(brandId: string, eventType: string): Promise<GraphEvent | null>;
+  findEventByBrand(tenantId: string, brandId: string, eventType: string): Promise<GraphEvent | null>;
   linkArtifact(input: {
     tenantId: string;
     brandId: string;
     artifactId: string;
     artifactType?: string | null;
   }): Promise<ArtifactLink>;
-  listArtifactLinks(brandId: string): Promise<ArtifactLink[]>;
+  listArtifactLinks(tenantId: string, brandId: string): Promise<ArtifactLink[]>;
 
   /** Read-only full graph projection */
-  getGraph(brandId: string, options?: GraphQueryOptions): Promise<GraphSnapshot>;
+  getGraph(tenantId: string, brandId: string, options?: GraphQueryOptions): Promise<GraphSnapshot>;
 
   /** Historical snapshot index */
-  getGraphSnapshots(brandId: string, options?: GraphQueryOptions): Promise<GraphSnapshotList>;
+  getGraphSnapshots(tenantId: string, brandId: string, options?: GraphQueryOptions): Promise<GraphSnapshotList>;
 }
 
 const isTest = process.env.NODE_ENV === "test" || process.env.BRANDGRAPH_DB === "test";
@@ -63,11 +64,11 @@ export function createInMemoryRepo(): BrandGraphRepo {
     async createBrand({ id, tenantId, name }) {
       const now = new Date().toISOString();
       const brand: Brand = { id, tenantId, name, createdAt: now };
-      brands.set(id, brand);
+      brands.set(tenantKey(tenantId, id), brand);
       return brand;
     },
-    async getBrand(id) {
-      return brands.get(id) ?? null;
+    async getBrand(tenantId, id) {
+      return brands.get(tenantKey(tenantId, id)) ?? null;
     },
     async createEvent(input) {
       const now = new Date().toISOString();
@@ -75,11 +76,15 @@ export function createInMemoryRepo(): BrandGraphRepo {
       events.push(event);
       return event;
     },
-    async findEventByBrand(brandId, eventType) {
-      return events.find((evt) => evt.brandId === brandId && evt.eventType === eventType) ?? null;
+    async findEventByBrand(tenantId, brandId, eventType) {
+      return (
+        events.find(
+          (evt) => evt.tenantId === tenantId && evt.brandId === brandId && evt.eventType === eventType
+        ) ?? null
+      );
     },
     async linkArtifact(input) {
-      const key = `${input.brandId}:${input.artifactId}`;
+      const key = `${input.tenantId}:${input.brandId}:${input.artifactId}`;
       const existing = artifactLinks.get(key);
       if (existing) return existing;
 
@@ -96,10 +101,12 @@ export function createInMemoryRepo(): BrandGraphRepo {
       artifactLinks.set(key, link);
       return link;
     },
-    async listArtifactLinks(brandId) {
-      return Array.from(artifactLinks.values()).filter((link) => link.brandId === brandId);
+    async listArtifactLinks(tenantId, brandId) {
+      return Array.from(artifactLinks.values()).filter(
+        (link) => link.tenantId === tenantId && link.brandId === brandId
+      );
     },
-    async getGraph(brandId, options = {}) {
+    async getGraph(tenantId, brandId, options = {}) {
       const {
         limit = DEFAULT_LIMIT,
         cursor,
@@ -108,7 +115,7 @@ export function createInMemoryRepo(): BrandGraphRepo {
         eventTypes,
       } = options;
 
-      let filtered = events.filter((evt) => evt.brandId === brandId);
+      let filtered = events.filter((evt) => evt.tenantId === tenantId && evt.brandId === brandId);
       const allowedEventTypes = eventTypes?.length ? new Set(eventTypes) : null;
 
       if (allowedEventTypes) {
@@ -165,7 +172,7 @@ export function createInMemoryRepo(): BrandGraphRepo {
         generatedAt: new Date().toISOString(),
       };
     },
-    async getGraphSnapshots(brandId, options = {}) {
+    async getGraphSnapshots(tenantId, brandId, options = {}) {
       const {
         limit = DEFAULT_LIMIT,
         cursor,
@@ -174,7 +181,7 @@ export function createInMemoryRepo(): BrandGraphRepo {
         eventTypes,
       } = options;
 
-      let filtered = events.filter((evt) => evt.brandId === brandId);
+      let filtered = events.filter((evt) => evt.tenantId === tenantId && evt.brandId === brandId);
       const allowedEventTypes = eventTypes?.length ? new Set(eventTypes) : null;
 
       if (allowedEventTypes) {

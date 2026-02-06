@@ -1,8 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { generateBrandId, generateEventId, generateTenantId, makeEventId } from '../domain/ids.js';
+import { generateBrandId, generateEventId, makeEventId } from '../domain/ids.js';
 import type { GraphQueryOptions } from '../domain/graph.js';
 import type { BrandGraphRepo } from '../domain/repo.js';
+import { getTenantId, TenantIdSchema } from './tenant.js';
 import { createArtifactLinkWorkflow } from '../workflows/artifactLink.workflow.js';
 import { WorkflowRunner } from '../workflows/runner.js';
 
@@ -82,11 +83,20 @@ export async function brandRoutes(
   const workflowRunner = deps.workflowRunner ?? new WorkflowRunner(repo);
   // POST /brandgraph/brands
   app.post('/brands', async (request, reply) => {
-    const { name, tenantName } = CreateBrandSchema.parse(request.body);
-    
-    // In a real app, tenantId would come from auth context. 
-    // For now, we derive it from tenantName for determinism.
-    const tenantId = generateTenantId(tenantName!);
+    let tenantId: string;
+    try {
+      tenantId = getTenantId(request);
+    } catch (err) {
+      const body = request.body as { tenantId?: string };
+      const parsed = TenantIdSchema.safeParse(body?.tenantId);
+      if (!parsed.success) {
+        const error = err as { statusCode?: number; code?: string };
+        return reply.code(error.statusCode ?? 400).send({ error: error.code ?? 'TENANT_ID_REQUIRED' });
+      }
+      tenantId = parsed.data;
+    }
+
+    const { name } = CreateBrandSchema.parse(request.body);
     const brandId = generateBrandId(tenantId, name);
 
     const brand = await repo.createBrand({ id: brandId, tenantId, name });
@@ -104,9 +114,17 @@ export async function brandRoutes(
 
   // GET /brandgraph/brands/:id
   app.get('/brands/:id', async (request, reply) => {
+    let tenantId: string;
+    try {
+      tenantId = getTenantId(request);
+    } catch (err) {
+      const error = err as { statusCode?: number; code?: string };
+      return reply.code(error.statusCode ?? 400).send({ error: error.code ?? 'TENANT_ID_REQUIRED' });
+    }
+
     const { id } = request.params as { id: string };
     
-    const brand = await repo.getBrand(id);
+    const brand = await repo.getBrand(tenantId, id);
 
     if (!brand) {
       return reply.status(404).send({ error: 'Brand not found' });
@@ -117,6 +135,14 @@ export async function brandRoutes(
 
   // POST /brandgraph/brands/:id/artifacts/link
   app.post('/brands/:id/artifacts/link', async (request, reply) => {
+    let tenantId: string;
+    try {
+      tenantId = getTenantId(request);
+    } catch (err) {
+      const error = err as { statusCode?: number; code?: string };
+      return reply.code(error.statusCode ?? 400).send({ error: error.code ?? 'TENANT_ID_REQUIRED' });
+    }
+
     const { id: brandId } = request.params as { id: string };
     const body = request.body as { artifactId: string; artifactType?: string };
 
@@ -124,26 +150,26 @@ export async function brandRoutes(
       return reply.code(400).send({ error: 'INVALID_ARTIFACT_ID' });
     }
 
-    const brand = await repo.getBrand(brandId);
+    const brand = await repo.getBrand(tenantId, brandId);
     if (!brand) return reply.code(404).send({ error: 'NOT_FOUND' });
 
     const link = await repo.linkArtifact({
-      tenantId: brand.tenantId,
+      tenantId,
       brandId,
       artifactId: body.artifactId,
       artifactType: body.artifactType ?? null,
     });
 
     await repo.createEvent({
-      id: makeEventId({ tenantId: brand.tenantId, brandId, eventType: 'ARTIFACT_LINKED' }),
-      tenantId: brand.tenantId,
+      id: makeEventId({ tenantId, brandId, eventType: 'ARTIFACT_LINKED' }),
+      tenantId,
       brandId,
       eventType: 'ARTIFACT_LINKED',
       payload: { artifactId: link.artifactId, artifactType: link.artifactType ?? null },
     });
 
     await workflowRunner.run(createArtifactLinkWorkflow(repo), {
-      tenantId: brand.tenantId,
+      tenantId,
       brandId,
     });
 
@@ -152,12 +178,20 @@ export async function brandRoutes(
 
   // GET /brandgraph/brands/:id/graph
   app.get('/brands/:id/graph', async (request, reply) => {
+    let tenantId: string;
+    try {
+      tenantId = getTenantId(request);
+    } catch (err) {
+      const error = err as { statusCode?: number; code?: string };
+      return reply.code(error.statusCode ?? 400).send({ error: error.code ?? 'TENANT_ID_REQUIRED' });
+    }
+
     const { id: brandId } = request.params as { id: string };
 
-    const brand = await repo.getBrand(brandId);
+    const brand = await repo.getBrand(tenantId, brandId);
     if (!brand) return reply.code(404).send({ error: 'NOT_FOUND' });
 
-    const linkedArtifacts = await repo.listArtifactLinks(brandId);
+    const linkedArtifacts = await repo.listArtifactLinks(tenantId, brandId);
 
     // Keep it minimal for now. Events listing can be added in BT-3C.2 if you want.
     return reply.code(200).send({
@@ -168,6 +202,14 @@ export async function brandRoutes(
 
   // GET /brandgraph/graph/:brandId
   app.get('/graph/:brandId', async (request, reply) => {
+    let tenantId: string;
+    try {
+      tenantId = getTenantId(request);
+    } catch (err) {
+      const error = err as { statusCode?: number; code?: string };
+      return reply.code(error.statusCode ?? 400).send({ error: error.code ?? 'TENANT_ID_REQUIRED' });
+    }
+
     const { brandId } = request.params as { brandId: string };
 
     let options: GraphQueryOptions | undefined;
@@ -178,13 +220,24 @@ export async function brandRoutes(
       return reply.code(400).send({ error: msg });
     }
 
-    const graph = await repo.getGraph(brandId, options);
+    const brand = await repo.getBrand(tenantId, brandId);
+    if (!brand) return reply.code(404).send({ error: 'NOT_FOUND' });
+
+    const graph = await repo.getGraph(tenantId, brandId, options);
 
     return reply.code(200).send(graph);
   });
 
   // GET /brandgraph/graph/:brandId/snapshots
   app.get('/graph/:brandId/snapshots', async (request, reply) => {
+    let tenantId: string;
+    try {
+      tenantId = getTenantId(request);
+    } catch (err) {
+      const error = err as { statusCode?: number; code?: string };
+      return reply.code(error.statusCode ?? 400).send({ error: error.code ?? 'TENANT_ID_REQUIRED' });
+    }
+
     const { brandId } = request.params as { brandId: string };
 
     let options: GraphQueryOptions | undefined;
@@ -195,7 +248,10 @@ export async function brandRoutes(
       return reply.code(400).send({ error: msg });
     }
 
-    const snapshots = await repo.getGraphSnapshots(brandId, options);
+    const brand = await repo.getBrand(tenantId, brandId);
+    if (!brand) return reply.code(404).send({ error: 'NOT_FOUND' });
+
+    const snapshots = await repo.getGraphSnapshots(tenantId, brandId, options);
     return reply.code(200).send(snapshots);
   });
 }

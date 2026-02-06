@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../src/server.js';
 import { createInMemoryRepo } from '../src/domain/repo.js';
-import { generateBrandId, generateTenantId } from '../src/domain/ids.js';
+import { generateBrandId } from '../src/domain/ids.js';
 
 describe('BrandGraph CRUD', () => {
   const repo = createInMemoryRepo();
   const app = buildServer({ repo });
+  const tenant = (id: string) => ({ 'x-tenant-id': id });
 
   beforeAll(async () => {
     await app.ready();
@@ -20,16 +21,15 @@ describe('BrandGraph CRUD', () => {
 
   it('POST /brandgraph/brands creates a brand with deterministic ID', async () => {
     const brandName = 'Test Brand ' + Date.now();
-    const tenantName = 'Test Tenant';
-    const expectedTenantId = generateTenantId(tenantName);
-    const expectedBrandId = generateBrandId(expectedTenantId, brandName);
+    const tenantId = 'tenant-test';
+    const expectedBrandId = generateBrandId(tenantId, brandName);
 
     const response = await app.inject({
       method: 'POST',
       url: '/brandgraph/brands',
+      headers: tenant(tenantId),
       payload: {
         name: brandName,
-        tenantName: tenantName,
       },
     });
 
@@ -37,29 +37,30 @@ describe('BrandGraph CRUD', () => {
     const body = JSON.parse(response.payload);
     expect(body.id).toBe(expectedBrandId);
     expect(body.name).toBe(brandName);
-    expect(body.tenantId).toBe(expectedTenantId);
+    expect(body.tenantId).toBe(tenantId);
 
-    const event = await repo.findEventByBrand(expectedBrandId, 'BRAND_CREATED');
+    const event = await repo.findEventByBrand(tenantId, expectedBrandId, 'BRAND_CREATED');
     expect(event).toBeDefined();
     expect(event?.payload).toMatchObject({ name: brandName });
   });
 
   it('GET /brandgraph/brands/:id returns the brand', async () => {
     const brandName = 'Fetch Test Brand';
-    const tenantName = 'Test Tenant';
-    const tenantId = generateTenantId(tenantName);
+    const tenantId = 'tenant-fetch';
     const brandId = generateBrandId(tenantId, brandName);
 
     // Ensure it exists
     await app.inject({
       method: 'POST',
       url: '/brandgraph/brands',
-      payload: { name: brandName, tenantName },
+      headers: tenant(tenantId),
+      payload: { name: brandName },
     });
 
     const response = await app.inject({
       method: 'GET',
       url: `/brandgraph/brands/${brandId}`,
+      headers: tenant(tenantId),
     });
 
     expect(response.statusCode).toBe(200);
@@ -72,6 +73,7 @@ describe('BrandGraph CRUD', () => {
     const response = await app.inject({
       method: 'GET',
       url: '/brandgraph/brands/non-existent-id',
+      headers: tenant('tenant-missing'),
     });
 
     expect(response.statusCode).toBe(404);
@@ -79,10 +81,12 @@ describe('BrandGraph CRUD', () => {
 
   it('POST /brandgraph/brands/:id/artifacts/link links an artifact (idempotent)', async () => {
     // Create brand
+    const tenantId = 'tenant-link';
     const createRes = await app.inject({
       method: 'POST',
       url: '/brandgraph/brands',
-      payload: { tenantName: 'Acme', name: 'RocketCo' },
+      headers: tenant(tenantId),
+      payload: { name: 'RocketCo' },
     });
 
     expect(createRes.statusCode).toBe(201);
@@ -92,6 +96,7 @@ describe('BrandGraph CRUD', () => {
     const linkRes1 = await app.inject({
       method: 'POST',
       url: `/brandgraph/brands/${created.id}/artifacts/link`,
+      headers: tenant(tenantId),
       payload: { artifactId: 'art_123', artifactType: 'BrandBible' },
     });
 
@@ -103,6 +108,7 @@ describe('BrandGraph CRUD', () => {
     const linkRes2 = await app.inject({
       method: 'POST',
       url: `/brandgraph/brands/${created.id}/artifacts/link`,
+      headers: tenant(tenantId),
       payload: { artifactId: 'art_123', artifactType: 'BrandBible' },
     });
 
@@ -110,10 +116,12 @@ describe('BrandGraph CRUD', () => {
   });
 
   it('runs artifact link workflow and emits graph snapshot events', async () => {
+    const tenantId = 'tenant-workflow';
     const createRes = await app.inject({
       method: 'POST',
       url: '/brandgraph/brands',
-      payload: { tenantName: 'Acme', name: `WorkflowCo-${Date.now()}` },
+      headers: tenant(tenantId),
+      payload: { name: `WorkflowCo-${Date.now()}` },
     });
 
     expect(createRes.statusCode).toBe(201);
@@ -122,21 +130,24 @@ describe('BrandGraph CRUD', () => {
     await app.inject({
       method: 'POST',
       url: `/brandgraph/brands/${created.id}/artifacts/link`,
+      headers: tenant(tenantId),
       payload: { artifactId: 'art_workflow', artifactType: 'Workflow' },
     });
 
-    const snapshotEvent = await repo.findEventByBrand(created.id, 'GRAPH_SNAPSHOT_UPDATED');
+    const snapshotEvent = await repo.findEventByBrand(tenantId, created.id, 'GRAPH_SNAPSHOT_UPDATED');
     expect(snapshotEvent).toBeDefined();
 
-    const workflowEvent = await repo.findEventByBrand(created.id, 'WORKFLOW_STEP_COMPLETED');
+    const workflowEvent = await repo.findEventByBrand(tenantId, created.id, 'WORKFLOW_STEP_COMPLETED');
     expect(workflowEvent).toBeDefined();
   });
 
   it('GET /brandgraph/brands/:id/graph returns linkedArtifacts', async () => {
+    const tenantId = 'tenant-graph';
     const createRes = await app.inject({
       method: 'POST',
       url: '/brandgraph/brands',
-      payload: { tenantName: 'Acme', name: 'GraphCo' },
+      headers: tenant(tenantId),
+      payload: { name: 'GraphCo' },
     });
 
     expect(createRes.statusCode).toBe(201);
@@ -145,12 +156,14 @@ describe('BrandGraph CRUD', () => {
     await app.inject({
       method: 'POST',
       url: `/brandgraph/brands/${created.id}/artifacts/link`,
+      headers: tenant(tenantId),
       payload: { artifactId: 'art_999', artifactType: 'VisualBible' },
     });
 
     const graphRes = await app.inject({
       method: 'GET',
       url: `/brandgraph/brands/${created.id}/graph`,
+      headers: tenant(tenantId),
     });
 
     expect(graphRes.statusCode).toBe(200);
@@ -167,6 +180,7 @@ describe('BrandGraph CRUD', () => {
     const linkRes = await app.inject({
       method: 'POST',
       url: '/brandgraph/brands/non-existent/artifacts/link',
+      headers: tenant('tenant-missing'),
       payload: { artifactId: 'art_nope' },
     });
     expect(linkRes.statusCode).toBe(404);
@@ -174,17 +188,88 @@ describe('BrandGraph CRUD', () => {
     const graphRes = await app.inject({
       method: 'GET',
       url: '/brandgraph/brands/non-existent/graph',
+      headers: tenant('tenant-missing'),
     });
     expect(graphRes.statusCode).toBe(404);
   });
 
+  it('returns 400 when tenant header is missing', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/brandgraph/brands/any-id',
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  describe('Tenant scoping', () => {
+    it('isolates tenants (brand created in t1 is invisible to t2)', async () => {
+      const tenantId = 't1a';
+      const otherTenantId = 't2a';
+      const brandName = `Scoped-${Date.now()}`;
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/brandgraph/brands',
+        headers: tenant(tenantId),
+        payload: { name: brandName },
+      });
+      expect(createRes.statusCode).toBe(201);
+      const brand = JSON.parse(createRes.payload) as { id: string };
+
+      const r1 = await app.inject({
+        method: 'GET',
+        url: `/brandgraph/brands/${brand.id}`,
+        headers: tenant(tenantId),
+      });
+      expect(r1.statusCode).toBe(200);
+
+      const r2 = await app.inject({
+        method: 'GET',
+        url: `/brandgraph/brands/${brand.id}`,
+        headers: tenant(otherTenantId),
+      });
+      expect(r2.statusCode).toBe(404);
+    });
+
+    it('blocks cross-tenant writes and reads', async () => {
+      const tenantId = 't1w';
+      const otherTenantId = 't2w';
+      const brandName = `ScopedWrite-${Date.now()}`;
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/brandgraph/brands',
+        headers: tenant(tenantId),
+        payload: { name: brandName },
+      });
+      expect(createRes.statusCode).toBe(201);
+      const brand = JSON.parse(createRes.payload) as { id: string };
+
+      const linkRes = await app.inject({
+        method: 'POST',
+        url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        headers: tenant(otherTenantId),
+        payload: { artifactId: 'art_cross' },
+      });
+      expect(linkRes.statusCode).toBe(404);
+
+      const graphRes = await app.inject({
+        method: 'GET',
+        url: `/brandgraph/graph/${brand.id}`,
+        headers: tenant(otherTenantId),
+      });
+      expect(graphRes.statusCode).toBe(404);
+    });
+  });
+
   describe('BT-5 Graph Read APIs', () => {
     it('GET /brandgraph/graph/:brandId returns a complete graph view', async () => {
+      const tenantId = 'tenant-read';
       const brandName = `GraphRead-${Date.now()}`;
       const createRes = await app.inject({
         method: 'POST',
         url: '/brandgraph/brands',
-        payload: { tenantName: 'ReadCo', name: brandName },
+        headers: tenant(tenantId),
+        payload: { name: brandName },
       });
       const brand = JSON.parse(createRes.payload);
 
@@ -192,12 +277,14 @@ describe('BrandGraph CRUD', () => {
       await app.inject({
         method: 'POST',
         url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        headers: tenant(tenantId),
         payload: { artifactId: 'art_graph_1', artifactType: 'StyleGuide' },
       });
 
       const response = await app.inject({
         method: 'GET',
         url: `/brandgraph/graph/${brand.id}`,
+        headers: tenant(tenantId),
       });
 
       expect(response.statusCode).toBe(200);
@@ -216,11 +303,13 @@ describe('BrandGraph CRUD', () => {
     });
 
     it('GET /brandgraph/graph/:brandId/snapshots returns historical snapshots', async () => {
+      const tenantId = 'tenant-snapshot';
       const brandName = `SnapshotRead-${Date.now()}`;
       const createRes = await app.inject({
         method: 'POST',
         url: '/brandgraph/brands',
-        payload: { tenantName: 'SnapshotCo', name: brandName },
+        headers: tenant(tenantId),
+        payload: { name: brandName },
       });
       const brand = JSON.parse(createRes.payload);
 
@@ -228,12 +317,14 @@ describe('BrandGraph CRUD', () => {
       await app.inject({
         method: 'POST',
         url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        headers: tenant(tenantId),
         payload: { artifactId: 'art_snap_1' },
       });
 
       const response = await app.inject({
         method: 'GET',
         url: `/brandgraph/graph/${brand.id}/snapshots`,
+        headers: tenant(tenantId),
       });
 
       expect(response.statusCode).toBe(200);
@@ -245,10 +336,12 @@ describe('BrandGraph CRUD', () => {
     });
 
     it('GET /brandgraph/graph/:brandId supports limit', async () => {
+      const tenantId = 'tenant-limit';
       const createRes = await app.inject({
         method: 'POST',
         url: '/brandgraph/brands',
-        payload: { tenantName: 'Acme', name: 'LimitCo' },
+        headers: tenant(tenantId),
+        payload: { name: 'LimitCo' },
       });
       expect(createRes.statusCode).toBe(201);
       const brand = JSON.parse(createRes.payload) as { id: string };
@@ -256,17 +349,20 @@ describe('BrandGraph CRUD', () => {
       await app.inject({
         method: 'POST',
         url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        headers: tenant(tenantId),
         payload: { artifactId: 'art_A', artifactType: 'BrandBible' },
       });
       await app.inject({
         method: 'POST',
         url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        headers: tenant(tenantId),
         payload: { artifactId: 'art_B', artifactType: 'VisualBible' },
       });
 
       const graphRes = await app.inject({
         method: 'GET',
         url: `/brandgraph/graph/${brand.id}?limit=1`,
+        headers: tenant(tenantId),
       });
       expect(graphRes.statusCode).toBe(200);
 
@@ -275,10 +371,12 @@ describe('BrandGraph CRUD', () => {
     });
 
     it('GET /brandgraph/graph/:brandId supports cursor paging', async () => {
+      const tenantId = 'tenant-cursor';
       const createRes = await app.inject({
         method: 'POST',
         url: '/brandgraph/brands',
-        payload: { tenantName: 'Acme', name: 'CursorCo' },
+        headers: tenant(tenantId),
+        payload: { name: 'CursorCo' },
       });
       expect(createRes.statusCode).toBe(201);
       const brand = JSON.parse(createRes.payload) as { id: string };
@@ -286,17 +384,20 @@ describe('BrandGraph CRUD', () => {
       await app.inject({
         method: 'POST',
         url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        headers: tenant(tenantId),
         payload: { artifactId: 'art_1' },
       });
       await app.inject({
         method: 'POST',
         url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        headers: tenant(tenantId),
         payload: { artifactId: 'art_2' },
       });
 
       const first = await app.inject({
         method: 'GET',
         url: `/brandgraph/graph/${brand.id}?limit=1`,
+        headers: tenant(tenantId),
       });
       expect(first.statusCode).toBe(200);
 
@@ -307,6 +408,7 @@ describe('BrandGraph CRUD', () => {
       const second = await app.inject({
         method: 'GET',
         url: `/brandgraph/graph/${brand.id}?cursor=${encodeURIComponent(cursor)}&limit=10`,
+        headers: tenant(tenantId),
       });
       expect(second.statusCode).toBe(200);
 
@@ -319,6 +421,7 @@ describe('BrandGraph CRUD', () => {
       const res = await app.inject({
         method: 'GET',
         url: '/brandgraph/graph/non-existent?limit=999999',
+        headers: tenant('tenant-invalid'),
       });
       expect(res.statusCode).toBe(400);
     });
@@ -327,12 +430,9 @@ describe('BrandGraph CRUD', () => {
       const response = await app.inject({
         method: 'GET',
         url: '/brandgraph/graph/does-not-exist',
+        headers: tenant('tenant-missing'),
       });
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.payload);
-      expect(body.brandId).toBe('does-not-exist');
-      expect(Array.isArray(body.nodes)).toBe(true);
-      expect(Array.isArray(body.edges)).toBe(true);
+      expect(response.statusCode).toBe(404);
     });
   });
 });

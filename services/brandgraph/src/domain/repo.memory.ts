@@ -1,5 +1,6 @@
 import { BrandGraphRepo, ArtifactLink } from './repo';
 import { GraphQueryOptions, GraphSnapshot, GraphSnapshotList } from './graph';
+import { tenantKey } from "./tenantKey.js";
 
 export class InMemoryBrandGraphRepo implements BrandGraphRepo {
   constructor(
@@ -7,17 +8,17 @@ export class InMemoryBrandGraphRepo implements BrandGraphRepo {
   ) {}
 
   async createBrand(_input: { id: string; tenantId: string; name: string }) { return {} as any; }
-  async getBrand(_id: string) { return null; }
+  async getBrand(_tenantId: string, _id: string) { return null; }
   async createEvent(_input: any) { return {} as any; }
-  async findEventByBrand(_brandId: string, _eventType: string) { return null; }
+  async findEventByBrand(_tenantId: string, _brandId: string, _eventType: string) { return null; }
   async linkArtifact(_input: any) { return {} as any; }
-  async listArtifactLinks(_brandId: string) { return []; }
+  async listArtifactLinks(_tenantId: string, _brandId: string) { return []; }
 
-  async getGraph(brandId: string, options: GraphQueryOptions = {}): Promise<GraphSnapshot> {
+  async getGraph(tenantId: string, brandId: string, options: GraphQueryOptions = {}): Promise<GraphSnapshot> {
     const DEFAULT_LIMIT = 100;
     const { limit = DEFAULT_LIMIT, cursor, fromTimestamp, toTimestamp } = options;
 
-    let filtered = this.links.filter(l => l.brandId === brandId);
+    let filtered = this.links.filter(l => l.tenantId === tenantId && l.brandId === brandId);
 
     if (cursor) {
       filtered = filtered.filter(l => l.eventId > cursor);
@@ -42,7 +43,7 @@ export class InMemoryBrandGraphRepo implements BrandGraphRepo {
     const nodes = new Map<string, { id: string; type: 'brand' | 'artifact'; label: string }>();
     const edges = [];
 
-    nodes.set(brandId, { id: brandId, type: 'brand', label: brandId });
+    nodes.set(tenantKey(tenantId, brandId), { id: brandId, type: 'brand', label: brandId });
 
     for (const link of filtered) {
       nodes.set(link.artifactId, { id: link.artifactId, type: 'artifact', label: link.artifactId });
@@ -65,11 +66,11 @@ export class InMemoryBrandGraphRepo implements BrandGraphRepo {
     };
   }
 
-  async getGraphSnapshots(brandId: string, options: GraphQueryOptions = {}): Promise<GraphSnapshotList> {
+  async getGraphSnapshots(tenantId: string, brandId: string, options: GraphQueryOptions = {}): Promise<GraphSnapshotList> {
     const DEFAULT_LIMIT = 100;
     const { limit = DEFAULT_LIMIT, cursor, fromTimestamp, toTimestamp } = options;
 
-    let filtered = this.links.filter(l => l.brandId === brandId);
+    let filtered = this.links.filter(l => l.tenantId === tenantId && l.brandId === brandId);
 
     if (cursor) {
       filtered = filtered.filter(l => l.eventId > cursor);
