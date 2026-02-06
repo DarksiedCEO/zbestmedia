@@ -12,20 +12,18 @@
     }
   },
   "scripts": {
-    "lint": "eslint \"packages/**/src/**/*.ts\" \"packages/**/test/**/*.ts\" \"services/**/src/**/*.ts\" \"services/**/test/**/*.ts\" \"scripts/**/*.ts\"",
-    "lint:fix": "eslint \"packages/**/src/**/*.ts\" \"packages/**/test/**/*.ts\" \"services/**/src/**/*.ts\" \"services/**/test/**/*.ts\" \"scripts/**/*.ts\" --fix",
-
-    "test": "vitest run --config vitest.config.ts",
-    "test:artifact-registry": "pnpm -C services/artifact-registry run test",
-    "test:brandgraph": "pnpm -C services/brandgraph run test",
-    "test:packages": "pnpm -r --filter \"./packages/**\" --if-present test",
-
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
 
     "ci:lint": "pnpm -r --if-present lint",
     "ci:typecheck": "pnpm -r --if-present typecheck",
     "ci:test": "pnpm -r --if-present test",
     "ci:all": "pnpm run ci:lint && pnpm run ci:typecheck && pnpm run ci:test",
+
+    "test:artifact-registry": "pnpm -C services/artifact-registry run test",
+    "test:brandgraph": "pnpm -C services/brandgraph run test",
+    "test:agent-lifecycle": "pnpm -C packages/agent-lifecycle run test",
 
     "schemas:gen": "tsx scripts/generate-json-schemas.ts",
     "schemas:check": "tsx scripts/generate-json-schemas.ts --check && git diff --exit-code -- packages/brand-trinity-schemas/schemas packages/eval-gates-schemas/schemas packages/brand-events-contracts/schemas",

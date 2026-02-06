@@ -9,7 +9,7 @@
     "start": "node dist/index.js",
     "lint": "eslint . --ignore-pattern \"src/generated/**\" --ignore-pattern \"src/generated/prisma/**\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --config vitest.config.ts",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",

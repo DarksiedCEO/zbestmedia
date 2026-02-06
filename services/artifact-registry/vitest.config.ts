@@ -7,6 +7,7 @@ export default mergeConfig(rootConfig, defineConfig({
   test: {
     include: ["test/**/*.test.ts"],
   },
+  cacheDir: "../../node_modules/.cache/vitest/artifact-registry",
   resolve: {
     alias: {
       "@zbest/brand-trinity-schemas": path.resolve(__dirname, "../../packages/brand-trinity-schemas/src/index.ts"),
