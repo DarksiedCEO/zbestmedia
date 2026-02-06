@@ -21,7 +21,8 @@
     "ci:test": "pnpm -r --if-present test",
     "ci:all": "pnpm run ci:lint && pnpm run ci:typecheck && pnpm run ci:test",
 
-    "verify": "pnpm run ci:all && pnpm run test:artifact-registry && pnpm run test:brandgraph && pnpm run test:agent-lifecycle",
+    "guard:eslint": "node -e \"const v=require('eslint/package.json').version; if(!v.startsWith('8.')){console.error('ESLint must be v8.x, got '+v); process.exit(1)}\"",
+    "verify": "pnpm run guard:eslint && pnpm run ci:all && pnpm run test:artifact-registry && pnpm run test:brandgraph && pnpm run test:agent-lifecycle",
 
     "test:artifact-registry": "pnpm -C services/artifact-registry run test",
     "test:brandgraph": "pnpm -C services/brandgraph run test",
