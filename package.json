@@ -7,34 +7,25 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "lint": "pnpm -r --if-present lint",
-    "lint:fix": "pnpm -r --if-present lint -- --fix",
-
-    "typecheck": "pnpm -r --if-present typecheck",
-
-    "test": "pnpm -r --if-present test",
-    "test:watch": "pnpm -r --if-present test -- --watch",
-    "test:ci": "pnpm -r --if-present test -- --run",
-
-    "check": "pnpm run lint && pnpm run typecheck && pnpm run test",
-    "ci:lint": "pnpm run lint",
-    "ci:typecheck": "pnpm run typecheck",
-    "ci:test": "pnpm run test",
+    "lint": "eslint \"packages/**/src/**/*.ts\" \"packages/**/test/**/*.ts\" \"services/**/src/**/*.ts\" \"services/**/test/**/*.ts\" \"scripts/**/*.ts\"",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "ci:lint": "pnpm -r --if-present lint",
+    "ci:typecheck": "pnpm -r --if-present typecheck",
+    "ci:test": "pnpm -r --if-present test",
     "ci:all": "pnpm run ci:lint && pnpm run ci:typecheck && pnpm run ci:test",
-
     "schemas:gen": "tsx scripts/generate-json-schemas.ts",
     "schemas:check": "tsx scripts/generate-json-schemas.ts --check && git diff --exit-code -- packages/brand-trinity-schemas/schemas packages/eval-gates-schemas/schemas packages/brand-events-contracts/schemas",
-    "schemas:compat": "tsx scripts/check-schema-compat.ts",
-    "schemas:ci": "pnpm run schemas:check && pnpm run schemas:compat"
+    "schemas:compat": "tsx scripts/check-schema-compat.ts"
   },
   "devDependencies": {
     "@types/node": "^20.14.9",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
-    "eslint": "^8.57.0",
+    "eslint": "^8.57.1",
     "semver": "^7.6.3",
     "tsx": "^4.19.1",
-    "typescript": "5.5.4",
+    "typescript": "^5.9.3",
     "vitest": "^2.1.5",
     "zod-to-json-schema": "^3.23.5"
   }
