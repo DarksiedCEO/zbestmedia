@@ -38,7 +38,7 @@ export type RotationPlan = {
   successorVersion?: string;
 };
 
-export function parseManifest(input: unknown): AgentManifest {
+export function parseRotationManifest(input: unknown): AgentManifest {
   const parsed = AgentManifestSchema.safeParse(input);
   if (!parsed.success) {
     throw new AgentLifecycleError("MANIFEST_INVALID", `Invalid agent manifest: ${parsed.error.message}`);

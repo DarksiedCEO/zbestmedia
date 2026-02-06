@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import type { AgentManifest } from "../src/manifest";
 import { runRotation } from "../src/rotation";
 
@@ -20,10 +20,10 @@ it("rotates expired agents: creates successor + retires predecessor + writes han
   const calls: string[] = [];
   const store = {
     listActiveManifests: async () => [makeManifest()],
-    createManifest: async () => calls.push("createManifest"),
-    updateStatus: async () => calls.push("updateStatus"),
-    writeHandoffSnapshot: async () => calls.push("writeHandoffSnapshot"),
-    appendAuditEvent: async () => calls.push("appendAuditEvent")
+    createManifest: async () => { calls.push("createManifest"); },
+    updateStatus: async () => { calls.push("updateStatus"); },
+    writeHandoffSnapshot: async () => { calls.push("writeHandoffSnapshot"); },
+    appendAuditEvent: async () => { calls.push("appendAuditEvent"); }
   };
 
   const res = await runRotation(store, {

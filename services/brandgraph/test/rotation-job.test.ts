@@ -24,9 +24,9 @@ describe("rotation job (brand-trinity)", () => {
 
     const store = {
       listActiveManifests: async () => [manifest()],
-      createManifest: async (m: AgentManifest) => created.push(m),
-      updateStatus: async (id: string, status: AgentManifest["status"]) => statuses.push({ id, status }),
-      writeHandoffSnapshot: async (s: any) => handoffs.push(s),
+      createManifest: async (m: AgentManifest) => { created.push(m); },
+      updateStatus: async (id: string, status: AgentManifest["status"]) => { statuses.push({ id, status }); },
+      writeHandoffSnapshot: async (s: any) => { handoffs.push(s); },
       appendAuditEvent: async () => {}
     };
 
