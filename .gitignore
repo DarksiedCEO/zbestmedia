@@ -8,3 +8,4 @@ services/**/prisma/dev.db
 services/**/src/generated/prisma/
 services/brandgraph/prisma/test.db
 services/**/prisma/test.db
+.env
