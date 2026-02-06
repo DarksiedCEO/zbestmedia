@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -35,7 +35,7 @@ model GraphEvent {
   tenantId  String
   brandId   String?
   eventType String
-  payload   Json
+  payload   String
   createdAt DateTime @default(now())
 
   @@index([tenantId])
@@ -43,11 +43,6 @@ model GraphEvent {
   @@index([createdAt])
 }
 
-enum AgentStatus {
-  ACTIVE
-  RETIRED
-  DISABLED
-}
 
 model AgentManifest {
   agentId          String     @id
@@ -55,7 +50,7 @@ model AgentManifest {
   ownerDomain      String
   role             String
   version          String
-  status           AgentStatus @default(ACTIVE)
+  status           String      @default("ACTIVE")
   createdAt        DateTime    @default(now())
   expiresAt        DateTime
   memoryNamespace  String
@@ -73,8 +68,8 @@ model RotationAudit {
   id               String      @id @default(cuid())
   tenantId         String
   agentId          String
-  fromStatus       AgentStatus
-  toStatus         AgentStatus
+  fromStatus       String
+  toStatus         String
   successorAgentId String?
   reason           String
   createdAt        DateTime    @default(now())

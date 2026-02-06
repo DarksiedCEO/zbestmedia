@@ -47,11 +47,11 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
 
         const created = await this.prisma.graphEvent.create({
           data: {
-            id: `${input.brandId}:${artifactId}`,
+            id: `${input.tenantId}:${input.brandId}:${artifactId}`,
             tenantId: input.tenantId,
             brandId: input.brandId,
             eventType: input.eventType,
-            payload: input.payload as Prisma.InputJsonValue,
+            payload: JSON.stringify(input.payload),
           },
         });
         return this.toGraphEvent(created);
@@ -64,7 +64,7 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
         tenantId: input.tenantId,
         brandId: input.brandId ?? null,
         eventType: input.eventType,
-        payload: input.payload as Prisma.InputJsonValue,
+        payload: JSON.stringify(input.payload),
       },
     });
 
@@ -90,14 +90,14 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
 
     const created = await this.prisma.graphEvent.create({
       data: {
-        id: `${input.brandId}:${input.artifactId}`,
+        id: `${input.tenantId}:${input.brandId}:${input.artifactId}`,
         tenantId: input.tenantId,
         brandId: input.brandId,
         eventType: "ARTIFACT_LINKED",
-        payload: {
+        payload: JSON.stringify({
           artifactId: input.artifactId,
           artifactType: input.artifactType ?? null,
-        } as Prisma.InputJsonValue,
+        }),
       },
     });
 
@@ -111,6 +111,14 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
     });
 
     return events.map((event) => this.toArtifactLink(event)).filter((link) => link.artifactId);
+  }
+
+  async listBrands(tenantId: string): Promise<Brand[]> {
+    const brands = await this.prisma.brand.findMany({
+      where: { tenantId },
+      orderBy: { name: "asc" },
+    });
+    return brands.map((brand) => this.toBrand(brand));
   }
 
   async getGraph(tenantId: string, brandId: string, options: GraphQueryOptions = {}): Promise<GraphSnapshot> {
@@ -268,24 +276,45 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
   }
 
   private toGraphEvent(event: PrismaGraphEvent): GraphEvent {
+    let payload = event.payload;
+    if (typeof payload === 'string') {
+      try {
+        payload = JSON.parse(payload);
+      } catch (e) {
+        // Fallback to raw string if not JSON
+      }
+    }
+
     return {
       id: event.id,
       tenantId: event.tenantId,
       brandId: event.brandId ?? null,
       eventType: event.eventType,
-      payload: event.payload,
+      payload,
       createdAt: event.createdAt.toISOString(),
     };
   }
 
   private toArtifactLink(event: PrismaGraphEvent): ArtifactLink {
-    const payload = (event.payload ?? {}) as Record<string, unknown>;
+    let payloadObj: Record<string, unknown> = {};
+    const payload = event.payload;
+
+    if (typeof payload === 'string') {
+      try {
+        payloadObj = JSON.parse(payload);
+      } catch (e) {
+        // Fallback
+      }
+    } else if (payload && typeof payload === 'object') {
+      payloadObj = payload as Record<string, unknown>;
+    }
+
     return {
       id: event.id,
       tenantId: event.tenantId,
       brandId: event.brandId ?? "",
-      artifactId: typeof payload.artifactId === "string" ? payload.artifactId : "",
-      artifactType: typeof payload.artifactType === "string" ? payload.artifactType : null,
+      artifactId: typeof payloadObj.artifactId === "string" ? payloadObj.artifactId : "",
+      artifactType: typeof payloadObj.artifactType === "string" ? payloadObj.artifactType : null,
       linkedAt: event.createdAt.toISOString(),
       eventId: event.id,
       createdAt: event.createdAt.toISOString(),
