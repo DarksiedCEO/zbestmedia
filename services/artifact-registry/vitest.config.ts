@@ -3,8 +3,9 @@ import { defineConfig, mergeConfig } from "vitest/config";
 import rootConfig from "../../vitest.config";
 
 export default mergeConfig(rootConfig, defineConfig({
+  root: path.resolve(__dirname),
   test: {
-    include: ["services/artifact-registry/test/**/*.test.ts"],
+    include: ["test/**/*.test.ts"],
   },
   resolve: {
     alias: {

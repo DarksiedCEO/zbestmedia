@@ -6,14 +6,27 @@
   "engines": {
     "node": ">=20.0.0"
   },
+  "pnpm": {
+    "overrides": {
+      "eslint": "8.57.1"
+    }
+  },
   "scripts": {
     "lint": "eslint \"packages/**/src/**/*.ts\" \"packages/**/test/**/*.ts\" \"services/**/src/**/*.ts\" \"services/**/test/**/*.ts\" \"scripts/**/*.ts\"",
+    "lint:fix": "eslint \"packages/**/src/**/*.ts\" \"packages/**/test/**/*.ts\" \"services/**/src/**/*.ts\" \"services/**/test/**/*.ts\" \"scripts/**/*.ts\" --fix",
+
     "test": "vitest run --config vitest.config.ts",
+    "test:artifact-registry": "pnpm -C services/artifact-registry run test",
+    "test:brandgraph": "pnpm -C services/brandgraph run test",
+    "test:packages": "pnpm -r --filter \"./packages/**\" --if-present test",
+
     "typecheck": "tsc -p tsconfig.json --noEmit",
+
     "ci:lint": "pnpm -r --if-present lint",
     "ci:typecheck": "pnpm -r --if-present typecheck",
     "ci:test": "pnpm -r --if-present test",
     "ci:all": "pnpm run ci:lint && pnpm run ci:typecheck && pnpm run ci:test",
+
     "schemas:gen": "tsx scripts/generate-json-schemas.ts",
     "schemas:check": "tsx scripts/generate-json-schemas.ts --check && git diff --exit-code -- packages/brand-trinity-schemas/schemas packages/eval-gates-schemas/schemas packages/brand-events-contracts/schemas",
     "schemas:compat": "tsx scripts/check-schema-compat.ts"
@@ -22,7 +35,7 @@
     "@types/node": "^20.14.9",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
-    "eslint": "^8.57.1",
+    "eslint": "8.57.1",
     "semver": "^7.6.3",
     "tsx": "^4.19.1",
     "typescript": "^5.9.3",

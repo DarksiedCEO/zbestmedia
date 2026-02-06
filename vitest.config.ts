@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   root: path.resolve(__dirname),
+  cacheDir: "/tmp/vite-cache",
   resolve: {
     alias: {
       "@zbest/brand-trinity-schemas": path.resolve(__dirname, "packages/brand-trinity-schemas/src/index.ts"),
