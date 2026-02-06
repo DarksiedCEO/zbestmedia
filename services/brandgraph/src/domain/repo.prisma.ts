@@ -130,23 +130,31 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
         tenantId,
         brandId,
         eventType: { in: allowedEventTypes },
-        ...(cursor ? { id: { gt: cursor } } : {}),
         ...(fromTimestamp ? { createdAt: { gte: new Date(fromTimestamp) } } : {}),
         ...(toTimestamp ? { createdAt: { lte: new Date(toTimestamp) } } : {}),
       },
-      orderBy: [
-        { createdAt: 'asc' },
-        { id: 'asc' },
-      ],
-      take: limit,
+      orderBy: [{ id: 'asc' }],
     });
+
+    const ordered = events.sort((a, b) => a.id.localeCompare(b.id));
+    let pagedSource = ordered;
+    if (cursor) {
+      const cursorIndex = ordered.findIndex((evt) => evt.id === cursor);
+      if (cursorIndex === -1) {
+        throw new Error("INVALID_CURSOR");
+      }
+      pagedSource = ordered.slice(cursorIndex + 1);
+    }
+
+    const paged = pagedSource.slice(0, limit);
+    const hasMore = pagedSource.length > paged.length;
 
     const nodes = new Map<string, { id: string; type: 'brand' | 'artifact'; label: string }>();
     const edges = [];
 
     nodes.set(brandId, { id: brandId, type: 'brand', label: brandId });
 
-    for (const e of events) {
+    for (const e of ordered) {
       const artifactId = this.getArtifactId(e.payload);
       if (!artifactId) continue;
 
@@ -155,6 +163,11 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
         type: 'artifact',
         label: artifactId,
       });
+    }
+
+    for (const e of paged) {
+      const artifactId = this.getArtifactId(e.payload);
+      if (!artifactId) continue;
 
       edges.push({
         id: e.id,
@@ -168,9 +181,10 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
 
     return {
       brandId,
-      nodes: Array.from(nodes.values()),
-      edges,
+      nodes: Array.from(nodes.values()).sort((a, b) => a.id.localeCompare(b.id)),
+      edges: edges.sort((a, b) => a.id.localeCompare(b.id)),
       generatedAt: new Date().toISOString(),
+      nextCursor: hasMore && edges.length ? edges[edges.length - 1]!.id : null,
     };
   }
 
@@ -191,23 +205,36 @@ export class PrismaBrandGraphRepo implements BrandGraphRepo {
         tenantId,
         brandId,
         eventType: { in: allowedEventTypes },
-        ...(cursor ? { id: { gt: cursor } } : {}),
         ...(fromTimestamp ? { createdAt: { gte: new Date(fromTimestamp) } } : {}),
         ...(toTimestamp ? { createdAt: { lte: new Date(toTimestamp) } } : {}),
       },
       orderBy: [
-        { createdAt: 'asc' },
-        { id: 'asc' },
+        { createdAt: 'desc' },
+        { id: 'desc' },
       ],
-      take: limit,
     });
+
+    const ordered = events.sort((a, b) =>
+      a.createdAt === b.createdAt ? b.id.localeCompare(a.id) : b.createdAt.localeCompare(a.createdAt)
+    );
+    if (cursor) {
+      const cursorIndex = ordered.findIndex((evt) => evt.id === cursor);
+      if (cursorIndex === -1) {
+        throw new Error("INVALID_CURSOR");
+      }
+      ordered.splice(0, cursorIndex + 1);
+    }
+
+    const paged = ordered.slice(0, limit);
+    const hasMore = ordered.length > paged.length;
 
     return {
       brandId,
-      snapshots: events.map(e => ({
+      snapshots: paged.map(e => ({
         eventId: e.id,
         createdAt: e.createdAt.toISOString(),
       })),
+      nextCursor: hasMore && paged.length ? paged[paged.length - 1]!.id : null
     };
   }
 

@@ -20,6 +20,7 @@ export interface GraphSnapshot {
   nodes: GraphNode[];
   edges: GraphEdge[];
   generatedAt: string;
+  nextCursor: string | null;
 }
 
 export interface GraphSnapshotMeta {
@@ -30,6 +31,7 @@ export interface GraphSnapshotMeta {
 export interface GraphSnapshotList {
   brandId: string;
   snapshots: GraphSnapshotMeta[];
+  nextCursor: string | null;
 }
 
 /**

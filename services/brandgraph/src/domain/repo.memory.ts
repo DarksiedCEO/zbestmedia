@@ -32,22 +32,31 @@ export class InMemoryBrandGraphRepo implements BrandGraphRepo {
       filtered = filtered.filter(l => l.createdAt <= toTimestamp);
     }
 
-    filtered = filtered
-      .sort((a, b) =>
-        a.createdAt === b.createdAt
-          ? a.eventId.localeCompare(b.eventId)
-          : a.createdAt.localeCompare(b.createdAt)
-      )
-      .slice(0, limit);
+    filtered = filtered.sort((a, b) => a.eventId.localeCompare(b.eventId));
+    const orderedLinks = filtered;
+
+    let pagedSource = orderedLinks;
+    if (cursor) {
+      const cursorIndex = orderedLinks.findIndex((l) => l.eventId === cursor);
+      if (cursorIndex === -1) {
+        throw new Error("INVALID_CURSOR");
+      }
+      pagedSource = orderedLinks.slice(cursorIndex + 1);
+    }
+
+    const paged = pagedSource.slice(0, limit);
+    const hasMore = pagedSource.length > paged.length;
 
     const nodes = new Map<string, { id: string; type: 'brand' | 'artifact'; label: string }>();
     const edges = [];
 
     nodes.set(tenantKey(tenantId, brandId), { id: brandId, type: 'brand', label: brandId });
 
-    for (const link of filtered) {
+    for (const link of orderedLinks) {
       nodes.set(link.artifactId, { id: link.artifactId, type: 'artifact', label: link.artifactId });
+    }
 
+    for (const link of paged) {
       edges.push({
         id: link.eventId,
         from: brandId,
@@ -60,9 +69,10 @@ export class InMemoryBrandGraphRepo implements BrandGraphRepo {
 
     return {
       brandId,
-      nodes: Array.from(nodes.values()),
-      edges,
+      nodes: Array.from(nodes.values()).sort((a, b) => a.id.localeCompare(b.id)),
+      edges: edges.sort((a, b) => a.id.localeCompare(b.id)),
       generatedAt: new Date().toISOString(),
+      nextCursor: hasMore && edges.length ? edges[edges.length - 1]!.id : null,
     };
   }
 
@@ -86,15 +96,30 @@ export class InMemoryBrandGraphRepo implements BrandGraphRepo {
 
     filtered = filtered.sort((a, b) =>
       a.createdAt === b.createdAt
-        ? a.eventId.localeCompare(b.eventId)
-        : a.createdAt.localeCompare(b.createdAt)
+        ? b.eventId.localeCompare(a.eventId)
+        : b.createdAt.localeCompare(a.createdAt)
     );
 
-    const snapshots = filtered.slice(0, limit).map(l => ({
+    if (cursor) {
+      const cursorIndex = filtered.findIndex((l) => l.eventId === cursor);
+      if (cursorIndex === -1) {
+        throw new Error("INVALID_CURSOR");
+      }
+      filtered = filtered.slice(cursorIndex + 1);
+    }
+
+    const paged = filtered.slice(0, limit);
+    const snapshots = paged.map(l => ({
       eventId: l.eventId,
       createdAt: l.createdAt,
     }));
 
-    return { brandId, snapshots };
+    return {
+      brandId,
+      snapshots,
+      nextCursor: filtered.length > paged.length && snapshots.length
+        ? snapshots[snapshots.length - 1]!.eventId
+        : null
+    };
   }
 }

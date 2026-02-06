@@ -335,6 +335,73 @@ describe('BrandGraph CRUD', () => {
       expect(body.snapshots[0].eventId).toBeDefined();
     });
 
+    it('GET /brandgraph/graph/:brandId/snapshots supports paging with nextCursor', async () => {
+      const tenantId = 'tenant-snapshot-paging';
+      const brandName = `SnapshotPage-${Date.now()}`;
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/brandgraph/brands',
+        headers: tenant(tenantId),
+        payload: { name: brandName },
+      });
+      expect(createRes.statusCode).toBe(201);
+      const brand = JSON.parse(createRes.payload);
+
+      await app.inject({
+        method: 'POST',
+        url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        headers: tenant(tenantId),
+        payload: { artifactId: 'art_snap_a' },
+      });
+      await app.inject({
+        method: 'POST',
+        url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        headers: tenant(tenantId),
+        payload: { artifactId: 'art_snap_b' },
+      });
+
+      const first = await app.inject({
+        method: 'GET',
+        url: `/brandgraph/graph/${brand.id}/snapshots?limit=1`,
+        headers: tenant(tenantId),
+      });
+      expect(first.statusCode).toBe(200);
+      const firstBody = JSON.parse(first.payload) as {
+        snapshots: Array<{ eventId: string }>;
+        nextCursor: string | null;
+      };
+      expect(firstBody.snapshots.length).toBe(1);
+      expect(firstBody.nextCursor).toBe(firstBody.snapshots[0]!.eventId);
+
+      const second = await app.inject({
+        method: 'GET',
+        url: `/brandgraph/graph/${brand.id}/snapshots?limit=1&cursor=${encodeURIComponent(firstBody.nextCursor!)}`,
+        headers: tenant(tenantId),
+      });
+      expect(second.statusCode).toBe(200);
+      const secondBody = JSON.parse(second.payload) as { snapshots: Array<{ eventId: string }> };
+      expect(secondBody.snapshots.some((s) => s.eventId === firstBody.nextCursor)).toBe(false);
+    });
+
+    it('GET /brandgraph/graph/:brandId/snapshots returns 400 for invalid cursor', async () => {
+      const tenantId = 'tenant-snapshot-invalid';
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/brandgraph/brands',
+        headers: tenant(tenantId),
+        payload: { name: 'SnapshotInvalid' },
+      });
+      expect(createRes.statusCode).toBe(201);
+      const brand = JSON.parse(createRes.payload);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/brandgraph/graph/${brand.id}/snapshots?cursor=does-not-exist`,
+        headers: tenant(tenantId),
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
     it('GET /brandgraph/graph/:brandId supports limit', async () => {
       const tenantId = 'tenant-limit';
       const createRes = await app.inject({
@@ -366,8 +433,9 @@ describe('BrandGraph CRUD', () => {
       });
       expect(graphRes.statusCode).toBe(200);
 
-      const body = JSON.parse(graphRes.payload) as { edges: Array<{ id: string }> };
+      const body = JSON.parse(graphRes.payload) as { edges: Array<{ id: string }>; nextCursor: string | null };
       expect(body.edges.length).toBe(1);
+      expect(body.nextCursor).toBe(body.edges[0]!.id);
     });
 
     it('GET /brandgraph/graph/:brandId supports cursor paging', async () => {
@@ -401,9 +469,9 @@ describe('BrandGraph CRUD', () => {
       });
       expect(first.statusCode).toBe(200);
 
-      const firstBody = JSON.parse(first.payload) as { edges: Array<{ id: string }> };
+      const firstBody = JSON.parse(first.payload) as { edges: Array<{ id: string }>; nextCursor: string | null };
       expect(firstBody.edges.length).toBe(1);
-      const cursor = firstBody.edges[0]!.id;
+      const cursor = firstBody.nextCursor!;
 
       const second = await app.inject({
         method: 'GET',
@@ -426,6 +494,25 @@ describe('BrandGraph CRUD', () => {
       expect(res.statusCode).toBe(400);
     });
 
+    it('GET /brandgraph/graph/:brandId returns 400 for invalid cursor', async () => {
+      const tenantId = 'tenant-invalid-cursor';
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/brandgraph/brands',
+        headers: tenant(tenantId),
+        payload: { name: 'CursorInvalid' },
+      });
+      expect(createRes.statusCode).toBe(201);
+      const brand = JSON.parse(createRes.payload) as { id: string };
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/brandgraph/graph/${brand.id}?cursor=does-not-exist`,
+        headers: tenant(tenantId),
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
     it('returns 404 for non-existent graph', async () => {
       const response = await app.inject({
         method: 'GET',
@@ -433,6 +520,48 @@ describe('BrandGraph CRUD', () => {
         headers: tenant('tenant-missing'),
       });
       expect(response.statusCode).toBe(404);
+    });
+
+    it('GET /brandgraph/graph/:brandId returns stable ordering', async () => {
+      const tenantId = 'tenant-stable';
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/brandgraph/brands',
+        headers: tenant(tenantId),
+        payload: { name: 'StableOrder' },
+      });
+      expect(createRes.statusCode).toBe(201);
+      const brand = JSON.parse(createRes.payload) as { id: string };
+
+      await app.inject({
+        method: 'POST',
+        url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        headers: tenant(tenantId),
+        payload: { artifactId: 'art_2' },
+      });
+      await app.inject({
+        method: 'POST',
+        url: `/brandgraph/brands/${brand.id}/artifacts/link`,
+        headers: tenant(tenantId),
+        payload: { artifactId: 'art_1' },
+      });
+
+      const first = await app.inject({
+        method: 'GET',
+        url: `/brandgraph/graph/${brand.id}`,
+        headers: tenant(tenantId),
+      });
+      const second = await app.inject({
+        method: 'GET',
+        url: `/brandgraph/graph/${brand.id}`,
+        headers: tenant(tenantId),
+      });
+
+      expect(first.statusCode).toBe(200);
+      expect(second.statusCode).toBe(200);
+      const firstBody = JSON.parse(first.payload) as { edges: Array<{ id: string }> };
+      const secondBody = JSON.parse(second.payload) as { edges: Array<{ id: string }> };
+      expect(firstBody.edges[0]?.id).toBe(secondBody.edges[0]?.id);
     });
   });
 });

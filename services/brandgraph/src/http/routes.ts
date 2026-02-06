@@ -12,7 +12,11 @@ const CreateBrandSchema = z.object({
   tenantName: z.string().optional().default('Default Tenant'),
 });
 
-const MAX_LIMIT = 500;
+const MAX_LIMIT = 100;
+const CursorSchema = z
+  .string()
+  .min(3)
+  .regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/);
 
 function parseGraphQueryOptions(query: unknown): GraphQueryOptions {
   const q = (query ?? {}) as Record<string, unknown>;
@@ -34,8 +38,12 @@ function parseGraphQueryOptions(query: unknown): GraphQueryOptions {
     limit = n;
   }
 
-  const cursor =
+  const cursorRaw =
     typeof q.cursor === 'string' && q.cursor.trim() !== '' ? q.cursor : undefined;
+  const cursorParsed = cursorRaw ? CursorSchema.safeParse(cursorRaw) : undefined;
+  if (cursorRaw && !cursorParsed?.success) {
+    throw new Error('INVALID_CURSOR');
+  }
 
   const fromTimestamp =
     typeof q.fromTimestamp === 'string' && q.fromTimestamp.trim() !== ''
@@ -68,7 +76,7 @@ function parseGraphQueryOptions(query: unknown): GraphQueryOptions {
 
   return {
     limit,
-    cursor,
+    cursor: cursorRaw ?? undefined,
     fromTimestamp,
     toTimestamp,
     eventTypes,
@@ -223,7 +231,16 @@ export async function brandRoutes(
     const brand = await repo.getBrand(tenantId, brandId);
     if (!brand) return reply.code(404).send({ error: 'NOT_FOUND' });
 
-    const graph = await repo.getGraph(tenantId, brandId, options);
+    let graph;
+    try {
+      graph = await repo.getGraph(tenantId, brandId, options);
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (msg === 'INVALID_CURSOR') {
+        return reply.code(400).send({ error: msg });
+      }
+      throw err;
+    }
 
     return reply.code(200).send(graph);
   });
@@ -251,7 +268,16 @@ export async function brandRoutes(
     const brand = await repo.getBrand(tenantId, brandId);
     if (!brand) return reply.code(404).send({ error: 'NOT_FOUND' });
 
-    const snapshots = await repo.getGraphSnapshots(tenantId, brandId, options);
+    let snapshots;
+    try {
+      snapshots = await repo.getGraphSnapshots(tenantId, brandId, options);
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (msg === 'INVALID_CURSOR') {
+        return reply.code(400).send({ error: msg });
+      }
+      throw err;
+    }
     return reply.code(200).send(snapshots);
   });
 }
