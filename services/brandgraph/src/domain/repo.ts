@@ -22,6 +22,7 @@ export type GraphEvent = {
 export interface BrandGraphRepo {
   createBrand(input: { id: string; tenantId: string; name: string }): Promise<Brand>;
   getBrand(tenantId: string, id: string): Promise<Brand | null>;
+  listBrands(tenantId: string): Promise<Brand[]>;
   createEvent(input: Omit<GraphEvent, "createdAt">): Promise<GraphEvent>;
   findEventByBrand(tenantId: string, brandId: string, eventType: string): Promise<GraphEvent | null>;
   linkArtifact(input: {
@@ -69,6 +70,11 @@ export function createInMemoryRepo(): BrandGraphRepo {
     },
     async getBrand(tenantId, id) {
       return brands.get(tenantKey(tenantId, id)) ?? null;
+    },
+    async listBrands(tenantId) {
+      return Array.from(brands.values())
+        .filter((brand) => brand.tenantId === tenantId)
+        .sort((a, b) => a.name.localeCompare(b.name));
     },
     async createEvent(input) {
       const now = new Date().toISOString();

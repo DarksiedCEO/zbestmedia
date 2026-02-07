@@ -120,6 +120,20 @@ export async function brandRoutes(
     return reply.status(201).send(brand);
   });
 
+  // GET /brandgraph/brands
+  app.get('/brands', async (request, reply) => {
+    let tenantId: string;
+    try {
+      tenantId = getTenantId(request);
+    } catch (err) {
+      const error = err as { statusCode?: number; code?: string };
+      return reply.code(error.statusCode ?? 400).send({ error: error.code ?? 'TENANT_ID_REQUIRED' });
+    }
+
+    const brands = await repo.listBrands(tenantId);
+    return reply.send(brands);
+  });
+
   // GET /brandgraph/brands/:id
   app.get('/brands/:id', async (request, reply) => {
     let tenantId: string;
