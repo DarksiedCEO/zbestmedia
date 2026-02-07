@@ -9,3 +9,8 @@ services/**/src/generated/prisma/
 services/brandgraph/prisma/test.db
 services/**/prisma/test.db
 .env
+# env files
+.env.local
+apps/*/.env.local
+apps/*/.env.*
+
