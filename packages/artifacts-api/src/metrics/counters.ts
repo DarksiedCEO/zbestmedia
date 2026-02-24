@@ -7,7 +7,10 @@ export type MetricsSnapshot = {
   policyDenialsByCode: Record<string, number>;
   leadIntakeTotalBySource: Record<string, number>;
   leadEventsTotalByType: Record<string, number>;
+  leadConversionsTotalByType: Record<string, number>;
+  leadStageTransitionsTotalByTo: Record<string, number>;
   leadIntakeDurationMs: { count: number; sum: number };
+  leadConversionDurationMs: { count: number; sum: number };
   leadScoreRecomputeDurationMs: { count: number; sum: number };
 };
 
@@ -20,7 +23,10 @@ const state: MetricsSnapshot = {
   policyDenialsByCode: {},
   leadIntakeTotalBySource: {},
   leadEventsTotalByType: {},
+  leadConversionsTotalByType: {},
+  leadStageTransitionsTotalByTo: {},
   leadIntakeDurationMs: { count: 0, sum: 0 },
+  leadConversionDurationMs: { count: 0, sum: 0 },
   leadScoreRecomputeDurationMs: { count: 0, sum: 0 }
 };
 
@@ -66,9 +72,26 @@ export function incLeadEventsTotal(type: string): void {
   state.leadEventsTotalByType[key] = (state.leadEventsTotalByType[key] ?? 0) + 1;
 }
 
+export function incLeadConversionsTotal(type: string): void {
+  const key = type.trim().toLowerCase();
+  if (!key) return;
+  state.leadConversionsTotalByType[key] = (state.leadConversionsTotalByType[key] ?? 0) + 1;
+}
+
+export function incLeadStageTransitionsTotal(to: string): void {
+  const key = to.trim().toLowerCase();
+  if (!key) return;
+  state.leadStageTransitionsTotalByTo[key] = (state.leadStageTransitionsTotalByTo[key] ?? 0) + 1;
+}
+
 export function observeLeadIntakeDurationMs(durationMs: number): void {
   state.leadIntakeDurationMs.count += 1;
   state.leadIntakeDurationMs.sum += Math.max(0, durationMs);
+}
+
+export function observeLeadConversionDurationMs(durationMs: number): void {
+  state.leadConversionDurationMs.count += 1;
+  state.leadConversionDurationMs.sum += Math.max(0, durationMs);
 }
 
 export function observeLeadScoreRecomputeDurationMs(durationMs: number): void {
@@ -82,7 +105,10 @@ export function snapshotMetrics(): MetricsSnapshot {
     policyDenialsByCode: { ...state.policyDenialsByCode },
     leadIntakeTotalBySource: { ...state.leadIntakeTotalBySource },
     leadEventsTotalByType: { ...state.leadEventsTotalByType },
+    leadConversionsTotalByType: { ...state.leadConversionsTotalByType },
+    leadStageTransitionsTotalByTo: { ...state.leadStageTransitionsTotalByTo },
     leadIntakeDurationMs: { ...state.leadIntakeDurationMs },
+    leadConversionDurationMs: { ...state.leadConversionDurationMs },
     leadScoreRecomputeDurationMs: { ...state.leadScoreRecomputeDurationMs }
   };
 }
@@ -96,6 +122,9 @@ export function resetMetricsForTests(): void {
   state.policyDenialsByCode = {};
   state.leadIntakeTotalBySource = {};
   state.leadEventsTotalByType = {};
+  state.leadConversionsTotalByType = {};
+  state.leadStageTransitionsTotalByTo = {};
   state.leadIntakeDurationMs = { count: 0, sum: 0 };
+  state.leadConversionDurationMs = { count: 0, sum: 0 };
   state.leadScoreRecomputeDurationMs = { count: 0, sum: 0 };
 }

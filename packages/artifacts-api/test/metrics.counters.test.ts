@@ -3,12 +3,15 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   incArtifactsCreated,
   incArtifactsSuperseded,
+  incLeadConversionsTotal,
   incLeadEventsTotal,
   incLeadIntakeTotal,
+  incLeadStageTransitionsTotal,
   incPolicyDenials,
   incPolicyDenialsByCodes,
   incSealVerificationFailures,
   incTenantBudgetViolations,
+  observeLeadConversionDurationMs,
   observeLeadIntakeDurationMs,
   observeLeadScoreRecomputeDurationMs,
   resetMetricsForTests,
@@ -30,7 +33,10 @@ describe("metrics counters", () => {
       policyDenialsByCode: {},
       leadIntakeTotalBySource: {},
       leadEventsTotalByType: {},
+      leadConversionsTotalByType: {},
+      leadStageTransitionsTotalByTo: {},
       leadIntakeDurationMs: { count: 0, sum: 0 },
+      leadConversionDurationMs: { count: 0, sum: 0 },
       leadScoreRecomputeDurationMs: { count: 0, sum: 0 }
     });
 
@@ -41,7 +47,10 @@ describe("metrics counters", () => {
     incPolicyDenials();
     incLeadIntakeTotal("website");
     incLeadEventsTotal("intake");
+    incLeadConversionsTotal("meeting_booked");
+    incLeadStageTransitionsTotal("sql");
     observeLeadIntakeDurationMs(12);
+    observeLeadConversionDurationMs(9);
     observeLeadScoreRecomputeDurationMs(7);
 
     expect(snapshotMetrics()).toEqual({
@@ -53,7 +62,10 @@ describe("metrics counters", () => {
       policyDenialsByCode: {},
       leadIntakeTotalBySource: { website: 1 },
       leadEventsTotalByType: { intake: 1 },
+      leadConversionsTotalByType: { meeting_booked: 1 },
+      leadStageTransitionsTotalByTo: { sql: 1 },
       leadIntakeDurationMs: { count: 1, sum: 12 },
+      leadConversionDurationMs: { count: 1, sum: 9 },
       leadScoreRecomputeDurationMs: { count: 1, sum: 7 }
     });
   });

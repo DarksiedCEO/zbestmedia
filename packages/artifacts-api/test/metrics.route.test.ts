@@ -71,7 +71,10 @@ describe("GET /metrics", () => {
       policyDenialsByCode: expect.any(Object),
       leadIntakeTotalBySource: expect.any(Object),
       leadEventsTotalByType: expect.any(Object),
+      leadConversionsTotalByType: expect.any(Object),
+      leadStageTransitionsTotalByTo: expect.any(Object),
       leadIntakeDurationMs: { count: expect.any(Number), sum: expect.any(Number) },
+      leadConversionDurationMs: { count: expect.any(Number), sum: expect.any(Number) },
       leadScoreRecomputeDurationMs: { count: expect.any(Number), sum: expect.any(Number) }
     });
   });

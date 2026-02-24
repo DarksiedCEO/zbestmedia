@@ -26,3 +26,16 @@ export const eventSchema = z.object({
   actor: shortString(1, 120).optional(),
   recomputeScore: z.boolean().optional()
 });
+
+export const conversionSchema = z.object({
+  type: shortString(1, 64),
+  valueUsd: z.number().nonnegative().max(999_999_999).optional(),
+  meta: z.record(z.any()).default({}),
+  recomputeScore: z.boolean().optional()
+});
+
+export function parseBoundedLimit(raw: unknown, def = 20, max = 50): number {
+  const n = typeof raw === "string" ? Number(raw) : typeof raw === "number" ? raw : def;
+  if (!Number.isFinite(n)) return def;
+  return Math.max(1, Math.min(max, Math.floor(n)));
+}

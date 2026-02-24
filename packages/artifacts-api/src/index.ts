@@ -24,9 +24,11 @@ export { buildServer } from "./server";
 export * from "./policy";
 export { leadModule } from "./lead/leadModule";
 export { leadRoutes } from "./lead/http/leadRoutes";
-export { intakeSchema, eventSchema } from "./lead/http/validators";
+export { leadConversionRoutes } from "./lead/http/conversionRoutes";
+export { intakeSchema, eventSchema, conversionSchema, parseBoundedLimit } from "./lead/http/validators";
 export { LeadRepo } from "./lead/repo/leadRepo";
 export { LeadEventRepo } from "./lead/repo/eventRepo";
+export { LeadConversionRepo } from "./lead/repo/conversionRepo";
 export { LeadScoreService } from "./lead/scoring/scoreService";
 export { computeScoreV1 } from "./lead/scoring/scoreV1";
 export type {
@@ -43,7 +45,10 @@ export {
   incArtifactsSuperseded,
   incLeadEventsTotal,
   incLeadIntakeTotal,
+  incLeadConversionsTotal,
+  incLeadStageTransitionsTotal,
   observeLeadIntakeDurationMs,
+  observeLeadConversionDurationMs,
   observeLeadScoreRecomputeDurationMs,
   incSealVerificationFailures,
   incTenantBudgetViolations,

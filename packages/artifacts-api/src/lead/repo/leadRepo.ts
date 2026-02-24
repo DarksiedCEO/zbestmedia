@@ -28,6 +28,8 @@ type ScoreUpdateInput = {
 export type LeadRow = {
   id: string;
   tenant_id: string;
+  created_at: Date;
+  updated_at: Date;
   email: string | null;
   phone: string | null;
   first_name: string | null;
@@ -37,6 +39,10 @@ export type LeadRow = {
   source: string;
   source_ref: string | null;
   channel: string | null;
+  score_total: number;
+  score_version: string;
+  score_updated_at: Date | null;
+  lifecycle_stage: string;
 };
 
 type LeadEventForScoring = {
@@ -69,6 +75,10 @@ export class LeadRepo {
       [tenantId, leadId]
     );
     return rows[0] ?? null;
+  }
+
+  async getById(client: PoolClient, tenantId: string, leadId: string): Promise<LeadRow | null> {
+    return this.findById(client, tenantId, leadId);
   }
 
   async insert(client: PoolClient, data: LeadInsertInput): Promise<string> {
