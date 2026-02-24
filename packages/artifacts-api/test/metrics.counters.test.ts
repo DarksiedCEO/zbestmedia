@@ -6,7 +6,9 @@ import {
   incLeadConversionsTotal,
   incLeadEventsTotal,
   incLeadIntakeTotal,
+  incLeadRequestsTotal,
   incLeadStageTransitionsTotal,
+  observeLeadRequestDurationMs,
   incPolicyDenials,
   incPolicyDenialsByCodes,
   incSealVerificationFailures,
@@ -35,6 +37,9 @@ describe("metrics counters", () => {
       leadEventsTotalByType: {},
       leadConversionsTotalByType: {},
       leadStageTransitionsTotalByTo: {},
+      leadRequestsTotalByRouteMethodStatus: {},
+      leadErrorsTotalByRouteCode: {},
+      leadRequestDurationMsByRouteMethod: {},
       leadIntakeDurationMs: { count: 0, sum: 0 },
       leadConversionDurationMs: { count: 0, sum: 0 },
       leadScoreRecomputeDurationMs: { count: 0, sum: 0 }
@@ -49,7 +54,9 @@ describe("metrics counters", () => {
     incLeadEventsTotal("intake");
     incLeadConversionsTotal("meeting_booked");
     incLeadStageTransitionsTotal("sql");
+    incLeadRequestsTotal("/v1/leads/intake", "POST", 200);
     observeLeadIntakeDurationMs(12);
+    observeLeadRequestDurationMs("/v1/leads/intake", "POST", 11);
     observeLeadConversionDurationMs(9);
     observeLeadScoreRecomputeDurationMs(7);
 
@@ -64,6 +71,9 @@ describe("metrics counters", () => {
       leadEventsTotalByType: { intake: 1 },
       leadConversionsTotalByType: { meeting_booked: 1 },
       leadStageTransitionsTotalByTo: { sql: 1 },
+      leadRequestsTotalByRouteMethodStatus: { "/v1/leads/intake|POST|200": 1 },
+      leadErrorsTotalByRouteCode: {},
+      leadRequestDurationMsByRouteMethod: { "/v1/leads/intake|POST": { count: 1, sum: 11 } },
       leadIntakeDurationMs: { count: 1, sum: 12 },
       leadConversionDurationMs: { count: 1, sum: 9 },
       leadScoreRecomputeDurationMs: { count: 1, sum: 7 }

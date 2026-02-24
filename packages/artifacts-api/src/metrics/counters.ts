@@ -9,6 +9,9 @@ export type MetricsSnapshot = {
   leadEventsTotalByType: Record<string, number>;
   leadConversionsTotalByType: Record<string, number>;
   leadStageTransitionsTotalByTo: Record<string, number>;
+  leadRequestsTotalByRouteMethodStatus: Record<string, number>;
+  leadErrorsTotalByRouteCode: Record<string, number>;
+  leadRequestDurationMsByRouteMethod: Record<string, { count: number; sum: number }>;
   leadIntakeDurationMs: { count: number; sum: number };
   leadConversionDurationMs: { count: number; sum: number };
   leadScoreRecomputeDurationMs: { count: number; sum: number };
@@ -25,6 +28,9 @@ const state: MetricsSnapshot = {
   leadEventsTotalByType: {},
   leadConversionsTotalByType: {},
   leadStageTransitionsTotalByTo: {},
+  leadRequestsTotalByRouteMethodStatus: {},
+  leadErrorsTotalByRouteCode: {},
+  leadRequestDurationMsByRouteMethod: {},
   leadIntakeDurationMs: { count: 0, sum: 0 },
   leadConversionDurationMs: { count: 0, sum: 0 },
   leadScoreRecomputeDurationMs: { count: 0, sum: 0 }
@@ -84,6 +90,33 @@ export function incLeadStageTransitionsTotal(to: string): void {
   state.leadStageTransitionsTotalByTo[key] = (state.leadStageTransitionsTotalByTo[key] ?? 0) + 1;
 }
 
+export function incLeadRequestsTotal(route: string, method: string, status: number): void {
+  const routeKey = route.trim().toLowerCase();
+  const methodKey = method.trim().toUpperCase();
+  if (!routeKey || !methodKey || !Number.isFinite(status)) return;
+  const key = `${routeKey}|${methodKey}|${Math.trunc(status)}`;
+  state.leadRequestsTotalByRouteMethodStatus[key] = (state.leadRequestsTotalByRouteMethodStatus[key] ?? 0) + 1;
+}
+
+export function incLeadErrorsTotal(route: string, code: string): void {
+  const routeKey = route.trim().toLowerCase();
+  const codeKey = code.trim().toLowerCase();
+  if (!routeKey || !codeKey) return;
+  const key = `${routeKey}|${codeKey}`;
+  state.leadErrorsTotalByRouteCode[key] = (state.leadErrorsTotalByRouteCode[key] ?? 0) + 1;
+}
+
+export function observeLeadRequestDurationMs(route: string, method: string, durationMs: number): void {
+  const routeKey = route.trim().toLowerCase();
+  const methodKey = method.trim().toUpperCase();
+  if (!routeKey || !methodKey) return;
+  const key = `${routeKey}|${methodKey}`;
+  const bucket = state.leadRequestDurationMsByRouteMethod[key] ?? { count: 0, sum: 0 };
+  bucket.count += 1;
+  bucket.sum += Math.max(0, durationMs);
+  state.leadRequestDurationMsByRouteMethod[key] = bucket;
+}
+
 export function observeLeadIntakeDurationMs(durationMs: number): void {
   state.leadIntakeDurationMs.count += 1;
   state.leadIntakeDurationMs.sum += Math.max(0, durationMs);
@@ -107,6 +140,11 @@ export function snapshotMetrics(): MetricsSnapshot {
     leadEventsTotalByType: { ...state.leadEventsTotalByType },
     leadConversionsTotalByType: { ...state.leadConversionsTotalByType },
     leadStageTransitionsTotalByTo: { ...state.leadStageTransitionsTotalByTo },
+    leadRequestsTotalByRouteMethodStatus: { ...state.leadRequestsTotalByRouteMethodStatus },
+    leadErrorsTotalByRouteCode: { ...state.leadErrorsTotalByRouteCode },
+    leadRequestDurationMsByRouteMethod: Object.fromEntries(
+      Object.entries(state.leadRequestDurationMsByRouteMethod).map(([key, value]) => [key, { ...value }])
+    ),
     leadIntakeDurationMs: { ...state.leadIntakeDurationMs },
     leadConversionDurationMs: { ...state.leadConversionDurationMs },
     leadScoreRecomputeDurationMs: { ...state.leadScoreRecomputeDurationMs }
@@ -124,6 +162,9 @@ export function resetMetricsForTests(): void {
   state.leadEventsTotalByType = {};
   state.leadConversionsTotalByType = {};
   state.leadStageTransitionsTotalByTo = {};
+  state.leadRequestsTotalByRouteMethodStatus = {};
+  state.leadErrorsTotalByRouteCode = {};
+  state.leadRequestDurationMsByRouteMethod = {};
   state.leadIntakeDurationMs = { count: 0, sum: 0 };
   state.leadConversionDurationMs = { count: 0, sum: 0 };
   state.leadScoreRecomputeDurationMs = { count: 0, sum: 0 };
