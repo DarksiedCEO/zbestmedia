@@ -6,8 +6,8 @@ describe("loadEnv", () => {
   it("parses required values and defaults", () => {
     const env = loadEnv({
       DATABASE_URL: "postgres://localhost:5432/zbest",
-      AUTH_JWT_SECRET: "secret",
-      ARTIFACT_SIGNING_KEY: "signing-key"
+      AUTH_JWT_SECRET: "s".repeat(32),
+      ARTIFACT_SIGNING_KEY: "k".repeat(32)
     });
 
     expect(env.NODE_ENV).toBe("development");
