@@ -13,7 +13,12 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --no-error-on-unmatched-pattern",
     "test": "vitest run --config ../../vitest.config.ts --passWithNoTests",
-    "db:migrate": "test -n \"$DATABASE_URL\" && psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f db/migrations/001_artifacts_rls.sql && psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f db/migrations/002_artifacts_determinism_input.sql",
+    "db:up": "docker compose -f db/docker-compose.postgres.yml up -d",
+    "db:down": "docker compose -f db/docker-compose.postgres.yml down -v",
+    "db:wait": "node db/scripts/wait-for-db.js",
+    "db:migrate:check": "node db/scripts/resolve-db-url.js",
+    "db:migrate": "node db/scripts/migrate.js",
+    "db:migrate:local": "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/zbestmedia_artifacts pnpm db:migrate",
     "start": "tsx src/main.ts"
   },
   "dependencies": {

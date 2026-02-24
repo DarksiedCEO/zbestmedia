@@ -1,28 +1,16 @@
 import { execFile } from "node:child_process";
+import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
 export async function applyArtifactsMigration(args: { databaseUrl: string }): Promise<void> {
-  const migrations = [
-    path.resolve(
-      process.cwd(),
-      "packages",
-      "artifacts-api",
-      "db",
-      "migrations",
-      "001_artifacts_rls.sql"
-    ),
-    path.resolve(
-      process.cwd(),
-      "packages",
-      "artifacts-api",
-      "db",
-      "migrations",
-      "002_artifacts_determinism_input.sql"
-    )
-  ];
+  const migrationDir = path.resolve(process.cwd(), "packages", "artifacts-api", "db", "migrations");
+  const migrations = (await readdir(migrationDir))
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => path.join(migrationDir, name));
 
   try {
     for (const migrationPath of migrations) {

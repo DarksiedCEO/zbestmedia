@@ -6,12 +6,19 @@ Apply migrations locally from the `packages/artifacts-api` directory:
 pnpm db:migrate
 ```
 
-The command requires `DATABASE_URL` and runs:
+Local Postgres workflow:
 
 ```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/001_artifacts_rls.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/002_artifacts_determinism_input.sql
+pnpm db:up
+pnpm db:migrate:local
+pnpm db:down
 ```
+
+`db:migrate` resolves DB URL from:
+1) `DATABASE_URL`
+2) `ARTIFACTS_INT_DATABASE_URL`
+3) `ARTIFACTS_DB_URL`
+4) `.env` / `.env.local` in `packages/artifacts-api`
 
 ## Manual RLS verification
 
