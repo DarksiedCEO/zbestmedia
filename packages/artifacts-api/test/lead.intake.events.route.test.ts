@@ -22,7 +22,7 @@ async function signToken(args: { tenantId: string; actorId: string; roles?: stri
     .sign(new TextEncoder().encode(JWT_SECRET));
 }
 
-describe.runIf(Boolean(DATABASE_URL))("lead conversion routes", () => {
+describe.runIf(Boolean(DATABASE_URL))("lead intake and events routes", () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
 
   beforeAll(async () => {
@@ -50,61 +50,77 @@ describe.runIf(Boolean(DATABASE_URL))("lead conversion routes", () => {
     await app.close();
   });
 
-  it("appends conversion and supports bounded retrieval", async () => {
+  it("returns 400 for invalid intake payload", async () => {
     const tokenA = await signToken({ tenantId: TENANT_A, actorId: "actor-a" });
-
-    const intake = await app.inject({
+    const res = await app.inject({
       method: "POST",
       url: "/v1/leads/intake",
       headers: { authorization: `Bearer ${tokenA}` },
-      payload: { email: "a@acme.com", source: "website" }
+      payload: { source: "website", email: "not-an-email" }
     });
-    expect(intake.statusCode).toBe(200);
-    const leadId = String(intake.json().leadId);
 
-    const conversion = await app.inject({
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe("invalid_payload");
+  });
+
+  it("creates on first intake and upserts by tenant+email on second intake", async () => {
+    const tokenA = await signToken({ tenantId: TENANT_A, actorId: "actor-a" });
+
+    const first = await app.inject({
       method: "POST",
-      url: `/v1/leads/${leadId}/conversions`,
+      url: "/v1/leads/intake",
       headers: { authorization: `Bearer ${tokenA}` },
-      payload: { type: "meeting_booked" }
+      payload: { source: "website", email: "u1@acme.com", firstName: "A" }
     });
-    expect(conversion.statusCode).toBe(200);
-    expect(conversion.json().leadId).toBe(leadId);
-    expect(conversion.json().conversion.type).toBe("meeting_booked");
+    expect(first.statusCode).toBe(200);
+    const leadIdA = String(first.json().leadId);
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/v1/leads/intake",
+      headers: { authorization: `Bearer ${tokenA}` },
+      payload: { source: "website", email: "u1@acme.com", lastName: "B" }
+    });
+    expect(second.statusCode).toBe(200);
+    const leadIdB = String(second.json().leadId);
+    expect(leadIdB).toBe(leadIdA);
 
     const getLead = await app.inject({
       method: "GET",
-      url: `/v1/leads/${leadId}?eventsLimit=1&conversionsLimit=1`,
+      url: `/v1/leads/${leadIdA}`,
       headers: { authorization: `Bearer ${tokenA}` }
     });
     expect(getLead.statusCode).toBe(200);
-    expect(getLead.json().lead.id).toBe(leadId);
-    expect(getLead.json().limits.events).toBe(1);
-    expect(getLead.json().limits.conversions).toBe(1);
-    expect(Array.isArray(getLead.json().events)).toBe(true);
-    expect(Array.isArray(getLead.json().conversions)).toBe(true);
+    expect(getLead.json().lead.firstName).toBe("A");
+    expect(getLead.json().lead.lastName).toBe("B");
+    expect(getLead.json().events.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("caps retrieval limits at 50", async () => {
+  it("appends custom events and returns them via lead fetch", async () => {
     const tokenA = await signToken({ tenantId: TENANT_A, actorId: "actor-a" });
-
     const intake = await app.inject({
       method: "POST",
       url: "/v1/leads/intake",
       headers: { authorization: `Bearer ${tokenA}` },
-      payload: { email: "cap@acme.com", source: "website" }
+      payload: { source: "website", email: "events@acme.com" }
     });
     expect(intake.statusCode).toBe(200);
     const leadId = String(intake.json().leadId);
 
-    const res = await app.inject({
+    const append = await app.inject({
+      method: "POST",
+      url: `/v1/leads/${leadId}/events`,
+      headers: { authorization: `Bearer ${tokenA}` },
+      payload: { type: "pricing_view", payload: { page: "pricing" } }
+    });
+    expect(append.statusCode).toBe(204);
+
+    const getLead = await app.inject({
       method: "GET",
-      url: `/v1/leads/${leadId}?eventsLimit=999&conversionsLimit=999`,
+      url: `/v1/leads/${leadId}?eventsLimit=50`,
       headers: { authorization: `Bearer ${tokenA}` }
     });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.json().limits.events).toBe(50);
-    expect(res.json().limits.conversions).toBe(50);
+    expect(getLead.statusCode).toBe(200);
+    expect(getLead.json().events.some((e: { type: string }) => e.type === "pricing_view")).toBe(true);
   });
 });
