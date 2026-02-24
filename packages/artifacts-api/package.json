@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --no-error-on-unmatched-pattern",
-    "test": "vitest run --config ../../vitest.config.ts --passWithNoTests",
+    "test": "vitest run",
     "db:up": "docker compose -f db/docker-compose.postgres.yml up -d",
     "db:down": "docker compose -f db/docker-compose.postgres.yml down -v",
     "db:wait": "node db/scripts/wait-for-db.js",
