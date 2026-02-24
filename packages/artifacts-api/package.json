@@ -13,7 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --no-error-on-unmatched-pattern",
     "test": "vitest run --config ../../vitest.config.ts --passWithNoTests",
-    "db:migrate": "test -n \"$DATABASE_URL\" && psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f db/migrations/001_artifacts_rls.sql",
+    "db:migrate": "test -n \"$DATABASE_URL\" && psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f db/migrations/001_artifacts_rls.sql && psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f db/migrations/002_artifacts_determinism_input.sql",
     "start": "tsx src/main.ts"
   },
   "dependencies": {

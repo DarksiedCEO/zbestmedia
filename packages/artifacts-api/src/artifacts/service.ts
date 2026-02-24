@@ -72,7 +72,10 @@ export class ArtifactService {
       sourceArtifactIds: args.sourceArtifactIds,
       evalReport: args.evalReport,
       payload: args.payload,
-      sealedAt
+      sealedAt,
+      ...(args.supersedesArtifactId
+        ? { supersedesArtifactId: args.supersedesArtifactId }
+        : {})
     };
     const { artifactId } = computeArtifactId(determinismInput);
     const signature = signArtifact({
@@ -94,8 +97,9 @@ export class ArtifactService {
           source_artifact_ids,
           supersedes_artifact_id,
           eval_report,
-          payload
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)
+          payload,
+          determinism_input
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb)
         `,
         [
           args.tenantId,
@@ -107,7 +111,8 @@ export class ArtifactService {
           args.sourceArtifactIds,
           args.supersedesArtifactId ?? null,
           JSON.stringify(args.evalReport),
-          JSON.stringify(args.payload)
+          JSON.stringify(args.payload),
+          JSON.stringify(determinismInput)
         ]
       );
     });
