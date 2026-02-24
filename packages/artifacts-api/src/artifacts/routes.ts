@@ -4,6 +4,7 @@ import { TenantWriteBudget } from "../budgets/tenantBudget";
 import {
   incArtifactsCreated,
   incPolicyDenials,
+  incPolicyDenialsByCodes,
   incArtifactsSuperseded,
   incSealVerificationFailures,
   incTenantBudgetViolations
@@ -34,7 +35,9 @@ export function artifactRoutes(opts: {
         payload: parsed.data.payload
       });
       if (!decision.allowed) {
+        const violationCodes = decision.violations.map((violation) => violation.code);
         incPolicyDenials();
+        incPolicyDenialsByCodes(violationCodes);
         req.log.warn({
           event: "policy_denied",
           requestId: req.requestId,
@@ -43,6 +46,8 @@ export function artifactRoutes(opts: {
           action: "artifact_create",
           artifactType: parsed.data.artifactType,
           policyVersion: decision.policyVersion,
+          violationsCount: violationCodes.length,
+          violationCodes,
           violations: decision.violations
         });
         return reply.code(400).send({
@@ -144,7 +149,9 @@ export function artifactRoutes(opts: {
         payload: parsed.data.newPayload
       });
       if (!decision.allowed) {
+        const violationCodes = decision.violations.map((violation) => violation.code);
         incPolicyDenials();
+        incPolicyDenialsByCodes(violationCodes);
         req.log.warn({
           event: "policy_denied",
           requestId: req.requestId,
@@ -154,6 +161,8 @@ export function artifactRoutes(opts: {
           artifactType: parsed.data.newArtifactType,
           supersedesArtifactId: path.data.id,
           policyVersion: decision.policyVersion,
+          violationsCount: violationCodes.length,
+          violationCodes,
           violations: decision.violations
         });
         return reply.code(400).send({

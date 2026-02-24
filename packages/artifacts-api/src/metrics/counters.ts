@@ -4,6 +4,7 @@ export type MetricsSnapshot = {
   sealVerificationFailures: number;
   tenantBudgetViolations: number;
   policyDenials: number;
+  policyDenialsByCode: Record<string, number>;
 };
 
 const state: MetricsSnapshot = {
@@ -11,7 +12,8 @@ const state: MetricsSnapshot = {
   artifactsSuperseded: 0,
   sealVerificationFailures: 0,
   tenantBudgetViolations: 0,
-  policyDenials: 0
+  policyDenials: 0,
+  policyDenialsByCode: {}
 };
 
 export function incArtifactsCreated(): void {
@@ -34,8 +36,21 @@ export function incPolicyDenials(): void {
   state.policyDenials += 1;
 }
 
+export function incPolicyDenialsByCodes(codes: string[]): void {
+  for (const code of codes) {
+    const key = code.trim();
+    if (!key) {
+      continue;
+    }
+    state.policyDenialsByCode[key] = (state.policyDenialsByCode[key] ?? 0) + 1;
+  }
+}
+
 export function snapshotMetrics(): MetricsSnapshot {
-  return { ...state };
+  return {
+    ...state,
+    policyDenialsByCode: { ...state.policyDenialsByCode }
+  };
 }
 
 export function resetMetricsForTests(): void {
@@ -44,4 +59,5 @@ export function resetMetricsForTests(): void {
   state.sealVerificationFailures = 0;
   state.tenantBudgetViolations = 0;
   state.policyDenials = 0;
+  state.policyDenialsByCode = {};
 }

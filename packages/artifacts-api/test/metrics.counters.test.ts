@@ -4,6 +4,7 @@ import {
   incArtifactsCreated,
   incArtifactsSuperseded,
   incPolicyDenials,
+  incPolicyDenialsByCodes,
   incSealVerificationFailures,
   incTenantBudgetViolations,
   resetMetricsForTests,
@@ -21,7 +22,8 @@ describe("metrics counters", () => {
       artifactsSuperseded: 0,
       sealVerificationFailures: 0,
       tenantBudgetViolations: 0,
-      policyDenials: 0
+      policyDenials: 0,
+      policyDenialsByCode: {}
     });
 
     incArtifactsCreated();
@@ -35,15 +37,28 @@ describe("metrics counters", () => {
       artifactsSuperseded: 1,
       sealVerificationFailures: 1,
       tenantBudgetViolations: 1,
-      policyDenials: 1
+      policyDenials: 1,
+      policyDenialsByCode: {}
+    });
+  });
+
+  it("increments policyDenialsByCode for each violation code", () => {
+    incPolicyDenialsByCodes(["artifact_type_forbidden", "payload_forbidden_phrase", "artifact_type_forbidden"]);
+
+    expect(snapshotMetrics().policyDenialsByCode).toEqual({
+      artifact_type_forbidden: 2,
+      payload_forbidden_phrase: 1
     });
   });
 
   it("returns snapshot copies", () => {
     incArtifactsCreated();
+    incPolicyDenialsByCodes(["artifact_type_forbidden"]);
     const snapshot = snapshotMetrics();
     snapshot.artifactsCreated = 999;
+    snapshot.policyDenialsByCode.artifact_type_forbidden = 999;
 
     expect(snapshotMetrics().artifactsCreated).toBe(1);
+    expect(snapshotMetrics().policyDenialsByCode.artifact_type_forbidden).toBe(1);
   });
 });
