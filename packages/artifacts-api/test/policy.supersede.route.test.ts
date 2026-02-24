@@ -1,5 +1,5 @@
 import { SignJWT } from "jose";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { type AppEnv } from "../src/config/env";
 import { resetMetricsForTests, snapshotMetrics } from "../src/metrics/counters";
@@ -44,6 +44,10 @@ describe("policy firewall on supersede route", () => {
     await app.close();
   });
 
+  beforeEach(() => {
+    resetMetricsForTests();
+  });
+
   it("returns 400 policy_denied for forbidden new artifact type", async () => {
     const token = await signToken("11111111-1111-4111-8111-111111111111");
     const res = await app.inject({
@@ -66,6 +70,8 @@ describe("policy firewall on supersede route", () => {
     expect(res.json().violations).toEqual(
       expect.arrayContaining([expect.objectContaining({ code: "artifact_type_forbidden" })])
     );
+    expect(snapshotMetrics().policyDenials).toBe(1);
+    expect(snapshotMetrics().policyDenialsByCode.artifact_type_forbidden).toBe(1);
   });
 
   it("returns 400 policy_denied for forbidden phrase in supersede payload", async () => {
@@ -90,6 +96,7 @@ describe("policy firewall on supersede route", () => {
     expect(res.json().violations).toEqual(
       expect.arrayContaining([expect.objectContaining({ code: "payload_forbidden_phrase" })])
     );
-    expect(snapshotMetrics().policyDenials).toBe(2);
+    expect(snapshotMetrics().policyDenials).toBe(1);
+    expect(snapshotMetrics().policyDenialsByCode.payload_forbidden_phrase).toBe(1);
   });
 });
