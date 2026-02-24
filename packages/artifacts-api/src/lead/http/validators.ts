@@ -34,6 +34,25 @@ export const conversionSchema = z.object({
   recomputeScore: z.boolean().optional()
 });
 
+export const listQuerySchema = z
+  .object({
+    lifecycleStage: shortString(1, 32).optional(),
+    source: shortString(1, 64).optional(),
+    minScore: z.coerce.number().int().min(0).max(100).optional(),
+    maxScore: z.coerce.number().int().min(0).max(100).optional(),
+    createdFrom: z.string().datetime().optional(),
+    createdTo: z.string().datetime().optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(20),
+    cursor: z.string().datetime().optional()
+  })
+  .refine(
+    (q) => {
+      if (q.minScore !== undefined && q.maxScore !== undefined) return q.minScore <= q.maxScore;
+      return true;
+    },
+    { message: "minScore must be <= maxScore", path: ["minScore"] }
+  );
+
 export function parseBoundedLimit(raw: unknown, def = 20, max = 50): number {
   const n = typeof raw === "string" ? Number(raw) : typeof raw === "number" ? raw : def;
   if (!Number.isFinite(n)) return def;

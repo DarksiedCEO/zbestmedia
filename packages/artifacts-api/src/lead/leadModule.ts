@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import type { Pool } from "pg";
 
 import { leadConversionRoutes } from "./http/conversionRoutes";
+import { leadListRoutes } from "./http/listRoutes";
 import { leadRoutes } from "./http/leadRoutes";
 import { incLeadErrorsTotal, incLeadRequestsTotal, observeLeadRequestDurationMs } from "../metrics/counters";
 
@@ -65,6 +66,9 @@ export const leadModule: FastifyPluginAsync<LeadModuleOptions> = async (app, opt
     maxEventPayloadBytes: opts.maxEventPayloadBytes,
     maxIntakeAttributesBytes: opts.maxIntakeAttributesBytes,
     routeSlowBudgetMs: opts.routeSlowBudgetMs
+  });
+  await app.register(leadListRoutes, {
+    pool: opts.pool
   });
   await app.register(leadConversionRoutes, {
     pool: opts.pool,
