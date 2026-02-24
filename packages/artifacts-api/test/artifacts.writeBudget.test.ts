@@ -32,7 +32,12 @@ describe.runIf(Boolean(DATABASE_URL))("tenant write budget", () => {
       DATABASE_URL: DATABASE_URL!,
       AUTH_JWT_SECRET: JWT_SECRET,
       ARTIFACT_SIGNING_KEY: SIGNING_KEY,
-      MAX_ARTIFACT_WRITES_PER_MINUTE: 1
+      MAX_ARTIFACT_WRITES_PER_MINUTE: 1,
+      MAX_POLICY_PAYLOAD_BYTES: 50_000,
+      MAX_POLICY_PAYLOAD_KEYS: 200,
+      FORBIDDEN_ARTIFACT_TYPES: "legal.advice,medical.advice",
+      FORBIDDEN_PHRASES: "guaranteed results,no risk,100% guaranteed",
+      POLICY_VERSION: "policy-v1"
     };
 
     await applyArtifactsMigration({ databaseUrl: env.DATABASE_URL });

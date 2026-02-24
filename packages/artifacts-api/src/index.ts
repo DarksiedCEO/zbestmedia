@@ -21,6 +21,7 @@ export {
   type RequestLogContext
 } from "./logging/requestContext";
 export { buildServer } from "./server";
+export * from "./policy";
 export {
   incArtifactsCreated,
   incArtifactsSuperseded,

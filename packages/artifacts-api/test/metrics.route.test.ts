@@ -27,7 +27,12 @@ describe("GET /metrics", () => {
       DATABASE_URL: "postgres://postgres:postgres@localhost:5432/zbest_test",
       AUTH_JWT_SECRET: JWT_SECRET,
       ARTIFACT_SIGNING_KEY: SIGNING_KEY,
-      MAX_ARTIFACT_WRITES_PER_MINUTE: 60
+      MAX_ARTIFACT_WRITES_PER_MINUTE: 60,
+      MAX_POLICY_PAYLOAD_BYTES: 50_000,
+      MAX_POLICY_PAYLOAD_KEYS: 200,
+      FORBIDDEN_ARTIFACT_TYPES: "legal.advice,medical.advice",
+      FORBIDDEN_PHRASES: "guaranteed results,no risk,100% guaranteed",
+      POLICY_VERSION: "policy-v1"
     };
 
     resetMetricsForTests();
