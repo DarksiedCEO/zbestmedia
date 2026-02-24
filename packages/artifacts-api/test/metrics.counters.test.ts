@@ -3,10 +3,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   incArtifactsCreated,
   incArtifactsSuperseded,
+  incLeadEventsTotal,
+  incLeadIntakeTotal,
   incPolicyDenials,
   incPolicyDenialsByCodes,
   incSealVerificationFailures,
   incTenantBudgetViolations,
+  observeLeadIntakeDurationMs,
+  observeLeadScoreRecomputeDurationMs,
   resetMetricsForTests,
   snapshotMetrics
 } from "../src/metrics/counters";
@@ -23,7 +27,11 @@ describe("metrics counters", () => {
       sealVerificationFailures: 0,
       tenantBudgetViolations: 0,
       policyDenials: 0,
-      policyDenialsByCode: {}
+      policyDenialsByCode: {},
+      leadIntakeTotalBySource: {},
+      leadEventsTotalByType: {},
+      leadIntakeDurationMs: { count: 0, sum: 0 },
+      leadScoreRecomputeDurationMs: { count: 0, sum: 0 }
     });
 
     incArtifactsCreated();
@@ -31,6 +39,10 @@ describe("metrics counters", () => {
     incSealVerificationFailures();
     incTenantBudgetViolations();
     incPolicyDenials();
+    incLeadIntakeTotal("website");
+    incLeadEventsTotal("intake");
+    observeLeadIntakeDurationMs(12);
+    observeLeadScoreRecomputeDurationMs(7);
 
     expect(snapshotMetrics()).toEqual({
       artifactsCreated: 1,
@@ -38,7 +50,11 @@ describe("metrics counters", () => {
       sealVerificationFailures: 1,
       tenantBudgetViolations: 1,
       policyDenials: 1,
-      policyDenialsByCode: {}
+      policyDenialsByCode: {},
+      leadIntakeTotalBySource: { website: 1 },
+      leadEventsTotalByType: { intake: 1 },
+      leadIntakeDurationMs: { count: 1, sum: 12 },
+      leadScoreRecomputeDurationMs: { count: 1, sum: 7 }
     });
   });
 

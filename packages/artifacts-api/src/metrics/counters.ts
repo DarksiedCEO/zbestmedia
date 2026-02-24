@@ -5,6 +5,10 @@ export type MetricsSnapshot = {
   tenantBudgetViolations: number;
   policyDenials: number;
   policyDenialsByCode: Record<string, number>;
+  leadIntakeTotalBySource: Record<string, number>;
+  leadEventsTotalByType: Record<string, number>;
+  leadIntakeDurationMs: { count: number; sum: number };
+  leadScoreRecomputeDurationMs: { count: number; sum: number };
 };
 
 const state: MetricsSnapshot = {
@@ -13,7 +17,11 @@ const state: MetricsSnapshot = {
   sealVerificationFailures: 0,
   tenantBudgetViolations: 0,
   policyDenials: 0,
-  policyDenialsByCode: {}
+  policyDenialsByCode: {},
+  leadIntakeTotalBySource: {},
+  leadEventsTotalByType: {},
+  leadIntakeDurationMs: { count: 0, sum: 0 },
+  leadScoreRecomputeDurationMs: { count: 0, sum: 0 }
 };
 
 export function incArtifactsCreated(): void {
@@ -46,10 +54,36 @@ export function incPolicyDenialsByCodes(codes: string[]): void {
   }
 }
 
+export function incLeadIntakeTotal(source: string): void {
+  const key = source.trim().toLowerCase();
+  if (!key) return;
+  state.leadIntakeTotalBySource[key] = (state.leadIntakeTotalBySource[key] ?? 0) + 1;
+}
+
+export function incLeadEventsTotal(type: string): void {
+  const key = type.trim().toLowerCase();
+  if (!key) return;
+  state.leadEventsTotalByType[key] = (state.leadEventsTotalByType[key] ?? 0) + 1;
+}
+
+export function observeLeadIntakeDurationMs(durationMs: number): void {
+  state.leadIntakeDurationMs.count += 1;
+  state.leadIntakeDurationMs.sum += Math.max(0, durationMs);
+}
+
+export function observeLeadScoreRecomputeDurationMs(durationMs: number): void {
+  state.leadScoreRecomputeDurationMs.count += 1;
+  state.leadScoreRecomputeDurationMs.sum += Math.max(0, durationMs);
+}
+
 export function snapshotMetrics(): MetricsSnapshot {
   return {
     ...state,
-    policyDenialsByCode: { ...state.policyDenialsByCode }
+    policyDenialsByCode: { ...state.policyDenialsByCode },
+    leadIntakeTotalBySource: { ...state.leadIntakeTotalBySource },
+    leadEventsTotalByType: { ...state.leadEventsTotalByType },
+    leadIntakeDurationMs: { ...state.leadIntakeDurationMs },
+    leadScoreRecomputeDurationMs: { ...state.leadScoreRecomputeDurationMs }
   };
 }
 
@@ -60,4 +94,8 @@ export function resetMetricsForTests(): void {
   state.tenantBudgetViolations = 0;
   state.policyDenials = 0;
   state.policyDenialsByCode = {};
+  state.leadIntakeTotalBySource = {};
+  state.leadEventsTotalByType = {};
+  state.leadIntakeDurationMs = { count: 0, sum: 0 };
+  state.leadScoreRecomputeDurationMs = { count: 0, sum: 0 };
 }

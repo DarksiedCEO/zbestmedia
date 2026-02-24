@@ -8,6 +8,7 @@ import { loadEnv, type AppEnv } from "./config/env";
 import { createPool } from "./db/pool";
 import { authPlugin } from "./http/auth";
 import { requestIdPlugin } from "./http/requestId";
+import { leadModule } from "./lead/leadModule";
 import { snapshotMetrics } from "./metrics/counters";
 import { PolicyFirewall } from "./policy/firewall";
 
@@ -50,6 +51,10 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       maxProvenanceDepth: env.MAX_PROVENANCE_DEPTH
     })
   );
+  await app.register(leadModule, {
+    pool,
+    maxEventPayloadBytes: env.MAX_POLICY_PAYLOAD_BYTES
+  });
 
   return app;
 }

@@ -1,10 +1,10 @@
-import type { Logger } from "pino";
+import type { FastifyBaseLogger } from "fastify";
 
 import { computeScoreV1 } from "./scoreV1";
 import type { ScoreComputeInput, ScoreResult } from "./types";
 
 export class LeadScoreService {
-  constructor(private readonly logger: Logger) {}
+  constructor(private readonly logger: FastifyBaseLogger) {}
 
   compute(input: ScoreComputeInput): ScoreResult {
     const result = computeScoreV1(input);

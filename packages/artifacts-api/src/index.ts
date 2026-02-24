@@ -22,9 +22,29 @@ export {
 } from "./logging/requestContext";
 export { buildServer } from "./server";
 export * from "./policy";
+export { leadModule } from "./lead/leadModule";
+export { leadRoutes } from "./lead/http/leadRoutes";
+export { intakeSchema, eventSchema } from "./lead/http/validators";
+export { LeadRepo } from "./lead/repo/leadRepo";
+export { LeadEventRepo } from "./lead/repo/eventRepo";
+export { LeadScoreService } from "./lead/scoring/scoreService";
+export { computeScoreV1 } from "./lead/scoring/scoreV1";
+export type {
+  LeadConversion,
+  LeadEvent,
+  LeadSnapshot,
+  ScoreBreakdownItem,
+  ScoreComputeInput,
+  ScoreResult,
+  ScoreVersion
+} from "./lead/scoring/types";
 export {
   incArtifactsCreated,
   incArtifactsSuperseded,
+  incLeadEventsTotal,
+  incLeadIntakeTotal,
+  observeLeadIntakeDurationMs,
+  observeLeadScoreRecomputeDurationMs,
   incSealVerificationFailures,
   incTenantBudgetViolations,
   resetMetricsForTests,
