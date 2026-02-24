@@ -1,5 +1,14 @@
 export { loadEnv, type AppEnv } from "./config/env";
 export * from "./crypto";
+export { artifactRoutes } from "./artifacts/routes";
+export { ArtifactService, type ArtifactRecord } from "./artifacts/service";
+export {
+  ArtifactIdParamSchema,
+  CreateArtifactBodySchema,
+  EvalGateSchema,
+  EvalReportSchema,
+  SupersedeArtifactBodySchema
+} from "./artifacts/schemas";
 export { createPool, type DbPool } from "./db/pool";
 export { withTenant } from "./db/withTenant";
 export { authPlugin, type AuthContext } from "./http/auth";

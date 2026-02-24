@@ -1,0 +1,89 @@
+import type { FastifyPluginAsync } from "fastify";
+
+import { ArtifactService } from "./service";
+import { ArtifactIdParamSchema, CreateArtifactBodySchema, SupersedeArtifactBodySchema } from "./schemas";
+
+export function artifactRoutes(opts: { service: ArtifactService }): FastifyPluginAsync {
+  return async (app) => {
+    app.post("/v1/artifacts", async (req, reply) => {
+      const parsed = CreateArtifactBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          error: "invalid_body",
+          details: parsed.error.flatten()
+        });
+      }
+
+      const out = await opts.service.createAndSeal({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        artifactType: parsed.data.artifactType,
+        schemaVersion: parsed.data.schemaVersion,
+        sourceArtifactIds: parsed.data.sourceArtifactIds,
+        evalReport: parsed.data.evalReport,
+        payload: parsed.data.payload
+      });
+
+      return reply.code(201).send(out);
+    });
+
+    app.get("/v1/artifacts/:id", async (req, reply) => {
+      const path = ArtifactIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({
+          error: "invalid_path",
+          details: path.error.flatten()
+        });
+      }
+
+      const artifact = await opts.service.getById({
+        tenantId: req.auth.tenantId,
+        artifactId: path.data.id
+      });
+      if (!artifact) {
+        return reply.code(404).send({ error: "not_found" });
+      }
+
+      return reply.send(artifact);
+    });
+
+    app.post("/v1/artifacts/:id/supersede", async (req, reply) => {
+      const path = ArtifactIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({
+          error: "invalid_path",
+          details: path.error.flatten()
+        });
+      }
+
+      const parsed = SupersedeArtifactBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          error: "invalid_body",
+          details: parsed.error.flatten()
+        });
+      }
+
+      try {
+        const out = await opts.service.supersede({
+          tenantId: req.auth.tenantId,
+          actorId: req.auth.actorId,
+          supersedesArtifactId: path.data.id,
+          newArtifactType: parsed.data.newArtifactType,
+          newSchemaVersion: parsed.data.newSchemaVersion,
+          newEvalReport: parsed.data.newEvalReport,
+          newPayload: parsed.data.newPayload
+        });
+        return reply.code(201).send({
+          ...out,
+          supersedesArtifactId: path.data.id
+        });
+      } catch (err) {
+        if ((err as { statusCode?: number }).statusCode === 404) {
+          return reply.code(404).send({ error: "not_found" });
+        }
+        throw err;
+      }
+    });
+  };
+}
