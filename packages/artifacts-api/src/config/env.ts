@@ -10,6 +10,7 @@ const EnvSchema = z.object({
   FORBIDDEN_ARTIFACT_TYPES: z.string().min(1).default("legal.advice,medical.advice"),
   FORBIDDEN_PHRASES: z.string().min(1).default("guaranteed results,no risk,100% guaranteed"),
   POLICY_VERSION: z.string().min(1).default("policy-v1"),
+  MAX_PROVENANCE_DEPTH: z.coerce.number().int().positive().default(25),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(8080)
 });

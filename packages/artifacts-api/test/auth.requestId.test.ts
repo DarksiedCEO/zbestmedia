@@ -44,7 +44,8 @@ describe("auth and requestId middleware", () => {
       MAX_POLICY_PAYLOAD_KEYS: 200,
       FORBIDDEN_ARTIFACT_TYPES: "legal.advice,medical.advice",
       FORBIDDEN_PHRASES: "guaranteed results,no risk,100% guaranteed",
-      POLICY_VERSION: "policy-v1"
+      POLICY_VERSION: "policy-v1",
+      MAX_PROVENANCE_DEPTH: 25
     };
     app = await buildServer(env);
     await app.ready();

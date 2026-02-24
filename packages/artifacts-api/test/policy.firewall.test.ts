@@ -16,6 +16,7 @@ function mkEnv(overrides: Partial<AppEnv> = {}): AppEnv {
     FORBIDDEN_ARTIFACT_TYPES: "legal.advice,medical.advice",
     FORBIDDEN_PHRASES: "guaranteed results,no risk,100% guaranteed",
     POLICY_VERSION: "policy-v1",
+    MAX_PROVENANCE_DEPTH: 25,
     ...overrides
   };
 }

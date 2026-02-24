@@ -2,8 +2,6 @@ import { SignJWT } from "jose";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { type AppEnv } from "../src/config/env";
-import { createPool } from "../src/db/pool";
-import { withTenant } from "../src/db/withTenant";
 import { buildServer } from "../src/server";
 import { applyArtifactsMigration } from "./helpers/migrate";
 
@@ -24,9 +22,8 @@ async function signToken(args: { tenantId: string; actorId: string; roles?: stri
     .sign(new TextEncoder().encode(JWT_SECRET));
 }
 
-describe.runIf(Boolean(DATABASE_URL))("artifact seal verification on retrieval", () => {
+describe.runIf(Boolean(DATABASE_URL))("artifact provenance endpoint", () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
-  const pool = createPool(DATABASE_URL!);
 
   beforeAll(async () => {
     const env: AppEnv = {
@@ -51,11 +48,11 @@ describe.runIf(Boolean(DATABASE_URL))("artifact seal verification on retrieval",
 
   afterAll(async () => {
     await app.close();
-    await pool.end();
   });
 
-  it("returns 200 when seal matches", async () => {
+  it("returns deterministic provenance chain for superseded artifacts", async () => {
     const tokenA = await signToken({ tenantId: TENANT_A, actorId: "actor-a" });
+
     const createRes = await app.inject({
       method: "POST",
       url: "/v1/artifacts",
@@ -65,48 +62,45 @@ describe.runIf(Boolean(DATABASE_URL))("artifact seal verification on retrieval",
         schemaVersion: 1,
         sourceArtifactIds: [],
         evalReport: { gates: [{ gateId: "G1", passed: true }], summary: "ok" },
-        payload: { headline: "Revenue Intelligence" }
+        payload: { headline: "v1" }
       }
     });
-
     expect(createRes.statusCode).toBe(201);
-    const artifactId = String(createRes.json().artifactId);
+    const artifactA = String(createRes.json().artifactId);
 
-    const getRes = await app.inject({
-      method: "GET",
-      url: `/v1/artifacts/${artifactId}`,
-      headers: { authorization: `Bearer ${tokenA}` }
-    });
-    expect(getRes.statusCode).toBe(200);
-  });
-
-  it("returns 500 when stored signature is tampered", async () => {
-    const tokenA = await signToken({ tenantId: TENANT_A, actorId: "actor-a" });
-    const createRes = await app.inject({
+    const supersedeRes = await app.inject({
       method: "POST",
-      url: "/v1/artifacts",
+      url: `/v1/artifacts/${artifactA}/supersede`,
       headers: { authorization: `Bearer ${tokenA}` },
       payload: {
-        artifactType: "brand.copy",
-        schemaVersion: 1,
-        sourceArtifactIds: [],
-        evalReport: { gates: [{ gateId: "G1", passed: true }], summary: "ok" },
-        payload: { copy: "hello" }
+        newArtifactType: "brand.positioning",
+        newSchemaVersion: 2,
+        newEvalReport: { gates: [{ gateId: "G1", passed: true }], summary: "ok" },
+        newPayload: { headline: "v2" }
       }
     });
-    expect(createRes.statusCode).toBe(201);
-    const artifactId = String(createRes.json().artifactId);
+    expect(supersedeRes.statusCode).toBe(201);
+    const artifactB = String(supersedeRes.json().artifactId);
 
-    await withTenant(pool, TENANT_A, async (client) => {
-      await client.query("UPDATE artifacts SET signature = $1 WHERE artifact_id = $2", ["00", artifactId]);
-    });
-
-    const getRes = await app.inject({
+    const provRes = await app.inject({
       method: "GET",
-      url: `/v1/artifacts/${artifactId}`,
+      url: `/v1/artifacts/${artifactB}/provenance`,
       headers: { authorization: `Bearer ${tokenA}` }
     });
-    expect(getRes.statusCode).toBe(500);
-    expect(getRes.json()).toEqual({ error: "artifact_integrity_failure" });
+    expect(provRes.statusCode).toBe(200);
+    expect(provRes.json()).toMatchObject({
+      artifact: {
+        artifactId: artifactB,
+        artifactType: "brand.positioning",
+        schemaVersion: 2
+      },
+      sealVerification: {
+        matches: true
+      },
+      supersedesChain: [
+        { artifactId: artifactB, artifactType: "brand.positioning", schemaVersion: 2 },
+        { artifactId: artifactA, artifactType: "brand.positioning", schemaVersion: 1 }
+      ]
+    });
   });
 });

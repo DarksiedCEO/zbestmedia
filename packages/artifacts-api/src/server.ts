@@ -46,7 +46,8 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
     artifactRoutes({
       service: artifactService,
       writeBudget,
-      policyFirewall
+      policyFirewall,
+      maxProvenanceDepth: env.MAX_PROVENANCE_DEPTH
     })
   );
 

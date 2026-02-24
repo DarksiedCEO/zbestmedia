@@ -19,6 +19,14 @@ export type ArtifactRecord = {
   determinismInput: unknown;
 };
 
+export type SupersedesChainEntry = {
+  artifactId: string;
+  artifactType?: string;
+  schemaVersion?: number;
+  sealedAt?: string;
+  missing?: true;
+};
+
 type DbArtifactRow = {
   tenant_id: string;
   artifact_id: string;
@@ -32,6 +40,14 @@ type DbArtifactRow = {
   eval_report: unknown;
   payload: unknown;
   determinism_input: unknown;
+};
+
+type DbChainRow = {
+  artifact_id: string;
+  artifact_type: string;
+  schema_version: number;
+  sealed_at: string;
+  supersedes_artifact_id: string | null;
 };
 
 function mapRow(row: DbArtifactRow): ArtifactRecord {
@@ -184,13 +200,58 @@ export class ArtifactService {
   }
 
   verifyArtifactSeal(artifact: Pick<ArtifactRecord, "artifactId" | "sealedAt" | "signature">): boolean {
-    const expected = signArtifact({
+    const expected = this.getExpectedSignature(artifact);
+
+    return secureHexEquals(expected, artifact.signature);
+  }
+
+  getExpectedSignature(artifact: Pick<ArtifactRecord, "artifactId" | "sealedAt">): string {
+    return signArtifact({
       signingKey: this.signingKey,
       artifactId: artifact.artifactId,
       sealedAtIso: artifact.sealedAt
     });
+  }
 
-    return secureHexEquals(expected, artifact.signature);
+  async getSupersedesChain(args: {
+    tenantId: string;
+    startArtifactId: string;
+    maxDepth: number;
+  }): Promise<SupersedesChainEntry[]> {
+    return withTenant(this.pool, args.tenantId, async (client) => {
+      const chain: SupersedesChainEntry[] = [];
+      let currentId: string | null = args.startArtifactId;
+      let depth = 0;
+
+      while (currentId && depth < args.maxDepth) {
+        const res: { rows: DbChainRow[] } = await client.query<DbChainRow>(
+          `
+          SELECT artifact_id, artifact_type, schema_version, sealed_at, supersedes_artifact_id
+          FROM artifacts
+          WHERE artifact_id = $1
+          LIMIT 1
+          `,
+          [currentId]
+        );
+        const row: DbChainRow | undefined = res.rows[0];
+        if (!row) {
+          chain.push({ artifactId: currentId, missing: true });
+          break;
+        }
+
+        chain.push({
+          artifactId: row.artifact_id,
+          artifactType: row.artifact_type,
+          schemaVersion: row.schema_version,
+          sealedAt: row.sealed_at
+        });
+
+        currentId = row.supersedes_artifact_id;
+        depth += 1;
+      }
+
+      return chain;
+    });
   }
 }
 

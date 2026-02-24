@@ -18,6 +18,7 @@ export function artifactRoutes(opts: {
   service: ArtifactService;
   writeBudget: TenantWriteBudget;
   policyFirewall: PolicyFirewall;
+  maxProvenanceDepth: number;
 }): FastifyPluginAsync {
   return async (app) => {
     app.post("/v1/artifacts", async (req, reply) => {
@@ -163,6 +164,50 @@ export function artifactRoutes(opts: {
         canonicalJson: canonical,
         recomputedArtifactId,
         matches
+      });
+    });
+
+    app.get("/v1/artifacts/:id/provenance", async (req, reply) => {
+      const path = ArtifactIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({
+          error: "invalid_path",
+          details: path.error.flatten()
+        });
+      }
+
+      const artifact = await opts.service.getById({
+        tenantId: req.auth.tenantId,
+        artifactId: path.data.id
+      });
+      if (!artifact) {
+        return reply.code(404).send({ error: "not_found" });
+      }
+
+      const expectedSignature = opts.service.getExpectedSignature(artifact);
+      const matches = opts.service.verifyArtifactSeal(artifact);
+      const supersedesChain = await opts.service.getSupersedesChain({
+        tenantId: req.auth.tenantId,
+        startArtifactId: artifact.artifactId,
+        maxDepth: opts.maxProvenanceDepth
+      });
+
+      return reply.send({
+        artifact: {
+          artifactId: artifact.artifactId,
+          artifactType: artifact.artifactType,
+          schemaVersion: artifact.schemaVersion,
+          sealedAt: artifact.sealedAt,
+          createdAt: artifact.createdAt
+        },
+        sealVerification: {
+          matches,
+          expectedSignature,
+          storedSignature: artifact.signature
+        },
+        evalReport: artifact.evalReport,
+        sourceArtifactIds: artifact.sourceArtifactIds,
+        supersedesChain
       });
     });
 
