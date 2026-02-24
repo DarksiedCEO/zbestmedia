@@ -16,6 +16,7 @@ export type ArtifactRecord = {
   supersedesArtifactId: string | null;
   evalReport: unknown;
   payload: unknown;
+  determinismInput: unknown;
 };
 
 type DbArtifactRow = {
@@ -30,6 +31,7 @@ type DbArtifactRow = {
   supersedes_artifact_id: string | null;
   eval_report: unknown;
   payload: unknown;
+  determinism_input: unknown;
 };
 
 function mapRow(row: DbArtifactRow): ArtifactRecord {
@@ -44,7 +46,8 @@ function mapRow(row: DbArtifactRow): ArtifactRecord {
     sourceArtifactIds: row.source_artifact_ids,
     supersedesArtifactId: row.supersedes_artifact_id,
     evalReport: row.eval_report,
-    payload: row.payload
+    payload: row.payload,
+    determinismInput: row.determinism_input
   };
 }
 
@@ -135,7 +138,8 @@ export class ArtifactService {
           source_artifact_ids,
           supersedes_artifact_id,
           eval_report,
-          payload
+          payload,
+          determinism_input
         FROM artifacts
         WHERE artifact_id = $1
         LIMIT 1

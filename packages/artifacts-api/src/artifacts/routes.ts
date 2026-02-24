@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import { TenantWriteBudget } from "../budgets/tenantBudget";
+import { canonicalJson, sha256Hex } from "../crypto";
 import {
   incArtifactsCreated,
   incPolicyDenials,
@@ -123,6 +124,46 @@ export function artifactRoutes(opts: {
       }
 
       return reply.send(artifact);
+    });
+
+    app.get("/v1/artifacts/:id/replay", async (req, reply) => {
+      const path = ArtifactIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({
+          error: "invalid_path",
+          details: path.error.flatten()
+        });
+      }
+
+      const artifact = await opts.service.getById({
+        tenantId: req.auth.tenantId,
+        artifactId: path.data.id
+      });
+      if (!artifact) {
+        return reply.code(404).send({ error: "not_found" });
+      }
+
+      const canonical = canonicalJson(artifact.determinismInput);
+      const recomputedArtifactId = sha256Hex(canonical);
+      const matches = recomputedArtifactId === artifact.artifactId;
+
+      if (!matches) {
+        req.log.warn({
+          event: "artifact_replay_mismatch",
+          requestId: req.requestId,
+          tenantId: req.auth.tenantId,
+          artifactId: artifact.artifactId,
+          recomputedArtifactId
+        });
+      }
+
+      return reply.send({
+        artifactId: artifact.artifactId,
+        determinismInput: artifact.determinismInput,
+        canonicalJson: canonical,
+        recomputedArtifactId,
+        matches
+      });
     });
 
     app.post("/v1/artifacts/:id/supersede", async (req, reply) => {
