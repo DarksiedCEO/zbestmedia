@@ -1,0 +1,40 @@
+{
+  "type": "object",
+  "properties": {
+    "regen": {
+      "type": "boolean"
+    },
+    "maxAttempts": {
+      "type": "integer",
+      "exclusiveMinimum": 0
+    },
+    "strategy": {
+      "type": "string",
+      "enum": [
+        "tune",
+        "rewrite",
+        "style-shift",
+        "content-augment"
+      ]
+    },
+    "focusAreas": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "notes": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "regen",
+    "maxAttempts",
+    "strategy",
+    "focusAreas"
+  ],
+  "additionalProperties": false,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

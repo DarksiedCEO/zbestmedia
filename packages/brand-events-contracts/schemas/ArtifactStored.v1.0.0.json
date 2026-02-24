@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "occurredAt": {
+      "type": "string",
+      "minLength": 1
+    },
+    "eventVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "artifactId": {
+      "$ref": "#/properties/eventId"
+    },
+    "storageKey": {
+      "type": "string",
+      "minLength": 1
+    },
+    "checksum": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "eventId",
+    "occurredAt",
+    "eventVersion",
+    "artifactId",
+    "storageKey",
+    "checksum"
+  ],
+  "additionalProperties": false,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

@@ -1,0 +1,57 @@
+{
+  "type": "object",
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "occurredAt": {
+      "type": "string",
+      "minLength": 1
+    },
+    "eventVersion": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "requestId": {
+      "$ref": "#/properties/eventId"
+    },
+    "jobType": {
+      "type": "string",
+      "minLength": 1
+    },
+    "artifactType": {
+      "type": "string",
+      "minLength": 1
+    },
+    "brandId": {
+      "$ref": "#/properties/eventId"
+    },
+    "input": {},
+    "attempt": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "normal",
+        "high"
+      ]
+    }
+  },
+  "required": [
+    "eventId",
+    "occurredAt",
+    "eventVersion",
+    "requestId",
+    "jobType",
+    "artifactType",
+    "brandId",
+    "attempt",
+    "priority"
+  ],
+  "additionalProperties": false,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
