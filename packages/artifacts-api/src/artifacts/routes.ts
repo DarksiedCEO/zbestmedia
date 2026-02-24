@@ -136,6 +136,32 @@ export function artifactRoutes(opts: {
           details: parsed.error.flatten()
         });
       }
+      const decision = opts.policyFirewall.validateArtifactWrite({
+        action: "artifact_supersede",
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        artifactType: parsed.data.newArtifactType,
+        payload: parsed.data.newPayload
+      });
+      if (!decision.allowed) {
+        incPolicyDenials();
+        req.log.warn({
+          event: "policy_denied",
+          requestId: req.requestId,
+          tenantId: req.auth.tenantId,
+          actorId: req.auth.actorId,
+          action: "artifact_supersede",
+          artifactType: parsed.data.newArtifactType,
+          supersedesArtifactId: path.data.id,
+          policyVersion: decision.policyVersion,
+          violations: decision.violations
+        });
+        return reply.code(400).send({
+          error: "policy_denied",
+          policyVersion: decision.policyVersion,
+          violations: decision.violations
+        });
+      }
       const budget = opts.writeBudget.checkAndIncrement(req.auth.tenantId);
       if (!budget.allowed) {
         incTenantBudgetViolations();
