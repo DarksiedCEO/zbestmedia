@@ -5,13 +5,15 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "src"
+    "src",
+    "db"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --no-error-on-unmatched-pattern",
-    "test": "vitest run --config ../../vitest.config.ts --passWithNoTests"
+    "test": "vitest run --config ../../vitest.config.ts --passWithNoTests",
+    "db:migrate": "test -n \"$DATABASE_URL\" && psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f db/migrations/001_artifacts_rls.sql"
   },
   "dependencies": {
     "@fastify/helmet": "^13.0.2",
