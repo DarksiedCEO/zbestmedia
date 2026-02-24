@@ -13,9 +13,13 @@ import { LeadEventRepo } from "../repo/eventRepo";
 import { LeadRepo } from "../repo/leadRepo";
 import { LeadScoreService } from "../scoring/scoreService";
 import { conversionSchema, parseBoundedLimit } from "./validators";
+import { enforceJsonPayloadLimit } from "../guards/payloadLimit";
+import { warnIfSlow } from "../guards/timeBudget";
 
 type ConversionRoutesOptions = {
   pool: Pool;
+  maxConversionMetaBytes: number;
+  routeSlowBudgetMs: number;
 };
 
 function normalizeStage(s?: string | null): string {
@@ -38,6 +42,15 @@ export const leadConversionRoutes: FastifyPluginAsync<ConversionRoutesOptions> =
     const { leadId } = req.params as { leadId: string };
     const tenantId = req.auth.tenantId;
     const actorId = req.auth.actorId;
+    const metaLimit = enforceJsonPayloadLimit(parsed.data.meta ?? {}, opts.maxConversionMetaBytes);
+    if (!metaLimit.ok) {
+      return reply.code(413).send({
+        error: metaLimit.reason,
+        field: "meta",
+        bytes: metaLimit.bytes,
+        limit: metaLimit.limit
+      });
+    }
 
     const out = await withTenant(opts.pool, tenantId, async (client) => {
       const lead = await leadRepo.getById(client, tenantId, leadId);
@@ -128,6 +141,13 @@ export const leadConversionRoutes: FastifyPluginAsync<ConversionRoutesOptions> =
     });
 
     observeLeadConversionDurationMs(Date.now() - startedAt);
+    warnIfSlow(
+      req.log,
+      startedAt,
+      opts.routeSlowBudgetMs,
+      { route: "/v1/leads/:leadId/conversions", tenantId, actorId },
+      "slow lead conversions route"
+    );
     if (out.notFound) return reply.code(404).send({ error: "lead_not_found" });
     return reply.send(out.payload);
   });

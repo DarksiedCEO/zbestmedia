@@ -13,10 +13,14 @@ import { LeadScoreService } from "../scoring/scoreService";
 import { eventSchema, intakeSchema } from "./validators";
 import { LeadEventRepo } from "../repo/eventRepo";
 import { LeadRepo } from "../repo/leadRepo";
+import { enforceJsonPayloadLimit } from "../guards/payloadLimit";
+import { warnIfSlow } from "../guards/timeBudget";
 
 type LeadRoutesOptions = {
   pool: Pool;
   maxEventPayloadBytes: number;
+  maxIntakeAttributesBytes: number;
+  routeSlowBudgetMs: number;
 };
 
 function deterministicLeadId(input: {
@@ -57,6 +61,15 @@ export const leadRoutes: FastifyPluginAsync<LeadRoutesOptions> = async (app, opt
     const body = parsed.data;
     const tenantId = req.auth.tenantId;
     const actorId = req.auth.actorId;
+    const attributesLimit = enforceJsonPayloadLimit(body.attributes ?? {}, opts.maxIntakeAttributesBytes);
+    if (!attributesLimit.ok) {
+      return reply.code(413).send({
+        error: attributesLimit.reason,
+        field: "attributes",
+        bytes: attributesLimit.bytes,
+        limit: attributesLimit.limit
+      });
+    }
 
     const output = await withTenant(opts.pool, tenantId, async (client) => {
       const existing = body.email ? await leadRepo.findByEmail(client, tenantId, body.email) : null;
@@ -178,11 +191,19 @@ export const leadRoutes: FastifyPluginAsync<LeadRoutesOptions> = async (app, opt
 
     incLeadIntakeTotal(body.source);
     observeLeadIntakeDurationMs(Date.now() - intakeStart);
+    warnIfSlow(
+      req.log,
+      intakeStart,
+      opts.routeSlowBudgetMs,
+      { route: "/v1/leads/intake", tenantId, actorId },
+      "slow lead intake route"
+    );
 
     return reply.send(output);
   });
 
   app.post("/v1/leads/:leadId/events", async (req, reply) => {
+    const eventStart = Date.now();
     const parsed = eventSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -194,12 +215,13 @@ export const leadRoutes: FastifyPluginAsync<LeadRoutesOptions> = async (app, opt
     const { leadId } = req.params as { leadId: string };
     const tenantId = req.auth.tenantId;
     const actorId = req.auth.actorId;
-
-    const payloadBytes = Buffer.byteLength(JSON.stringify(parsed.data.payload ?? {}), "utf8");
-    if (payloadBytes > opts.maxEventPayloadBytes) {
-      return reply.code(400).send({
-        error: "payload_too_large",
-        limitBytes: opts.maxEventPayloadBytes
+    const payloadLimit = enforceJsonPayloadLimit(parsed.data.payload ?? {}, opts.maxEventPayloadBytes);
+    if (!payloadLimit.ok) {
+      return reply.code(413).send({
+        error: payloadLimit.reason,
+        field: "payload",
+        bytes: payloadLimit.bytes,
+        limit: payloadLimit.limit
       });
     }
 
@@ -280,6 +302,13 @@ export const leadRoutes: FastifyPluginAsync<LeadRoutesOptions> = async (app, opt
     }
 
     incLeadEventsTotal(parsed.data.type);
+    warnIfSlow(
+      req.log,
+      eventStart,
+      opts.routeSlowBudgetMs,
+      { route: "/v1/leads/:leadId/events", tenantId, actorId },
+      "slow lead events route"
+    );
     return reply.code(204).send();
   });
 };

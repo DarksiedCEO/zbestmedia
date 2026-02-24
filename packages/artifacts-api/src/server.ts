@@ -53,7 +53,10 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   );
   await app.register(leadModule, {
     pool,
-    maxEventPayloadBytes: env.MAX_POLICY_PAYLOAD_BYTES
+    maxEventPayloadBytes: env.LEAD_MAX_EVENT_PAYLOAD_BYTES,
+    maxConversionMetaBytes: env.LEAD_MAX_CONVERSION_META_BYTES,
+    maxIntakeAttributesBytes: env.LEAD_MAX_INTAKE_ATTR_BYTES,
+    routeSlowBudgetMs: env.LEAD_ROUTE_SLOW_BUDGET_MS
   });
 
   return app;

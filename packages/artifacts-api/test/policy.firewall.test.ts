@@ -17,6 +17,10 @@ function mkEnv(overrides: Partial<AppEnv> = {}): AppEnv {
     FORBIDDEN_PHRASES: "guaranteed results,no risk,100% guaranteed",
     POLICY_VERSION: "policy-v1",
     MAX_PROVENANCE_DEPTH: 25,
+      LEAD_MAX_EVENT_PAYLOAD_BYTES: 16_384,
+      LEAD_MAX_CONVERSION_META_BYTES: 16_384,
+      LEAD_MAX_INTAKE_ATTR_BYTES: 16_384,
+      LEAD_ROUTE_SLOW_BUDGET_MS: 250,
     ...overrides
   };
 }
