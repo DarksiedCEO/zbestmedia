@@ -65,7 +65,8 @@ describe("GET /metrics", () => {
       artifactsCreated: expect.any(Number),
       artifactsSuperseded: expect.any(Number),
       sealVerificationFailures: expect.any(Number),
-      tenantBudgetViolations: expect.any(Number)
+      tenantBudgetViolations: expect.any(Number),
+      policyDenials: expect.any(Number)
     });
   });
 });

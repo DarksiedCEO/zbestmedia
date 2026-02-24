@@ -3,16 +3,19 @@ import type { FastifyPluginAsync } from "fastify";
 import { TenantWriteBudget } from "../budgets/tenantBudget";
 import {
   incArtifactsCreated,
+  incPolicyDenials,
   incArtifactsSuperseded,
   incSealVerificationFailures,
   incTenantBudgetViolations
 } from "../metrics/counters";
+import { PolicyFirewall } from "../policy/firewall";
 import { ArtifactService } from "./service";
 import { ArtifactIdParamSchema, CreateArtifactBodySchema, SupersedeArtifactBodySchema } from "./schemas";
 
 export function artifactRoutes(opts: {
   service: ArtifactService;
   writeBudget: TenantWriteBudget;
+  policyFirewall: PolicyFirewall;
 }): FastifyPluginAsync {
   return async (app) => {
     app.post("/v1/artifacts", async (req, reply) => {
@@ -21,6 +24,31 @@ export function artifactRoutes(opts: {
         return reply.code(400).send({
           error: "invalid_body",
           details: parsed.error.flatten()
+        });
+      }
+      const decision = opts.policyFirewall.validateArtifactWrite({
+        action: "artifact_create",
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        artifactType: parsed.data.artifactType,
+        payload: parsed.data.payload
+      });
+      if (!decision.allowed) {
+        incPolicyDenials();
+        req.log.warn({
+          event: "policy_denied",
+          requestId: req.requestId,
+          tenantId: req.auth.tenantId,
+          actorId: req.auth.actorId,
+          action: "artifact_create",
+          artifactType: parsed.data.artifactType,
+          policyVersion: decision.policyVersion,
+          violations: decision.violations
+        });
+        return reply.code(400).send({
+          error: "policy_denied",
+          policyVersion: decision.policyVersion,
+          violations: decision.violations
         });
       }
       const budget = opts.writeBudget.checkAndIncrement(req.auth.tenantId);

@@ -9,6 +9,7 @@ import { createPool } from "./db/pool";
 import { authPlugin } from "./http/auth";
 import { requestIdPlugin } from "./http/requestId";
 import { snapshotMetrics } from "./metrics/counters";
+import { PolicyFirewall } from "./policy/firewall";
 
 export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const env = envInput ?? loadEnv();
@@ -33,6 +34,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const pool = createPool(env.DATABASE_URL);
   const artifactService = new ArtifactService(pool, env.ARTIFACT_SIGNING_KEY);
   const writeBudget = new TenantWriteBudget(env.MAX_ARTIFACT_WRITES_PER_MINUTE);
+  const policyFirewall = new PolicyFirewall(env);
 
   app.addHook("onClose", async () => {
     await pool.end();
@@ -43,7 +45,8 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   await app.register(
     artifactRoutes({
       service: artifactService,
-      writeBudget
+      writeBudget,
+      policyFirewall
     })
   );
 

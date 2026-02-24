@@ -3,13 +3,15 @@ export type MetricsSnapshot = {
   artifactsSuperseded: number;
   sealVerificationFailures: number;
   tenantBudgetViolations: number;
+  policyDenials: number;
 };
 
 const state: MetricsSnapshot = {
   artifactsCreated: 0,
   artifactsSuperseded: 0,
   sealVerificationFailures: 0,
-  tenantBudgetViolations: 0
+  tenantBudgetViolations: 0,
+  policyDenials: 0
 };
 
 export function incArtifactsCreated(): void {
@@ -28,6 +30,10 @@ export function incTenantBudgetViolations(): void {
   state.tenantBudgetViolations += 1;
 }
 
+export function incPolicyDenials(): void {
+  state.policyDenials += 1;
+}
+
 export function snapshotMetrics(): MetricsSnapshot {
   return { ...state };
 }
@@ -37,4 +43,5 @@ export function resetMetricsForTests(): void {
   state.artifactsSuperseded = 0;
   state.sealVerificationFailures = 0;
   state.tenantBudgetViolations = 0;
+  state.policyDenials = 0;
 }
