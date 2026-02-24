@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import type { Pool } from "pg";
 
 import { computeArtifactId, signArtifact } from "../crypto";
@@ -171,5 +172,28 @@ export class ArtifactService {
       payload: args.newPayload,
       supersedesArtifactId: args.supersedesArtifactId
     });
+  }
+
+  verifyArtifactSeal(artifact: Pick<ArtifactRecord, "artifactId" | "sealedAt" | "signature">): boolean {
+    const expected = signArtifact({
+      signingKey: this.signingKey,
+      artifactId: artifact.artifactId,
+      sealedAtIso: artifact.sealedAt
+    });
+
+    return secureHexEquals(expected, artifact.signature);
+  }
+}
+
+function secureHexEquals(a: string, b: string): boolean {
+  try {
+    const left = Buffer.from(a, "hex");
+    const right = Buffer.from(b, "hex");
+    if (left.length === 0 || right.length === 0 || left.length !== right.length) {
+      return false;
+    }
+    return timingSafeEqual(left, right);
+  } catch {
+    return false;
   }
 }

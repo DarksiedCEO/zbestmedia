@@ -43,6 +43,17 @@ export function artifactRoutes(opts: { service: ArtifactService }): FastifyPlugi
       if (!artifact) {
         return reply.code(404).send({ error: "not_found" });
       }
+      const sealValid = opts.service.verifyArtifactSeal(artifact);
+      if (!sealValid) {
+        req.log.error({
+          event: "artifact_seal_verification_failed",
+          requestId: req.requestId,
+          tenantId: req.auth.tenantId,
+          artifactId: artifact.artifactId,
+          mismatch: true
+        });
+        return reply.code(500).send({ error: "artifact_integrity_failure" });
+      }
 
       return reply.send(artifact);
     });
