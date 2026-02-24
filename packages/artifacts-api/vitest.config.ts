@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     include: ["test/**/*.test.ts"],
     exclude: ["node_modules/**", "dist/**"],
-    passWithNoTests: false
+    passWithNoTests: false,
+    globalSetup: ["test/helpers/dbMode.global.ts"]
   }
 });
