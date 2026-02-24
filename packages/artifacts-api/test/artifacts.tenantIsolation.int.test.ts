@@ -33,7 +33,8 @@ describe.runIf(Boolean(DATABASE_URL))("RLS: cross-tenant artifact isolation", ()
       PORT: 0,
       DATABASE_URL: DATABASE_URL!,
       AUTH_JWT_SECRET: JWT_SECRET,
-      ARTIFACT_SIGNING_KEY: SIGNING_KEY
+      ARTIFACT_SIGNING_KEY: SIGNING_KEY,
+      MAX_ARTIFACT_WRITES_PER_MINUTE: 60
     };
 
     await applyArtifactsMigration({ databaseUrl: env.DATABASE_URL });

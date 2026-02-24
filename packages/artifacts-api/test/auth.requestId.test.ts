@@ -38,7 +38,8 @@ describe("auth and requestId middleware", () => {
       PORT: 0,
       DATABASE_URL: "postgres://postgres:postgres@localhost:5432/zbest_test",
       AUTH_JWT_SECRET: JWT_SECRET,
-      ARTIFACT_SIGNING_KEY: SIGNING_KEY
+      ARTIFACT_SIGNING_KEY: SIGNING_KEY,
+      MAX_ARTIFACT_WRITES_PER_MINUTE: 60
     };
     app = await buildServer(env);
     await app.ready();

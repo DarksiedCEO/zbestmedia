@@ -9,6 +9,7 @@ export {
   EvalReportSchema,
   SupersedeArtifactBodySchema
 } from "./artifacts/schemas";
+export { TenantWriteBudget } from "./budgets/tenantBudget";
 export { createPool, type DbPool } from "./db/pool";
 export { withTenant } from "./db/withTenant";
 export { authPlugin, type AuthContext } from "./http/auth";

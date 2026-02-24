@@ -4,6 +4,7 @@ const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   AUTH_JWT_SECRET: z.string().min(32, "AUTH_JWT_SECRET must be at least 32 characters"),
   ARTIFACT_SIGNING_KEY: z.string().min(32, "ARTIFACT_SIGNING_KEY must be at least 32 characters"),
+  MAX_ARTIFACT_WRITES_PER_MINUTE: z.coerce.number().int().positive().default(60),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(8080)
 });

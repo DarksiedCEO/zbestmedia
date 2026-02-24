@@ -1,9 +1,13 @@
 import type { FastifyPluginAsync } from "fastify";
 
+import { TenantWriteBudget } from "../budgets/tenantBudget";
 import { ArtifactService } from "./service";
 import { ArtifactIdParamSchema, CreateArtifactBodySchema, SupersedeArtifactBodySchema } from "./schemas";
 
-export function artifactRoutes(opts: { service: ArtifactService }): FastifyPluginAsync {
+export function artifactRoutes(opts: {
+  service: ArtifactService;
+  writeBudget: TenantWriteBudget;
+}): FastifyPluginAsync {
   return async (app) => {
     app.post("/v1/artifacts", async (req, reply) => {
       const parsed = CreateArtifactBodySchema.safeParse(req.body);
@@ -12,6 +16,15 @@ export function artifactRoutes(opts: { service: ArtifactService }): FastifyPlugi
           error: "invalid_body",
           details: parsed.error.flatten()
         });
+      }
+      const budget = opts.writeBudget.checkAndIncrement(req.auth.tenantId);
+      if (!budget.allowed) {
+        req.log.warn({
+          event: "tenant_budget_exceeded",
+          requestId: req.requestId,
+          tenantId: req.auth.tenantId
+        });
+        return reply.code(429).send({ error: "tenant_budget_exceeded" });
       }
 
       const out = await opts.service.createAndSeal({
@@ -73,6 +86,15 @@ export function artifactRoutes(opts: { service: ArtifactService }): FastifyPlugi
           error: "invalid_body",
           details: parsed.error.flatten()
         });
+      }
+      const budget = opts.writeBudget.checkAndIncrement(req.auth.tenantId);
+      if (!budget.allowed) {
+        req.log.warn({
+          event: "tenant_budget_exceeded",
+          requestId: req.requestId,
+          tenantId: req.auth.tenantId
+        });
+        return reply.code(429).send({ error: "tenant_budget_exceeded" });
       }
 
       try {
