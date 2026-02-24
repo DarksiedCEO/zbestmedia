@@ -8,6 +8,7 @@ import { loadEnv, type AppEnv } from "./config/env";
 import { createPool } from "./db/pool";
 import { authPlugin } from "./http/auth";
 import { requestIdPlugin } from "./http/requestId";
+import { snapshotMetrics } from "./metrics/counters";
 
 export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const env = envInput ?? loadEnv();
@@ -38,6 +39,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   });
 
   app.get("/healthz", async () => ({ ok: true }));
+  app.get("/metrics", async () => snapshotMetrics());
   await app.register(
     artifactRoutes({
       service: artifactService,

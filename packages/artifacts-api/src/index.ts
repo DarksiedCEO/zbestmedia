@@ -21,3 +21,12 @@ export {
   type RequestLogContext
 } from "./logging/requestContext";
 export { buildServer } from "./server";
+export {
+  incArtifactsCreated,
+  incArtifactsSuperseded,
+  incSealVerificationFailures,
+  incTenantBudgetViolations,
+  resetMetricsForTests,
+  snapshotMetrics,
+  type MetricsSnapshot
+} from "./metrics/counters";

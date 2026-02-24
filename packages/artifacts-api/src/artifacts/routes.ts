@@ -1,6 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import { TenantWriteBudget } from "../budgets/tenantBudget";
+import {
+  incArtifactsCreated,
+  incArtifactsSuperseded,
+  incSealVerificationFailures,
+  incTenantBudgetViolations
+} from "../metrics/counters";
 import { ArtifactService } from "./service";
 import { ArtifactIdParamSchema, CreateArtifactBodySchema, SupersedeArtifactBodySchema } from "./schemas";
 
@@ -19,6 +25,7 @@ export function artifactRoutes(opts: {
       }
       const budget = opts.writeBudget.checkAndIncrement(req.auth.tenantId);
       if (!budget.allowed) {
+        incTenantBudgetViolations();
         req.log.warn({
           event: "tenant_budget_exceeded",
           requestId: req.requestId,
@@ -36,6 +43,7 @@ export function artifactRoutes(opts: {
         evalReport: parsed.data.evalReport,
         payload: parsed.data.payload
       });
+      incArtifactsCreated();
 
       return reply.code(201).send(out);
     });
@@ -58,6 +66,7 @@ export function artifactRoutes(opts: {
       }
       const sealValid = opts.service.verifyArtifactSeal(artifact);
       if (!sealValid) {
+        incSealVerificationFailures();
         req.log.error({
           event: "artifact_seal_verification_failed",
           requestId: req.requestId,
@@ -89,6 +98,7 @@ export function artifactRoutes(opts: {
       }
       const budget = opts.writeBudget.checkAndIncrement(req.auth.tenantId);
       if (!budget.allowed) {
+        incTenantBudgetViolations();
         req.log.warn({
           event: "tenant_budget_exceeded",
           requestId: req.requestId,
@@ -107,6 +117,7 @@ export function artifactRoutes(opts: {
           newEvalReport: parsed.data.newEvalReport,
           newPayload: parsed.data.newPayload
         });
+        incArtifactsSuperseded();
         return reply.code(201).send({
           ...out,
           supersedesArtifactId: path.data.id
