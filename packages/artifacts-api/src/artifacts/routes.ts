@@ -29,7 +29,9 @@ export function artifactRoutes(opts: {
         req.log.warn({
           event: "tenant_budget_exceeded",
           requestId: req.requestId,
-          tenantId: req.auth.tenantId
+          tenantId: req.auth.tenantId,
+          limitPerMinute: budget.limitPerMinute,
+          currentCount: budget.currentCount
         });
         return reply.code(429).send({ error: "tenant_budget_exceeded" });
       }
@@ -44,6 +46,16 @@ export function artifactRoutes(opts: {
         payload: parsed.data.payload
       });
       incArtifactsCreated();
+      req.log.info({
+        event: "artifact_sealed",
+        requestId: req.requestId,
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        artifactId: out.artifactId,
+        artifactType: parsed.data.artifactType,
+        schemaVersion: parsed.data.schemaVersion,
+        sealedAt: out.sealedAt
+      });
 
       return reply.code(201).send(out);
     });
@@ -67,7 +79,7 @@ export function artifactRoutes(opts: {
       const sealValid = opts.service.verifyArtifactSeal(artifact);
       if (!sealValid) {
         incSealVerificationFailures();
-        req.log.error({
+        req.log.warn({
           event: "artifact_seal_verification_failed",
           requestId: req.requestId,
           tenantId: req.auth.tenantId,
@@ -102,7 +114,9 @@ export function artifactRoutes(opts: {
         req.log.warn({
           event: "tenant_budget_exceeded",
           requestId: req.requestId,
-          tenantId: req.auth.tenantId
+          tenantId: req.auth.tenantId,
+          limitPerMinute: budget.limitPerMinute,
+          currentCount: budget.currentCount
         });
         return reply.code(429).send({ error: "tenant_budget_exceeded" });
       }
@@ -118,6 +132,17 @@ export function artifactRoutes(opts: {
           newPayload: parsed.data.newPayload
         });
         incArtifactsSuperseded();
+        req.log.info({
+          event: "artifact_sealed",
+          requestId: req.requestId,
+          tenantId: req.auth.tenantId,
+          actorId: req.auth.actorId,
+          artifactId: out.artifactId,
+          artifactType: parsed.data.newArtifactType,
+          schemaVersion: parsed.data.newSchemaVersion,
+          sealedAt: out.sealedAt,
+          supersedesArtifactId: path.data.id
+        });
         return reply.code(201).send({
           ...out,
           supersedesArtifactId: path.data.id
