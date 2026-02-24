@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "types": ["node"],
+    "paths": {
+      "@zbest/artifacts-api": ["packages/artifacts-api/src/index.ts"],
+      "@zbest/brand-trinity-schemas": ["packages/brand-trinity-schemas/src/index.ts"],
+      "@zbest/eval-gates-schemas": ["packages/eval-gates-schemas/src/index.ts"],
+      "@zbest/brand-events-contracts": ["packages/brand-events-contracts/src/index.ts"],
+      "@zbest/id-core": ["packages/id-core/src/index.ts"],
+      "@zbest/falcon-rules": ["packages/falcon-rules/src/index.ts"],
+      "@zbest/brand-memory-spine": ["packages/brand-memory-spine/src/index.ts"]
+    },
+    "noEmit": false
+  }
+}

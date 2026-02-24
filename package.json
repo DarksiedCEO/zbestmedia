@@ -1,0 +1,36 @@
+{
+  "name": "zbest-media",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "lint": "eslint \"packages/**/src/**/*.ts\" \"packages/**/test/**/*.ts\" \"scripts/**/*.ts\"",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "schemas:gen": "tsx scripts/generate-json-schemas.ts",
+    "schemas:check": "tsx scripts/generate-json-schemas.ts --check && git diff --exit-code -- packages/brand-trinity-schemas/schemas packages/eval-gates-schemas/schemas packages/brand-events-contracts/schemas",
+    "schemas:compat": "tsx scripts/check-schema-compat.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/pg": "^8.16.0",
+    "@types/semver": "^7.7.1",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^9.7.0",
+    "semver": "^7.6.3",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.5",
+    "zod-to-json-schema": "^3.23.5"
+  },
+  "dependencies": {
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/rate-limit": "^10.3.0",
+    "canonicalize": "^2.1.0",
+    "fastify": "^5.7.4",
+    "jose": "^6.1.3",
+    "pg": "^8.18.0",
+    "pino": "^10.3.1",
+    "zod": "^3.25.76"
+  }
+}
