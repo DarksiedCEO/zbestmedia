@@ -1,0 +1,50 @@
+name: Loadrun Regression Gate
+
+on:
+  pull_request:
+    paths:
+      - "packages/policy-sdk/**"
+      - "packages/artifacts-api/**"
+      - "scripts/loadrun/**"
+      - "ops/**"
+      - ".github/workflows/loadrun-regression.yml"
+  workflow_dispatch:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    env:
+      LOADRUN_TARGET_BASE_URL: ${{ secrets.LOADRUN_TARGET_BASE_URL }}
+      LOADRUN_AUTH_TOKEN: ${{ secrets.LOADRUN_AUTH_TOKEN }}
+      CANDIDATE_RUN: ops/load_runs/ci/${{ github.sha }}__candidate.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Validate loadrun target env
+        run: |
+          test -n "$LOADRUN_TARGET_BASE_URL" || (echo "Missing LOADRUN_TARGET_BASE_URL secret" && exit 1)
+      - name: Mini load candidate run
+        run: |
+          pnpm ops:loadrun:ci-run \
+            --out "$CANDIDATE_RUN" \
+            --targetBaseUrl "$LOADRUN_TARGET_BASE_URL" \
+            ${LOADRUN_AUTH_TOKEN:+--authToken "$LOADRUN_AUTH_TOKEN"}
+      - name: Loadrun CI gate
+        run: |
+          BASELINE_RUN=$(node -e "const r=require('./ops/load_runs/baselines/registry.json'); process.stdout.write(r.baseline_run_path||'')")
+          test -n "$BASELINE_RUN" || (echo "baseline_run_path missing in registry" && exit 1)
+          pnpm ops:loadrun:ci-gate --baseline "$BASELINE_RUN" --candidate "$CANDIDATE_RUN" --outDir ops/load_runs/ci
+      - name: Upload loadrun artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: loadrun-${{ github.sha }}
+          path: |
+            ops/load_runs/ci/*.json
+            ops/load_runs/ci/*.md

@@ -13,3 +13,7 @@ export * from "./loadrun/defaults";
 export * from "./loadrun/guardrails";
 export * from "./loadrun/propose";
 export * from "./loadrun/apply";
+export * from "./loadrun/baselineRegistry";
+export * from "./loadrun/ciGate";
+export * from "./loadrun/markdownSummary";
+export * from "./loadrun/acceptBaseline";
