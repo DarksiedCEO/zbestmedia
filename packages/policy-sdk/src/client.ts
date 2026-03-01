@@ -45,6 +45,11 @@ function compareContractVersions(a: ParsedContractVersion, b: ParsedContractVers
   return a.patch - b.patch;
 }
 
+function shouldEnforceContractVersionByDefault(): boolean {
+  const nodeEnv = (typeof process !== "undefined" ? process.env.NODE_ENV : undefined) ?? "development";
+  return nodeEnv === "production";
+}
+
 export class PolicyClient {
   private readonly cfg: Required<Pick<PolicySdkConfig, "timeoutMs" | "userAgent">> & PolicySdkConfig;
   private readonly breaker = new CircuitBreaker({ failureThreshold: 5, resetAfterMs: 15_000 });
@@ -65,14 +70,28 @@ export class PolicyClient {
 
   private validateContractVersion(versionHeader: string | null, correlationId?: string): void {
     const minContractVersion = this.cfg.minContractVersion ?? DEFAULT_MIN_CONTRACT_VERSION;
-    const enforceContractVersion = this.cfg.enforceContractVersion ?? false;
+    const enforceContractVersion = this.cfg.enforceContractVersion ?? shouldEnforceContractVersionByDefault();
 
     if (!versionHeader) {
       if (enforceContractVersion) {
         throw new PolicySdkError("CONTRACT_VERSION_MISSING", "Missing x-policy-contract-version response header");
       }
+      this.telemetry.onContractVersionMismatch?.({
+        key: "policy.resolve",
+        correlationId,
+        minRequired: minContractVersion,
+        reason: "missing",
+        enforced: false
+      });
       this.log.warn(
-        { correlationId, minContractVersion, enforceContractVersion },
+        {
+          event: "policy.contract.version_mismatch",
+          correlationId,
+          minContractVersion,
+          observedContractVersion: null,
+          enforced: false,
+          reason: "missing"
+        },
         "policy.resolve response missing contract version header"
       );
       return;
@@ -87,8 +106,23 @@ export class PolicyClient {
           details: { versionHeader, minContractVersion }
         });
       }
+      this.telemetry.onContractVersionMismatch?.({
+        key: "policy.resolve",
+        correlationId,
+        minRequired: minContractVersion,
+        observed: versionHeader,
+        reason: "invalid",
+        enforced: false
+      });
       this.log.warn(
-        { correlationId, versionHeader, minContractVersion, enforceContractVersion },
+        {
+          event: "policy.contract.version_mismatch",
+          correlationId,
+          minContractVersion,
+          observedContractVersion: versionHeader,
+          enforced: false,
+          reason: "invalid"
+        },
         "policy.resolve contract version format is invalid"
       );
       return;
@@ -103,8 +137,23 @@ export class PolicyClient {
           }
         });
       }
+      this.telemetry.onContractVersionMismatch?.({
+        key: "policy.resolve",
+        correlationId,
+        minRequired: minContractVersion,
+        observed: versionHeader,
+        reason: "contract_mismatch",
+        enforced: false
+      });
       this.log.warn(
-        { correlationId, actualContractVersion: versionHeader, minContractVersion },
+        {
+          event: "policy.contract.version_mismatch",
+          correlationId,
+          minContractVersion,
+          observedContractVersion: versionHeader,
+          enforced: false,
+          reason: "contract_mismatch"
+        },
         "policy.resolve contract name mismatch"
       );
       return;
@@ -120,15 +169,45 @@ export class PolicyClient {
           }
         });
       }
+      this.telemetry.onContractVersionMismatch?.({
+        key: "policy.resolve",
+        correlationId,
+        minRequired: minContractVersion,
+        observed: versionHeader,
+        reason: "too_old",
+        enforced: false
+      });
       this.log.warn(
-        { correlationId, actualContractVersion: versionHeader, minContractVersion },
+        {
+          event: "policy.contract.version_mismatch",
+          correlationId,
+          minContractVersion,
+          observedContractVersion: versionHeader,
+          enforced: false,
+          reason: "too_old"
+        },
         "policy.resolve contract version is older than configured minimum"
       );
       return;
     }
     if (cmp > 0) {
+      this.telemetry.onContractVersionMismatch?.({
+        key: "policy.resolve",
+        correlationId,
+        minRequired: minContractVersion,
+        observed: versionHeader,
+        reason: "newer",
+        enforced: enforceContractVersion
+      });
       this.log.warn(
-        { correlationId, actualContractVersion: versionHeader, minContractVersion },
+        {
+          event: "policy.contract.version_mismatch",
+          correlationId,
+          minContractVersion,
+          observedContractVersion: versionHeader,
+          enforced: enforceContractVersion,
+          reason: "newer"
+        },
         "policy.resolve contract version is newer than configured minimum"
       );
     }
@@ -279,7 +358,11 @@ export function createPolicyClientFromEnv(env: Record<string, string | undefined
   const baseUrl = env.POLICY_API_BASE_URL;
   const apiKey = env.POLICY_API_KEY;
   const minContractVersion = env.POLICY_MIN_CONTRACT_VERSION ?? DEFAULT_MIN_CONTRACT_VERSION;
-  const enforceContractVersion = String(env.POLICY_ENFORCE_CONTRACT_VERSION ?? "false").toLowerCase() === "true";
+  const enforceContractVersionRaw = env.POLICY_ENFORCE_CONTRACT_VERSION;
+  const enforceContractVersion =
+    enforceContractVersionRaw == null
+      ? ((env.NODE_ENV ?? process.env.NODE_ENV ?? "development") === "production")
+      : String(enforceContractVersionRaw).toLowerCase() === "true";
 
   if (!baseUrl) throw new Error("Missing POLICY_API_BASE_URL");
 

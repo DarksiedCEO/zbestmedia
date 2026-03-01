@@ -26,6 +26,15 @@ export type RetryEvent = {
   reason?: string;
 };
 
+export type ContractVersionMismatchEvent = {
+  key: string;
+  correlationId?: string;
+  minRequired: string;
+  observed?: string;
+  reason: "missing" | "invalid" | "contract_mismatch" | "too_old" | "newer";
+  enforced: boolean;
+};
+
 export type PolicyTelemetry = {
   onResolveStart?: (event: ResolveStartEvent) => void;
   onResolveEnd?: (event: ResolveEndEvent) => void;
@@ -34,6 +43,7 @@ export type PolicyTelemetry = {
   onCacheRevalidated?: (event: CacheEvent) => void;
   onCircuitOpen?: (event: { key: string; correlationId?: string; mode: "READ" | "MUTATE" }) => void;
   onRetry?: (event: RetryEvent) => void;
+  onContractVersionMismatch?: (event: ContractVersionMismatchEvent) => void;
 };
 
 export const noopTelemetry: PolicyTelemetry = {};
