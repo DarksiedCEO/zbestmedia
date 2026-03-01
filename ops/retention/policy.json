@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "rollover_cadence": "daily",
+  "archive_compression": "gzip",
+  "retention_days": 365,
+  "never_delete_targets": [
+    "prod/us-west/policy",
+    "prod/us-east/policy"
+  ]
+}

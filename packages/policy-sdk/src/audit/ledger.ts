@@ -53,7 +53,7 @@ function computeChainHash(args: {
   );
 }
 
-function readLedgerEntries(filePath: string): AuditLedgerEntry[] {
+export function readAuditLedgerEntries(filePath: string): AuditLedgerEntry[] {
   if (!fs.existsSync(filePath)) return [];
   return fs
     .readFileSync(filePath, "utf8")
@@ -73,7 +73,7 @@ export function appendAuditLedgerEntry(args: {
 }): AuditLedgerEntry {
   const now = args.now ?? new Date();
   const ts = now.toISOString();
-  const entries = readLedgerEntries(args.ledgerPath);
+  const entries = readAuditLedgerEntries(args.ledgerPath);
   const prevHash = entries.length > 0 ? entries[entries.length - 1]!.chain_hash : GENESIS_HASH;
   const payloadHash = stableObjectHash(args.payload);
   const entryId = `ledger-${timestampSlug(now)}-${entries.length + 1}`;
@@ -123,7 +123,7 @@ export function verifyAuditLedger(args: {
   verified_at: string;
   errors: string[];
 } {
-  const entries = readLedgerEntries(args.ledgerPath);
+  const entries = readAuditLedgerEntries(args.ledgerPath);
   const errors: string[] = [];
 
   let prevHash = GENESIS_HASH;

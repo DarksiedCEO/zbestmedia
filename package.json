@@ -31,8 +31,12 @@
     "ops:runtime:kill-switch": "tsx scripts/incident/kill-switch.ts",
     "ops:audit:verify-ledger": "tsx scripts/audit/verify-ledger.ts",
     "ops:audit:verify-signatures": "tsx scripts/audit/verify-signatures.ts",
+    "ops:audit:rollover-ledger": "tsx scripts/audit/rollover-ledger.ts",
+    "ops:audit:export-bundle": "tsx scripts/audit/export-bundle.ts",
+    "ops:audit:push-immutable": "tsx scripts/audit/push-immutable.ts",
     "ops:contracts:verify": "tsx scripts/contracts/verify.ts",
     "ops:contracts:sign": "tsx scripts/contracts/sign.ts",
+    "ops:keys:rotate": "tsx scripts/keys/rotate.ts",
     "schemas:gen": "tsx scripts/generate-json-schemas.ts",
     "schemas:check": "tsx scripts/generate-json-schemas.ts --check && git diff --exit-code -- packages/brand-trinity-schemas/schemas packages/eval-gates-schemas/schemas packages/brand-events-contracts/schemas",
     "schemas:compat": "tsx scripts/check-schema-compat.ts"

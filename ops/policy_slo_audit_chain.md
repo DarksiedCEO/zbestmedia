@@ -18,6 +18,22 @@
 - Verify contract signatures only:
   - `pnpm ops:audit:verify-signatures --strict`
 
+## Retention & Durability
+- Rollover active ledger to immutable archive segment:
+  - `pnpm ops:audit:rollover-ledger --approve --reason "..."`
+- Export audit bundle for external review:
+  - `pnpm ops:audit:export-bundle --from <iso> --to <iso> --target <target_id>`
+- Immutable sink push (env-gated):
+  - `pnpm ops:audit:push-immutable`
+- Retention policy:
+  - `ops/retention/policy.json`
+
+## Key Rotation
+- Rotation protocol:
+  - `ops/keys/rotation_policy.md`
+- Add a new public key and emit rotation plan:
+  - `pnpm ops:keys:rotate --new-kid <kid> --public-key-file <pem> --approve --reason "..."`
+
 ## Runtime Introspection Fields
 - `contracts_version`
 - `contracts_signature_status`

@@ -32,4 +32,8 @@ export * from "./canary/rollout";
 export * from "./audit/keyring";
 export * from "./audit/signing";
 export * from "./audit/ledger";
+export * from "./audit/retention";
+export * from "./audit/storage";
+export * from "./audit/exportBundle";
+export * from "./audit/keys";
 export * from "./contracts/sloContracts";
