@@ -32,8 +32,8 @@ type DbArtifactRow = {
   artifact_id: string;
   artifact_type: string;
   schema_version: number;
-  created_at: string;
-  sealed_at: string;
+  created_at: string | Date;
+  sealed_at: string | Date;
   signature: string;
   source_artifact_ids: string[];
   supersedes_artifact_id: string | null;
@@ -46,9 +46,13 @@ type DbChainRow = {
   artifact_id: string;
   artifact_type: string;
   schema_version: number;
-  sealed_at: string;
+  sealed_at: string | Date;
   supersedes_artifact_id: string | null;
 };
+
+function toIsoString(value: string | Date): string {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
 
 function mapRow(row: DbArtifactRow): ArtifactRecord {
   return {
@@ -56,8 +60,8 @@ function mapRow(row: DbArtifactRow): ArtifactRecord {
     artifactId: row.artifact_id,
     artifactType: row.artifact_type,
     schemaVersion: row.schema_version,
-    createdAt: row.created_at,
-    sealedAt: row.sealed_at,
+    createdAt: toIsoString(row.created_at),
+    sealedAt: toIsoString(row.sealed_at),
     signature: row.signature,
     sourceArtifactIds: row.source_artifact_ids,
     supersedesArtifactId: row.supersedes_artifact_id,
@@ -86,6 +90,7 @@ export class ArtifactService {
     const sealedAt = new Date().toISOString();
 
     const determinismInput = {
+      tenantId: args.tenantId,
       artifactType: args.artifactType,
       schemaVersion: args.schemaVersion,
       sourceArtifactIds: args.sourceArtifactIds,
@@ -157,10 +162,11 @@ export class ArtifactService {
           payload,
           determinism_input
         FROM artifacts
-        WHERE artifact_id = $1
+        WHERE tenant_id = $1
+          AND artifact_id = $2
         LIMIT 1
         `,
-        [args.artifactId]
+        [args.tenantId, args.artifactId]
       );
 
       const row = res.rows[0];
@@ -228,10 +234,11 @@ export class ArtifactService {
           `
           SELECT artifact_id, artifact_type, schema_version, sealed_at, supersedes_artifact_id
           FROM artifacts
-          WHERE artifact_id = $1
+          WHERE tenant_id = $1
+            AND artifact_id = $2
           LIMIT 1
           `,
-          [currentId]
+          [args.tenantId, currentId]
         );
         const row: DbChainRow | undefined = res.rows[0];
         if (!row) {
@@ -243,7 +250,7 @@ export class ArtifactService {
           artifactId: row.artifact_id,
           artifactType: row.artifact_type,
           schemaVersion: row.schema_version,
-          sealedAt: row.sealed_at
+          sealedAt: toIsoString(row.sealed_at)
         });
 
         currentId = row.supersedes_artifact_id;
