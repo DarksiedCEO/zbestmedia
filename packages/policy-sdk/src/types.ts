@@ -25,7 +25,11 @@ export const PolicyResolveMetaSchema = z
     policy_id: z.string().optional(),
     active_version: z.string().optional(),
     policy_receipt_header: z.string().optional(),
-    policy_receipt: z.custom<PolicyResolveReceipt>().optional()
+    policy_receipt: z.custom<PolicyResolveReceipt>().optional(),
+    policy_receipt_sig: z.string().optional(),
+    policy_receipt_kid: z.string().optional(),
+    receipt_verified: z.boolean().optional(),
+    receipt_verify_reason: z.string().optional()
   })
   .passthrough();
 
@@ -45,4 +49,7 @@ export type PolicySdkConfig = {
   userAgent?: string;
   minContractVersion?: string;
   enforceContractVersion?: boolean;
+  receiptVerifyEnabled?: boolean;
+  receiptVerifyEnforce?: boolean;
+  receiptHmacKeys?: Record<string, string>;
 };

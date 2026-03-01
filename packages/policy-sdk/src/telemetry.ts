@@ -11,6 +11,7 @@ export type ResolveEndEvent = {
   status?: number;
   errorCode?: string;
   policyReceiptPresent?: boolean;
+  receiptVerified?: boolean;
 };
 
 export type CacheEvent = {

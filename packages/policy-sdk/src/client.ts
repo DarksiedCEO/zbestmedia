@@ -13,6 +13,13 @@ import { PolicySdkError } from "./errors";
 import { noopLogger, type PolicyLogger } from "./logger";
 import { noopTelemetry, type PolicyTelemetry } from "./telemetry";
 import type { PolicyResolveReceipt } from "./types";
+import {
+  defaultEnforce,
+  defaultVerifyEnabled,
+  parseKeysJson,
+  type ReceiptVerifyConfig,
+  verifyReceiptOrThrow
+} from "./receiptVerify";
 
 const DEFAULT_MIN_CONTRACT_VERSION = "policy-resolve@1.0.0";
 
@@ -79,6 +86,15 @@ export class PolicyClient {
       ...cfg,
       timeoutMs: cfg.timeoutMs ?? 2000,
       userAgent: cfg.userAgent ?? "@zbest/policy-sdk"
+    };
+  }
+
+  private getReceiptVerifyConfig(): ReceiptVerifyConfig {
+    const nodeEnv = (typeof process !== "undefined" ? process.env.NODE_ENV : undefined) ?? "development";
+    return {
+      verifyEnabled: this.cfg.receiptVerifyEnabled ?? defaultVerifyEnabled(nodeEnv),
+      enforce: this.cfg.receiptVerifyEnforce ?? defaultEnforce(nodeEnv),
+      keysByKid: this.cfg.receiptHmacKeys ?? {}
     };
   }
 
@@ -290,29 +306,78 @@ export class PolicyClient {
           const res = await httpGetJson<unknown>(url, { timeoutMs: this.cfg.timeoutMs, headers });
           this.validateContractVersion(res.headers.get("x-policy-contract-version"), opts.correlationId);
           const receiptHeader = res.headers.get("x-policy-receipt");
+          const receiptKid = res.headers.get("x-policy-receipt-kid") ?? undefined;
+          const receiptSig = res.headers.get("x-policy-receipt-sig") ?? undefined;
           const parsedReceipt = decodePolicyReceiptHeader(receiptHeader);
+          const verifyCfg = this.getReceiptVerifyConfig();
+
+          let receiptVerified: boolean | undefined;
+          let receiptVerifyReason: string | undefined;
+          if (receiptHeader) {
+            const verification = verifyReceiptOrThrow({
+              receiptB64Url: receiptHeader,
+              sigB64Url: receiptSig,
+              kid: receiptKid,
+              cfg: verifyCfg
+            });
+            receiptVerified = verification.verified;
+            receiptVerifyReason = verification.reason;
+            if (!verification.verified && verifyCfg.verifyEnabled) {
+              this.log.warn(
+                {
+                  event: "policy.receipt.unverified",
+                  correlationId: opts.correlationId,
+                  reason: verification.reason,
+                  kid: receiptKid,
+                  enforce: verifyCfg.enforce
+                },
+                "policy.resolve receipt verification did not pass"
+              );
+            }
+          } else if (verifyCfg.verifyEnabled) {
+            receiptVerified = false;
+            receiptVerifyReason = "missing_receipt";
+            if (verifyCfg.enforce) {
+              throw new PolicySdkError("RECEIPT_SIGNATURE_MISSING", "missing_receipt");
+            }
+            this.log.warn(
+              {
+                event: "policy.receipt.unverified",
+                correlationId: opts.correlationId,
+                reason: "missing_receipt",
+                enforce: verifyCfg.enforce
+              },
+              "policy.resolve response missing receipt header"
+            );
+          }
+
+          const receiptMeta = {
+            ...(receiptHeader ? { policy_receipt_header: receiptHeader } : {}),
+            ...(parsedReceipt ? { policy_receipt: parsedReceipt } : {}),
+            ...(receiptKid ? { policy_receipt_kid: receiptKid } : {}),
+            ...(receiptSig ? { policy_receipt_sig: receiptSig } : {}),
+            ...(receiptVerified !== undefined ? { receipt_verified: receiptVerified } : {}),
+            ...(receiptVerifyReason ? { receipt_verify_reason: receiptVerifyReason } : {})
+          };
+
           if (res.status === 304) {
             if (!staleEntry) {
               throw new PolicySdkError("REVALIDATION_CACHE_MISS", "Server returned 304 but no cached policy is available");
             }
-            if (!receiptHeader) return staleEntry.value;
             return {
               ...staleEntry.value,
               meta: {
                 ...(staleEntry.value.meta ?? {}),
-                policy_receipt_header: receiptHeader,
-                ...(parsedReceipt ? { policy_receipt: parsedReceipt } : {})
+                ...receiptMeta
               }
             };
           }
           const parsed = PolicyResolveOutputSchema.parse(res.json);
-          if (!receiptHeader) return parsed;
           return {
             ...parsed,
             meta: {
               ...(parsed.meta ?? {}),
-              policy_receipt_header: receiptHeader,
-              ...(parsedReceipt ? { policy_receipt: parsedReceipt } : {})
+              ...receiptMeta
             }
           };
         },
@@ -343,7 +408,8 @@ export class PolicyClient {
         ok: true,
         latencyMs,
         status: revalidated ? 304 : 200,
-        policyReceiptPresent: Boolean(out.meta?.policy_receipt_header)
+        policyReceiptPresent: Boolean(out.meta?.policy_receipt_header),
+        receiptVerified: out.meta?.receipt_verified
       });
       this.log.info(
         {
@@ -354,7 +420,8 @@ export class PolicyClient {
           policy_id: out.meta?.policy_id,
           active_version: out.meta?.active_version,
           resolution_hash: out.meta?.resolution_hash,
-          policy_receipt_present: Boolean(out.meta?.policy_receipt_header)
+          policy_receipt_present: Boolean(out.meta?.policy_receipt_header),
+          receipt_verified: out.meta?.receipt_verified
         },
         "policy.resolve ok"
       );
@@ -373,7 +440,8 @@ export class PolicyClient {
         latencyMs,
         status: e?.status,
         errorCode: code,
-        policyReceiptPresent: false
+        policyReceiptPresent: false,
+        receiptVerified: false
       });
       this.log.error(
         { correlationId: opts.correlationId, latencyMs, key, code, status: e?.status, details: e?.details },
@@ -405,8 +473,27 @@ export function createPolicyClientFromEnv(env: Record<string, string | undefined
     enforceContractVersionRaw == null
       ? ((env.NODE_ENV ?? process.env.NODE_ENV ?? "development") === "production")
       : String(enforceContractVersionRaw).toLowerCase() === "true";
+  const receiptVerifyEnabled = defaultVerifyEnabled(
+    env.NODE_ENV ?? process.env.NODE_ENV ?? "development",
+    env.POLICY_RECEIPT_VERIFY_ENABLED
+  );
+  const receiptVerifyEnforce = receiptVerifyEnabled
+    ? defaultEnforce(env.NODE_ENV ?? process.env.NODE_ENV ?? "development", env.POLICY_RECEIPT_VERIFY_ENFORCE)
+    : false;
+  const receiptHmacKeys = parseKeysJson(env.POLICY_RECEIPT_HMAC_KEYS_JSON);
 
   if (!baseUrl) throw new Error("Missing POLICY_API_BASE_URL");
 
-  return new PolicyClient({ baseUrl, apiKey, minContractVersion, enforceContractVersion }, log ?? noopLogger);
+  return new PolicyClient(
+    {
+      baseUrl,
+      apiKey,
+      minContractVersion,
+      enforceContractVersion,
+      receiptVerifyEnabled,
+      receiptVerifyEnforce,
+      receiptHmacKeys
+    },
+    log ?? noopLogger
+  );
 }

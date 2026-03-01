@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PolicyClient } from "../src/client";
+import { computeReceiptSig } from "../src/receiptVerify";
 
 const originalFetch = globalThis.fetch;
 
@@ -19,6 +20,7 @@ describe("PolicyClient receipt capture", () => {
       issued_at: "2026-02-28T00:00:00.000Z"
     };
     const receiptHeader = Buffer.from(JSON.stringify(receiptObj), "utf8").toString("base64url");
+    const receiptSig = computeReceiptSig({ receiptB64Url: receiptHeader, key: "k1-secret" });
 
     globalThis.fetch = vi.fn(async () => {
       return new Response(
@@ -31,7 +33,9 @@ describe("PolicyClient receipt capture", () => {
           headers: {
             "content-type": "application/json",
             "x-policy-contract-version": "policy-resolve@1.0.0",
-            "x-policy-receipt": receiptHeader
+            "x-policy-receipt": receiptHeader,
+            "x-policy-receipt-kid": "k1",
+            "x-policy-receipt-sig": receiptSig
           }
         }
       );
@@ -41,7 +45,10 @@ describe("PolicyClient receipt capture", () => {
       {
         baseUrl: "http://policy.local",
         timeoutMs: 2_000,
-        enforceContractVersion: true
+        enforceContractVersion: true,
+        receiptVerifyEnabled: true,
+        receiptVerifyEnforce: true,
+        receiptHmacKeys: { k1: "k1-secret" }
       },
       {
         info: () => undefined,
@@ -59,6 +66,8 @@ describe("PolicyClient receipt capture", () => {
 
     expect(out.meta?.policy_receipt_header).toBe(receiptHeader);
     expect(out.meta?.policy_receipt).toEqual(receiptObj);
+    expect(out.meta?.policy_receipt_kid).toBe("k1");
+    expect(out.meta?.policy_receipt_sig).toBe(receiptSig);
+    expect(out.meta?.receipt_verified).toBe(true);
   });
 });
-
