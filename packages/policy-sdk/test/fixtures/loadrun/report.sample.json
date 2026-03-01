@@ -1,0 +1,103 @@
+{
+  "generated_at": "2026-03-01T17:07:28.000Z",
+  "baseline_file": "/tmp/baseline.json",
+  "chaos_file": "/tmp/chaos.json",
+  "comparison": {
+    "baseline": {
+      "totalRequests": 500,
+      "successCount": 500,
+      "failStatusCount": 0,
+      "transportFailureCount": 0,
+      "successRate": 1,
+      "failRate": 0,
+      "status2xx": 500,
+      "status4xx": 0,
+      "status5xx": 0,
+      "timeoutErrors": 0,
+      "latencyMs": {
+        "mean": 696.61,
+        "p50": 703.39,
+        "p95": 1334.09,
+        "p99": 1381.21
+      },
+      "breakerOpenRate": 0,
+      "breakerHalfOpenRate": 0,
+      "halfOpenSuccessRate": 1,
+      "retryAmplification": 0,
+      "blockedMutateTotal": 0,
+      "cacheStates": {
+        "miss": 500
+      },
+      "retryDistribution": {
+        "0": 500
+      },
+      "errorCodes": {}
+    },
+    "chaos": {
+      "totalRequests": 500,
+      "successCount": 435,
+      "failStatusCount": 65,
+      "transportFailureCount": 0,
+      "successRate": 0.87,
+      "failRate": 0.13,
+      "status2xx": 435,
+      "status4xx": 0,
+      "status5xx": 65,
+      "timeoutErrors": 0,
+      "latencyMs": {
+        "mean": 2070.5,
+        "p50": 2063.04,
+        "p95": 3796.99,
+        "p99": 3951.51
+      },
+      "breakerOpenRate": 0.12,
+      "breakerHalfOpenRate": 0.04,
+      "halfOpenSuccessRate": 0.954545,
+      "retryAmplification": 0.3,
+      "blockedMutateTotal": 12,
+      "cacheStates": {
+        "miss": 430,
+        "revalidated": 50,
+        "stale_used": 20
+      },
+      "retryDistribution": {
+        "0": 380,
+        "1": 90,
+        "2": 30
+      },
+      "errorCodes": {
+        "CHAOS_INJECTED": 65
+      }
+    },
+    "delta": {
+      "p50InflationPct": 193.3,
+      "p95InflationPct": 184.61,
+      "p99InflationPct": 186.16,
+      "successRateDropPctPoints": 13,
+      "status5xxIncreasePctPoints": 13,
+      "retryAmplificationDelta": 0.3,
+      "breakerOpenRateDeltaPctPoints": 12
+    },
+    "signals": {
+      "transportStable": true,
+      "chaosErrorContained": true,
+      "latencyInflationSevere": false,
+      "breakerFlappingRisk": true
+    }
+  },
+  "recommendation": {
+    "defaults": {
+      "POLICY_BREAKER_FAILURE_THRESHOLD": 5,
+      "POLICY_BREAKER_RESET_AFTER_MS": 45564,
+      "POLICY_RETRY_MAX": 2,
+      "POLICY_RETRY_BASE_DELAY_MS": 380,
+      "POLICY_RETRY_MAX_DELAY_MS": 1383,
+      "POLICY_MAX_CONCURRENCY_SAFE": 200
+    },
+    "rationale": [
+      "Chaos 5xx rate=13.00% drives breaker threshold=5 and retry max=2.",
+      "Chaos p95=3796.99ms and p99=3951.51ms drive reset/backoff windows.",
+      "Baseline success=100.00% and chaos inflation p95=184.61% drive max safe concurrency=200."
+    ]
+  }
+}
