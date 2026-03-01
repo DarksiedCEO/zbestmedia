@@ -296,6 +296,13 @@ export class PolicyService {
         nowUtc()
       );
       if (activeCampaignCount >= HARD_INVARIANTS.maxCampaignPolicyOverridesPerClient) {
+        await this.audit(policyVersionId, tenantId, "rejected", actorId, {
+          reason: "campaign_override_cap_exceeded",
+          clientId: pv.client_id,
+          policyKey: pv.policy_key,
+          cap: HARD_INVARIANTS.maxCampaignPolicyOverridesPerClient,
+          activeCount: activeCampaignCount
+        });
         throw new PolicyError(
           "CAP_EXCEEDED",
           `Active campaign override cap (${HARD_INVARIANTS.maxCampaignPolicyOverridesPerClient}) exceeded for client`

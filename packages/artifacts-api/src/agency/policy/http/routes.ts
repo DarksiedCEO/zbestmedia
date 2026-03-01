@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 
 import { withTenant } from "../../../db/withTenant";
@@ -201,6 +202,31 @@ export const policyRoutes: FastifyPluginAsync<PolicyRoutesOptions> = async (app,
       });
       return reply.code(204).send();
     } catch (err) {
+      if (err instanceof PolicyError && (err.code === "CAP_EXCEEDED" || err.code === "INVARIANT_VIOLATION")) {
+        try {
+          await withTenant(opts.pool, tenantId, async (client) => {
+            await client.query(
+              `
+              INSERT INTO agency.policy_audit_log (id, tenant_id, policy_version_id, event_type, actor_id, details_json)
+              VALUES ($1,$2,$3,'rejected',$4,$5)
+              `,
+              [
+                randomUUID(),
+                tenantId,
+                id,
+                actorId,
+                {
+                  reason: "tier1_blocked",
+                  errorCode: err.code,
+                  details: err.details ?? null
+                }
+              ]
+            );
+          });
+        } catch {
+          // Best-effort write; preserve primary error response path.
+        }
+      }
       const h = toHttp(err);
       return reply.code(h.status).send(h.body);
     }
