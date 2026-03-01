@@ -1,0 +1,58 @@
+name: Loadrun Prod Drift Monitor
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  prod-drift:
+    runs-on: ubuntu-latest
+    env:
+      POLICY_BASE_URL: ${{ secrets.POLICY_BASE_URL }}
+      POLICY_AUTH_TOKEN: ${{ secrets.POLICY_AUTH_TOKEN }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      LOADRUN_EMAIL_WEBHOOK_URL: ${{ secrets.LOADRUN_EMAIL_WEBHOOK_URL }}
+      LOADRUN_ALERT_EMAIL_TO: ${{ secrets.LOADRUN_ALERT_EMAIL_TO }}
+      CANDIDATE_RUN: ops/load_runs/prod/${{ github.run_id }}__candidate.json
+      GATE_OUT_DIR: ops/load_runs/prod/reports
+      REGISTRY_PATH: ops/load_runs/baselines/registry.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Validate target
+        run: |
+          test -n "$POLICY_BASE_URL" || (echo "Missing POLICY_BASE_URL" && exit 1)
+      - name: Run prod canary
+        run: pnpm ops:loadrun:prod-canary --target "$POLICY_BASE_URL" --out "$CANDIDATE_RUN" ${POLICY_AUTH_TOKEN:+--authToken "$POLICY_AUTH_TOKEN"}
+      - name: Resolve baseline path
+        run: |
+          BASELINE_RUN=$(node -e "const r=require('./ops/load_runs/baselines/registry.json'); process.stdout.write(r.baseline_run_path||'')")
+          test -n "$BASELINE_RUN" || (echo "baseline_run_path missing in registry" && exit 1)
+          echo "BASELINE_RUN=$BASELINE_RUN" >> "$GITHUB_ENV"
+      - name: Gate prod drift
+        id: gate
+        run: pnpm ops:loadrun:prod-gate --baseline "$BASELINE_RUN" --candidate "$CANDIDATE_RUN" --outDir "$GATE_OUT_DIR" --registry "$REGISTRY_PATH"
+      - name: Alert on drift failure
+        if: failure()
+        run: |
+          TRIAGE_FILE=$(ls -t ops/load_runs/prod/triage/*__triage.json | head -n 1)
+          test -n "$TRIAGE_FILE" || (echo "No triage file found" && exit 1)
+          pnpm ops:loadrun:alert --triage "$TRIAGE_FILE"
+      - name: Upload prod drift artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-drift-${{ github.run_id }}
+          path: |
+            ops/load_runs/prod/*.json
+            ops/load_runs/prod/reports/*.json
+            ops/load_runs/prod/reports/*.md
+            ops/load_runs/prod/triage/*.json

@@ -17,3 +17,7 @@ export * from "./loadrun/baselineRegistry";
 export * from "./loadrun/ciGate";
 export * from "./loadrun/markdownSummary";
 export * from "./loadrun/acceptBaseline";
+export * from "./loadrun/prodProfiles";
+export * from "./loadrun/triage";
+export * from "./loadrun/alerting/slack";
+export * from "./loadrun/alerting/email";
