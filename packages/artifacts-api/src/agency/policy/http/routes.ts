@@ -72,6 +72,7 @@ export const policyRoutes: FastifyPluginAsync<PolicyRoutesOptions> = async (app,
       return reply.send({
         policyKey: parsed.data.policyKey,
         resolved: out.resolved,
+        meta: out.meta,
         source: out.provenance
           ? {
               scopeType: out.provenance.scopeType,

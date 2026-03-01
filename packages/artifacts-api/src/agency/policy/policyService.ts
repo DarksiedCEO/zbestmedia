@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 
 import { HARD_INVARIANTS, validateResolvedPolicy } from "./hardInvariants";
 import type { PolicyKey } from "./policyKeys";
+import { resolutionHash } from "./resolve/resolutionHash";
 import { sealPolicyVersion } from "./seal";
 import { PolicyError, type PolicyProvenance, type PolicyScopeType, type PolicyStatus, type PolicyVersionRow, type RequiredApprovalRole } from "./types";
 import { validatePolicyValue } from "./validators";
@@ -24,6 +25,9 @@ type CreateDraftInput = {
 type ResolveResult = {
   resolved: unknown;
   provenance: PolicyProvenance | null;
+  meta: {
+    resolution_hash: string | null;
+  };
 };
 
 type RollbackResult = {
@@ -402,11 +406,20 @@ export class PolicyService {
           scopeType: top.scope_type,
           policyVersionId: top.id,
           version: Number(top.version)
+        },
+        meta: {
+          resolution_hash: resolutionHash(top.value_json).hash
         }
       };
     }
 
-    return { resolved: null, provenance: null };
+    return {
+      resolved: null,
+      provenance: null,
+      meta: {
+        resolution_hash: resolutionHash(null).hash
+      }
+    };
   }
 
   async rollback(tenantId: string, targetPolicyVersionId: string, actorId: string, reason: string): Promise<RollbackResult> {
