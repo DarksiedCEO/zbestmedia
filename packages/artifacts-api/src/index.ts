@@ -31,6 +31,7 @@ export { LeadEventRepo } from "./lead/repo/eventRepo";
 export { LeadConversionRepo } from "./lead/repo/conversionRepo";
 export { LeadScoreService } from "./lead/scoring/scoreService";
 export { computeScoreV1 } from "./lead/scoring/scoreV1";
+export * from "./agency/policy";
 export type {
   LeadConversion,
   LeadEvent,
