@@ -11,6 +11,7 @@ import { CircuitBreaker } from "./circuitBreaker";
 import { PolicyCache, type CacheMode } from "./cache";
 import { PolicySdkError } from "./errors";
 import { noopLogger, type PolicyLogger } from "./logger";
+import { noopTelemetry, type PolicyTelemetry } from "./telemetry";
 
 export type ResolveOptions = {
   correlationId?: string;
@@ -23,7 +24,11 @@ export class PolicyClient {
   private readonly breaker = new CircuitBreaker({ failureThreshold: 5, resetAfterMs: 15_000 });
   private readonly cache = new PolicyCache();
 
-  constructor(cfg: PolicySdkConfig, private readonly log: PolicyLogger = noopLogger) {
+  constructor(
+    cfg: PolicySdkConfig,
+    private readonly log: PolicyLogger = noopLogger,
+    private readonly telemetry: PolicyTelemetry = noopTelemetry
+  ) {
     if (!cfg.baseUrl) throw new Error("PolicyClient requires baseUrl");
     this.cfg = {
       ...cfg,
@@ -38,9 +43,16 @@ export class PolicyClient {
     const key = this.cache.makeKey(parsedInput);
     const cacheTtlMs = opts.cacheTtlMs ?? 120_000;
     const cacheMode = opts.cacheMode ?? "READ";
+    this.telemetry.onResolveStart?.({ key, correlationId: opts.correlationId });
 
     const cached = this.cache.get(key);
     if (cached) {
+      this.telemetry.onCacheHit?.({
+        key,
+        correlationId: opts.correlationId,
+        resolutionHash: cached.value.meta?.resolution_hash
+      });
+      this.telemetry.onResolveEnd?.({ key, correlationId: opts.correlationId, ok: true, latencyMs: 0, status: 200 });
       this.log.info(
         { correlationId: opts.correlationId, cache: "hit", key, resolution_hash: cached.value.meta?.resolution_hash },
         "policy.resolve cache hit"
@@ -48,7 +60,10 @@ export class PolicyClient {
       return cached.value;
     }
 
+    const staleEntry = this.cache.getStaleEntry(key);
+
     if (!this.breaker.canRequest()) {
+      this.telemetry.onCircuitOpen?.({ key, correlationId: opts.correlationId, mode: cacheMode });
       if (cacheMode === "READ") {
         throw new PolicySdkError("CIRCUIT_OPEN_NO_CACHE", "Circuit open and no cached policy available");
       }
@@ -66,27 +81,58 @@ export class PolicyClient {
       "user-agent": this.cfg.userAgent,
       ...(opts.correlationId ? { "x-correlation-id": opts.correlationId } : {})
     };
+    const staleHash = staleEntry?.value.meta?.resolution_hash;
+    if (staleHash) {
+      headers["if-none-match"] = `"${staleHash}"`;
+    }
     if (this.cfg.apiKey) headers.authorization = `Bearer ${this.cfg.apiKey}`;
 
     const started = Date.now();
 
     try {
+      this.telemetry.onCacheMiss?.({
+        key,
+        correlationId: opts.correlationId,
+        resolutionHash: staleHash
+      });
       const out = await withRetry(
         async () => {
           const res = await httpGetJson<unknown>(url, { timeoutMs: this.cfg.timeoutMs, headers });
+          if (res.status === 304) {
+            if (!staleEntry) {
+              throw new PolicySdkError("REVALIDATION_CACHE_MISS", "Server returned 304 but no cached policy is available");
+            }
+            return staleEntry.value;
+          }
           return PolicyResolveOutputSchema.parse(res.json);
         },
-        { maxRetries: 2, baseDelayMs: 80, maxDelayMs: 400 }
+        {
+          maxRetries: 2,
+          baseDelayMs: 80,
+          maxDelayMs: 400,
+          onRetry: ({ attempt, backoffMs, reason }) => {
+            this.telemetry.onRetry?.({ key, correlationId: opts.correlationId, attempt, backoffMs, reason });
+          }
+        }
       );
 
       this.breaker.onSuccess();
 
       const latencyMs = Date.now() - started;
+      const revalidated = staleHash != null && staleHash === out.meta?.resolution_hash;
+      if (revalidated) {
+        this.telemetry.onCacheRevalidated?.({
+          key,
+          correlationId: opts.correlationId,
+          resolutionHash: out.meta?.resolution_hash
+        });
+      }
+      this.telemetry.onResolveEnd?.({ key, correlationId: opts.correlationId, ok: true, latencyMs, status: revalidated ? 304 : 200 });
       this.log.info(
         {
           correlationId: opts.correlationId,
           latencyMs,
-          cache: "miss",
+          cache: revalidated ? "revalidated" : "miss",
           key,
           policy_id: out.meta?.policy_id,
           active_version: out.meta?.active_version,
@@ -102,6 +148,14 @@ export class PolicyClient {
 
       const latencyMs = Date.now() - started;
       const code = e?.code ?? "UNKNOWN";
+      this.telemetry.onResolveEnd?.({
+        key,
+        correlationId: opts.correlationId,
+        ok: false,
+        latencyMs,
+        status: e?.status,
+        errorCode: code
+      });
       this.log.error(
         { correlationId: opts.correlationId, latencyMs, key, code, status: e?.status, details: e?.details },
         "policy.resolve failed"

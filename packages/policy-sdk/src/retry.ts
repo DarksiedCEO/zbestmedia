@@ -4,6 +4,7 @@ export type RetryOpts = {
   maxRetries: number;
   baseDelayMs: number;
   maxDelayMs: number;
+  onRetry?: (event: { attempt: number; backoffMs: number; reason?: string }) => void;
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -21,6 +22,11 @@ export async function withRetry<T>(fn: () => Promise<T>, opts: RetryOpts): Promi
 
       const jitter = Math.floor(Math.random() * 25);
       const backoff = Math.min(opts.maxDelayMs, opts.baseDelayMs * Math.pow(2, attempt)) + jitter;
+      opts.onRetry?.({
+        attempt: attempt + 1,
+        backoffMs: backoff,
+        reason: (err as { code?: string })?.code
+      });
       await sleep(backoff);
       attempt++;
     }

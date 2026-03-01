@@ -5,11 +5,18 @@ export type HttpClientOpts = {
   headers: Record<string, string>;
 };
 
+export type HttpJsonResult<T> = {
+  status: number;
+  json: T | null;
+  headers: Headers;
+  etag?: string;
+};
+
 export async function httpPostJson<T>(
   url: string,
   body: unknown,
   opts: HttpClientOpts
-): Promise<{ status: number; json: T; headers: Headers }> {
+): Promise<HttpJsonResult<T>> {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), opts.timeoutMs);
 
@@ -37,7 +44,7 @@ export async function httpPostJson<T>(
       });
     }
 
-    return { status: res.status, json: parsed as T, headers: res.headers };
+    return { status: res.status, json: parsed as T, headers: res.headers, etag: res.headers.get("etag") ?? undefined };
   } catch (e: any) {
     const code =
       e?.name === "AbortError"
@@ -53,7 +60,7 @@ export async function httpPostJson<T>(
   }
 }
 
-export async function httpGetJson<T>(url: string, opts: HttpClientOpts): Promise<{ status: number; json: T; headers: Headers }> {
+export async function httpGetJson<T>(url: string, opts: HttpClientOpts): Promise<HttpJsonResult<T>> {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), opts.timeoutMs);
 
@@ -63,6 +70,10 @@ export async function httpGetJson<T>(url: string, opts: HttpClientOpts): Promise
       headers: opts.headers,
       signal: controller.signal
     });
+
+    if (res.status === 304) {
+      return { status: 304, json: null, headers: res.headers, etag: res.headers.get("etag") ?? undefined };
+    }
 
     const text = await res.text();
     let parsed: any = null;
@@ -80,7 +91,7 @@ export async function httpGetJson<T>(url: string, opts: HttpClientOpts): Promise
       });
     }
 
-    return { status: res.status, json: parsed as T, headers: res.headers };
+    return { status: res.status, json: parsed as T, headers: res.headers, etag: res.headers.get("etag") ?? undefined };
   } catch (e: any) {
     const code =
       e?.name === "AbortError"

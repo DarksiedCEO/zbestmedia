@@ -1,4 +1,4 @@
-import type { PolicyResolveInput, PolicyResolveOutput } from "./types";
+import type { ParsedPolicyResolveInput, PolicyResolveOutput } from "./types";
 
 export type CacheMode = "READ" | "MUTATE";
 
@@ -11,7 +11,7 @@ export type CacheEntry = {
 export class PolicyCache {
   private readonly map = new Map<string, CacheEntry>();
 
-  makeKey(input: PolicyResolveInput): string {
+  makeKey(input: ParsedPolicyResolveInput): string {
     const asOf = input.asOf ?? "NOW";
     return `policy:${input.policyKey}:${input.client_id}:${input.campaign_id}:${input.role}:${asOf}`;
   }
@@ -20,7 +20,6 @@ export class PolicyCache {
     const e = this.map.get(key);
     if (!e) return undefined;
     if (Date.now() - e.storedAtMs > e.ttlMs) {
-      this.map.delete(key);
       return undefined;
     }
     return e;
@@ -28,6 +27,10 @@ export class PolicyCache {
 
   getStale(key: string): PolicyResolveOutput | undefined {
     return this.map.get(key)?.value;
+  }
+
+  getStaleEntry(key: string): CacheEntry | undefined {
+    return this.map.get(key);
   }
 
   set(key: string, value: PolicyResolveOutput, ttlMs: number): void {

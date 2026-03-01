@@ -8,7 +8,8 @@ export const PolicyResolveInputSchema = z.object({
   asOf: z.string().datetime().optional()
 });
 
-export type PolicyResolveInput = z.infer<typeof PolicyResolveInputSchema>;
+export type PolicyResolveInput = z.input<typeof PolicyResolveInputSchema>;
+export type ParsedPolicyResolveInput = z.output<typeof PolicyResolveInputSchema>;
 
 export const PolicyResolveMetaSchema = z
   .object({
