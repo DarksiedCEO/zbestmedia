@@ -26,6 +26,11 @@ type ResolveResult = {
   provenance: PolicyProvenance | null;
 };
 
+type RollbackResult = {
+  policyVersionId: string;
+  status: "pending_approval";
+};
+
 function nowUtc(): Date {
   return new Date();
 }
@@ -402,5 +407,82 @@ export class PolicyService {
     }
 
     return { resolved: null, provenance: null };
+  }
+
+  async rollback(tenantId: string, targetPolicyVersionId: string, actorId: string, reason: string): Promise<RollbackResult> {
+    const { rows } = await this.client.query<PolicyVersionRow>(
+      `
+      SELECT *
+      FROM agency.policy_versions
+      WHERE tenant_id=$1 AND id=$2
+      LIMIT 1
+      `,
+      [tenantId, targetPolicyVersionId]
+    );
+    const target = rows[0];
+    if (!target) {
+      throw new PolicyError("NOT_FOUND", "Policy version not found");
+    }
+
+    if (!target.supersedes_id) {
+      throw new PolicyError("INVALID_STATE", "Cannot rollback: no superseded policy available");
+    }
+
+    const { rows: sourceRows } = await this.client.query<PolicyVersionRow>(
+      `
+      SELECT *
+      FROM agency.policy_versions
+      WHERE tenant_id=$1 AND id=$2
+      LIMIT 1
+      `,
+      [tenantId, target.supersedes_id]
+    );
+    const source = sourceRows[0];
+    if (!source) {
+      throw new PolicyError("NOT_FOUND", "Rollback source policy not found");
+    }
+
+    const approvalRows = await this.client.query<{ required_role: RequiredApprovalRole }>(
+      `
+      SELECT required_role
+      FROM agency.policy_approvals
+      WHERE tenant_id=$1 AND policy_version_id=$2
+      ORDER BY required_role
+      `,
+      [tenantId, source.id]
+    );
+    const requiredRoles = approvalRows.rows.map((r) => r.required_role);
+    const fallbackRoles: RequiredApprovalRole[] = requiredRoles.length > 0 ? requiredRoles : ["sebastian"];
+
+    const effectiveAt = nowUtc();
+    const expiresAt =
+      source.scope_type === "campaign"
+        ? source.expires_at && source.expires_at > effectiveAt
+          ? source.expires_at
+          : new Date(effectiveAt.getTime() + 24 * 60 * 60 * 1000)
+        : source.expires_at;
+
+    const created = await this.createDraft({
+      tenantId,
+      scopeType: source.scope_type,
+      scopeId: source.scope_id,
+      clientId: source.client_id,
+      policyKey: source.policy_key,
+      valueJson: source.value_json,
+      effectiveAt,
+      expiresAt,
+      changeReason: `rollback:${reason}`,
+      createdBy: actorId,
+      requiredRoles: fallbackRoles
+    });
+
+    await this.submitForApproval(tenantId, created.policyVersionId, actorId);
+    await this.audit(targetPolicyVersionId, tenantId, "rolled_back", actorId, {
+      rollbackPolicyVersionId: created.policyVersionId,
+      sourcePolicyVersionId: source.id,
+      reason
+    });
+
+    return { policyVersionId: created.policyVersionId, status: "pending_approval" };
   }
 }

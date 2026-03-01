@@ -32,6 +32,13 @@ export { LeadConversionRepo } from "./lead/repo/conversionRepo";
 export { LeadScoreService } from "./lead/scoring/scoreService";
 export { computeScoreV1 } from "./lead/scoring/scoreV1";
 export * from "./agency/policy";
+export { policyRoutes } from "./agency/policy/http/routes";
+export {
+  createDraftSchema as policyCreateDraftSchema,
+  approveSchema as policyApproveSchema,
+  resolveQuerySchema as policyResolveQuerySchema,
+  rollbackSchema as policyRollbackSchema
+} from "./agency/policy/http/validators";
 export type {
   LeadConversion,
   LeadEvent,

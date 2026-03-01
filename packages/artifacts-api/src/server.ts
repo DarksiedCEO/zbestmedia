@@ -11,6 +11,7 @@ import { requestIdPlugin } from "./http/requestId";
 import { leadModule } from "./lead/leadModule";
 import { snapshotMetrics } from "./metrics/counters";
 import { PolicyFirewall } from "./policy/firewall";
+import { policyRoutes } from "./agency/policy/http/routes";
 
 export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const env = envInput ?? loadEnv();
@@ -58,6 +59,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
     maxIntakeAttributesBytes: env.LEAD_MAX_INTAKE_ATTR_BYTES,
     routeSlowBudgetMs: env.LEAD_ROUTE_SLOW_BUDGET_MS
   });
+  await app.register(policyRoutes, { pool });
 
   return app;
 }
