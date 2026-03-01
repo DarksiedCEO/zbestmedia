@@ -9,6 +9,7 @@ import { receiptKid, receiptKeyOrThrow, shouldSignReceipts, signReceiptBase64Url
 import { PolicyError } from "../types";
 import { PolicyService } from "../policyService";
 import { maybeApplyChaosLatency, readPolicyChaosConfig, shouldInjectChaosError } from "./chaos";
+import { readPolicyResolveAuditConfig, shouldSamplePolicyResolveAudit } from "./resolveAudit";
 import { requireRole } from "./authz";
 import { approveSchema, createDraftSchema, resolveQuerySchema, rollbackSchema } from "./validators";
 
@@ -85,6 +86,7 @@ export const policyRoutes: FastifyPluginAsync<PolicyRoutesOptions> = async (app,
     const actorId = req.auth.actorId;
     const chaos = readPolicyChaosConfig(process.env);
     const chaosFingerprint = `${tenantId}:${parsed.data.policyKey}:${parsed.data.clientId ?? ""}:${parsed.data.campaignId ?? ""}:${req.id}`;
+    const resolveAudit = readPolicyResolveAuditConfig(process.env);
 
     try {
       await maybeApplyChaosLatency(chaos);
@@ -109,6 +111,9 @@ export const policyRoutes: FastifyPluginAsync<PolicyRoutesOptions> = async (app,
         const issuedAt = new Date();
         const ttlSec = defaultPolicyReceiptTtlSec(process.env);
         const expiresAt = new Date(issuedAt.getTime() + ttlSec * 1000);
+        const signingEnabled = shouldSignReceipts(process.env);
+        const requestRole = req.auth.roles[0] ?? null;
+        const requestId = req.requestId;
         const receipt = encodePolicyResolveReceipt({
           contract_version: POLICY_CONTRACT_VERSION,
           resolution_hash: etagValue,
@@ -121,12 +126,73 @@ export const policyRoutes: FastifyPluginAsync<PolicyRoutesOptions> = async (app,
         reply.header("X-Policy-Receipt", receipt);
         const kid = receiptKid(process.env);
         reply.header("X-Policy-Receipt-Kid", kid);
-        if (shouldSignReceipts(process.env)) {
+        if (signingEnabled) {
           const sig = signReceiptBase64UrlPayload({
             receiptB64Url: receipt,
             key: receiptKeyOrThrow(process.env)
           });
           reply.header("X-Policy-Receipt-Sig", sig);
+        }
+
+        const auditFingerprint = [
+          tenantId,
+          parsed.data.policyKey,
+          parsed.data.clientId ?? "",
+          parsed.data.campaignId ?? "",
+          requestRole ?? "",
+          requestId
+        ].join(":");
+
+        if (shouldSamplePolicyResolveAudit(resolveAudit, auditFingerprint)) {
+          try {
+            await withTenant(opts.pool, tenantId, async (client) => {
+              await client.query(
+                `
+                INSERT INTO agency.policy_resolve_audit (
+                  id,
+                  tenant_id,
+                  correlation_id,
+                  client_id,
+                  campaign_id,
+                  role,
+                  policy_key,
+                  resolution_hash,
+                  active_version,
+                  contract_version,
+                  receipt_kid,
+                  receipt_sig_present,
+                  issued_at,
+                  expires_at,
+                  details_json
+                )
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+                `,
+                [
+                  randomUUID(),
+                  tenantId,
+                  requestId,
+                  parsed.data.clientId ?? null,
+                  parsed.data.campaignId ?? null,
+                  requestRole,
+                  parsed.data.policyKey,
+                  etagValue,
+                  out.provenance?.version ?? null,
+                  POLICY_CONTRACT_VERSION,
+                  kid,
+                  signingEnabled,
+                  issuedAt,
+                  expiresAt,
+                  {
+                    policyVersionId: out.provenance?.policyVersionId ?? null,
+                    scopeType: out.provenance?.scopeType ?? null,
+                    actorId
+                  }
+                ]
+              );
+            });
+          } catch (auditErr) {
+            req.log.warn({ err: auditErr, requestId }, "policy resolve audit write failed");
+          }
         }
       }
       if (etagValue) {
