@@ -21,3 +21,6 @@ export * from "./loadrun/prodProfiles";
 export * from "./loadrun/triage";
 export * from "./loadrun/alerting/slack";
 export * from "./loadrun/alerting/email";
+export * from "./slo/schema";
+export * from "./slo/emit";
+export * from "./slo/summary";

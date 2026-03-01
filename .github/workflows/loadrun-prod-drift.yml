@@ -40,6 +40,9 @@ jobs:
       - name: Gate prod drift
         id: gate
         run: pnpm ops:loadrun:prod-gate --baseline "$BASELINE_RUN" --candidate "$CANDIDATE_RUN" --outDir "$GATE_OUT_DIR" --registry "$REGISTRY_PATH"
+      - name: Build SLO summary
+        if: always()
+        run: pnpm ops:slo:summary --last 30 --out ops/slo/summary.md
       - name: Alert on drift failure
         if: failure()
         run: |
@@ -56,3 +59,5 @@ jobs:
             ops/load_runs/prod/reports/*.json
             ops/load_runs/prod/reports/*.md
             ops/load_runs/prod/triage/*.json
+            ops/slo/loadrun_events.jsonl
+            ops/slo/summary.md

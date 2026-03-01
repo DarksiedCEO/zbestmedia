@@ -13,6 +13,7 @@
     "ops:loadrun:prod-canary": "tsx scripts/loadrun/prod-canary.ts",
     "ops:loadrun:prod-gate": "tsx scripts/loadrun/prod-gate.ts",
     "ops:loadrun:alert": "tsx scripts/loadrun/alert.ts",
+    "ops:slo:summary": "tsx scripts/slo/summary.ts",
     "ops:loadrun:propose-defaults": "tsx scripts/loadrun/propose-defaults.ts",
     "ops:loadrun:apply-defaults": "tsx scripts/loadrun/apply-defaults.ts",
     "ops:policy:print-env-defaults": "tsx scripts/loadrun/print-env-defaults.ts",

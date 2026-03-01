@@ -41,10 +41,16 @@ jobs:
           BASELINE_RUN=$(node -e "const r=require('./ops/load_runs/baselines/registry.json'); process.stdout.write(r.baseline_run_path||'')")
           test -n "$BASELINE_RUN" || (echo "baseline_run_path missing in registry" && exit 1)
           pnpm ops:loadrun:ci-gate --baseline "$BASELINE_RUN" --candidate "$CANDIDATE_RUN" --outDir ops/load_runs/ci
+      - name: Build SLO summary
+        if: always()
+        run: pnpm ops:slo:summary --last 30 --out ops/slo/summary.md
       - name: Upload loadrun artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: loadrun-${{ github.sha }}
           path: |
             ops/load_runs/ci/*.json
             ops/load_runs/ci/*.md
+            ops/slo/loadrun_events.jsonl
+            ops/slo/summary.md

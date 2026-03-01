@@ -7,6 +7,7 @@ import { buildCiGateMarkdownSummary } from "../../packages/policy-sdk/src/loadru
 import { parseLoadRun } from "../../packages/policy-sdk/src/loadrun/schema";
 import { computeSlices } from "../../packages/policy-sdk/src/loadrun/slice";
 import { buildTriage } from "../../packages/policy-sdk/src/loadrun/triage";
+import { buildLoadRunSloEvent, emitLoadRunSloEvent } from "../../packages/policy-sdk/src/slo/emit";
 
 type CliArgs = {
   baseline: string;
@@ -32,7 +33,9 @@ function parseArgs(argv: string[]): CliArgs {
   const baseline = args.get("baseline");
   const candidate = args.get("candidate");
   if (!baseline || !candidate) {
-    throw new Error("Usage: pnpm ops:loadrun:prod-gate --baseline <run.json> --candidate <run.json> [--outDir <dir>] [--registry <path>]");
+    throw new Error(
+      "Usage: pnpm ops:loadrun:prod-gate --baseline <run.json> --candidate <run.json> [--outDir <dir>] [--registry <path>]"
+    );
   }
 
   return {
@@ -53,7 +56,7 @@ function timestampSlug(date: Date): string {
   return `${yyyy}${mm}${dd}_${hh}${mi}${ss}`;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const cli = parseArgs(process.argv);
   const baselinePath = path.resolve(process.cwd(), cli.baseline);
   const candidatePath = path.resolve(process.cwd(), cli.candidate);
@@ -79,22 +82,45 @@ function main(): void {
   const reportMd = path.join(outDir, `${reportBase}.md`);
   const verdictJson = path.join(outDir, `${reportBase}.verdict.json`);
 
-  const reportPayload = {
-    generated_at: new Date().toISOString(),
-    baseline_file: baselinePath,
-    candidate_file: candidatePath,
-    gate
-  };
-
-  fs.writeFileSync(reportJson, `${JSON.stringify(reportPayload, null, 2)}\n`, "utf8");
-  fs.writeFileSync(reportMd, `${buildCiGateMarkdownSummary({ baselineFile: baselinePath, candidateFile: candidatePath, gate })}\n`, "utf8");
-
   let triagePath = "";
+  let triageTags: string[] = [];
   if (!gate.passed) {
     const triage = buildTriage({ gate, baselineRegistry: registry });
     triagePath = path.join(triageDir, `${stamp}__triage.json`);
     fs.writeFileSync(triagePath, `${JSON.stringify(triage, null, 2)}\n`, "utf8");
+    triageTags = triage.tags;
   }
+
+  const sloEvent = buildLoadRunSloEvent({
+    source: "prod",
+    service: "policy",
+    baselinePath,
+    candidatePath,
+    gate,
+    baselineConcurrency: baseline.config.concurrency,
+    candidateConcurrency: candidate.config.concurrency,
+    baselineRegistry: registry,
+    tags: triageTags
+  });
+
+  await emitLoadRunSloEvent({
+    event: sloEvent,
+    sink: (process.env.SLO_SINK as "file" | "postgres" | undefined) ?? "file",
+    jsonlPath: path.resolve(process.cwd(), process.env.SLO_EVENTS_JSONL_PATH ?? "ops/slo/loadrun_events.jsonl"),
+    archiveDir: path.resolve(process.cwd(), process.env.SLO_ARCHIVE_DIR ?? "ops/slo/archive"),
+    postgresUrl: process.env.SLO_POSTGRES_URL
+  });
+
+  const reportPayload = {
+    generated_at: new Date().toISOString(),
+    baseline_file: baselinePath,
+    candidate_file: candidatePath,
+    gate,
+    slo_event_id: sloEvent.event_id
+  };
+
+  fs.writeFileSync(reportJson, `${JSON.stringify(reportPayload, null, 2)}\n`, "utf8");
+  fs.writeFileSync(reportMd, `${buildCiGateMarkdownSummary({ baselineFile: baselinePath, candidateFile: candidatePath, gate })}\n`, "utf8");
 
   const verdict = {
     passed: gate.passed,
@@ -111,7 +137,8 @@ function main(): void {
       report_json: reportJson,
       report_md: reportMd,
       triage_json: triagePath || null
-    }
+    },
+    slo_event_id: sloEvent.event_id
   };
 
   fs.writeFileSync(verdictJson, `${JSON.stringify(verdict, null, 2)}\n`, "utf8");
@@ -121,4 +148,7 @@ function main(): void {
   }
 }
 
-main();
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+});
