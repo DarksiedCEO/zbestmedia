@@ -24,3 +24,8 @@ export * from "./loadrun/alerting/email";
 export * from "./slo/schema";
 export * from "./slo/emit";
 export * from "./slo/summary";
+export * from "./canary/types";
+export * from "./canary/stateMachine";
+export * from "./canary/plan";
+export * from "./canary/execute";
+export * from "./canary/rollout";
