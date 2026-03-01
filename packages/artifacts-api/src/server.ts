@@ -11,6 +11,7 @@ import { requestIdPlugin } from "./http/requestId";
 import { leadModule } from "./lead/leadModule";
 import { snapshotMetrics } from "./metrics/counters";
 import { PolicyFirewall } from "./policy/firewall";
+import { POLICY_CONTRACT_VERSION } from "./agency/policy/contract";
 import { policyRoutes } from "./agency/policy/http/routes";
 
 export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
@@ -40,6 +41,11 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
 
   app.addHook("onClose", async () => {
     await pool.end();
+  });
+
+  app.addHook("onSend", async (req, reply, payload) => {
+    reply.header("X-Policy-Contract-Version", POLICY_CONTRACT_VERSION);
+    return payload;
   });
 
   app.get("/healthz", async () => ({ ok: true }));
