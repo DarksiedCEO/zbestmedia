@@ -15,7 +15,7 @@ describe("withTenant", () => {
 
     expect(value).toBe("ok");
     expect(query).toHaveBeenNthCalledWith(1, "BEGIN");
-    expect(query).toHaveBeenNthCalledWith(2, "SET LOCAL app.tenant_id = $1", [
+    expect(query).toHaveBeenNthCalledWith(2, "SELECT set_config('app.tenant_id', $1, true)", [
       "11111111-1111-4111-8111-111111111111"
     ]);
     expect(query).toHaveBeenNthCalledWith(3, "COMMIT");
@@ -38,7 +38,7 @@ describe("withTenant", () => {
     ).rejects.toThrow("boom");
 
     expect(query).toHaveBeenNthCalledWith(1, "BEGIN");
-    expect(query).toHaveBeenNthCalledWith(2, "SET LOCAL app.tenant_id = $1", [
+    expect(query).toHaveBeenNthCalledWith(2, "SELECT set_config('app.tenant_id', $1, true)", [
       "11111111-1111-4111-8111-111111111111"
     ]);
     expect(query).toHaveBeenNthCalledWith(3, "ROLLBACK");
