@@ -7,6 +7,28 @@ const TOKEN = process.env.ARTIFACTS_CONTRACT_TEST_TOKEN;
 const POLICY_KEY = process.env.ARTIFACTS_CONTRACT_POLICY_KEY ?? "performance_limits";
 const CLIENT_ID = process.env.ARTIFACTS_CONTRACT_CLIENT_ID ?? "11111111-1111-4111-8111-111111111111";
 const CAMPAIGN_ID = process.env.ARTIFACTS_CONTRACT_CAMPAIGN_ID ?? "22222222-2222-4222-8222-222222222222";
+const MIN_CONTRACT_VERSION =
+  process.env.POLICY_MIN_CONTRACT_VERSION ?? "policy-resolve@1.0.0";
+
+function parseContractVersion(value: string): { contract: string; major: number; minor: number; patch: number } {
+  const match = value.match(/^([a-z0-9_-]+)@(\d+)\.(\d+)\.(\d+)$/i);
+  if (!match) throw new Error(`Invalid contract version: ${value}`);
+  return {
+    contract: match[1],
+    major: Number(match[2]),
+    minor: Number(match[3]),
+    patch: Number(match[4])
+  };
+}
+
+function versionGte(actual: string, minimum: string): boolean {
+  const a = parseContractVersion(actual);
+  const m = parseContractVersion(minimum);
+  if (a.contract !== m.contract) return false;
+  if (a.major !== m.major) return a.major > m.major;
+  if (a.minor !== m.minor) return a.minor > m.minor;
+  return a.patch >= m.patch;
+}
 
 describe.runIf(Boolean(BASE_URL && TOKEN))("policy-sdk <-> artifacts-api resolve contract", () => {
   it("returns ETag equal to resolution_hash and supports 304 revalidation", async () => {
@@ -34,6 +56,9 @@ describe.runIf(Boolean(BASE_URL && TOKEN))("policy-sdk <-> artifacts-api resolve
 
     const etag = first.headers.get("etag");
     expect(etag).toBe(`"${resolutionHash}"`);
+    const contractVersion = first.headers.get("x-policy-contract-version");
+    expect(typeof contractVersion).toBe("string");
+    expect(versionGte(String(contractVersion), MIN_CONTRACT_VERSION)).toBe(true);
 
     const second = await fetch(url.toString(), {
       headers: {

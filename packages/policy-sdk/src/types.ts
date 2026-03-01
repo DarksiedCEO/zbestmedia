@@ -33,4 +33,6 @@ export type PolicySdkConfig = {
   apiKey?: string;
   timeoutMs?: number;
   userAgent?: string;
+  minContractVersion?: string;
+  enforceContractVersion?: boolean;
 };

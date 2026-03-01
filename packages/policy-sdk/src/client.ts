@@ -13,11 +13,37 @@ import { PolicySdkError } from "./errors";
 import { noopLogger, type PolicyLogger } from "./logger";
 import { noopTelemetry, type PolicyTelemetry } from "./telemetry";
 
+const DEFAULT_MIN_CONTRACT_VERSION = "policy-resolve@1.0.0";
+
 export type ResolveOptions = {
   correlationId?: string;
   cacheTtlMs?: number;
   cacheMode?: CacheMode;
 };
+
+type ParsedContractVersion = {
+  contract: string;
+  major: number;
+  minor: number;
+  patch: number;
+};
+
+function parseContractVersion(version: string): ParsedContractVersion | null {
+  const match = version.trim().match(/^([a-z0-9_-]+)@(\d+)\.(\d+)\.(\d+)$/i);
+  if (!match) return null;
+  return {
+    contract: match[1],
+    major: Number(match[2]),
+    minor: Number(match[3]),
+    patch: Number(match[4])
+  };
+}
+
+function compareContractVersions(a: ParsedContractVersion, b: ParsedContractVersion): number {
+  if (a.major !== b.major) return a.major - b.major;
+  if (a.minor !== b.minor) return a.minor - b.minor;
+  return a.patch - b.patch;
+}
 
 export class PolicyClient {
   private readonly cfg: Required<Pick<PolicySdkConfig, "timeoutMs" | "userAgent">> & PolicySdkConfig;
@@ -35,6 +61,77 @@ export class PolicyClient {
       timeoutMs: cfg.timeoutMs ?? 2000,
       userAgent: cfg.userAgent ?? "@zbest/policy-sdk"
     };
+  }
+
+  private validateContractVersion(versionHeader: string | null, correlationId?: string): void {
+    const minContractVersion = this.cfg.minContractVersion ?? DEFAULT_MIN_CONTRACT_VERSION;
+    const enforceContractVersion = this.cfg.enforceContractVersion ?? false;
+
+    if (!versionHeader) {
+      if (enforceContractVersion) {
+        throw new PolicySdkError("CONTRACT_VERSION_MISSING", "Missing x-policy-contract-version response header");
+      }
+      this.log.warn(
+        { correlationId, minContractVersion, enforceContractVersion },
+        "policy.resolve response missing contract version header"
+      );
+      return;
+    }
+
+    const actualParsed = parseContractVersion(versionHeader);
+    const minParsed = parseContractVersion(minContractVersion);
+
+    if (!actualParsed || !minParsed) {
+      if (enforceContractVersion) {
+        throw new PolicySdkError("CONTRACT_VERSION_INVALID", "Invalid policy contract version format", {
+          details: { versionHeader, minContractVersion }
+        });
+      }
+      this.log.warn(
+        { correlationId, versionHeader, minContractVersion, enforceContractVersion },
+        "policy.resolve contract version format is invalid"
+      );
+      return;
+    }
+
+    if (actualParsed.contract !== minParsed.contract) {
+      if (enforceContractVersion) {
+        throw new PolicySdkError("CONTRACT_VERSION_MISMATCH", "Policy contract name does not match expected contract", {
+          details: {
+            actual: versionHeader,
+            minimum: minContractVersion
+          }
+        });
+      }
+      this.log.warn(
+        { correlationId, actualContractVersion: versionHeader, minContractVersion },
+        "policy.resolve contract name mismatch"
+      );
+      return;
+    }
+
+    const cmp = compareContractVersions(actualParsed, minParsed);
+    if (cmp < 0) {
+      if (enforceContractVersion) {
+        throw new PolicySdkError("CONTRACT_VERSION_TOO_OLD", "Policy contract version is lower than required minimum", {
+          details: {
+            actual: versionHeader,
+            minimum: minContractVersion
+          }
+        });
+      }
+      this.log.warn(
+        { correlationId, actualContractVersion: versionHeader, minContractVersion },
+        "policy.resolve contract version is older than configured minimum"
+      );
+      return;
+    }
+    if (cmp > 0) {
+      this.log.warn(
+        { correlationId, actualContractVersion: versionHeader, minContractVersion },
+        "policy.resolve contract version is newer than configured minimum"
+      );
+    }
   }
 
   async resolvePolicy(input: PolicyResolveInput, opts: ResolveOptions = {}): Promise<PolicyResolveOutput> {
@@ -98,6 +195,7 @@ export class PolicyClient {
       const out = await withRetry(
         async () => {
           const res = await httpGetJson<unknown>(url, { timeoutMs: this.cfg.timeoutMs, headers });
+          this.validateContractVersion(res.headers.get("x-policy-contract-version"), opts.correlationId);
           if (res.status === 304) {
             if (!staleEntry) {
               throw new PolicySdkError("REVALIDATION_CACHE_MISS", "Server returned 304 but no cached policy is available");
@@ -180,8 +278,10 @@ export class PolicyClient {
 export function createPolicyClientFromEnv(env: Record<string, string | undefined>, log?: PolicyLogger): PolicyClient {
   const baseUrl = env.POLICY_API_BASE_URL;
   const apiKey = env.POLICY_API_KEY;
+  const minContractVersion = env.POLICY_MIN_CONTRACT_VERSION ?? DEFAULT_MIN_CONTRACT_VERSION;
+  const enforceContractVersion = String(env.POLICY_ENFORCE_CONTRACT_VERSION ?? "false").toLowerCase() === "true";
 
   if (!baseUrl) throw new Error("Missing POLICY_API_BASE_URL");
 
-  return new PolicyClient({ baseUrl, apiKey }, log ?? noopLogger);
+  return new PolicyClient({ baseUrl, apiKey, minContractVersion, enforceContractVersion }, log ?? noopLogger);
 }
