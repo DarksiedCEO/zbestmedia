@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const PolicyResolveInputSchema = z.object({
+  policyKey: z.string().min(1).default("performance_limits"),
   client_id: z.string().min(1),
   campaign_id: z.string().min(1),
   role: z.string().min(1),

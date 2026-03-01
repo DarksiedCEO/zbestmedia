@@ -5,7 +5,7 @@ import {
   type PolicyResolveOutput,
   type PolicySdkConfig
 } from "./types";
-import { httpPostJson } from "./http";
+import { httpGetJson } from "./http";
 import { withRetry } from "./retry";
 import { CircuitBreaker } from "./circuitBreaker";
 import { PolicyCache, type CacheMode } from "./cache";
@@ -55,7 +55,12 @@ export class PolicyClient {
       throw new PolicySdkError("CIRCUIT_OPEN", "Circuit open; blocking policy resolve for mutate path");
     }
 
-    const url = `${this.cfg.baseUrl.replace(/\/+$/, "")}/v1/policies/resolve`;
+    const query = new URLSearchParams({
+      policyKey: parsedInput.policyKey,
+      clientId: parsedInput.client_id,
+      campaignId: parsedInput.campaign_id
+    });
+    const url = `${this.cfg.baseUrl.replace(/\/+$/, "")}/v1/policies/resolve?${query.toString()}`;
 
     const headers: Record<string, string> = {
       "user-agent": this.cfg.userAgent,
@@ -68,7 +73,7 @@ export class PolicyClient {
     try {
       const out = await withRetry(
         async () => {
-          const res = await httpPostJson<unknown>(url, parsedInput, { timeoutMs: this.cfg.timeoutMs, headers });
+          const res = await httpGetJson<unknown>(url, { timeoutMs: this.cfg.timeoutMs, headers });
           return PolicyResolveOutputSchema.parse(res.json);
         },
         { maxRetries: 2, baseDelayMs: 80, maxDelayMs: 400 }

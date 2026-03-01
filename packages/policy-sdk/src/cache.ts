@@ -13,7 +13,7 @@ export class PolicyCache {
 
   makeKey(input: PolicyResolveInput): string {
     const asOf = input.asOf ?? "NOW";
-    return `policy:${input.client_id}:${input.campaign_id}:${input.role}:${asOf}`;
+    return `policy:${input.policyKey}:${input.client_id}:${input.campaign_id}:${input.role}:${asOf}`;
   }
 
   get(key: string): CacheEntry | undefined {
