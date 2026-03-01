@@ -7,6 +7,7 @@ import { TenantWriteBudget } from "./budgets/tenantBudget";
 import { loadEnv, type AppEnv } from "./config/env";
 import { createPool } from "./db/pool";
 import { authPlugin } from "./http/auth";
+import { shouldBypassResolveRateLimit } from "./http/rateLimitBypass";
 import { requestIdPlugin } from "./http/requestId";
 import { leadModule } from "./lead/leadModule";
 import { snapshotMetrics } from "./metrics/counters";
@@ -25,10 +26,17 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
 
   await app.register(requestIdPlugin);
   await app.register(authPlugin, { jwtSecret: env.AUTH_JWT_SECRET });
+  const loadtestBypassEnabled = process.env.POLICY_LOADTEST_RATE_LIMIT_BYPASS === "true";
   await app.register(rateLimit, {
     hook: "preHandler",
     max: 120,
     timeWindow: 60_000,
+    allowList: (req) =>
+      shouldBypassResolveRateLimit({
+        enabled: loadtestBypassEnabled,
+        method: req.raw.method,
+        url: req.raw.url
+      }),
     keyGenerator: (req) => {
       const tenantId = req.auth?.tenantId;
       return tenantId ? `t:${tenantId}` : `ip:${req.ip}`;
