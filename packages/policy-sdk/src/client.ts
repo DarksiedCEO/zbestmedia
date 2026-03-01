@@ -64,7 +64,15 @@ function decodePolicyReceiptHeader(header: string | null): PolicyResolveReceipt 
     const decoded = Buffer.from(header, "base64url").toString("utf8");
     const parsed = JSON.parse(decoded) as PolicyResolveReceipt;
     if (typeof parsed !== "object" || parsed === null) return null;
-    if (!parsed.contract_version || !parsed.resolution_hash || !parsed.issued_at) return null;
+    if (
+      !parsed.contract_version ||
+      !parsed.resolution_hash ||
+      !parsed.issued_at ||
+      !parsed.expires_at ||
+      typeof parsed.ttl_sec !== "number"
+    ) {
+      return null;
+    }
     return parsed;
   } catch {
     return null;
@@ -313,6 +321,8 @@ export class PolicyClient {
 
           let receiptVerified: boolean | undefined;
           let receiptVerifyReason: string | undefined;
+          let receiptExpired: boolean | undefined;
+          let receiptExpiresAt: string | undefined;
           if (receiptHeader) {
             const verification = verifyReceiptOrThrow({
               receiptB64Url: receiptHeader,
@@ -322,6 +332,8 @@ export class PolicyClient {
             });
             receiptVerified = verification.verified;
             receiptVerifyReason = verification.reason;
+            receiptExpired = verification.expired;
+            receiptExpiresAt = verification.expiresAt;
             if (!verification.verified && verifyCfg.verifyEnabled) {
               this.log.warn(
                 {
@@ -357,7 +369,9 @@ export class PolicyClient {
             ...(receiptKid ? { policy_receipt_kid: receiptKid } : {}),
             ...(receiptSig ? { policy_receipt_sig: receiptSig } : {}),
             ...(receiptVerified !== undefined ? { receipt_verified: receiptVerified } : {}),
-            ...(receiptVerifyReason ? { receipt_verify_reason: receiptVerifyReason } : {})
+            ...(receiptVerifyReason ? { receipt_verify_reason: receiptVerifyReason } : {}),
+            ...(receiptExpired !== undefined ? { receipt_expired: receiptExpired } : {}),
+            ...(receiptExpiresAt ? { receipt_expires_at: receiptExpiresAt } : {})
           };
 
           if (res.status === 304) {

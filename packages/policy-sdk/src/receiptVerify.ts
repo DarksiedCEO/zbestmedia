@@ -28,6 +28,7 @@ export type ReceiptVerifyConfig = {
   verifyEnabled: boolean;
   enforce: boolean;
   keysByKid: Record<string, string>;
+  now?: Date;
 };
 
 export function defaultVerifyEnabled(nodeEnv?: string, explicit?: string): boolean {
@@ -55,12 +56,40 @@ export function parseKeysJson(raw?: string): Record<string, string> {
   }
 }
 
+export type DecodedReceiptPayload = {
+  contract_version?: string;
+  resolution_hash?: string;
+  policy_id?: string;
+  active_version?: string;
+  issued_at?: string;
+  expires_at?: string;
+  ttl_sec?: number;
+};
+
+export function decodeReceiptPayload(receiptB64Url: string): DecodedReceiptPayload | null {
+  try {
+    const decoded = Buffer.from(receiptB64Url, "base64url").toString("utf8");
+    const parsed = JSON.parse(decoded) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as DecodedReceiptPayload;
+  } catch {
+    return null;
+  }
+}
+
+export function parseReceiptExpiresAt(payload: DecodedReceiptPayload): Date | null {
+  if (typeof payload.expires_at !== "string" || payload.expires_at.length === 0) return null;
+  const date = new Date(payload.expires_at);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date;
+}
+
 export function verifyReceiptOrThrow(opts: {
   receiptB64Url: string;
   sigB64Url: string | undefined;
   kid: string | undefined;
   cfg: ReceiptVerifyConfig;
-}): { verified: boolean; reason?: string } {
+}): { verified: boolean; reason?: string; expired?: boolean; expiresAt?: string } {
   if (!opts.cfg.verifyEnabled) return { verified: false, reason: "verify_disabled" };
 
   if (!opts.sigB64Url || !opts.kid) {
@@ -84,5 +113,26 @@ export function verifyReceiptOrThrow(opts: {
     return { verified: false, reason };
   }
 
-  return { verified: true };
+  const payload = decodeReceiptPayload(opts.receiptB64Url);
+  if (!payload) {
+    const reason = "receipt_payload_invalid";
+    if (opts.cfg.enforce) throw new PolicySdkError("RECEIPT_EXPIRES_AT_INVALID", reason);
+    return { verified: false, reason };
+  }
+
+  const expiresAt = parseReceiptExpiresAt(payload);
+  if (!expiresAt) {
+    const reason = "expires_at_invalid";
+    if (opts.cfg.enforce) throw new PolicySdkError("RECEIPT_EXPIRES_AT_INVALID", reason);
+    return { verified: false, reason };
+  }
+
+  const now = opts.cfg.now ?? new Date();
+  if (now.getTime() > expiresAt.getTime()) {
+    const reason = "receipt_expired";
+    if (opts.cfg.enforce) throw new PolicySdkError("RECEIPT_EXPIRED", reason);
+    return { verified: false, reason, expired: true, expiresAt: expiresAt.toISOString() };
+  }
+
+  return { verified: true, expiresAt: expiresAt.toISOString(), expired: false };
 }

@@ -17,6 +17,8 @@ export type PolicyResolveReceipt = {
   policy_id?: string;
   active_version?: string;
   issued_at: string;
+  expires_at: string;
+  ttl_sec: number;
 };
 
 export const PolicyResolveMetaSchema = z
@@ -29,7 +31,9 @@ export const PolicyResolveMetaSchema = z
     policy_receipt_sig: z.string().optional(),
     policy_receipt_kid: z.string().optional(),
     receipt_verified: z.boolean().optional(),
-    receipt_verify_reason: z.string().optional()
+    receipt_verify_reason: z.string().optional(),
+    receipt_expires_at: z.string().optional(),
+    receipt_expired: z.boolean().optional()
   })
   .passthrough();
 

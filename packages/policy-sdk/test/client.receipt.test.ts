@@ -17,7 +17,9 @@ describe("PolicyClient receipt capture", () => {
       resolution_hash: "abc123",
       policy_id: "pv_1",
       active_version: "7",
-      issued_at: "2026-02-28T00:00:00.000Z"
+      issued_at: "2099-02-28T00:00:00.000Z",
+      expires_at: "2099-02-28T00:05:00.000Z",
+      ttl_sec: 300
     };
     const receiptHeader = Buffer.from(JSON.stringify(receiptObj), "utf8").toString("base64url");
     const receiptSig = computeReceiptSig({ receiptB64Url: receiptHeader, key: "k1-secret" });
@@ -69,5 +71,7 @@ describe("PolicyClient receipt capture", () => {
     expect(out.meta?.policy_receipt_kid).toBe("k1");
     expect(out.meta?.policy_receipt_sig).toBe(receiptSig);
     expect(out.meta?.receipt_verified).toBe(true);
+    expect(out.meta?.receipt_expires_at).toBe("2099-02-28T00:05:00.000Z");
+    expect(out.meta?.receipt_expired).toBe(false);
   });
 });
