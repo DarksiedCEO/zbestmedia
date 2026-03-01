@@ -1,0 +1,50 @@
+{
+  "breaker_states": {
+    "CLOSED": 500
+  },
+  "cache_states": {
+    "miss": 500
+  },
+  "config": {
+    "campaign_pool_size": 200,
+    "client_pool_size": 20,
+    "concurrency": 20,
+    "mutate_path": "/v1/policies/resolve",
+    "mutate_ratio": 0.2,
+    "policy_key": "performance_limits",
+    "precheck_path": "/healthz",
+    "read_path": "/v1/policies/resolve",
+    "role": "sebastian",
+    "seed": 1337,
+    "target_base_url": "http://127.0.0.1:8080",
+    "timeout_sec": 2,
+    "total": 500
+  },
+  "counts": {
+    "bad_request_samples": [],
+    "blocked_mutate": {},
+    "error_codes": {},
+    "fail_status": 0,
+    "status": {
+      "200": 500
+    },
+    "success": 500,
+    "transport_failure_samples": [],
+    "transport_failure_types": {},
+    "transport_failures": 0
+  },
+  "latency_ms": {
+    "mean": 696.61,
+    "p50": 703.39,
+    "p95": 1334.09,
+    "p99": 1381.21
+  },
+  "preflight": {
+    "ok": true,
+    "status": 200,
+    "url": "http://127.0.0.1:8080/healthz"
+  },
+  "retry_count_distribution": {
+    "0": 500
+  }
+}
