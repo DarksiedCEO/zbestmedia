@@ -62,6 +62,7 @@ describe.runIf(Boolean(DATABASE_URL))("PolicyService integration", () => {
           tenantId: TENANT_ID,
           scopeType: "campaign",
           scopeId: "22222222-2222-4222-8222-222222222222",
+          clientId: "33333333-3333-4333-8333-333333333333",
           policyKey: "creative_limits",
           valueJson: {
             minCreativeScore: 0.82,

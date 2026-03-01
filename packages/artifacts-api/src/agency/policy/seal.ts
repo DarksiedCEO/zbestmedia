@@ -27,6 +27,7 @@ export function sealPolicyVersion(input: {
   tenantId: string;
   scopeType: "global" | "client" | "campaign";
   scopeId: string | null;
+  clientId: string | null;
   policyKey: string;
   version: number;
   status: string;
@@ -40,6 +41,7 @@ export function sealPolicyVersion(input: {
     tenantId: input.tenantId,
     scopeType: input.scopeType,
     scopeId: input.scopeId,
+    clientId: input.clientId,
     policyKey: input.policyKey,
     version: input.version,
     status: input.status,

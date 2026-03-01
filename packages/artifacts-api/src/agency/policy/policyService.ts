@@ -11,6 +11,7 @@ type CreateDraftInput = {
   tenantId: string;
   scopeType: PolicyScopeType;
   scopeId: string | null;
+  clientId?: string | null;
   policyKey: PolicyKey;
   valueJson: unknown;
   effectiveAt: Date;
@@ -65,8 +66,9 @@ export class PolicyService {
     return Number(rows[0]?.maxv ?? "0") + 1;
   }
 
-  private async countActiveCampaignOverridesForTenantPolicy(
+  private async countActiveCampaignOverridesForClient(
     tenantId: string,
+    clientId: string,
     policyKey: PolicyKey,
     now: Date
   ): Promise<number> {
@@ -76,12 +78,13 @@ export class PolicyService {
       FROM agency.policy_versions
       WHERE tenant_id = $1
         AND scope_type = 'campaign'
-        AND policy_key = $2
+        AND client_id = $2
+        AND policy_key = $3
         AND status = 'active'
-        AND effective_at <= $3
-        AND expires_at > $3
+        AND effective_at <= $4
+        AND expires_at > $4
       `,
-      [tenantId, policyKey, now]
+      [tenantId, clientId, policyKey, now]
     );
     return Number(rows[0]?.cnt ?? "0");
   }
@@ -93,6 +96,9 @@ export class PolicyService {
     }
 
     if (input.scopeType === "campaign") {
+      if (!input.clientId) {
+        throw new PolicyError("INVALID_POLICY", "Campaign policy overrides require clientId");
+      }
       if (!input.expiresAt) {
         throw new PolicyError("EXPIRES_REQUIRED", "Campaign policy overrides require expiresAt");
       }
@@ -108,6 +114,7 @@ export class PolicyService {
       tenantId: input.tenantId,
       scopeType: input.scopeType,
       scopeId: input.scopeId,
+      clientId: input.clientId ?? null,
       policyKey: input.policyKey,
       version,
       status,
@@ -121,15 +128,16 @@ export class PolicyService {
     await this.client.query(
       `
       INSERT INTO agency.policy_versions (
-        id, tenant_id, scope_type, scope_id, policy_key, value_json, version, status,
+        id, tenant_id, scope_type, scope_id, client_id, policy_key, value_json, version, status,
         effective_at, expires_at, change_reason, created_by, sealed_hash, supersedes_id, superseded_by_id
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NULL,NULL)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NULL,NULL)
       `,
       [
         id,
         input.tenantId,
         input.scopeType,
         input.scopeId,
+        input.clientId ?? null,
         input.policyKey,
         parsed.data,
         version,
@@ -155,6 +163,7 @@ export class PolicyService {
     await this.audit(id, input.tenantId, "created", input.createdBy, {
       scopeType: input.scopeType,
       scopeId: input.scopeId,
+      clientId: input.clientId ?? null,
       policyKey: input.policyKey,
       version,
       requiredRoles: input.requiredRoles
@@ -267,12 +276,20 @@ export class PolicyService {
         throw new PolicyError("EXPIRES_REQUIRED", "Campaign overrides require expires_at");
       }
 
-      // Pack 8.3 limitation: no campaign->client link on policy_versions yet.
-      const activeCampaignCount = await this.countActiveCampaignOverridesForTenantPolicy(tenantId, pv.policy_key, nowUtc());
+      if (!pv.client_id) {
+        throw new PolicyError("INVARIANT_VIOLATION", "campaign policy missing client_id");
+      }
+
+      const activeCampaignCount = await this.countActiveCampaignOverridesForClient(
+        tenantId,
+        pv.client_id,
+        pv.policy_key,
+        nowUtc()
+      );
       if (activeCampaignCount >= HARD_INVARIANTS.maxCampaignPolicyOverridesPerClient) {
         throw new PolicyError(
           "CAP_EXCEEDED",
-          `Active campaign override cap (${HARD_INVARIANTS.maxCampaignPolicyOverridesPerClient}) exceeded`
+          `Active campaign override cap (${HARD_INVARIANTS.maxCampaignPolicyOverridesPerClient}) exceeded for client`
         );
       }
     }

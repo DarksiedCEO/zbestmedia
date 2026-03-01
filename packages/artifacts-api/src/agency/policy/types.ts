@@ -17,6 +17,7 @@ export type PolicyVersionRow = {
   tenant_id: string;
   scope_type: PolicyScopeType;
   scope_id: string | null;
+  client_id: string | null;
   policy_key: PolicyKey;
   value_json: unknown;
   version: number;
