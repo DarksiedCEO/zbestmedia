@@ -4,7 +4,11 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { isGovernanceFreezeEnabled, isRuntimeKillSwitchEnabled } from "../src/loadrun/governanceControls";
+import {
+  assertGovernanceMutableOperationAllowed,
+  isGovernanceFreezeEnabled,
+  isRuntimeKillSwitchEnabled
+} from "../src/loadrun/governanceControls";
 
 describe("governance controls", () => {
   const prev = process.env.POLICY_CONTROLS_PATH;
@@ -27,5 +31,29 @@ describe("governance controls", () => {
     process.env.POLICY_CONTROLS_PATH = controls;
     expect(isGovernanceFreezeEnabled()).toBe(true);
     expect(isRuntimeKillSwitchEnabled()).toBe(true);
+  });
+
+  it("blocks mutable operations when integrity auto-block is active", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "controls-"));
+    const status = path.join(dir, "integrity.json");
+    fs.writeFileSync(
+      status,
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        passed: false,
+        integrity_score: 20,
+        auto_block_active: true
+      }),
+      "utf8"
+    );
+    expect(() =>
+      assertGovernanceMutableOperationAllowed({
+        operation: "canary-execute",
+        env: {
+          POLICY_GOVERNANCE_INTEGRITY_STATUS_PATH: status,
+          GOVERNANCE_AUTO_BLOCK_ON_FAIL: "true"
+        }
+      })
+    ).toThrow(/GOVERNANCE_INTEGRITY_BLOCK_ACTIVE/);
   });
 });

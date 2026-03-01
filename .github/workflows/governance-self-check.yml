@@ -1,0 +1,37 @@
+name: Governance Self Check
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  self-check:
+    runs-on: ubuntu-latest
+    env:
+      LOADRUN_TARGET_ID: prod/us-west/policy
+      GOV_ERROUT: ops/incidents
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Readiness check
+        run: pnpm ops:readiness:check --strict
+      - name: Governance self-check
+        run: pnpm ops:governance:self-check --strict --target "$LOADRUN_TARGET_ID" --outDir "$GOV_ERROUT"
+      - name: Upload integrity artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governance-self-check-${{ github.run_id }}
+          path: |
+            ops/incidents/*__governance_self_check.json
+            ops/incidents/governance_integrity_status.json
+            ops/incidents/*__incident.json
+            ops/slo/loadrun_events.jsonl

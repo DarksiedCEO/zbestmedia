@@ -93,6 +93,8 @@ describe("policy governance snapshot", () => {
     expect(snapshotA.blast_radius.max_concurrency_cap).toBe(200);
     expect(snapshotA.contracts_signature_status).toBeTruthy();
     expect(Array.isArray(snapshotA.keyring_kids)).toBe(true);
+    expect(Array.isArray(snapshotA.integrity_flags)).toBe(true);
+    expect(typeof snapshotA.auto_block_active).toBe("boolean");
   });
 
   it("reflects freeze and kill switch flags in runtime snapshot", () => {

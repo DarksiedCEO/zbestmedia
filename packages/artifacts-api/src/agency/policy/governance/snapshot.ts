@@ -119,6 +119,13 @@ const PolicyGovernanceSnapshotSchema = z.object({
     canary_cap_pct: z.number().int().positive(),
     max_retry_amplification_runtime: z.number().nonnegative()
   }),
+  integrity_score: z.number().int().min(0).max(100).nullable(),
+  integrity_flags: z.array(z.string()),
+  last_self_check_ts: z.string().nullable(),
+  last_self_check_passed: z.boolean().nullable(),
+  last_self_check_event_id: z.string().nullable(),
+  auto_block_active: z.boolean(),
+  auto_freeze_recommended: z.boolean(),
   contracts_version: z.string().nullable(),
   contracts_signature_status: z.object({
     ok: z.boolean(),
@@ -237,6 +244,63 @@ function readControlFile(rawEnv: NodeJS.ProcessEnv): { freeze?: boolean; runtime
     return JSON.parse(fs.readFileSync(controlsPath, "utf8")) as { freeze?: boolean; runtime_kill_switch?: boolean };
   } catch {
     return {};
+  }
+}
+
+function readIntegrityStatus(rawEnv: NodeJS.ProcessEnv): {
+  integrity_score: number | null;
+  integrity_flags: string[];
+  last_self_check_ts: string | null;
+  last_self_check_passed: boolean | null;
+  last_self_check_event_id: string | null;
+  auto_block_active: boolean;
+  auto_freeze_recommended: boolean;
+} {
+  const filePath = resolvePathFromEnv(
+    rawEnv,
+    "POLICY_GOVERNANCE_INTEGRITY_STATUS_PATH",
+    "ops/incidents/governance_integrity_status.json"
+  );
+  if (!fs.existsSync(filePath)) {
+    return {
+      integrity_score: null,
+      integrity_flags: [],
+      last_self_check_ts: null,
+      last_self_check_passed: null,
+      last_self_check_event_id: null,
+      auto_block_active: false,
+      auto_freeze_recommended: false
+    };
+  }
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8")) as {
+      integrity_score?: number;
+      flags?: string[];
+      ts?: string;
+      passed?: boolean;
+      last_self_check_event_id?: string;
+      auto_block_active?: boolean;
+      auto_freeze_recommended?: boolean;
+    };
+    return {
+      integrity_score: Number.isFinite(parsed.integrity_score) ? Number(parsed.integrity_score) : null,
+      integrity_flags: Array.isArray(parsed.flags) ? parsed.flags.map((x) => String(x)) : [],
+      last_self_check_ts: typeof parsed.ts === "string" ? parsed.ts : null,
+      last_self_check_passed: typeof parsed.passed === "boolean" ? parsed.passed : null,
+      last_self_check_event_id: typeof parsed.last_self_check_event_id === "string" ? parsed.last_self_check_event_id : null,
+      auto_block_active: parsed.auto_block_active === true,
+      auto_freeze_recommended: parsed.auto_freeze_recommended === true
+    };
+  } catch {
+    return {
+      integrity_score: null,
+      integrity_flags: [],
+      last_self_check_ts: null,
+      last_self_check_passed: null,
+      last_self_check_event_id: null,
+      auto_block_active: false,
+      auto_freeze_recommended: false
+    };
   }
 }
 
@@ -384,6 +448,7 @@ export function readAndBuildGovernanceSnapshot(rawEnv: NodeJS.ProcessEnv = proce
   const thresholds = readThresholds(rawEnv);
   const contractsStatus = readContractsStatus(rawEnv);
   const ledgerStatus = readLedgerStatus(rawEnv);
+  const integrityStatus = readIntegrityStatus(rawEnv);
   const guardrailHash = sha256Hex(canonicalJson(thresholds));
   const defaultsHash = sha256Hex(canonicalJson(defaults));
   const defaultsVersion = rawEnv.POLICY_DEFAULTS_VERSION?.trim() || `runtime-defaults@${defaultsHash.slice(0, 12)}`;
@@ -458,6 +523,13 @@ export function readAndBuildGovernanceSnapshot(rawEnv: NodeJS.ProcessEnv = proce
     },
     budget,
     blast_radius: blastRadius,
+    integrity_score: integrityStatus.integrity_score,
+    integrity_flags: integrityStatus.integrity_flags,
+    last_self_check_ts: integrityStatus.last_self_check_ts,
+    last_self_check_passed: integrityStatus.last_self_check_passed,
+    last_self_check_event_id: integrityStatus.last_self_check_event_id,
+    auto_block_active: integrityStatus.auto_block_active,
+    auto_freeze_recommended: integrityStatus.auto_freeze_recommended,
     contracts_version: contractsStatus.contractsVersion,
     contracts_signature_status: contractsStatus.contractsSignatureStatus,
     ledger_head_hash: ledgerStatus.ledgerHeadHash,

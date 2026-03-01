@@ -41,3 +41,6 @@ export * from "./ops/drill";
 export * from "./ops/readiness";
 export * from "./ops/runbook";
 export * from "./ops/fortressReport";
+export * from "./governance/integrityFlags";
+export * from "./governance/integrityScore";
+export * from "./governance/selfCheck";
