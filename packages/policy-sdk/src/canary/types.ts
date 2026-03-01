@@ -21,12 +21,14 @@ export type CanaryState = z.infer<typeof canaryStateSchema>;
 export const canaryPlanSchema = z.object({
   plan_id: z.string(),
   generated_at: z.string().datetime(),
-  target: z.string().min(1),
+  target_id: z.string().min(1),
   defaults_proposal_file: z.string().min(1),
   defaults_proposal_sha256: z.string().min(1),
+  baseline_hash: z.string().min(1),
+  guardrails_profile_key: z.string().min(1),
+  guardrails_profile_hash: z.string().min(1),
   steps: z.array(canaryStepSchema).min(1),
   observe_window_minutes: z.number().int().positive(),
-  guardrail_profile: z.string().min(1),
   rollback_packet_pointer: z.string().min(1),
   expected_governance_fingerprint: z.string().min(1),
   approvals: z.array(

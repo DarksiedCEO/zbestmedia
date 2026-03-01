@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import type { BaselineRegistry } from "../loadrun/baselineRegistry";
+import type { BaselineRegistryEntry } from "../loadrun/baselineRegistry";
 import type { CiGateResult } from "../loadrun/ciGate";
 import { emitLoadRunSloEventToFile } from "./sinks/file";
 import { emitLoadRunSloEventToPostgres } from "./sinks/postgres";
@@ -37,16 +37,17 @@ export function buildLoadRunSloEvent(args: {
   ts?: string;
   source: "ci" | "prod";
   service: string;
+  targetId: string;
   baselinePath: string;
   candidatePath: string;
   gate: CiGateResult;
   baselineConcurrency: number;
   candidateConcurrency: number;
-  baselineRegistry?: BaselineRegistry | null;
+  baselineRegistryEntry?: BaselineRegistryEntry | null;
   tags?: string[];
 }): LoadRunSloEvent {
   const ts = args.ts ?? new Date().toISOString();
-  const baselineHash = args.baselineRegistry?.baseline_hash || fileHash(args.baselinePath);
+  const baselineHash = args.baselineRegistryEntry?.baseline_hash || fileHash(args.baselinePath);
   const candidateHash = fileHash(args.candidatePath);
 
   const b = args.gate.baseline;
@@ -57,10 +58,11 @@ export function buildLoadRunSloEvent(args: {
     ts,
     source: args.source,
     service: args.service,
+    target_id: args.targetId,
     baseline: {
       path: path.relative(process.cwd(), args.baselinePath),
       hash: baselineHash,
-      accepted_at: args.baselineRegistry?.accepted_at
+      accepted_at: args.baselineRegistryEntry?.accepted_at
     },
     candidate: {
       path: path.relative(process.cwd(), args.candidatePath),

@@ -6,6 +6,7 @@ type CliArgs = {
   candidateReport: string;
   baselinesDir: string;
   registryPath: string;
+  targetId: string;
   by: string;
   note: string;
   approve: boolean;
@@ -34,14 +35,19 @@ function parseArgs(argv: string[]): CliArgs {
   const candidateReport = args.get("candidate-report");
   if (!candidateReport) {
     throw new Error(
-      "Usage: pnpm ops:loadrun:accept-baseline --candidate-report <report.json> --by <name> --note <text> --approve --reason \"...\""
+      "Usage: pnpm ops:loadrun:accept-baseline --candidate-report <report.json> --target <target_id> --by <name> --note <text> --approve --reason \"...\""
     );
+  }
+  const targetId = args.get("target");
+  if (!targetId) {
+    throw new Error("Missing --target <target_id>");
   }
 
   return {
     candidateReport,
     baselinesDir: args.get("baselinesDir") ?? "ops/load_runs/baselines",
     registryPath: args.get("registry") ?? "ops/load_runs/baselines/registry.json",
+    targetId,
     by: args.get("by") ?? "",
     note: args.get("note") ?? "",
     approve: flags.has("approve"),
@@ -55,6 +61,7 @@ function main(): void {
     reportPath: path.resolve(process.cwd(), cli.candidateReport),
     baselinesDir: path.resolve(process.cwd(), cli.baselinesDir),
     registryPath: path.resolve(process.cwd(), cli.registryPath),
+    targetId: cli.targetId,
     by: cli.by,
     note: cli.note,
     approved: cli.approve,

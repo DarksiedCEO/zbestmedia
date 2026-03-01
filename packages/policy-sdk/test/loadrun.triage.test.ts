@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { BaselineRegistry } from "../src/loadrun/baselineRegistry";
+import type { BaselineRegistryEntry } from "../src/loadrun/baselineRegistry";
 import type { CiGateResult } from "../src/loadrun/ciGate";
 import { buildTriage } from "../src/loadrun/triage";
 
-const registry: BaselineRegistry = {
+const baselineEntry: BaselineRegistryEntry = {
   baseline_report_path: "ops/load_runs/baselines/a.json",
   baseline_hash: "abc",
   baseline_run_path: "ops/load_runs/baselines/b.json",
@@ -73,7 +73,12 @@ const gateBase: CiGateResult = {
 
 describe("triage builder", () => {
   it("assigns deterministic tags and top offender", () => {
-    const triage = buildTriage({ gate: gateBase, baselineRegistry: registry, generatedAt: "2026-03-01T00:00:00.000Z" });
+    const triage = buildTriage({
+      gate: gateBase,
+      baselineRegistryEntry: baselineEntry,
+      targetId: "prod/us-west/policy",
+      generatedAt: "2026-03-01T00:00:00.000Z"
+    });
 
     expect(triage.tags).toEqual(expect.arrayContaining(["5xx_spike", "retry_amp_spike", "breaker_open_spike", "timeout_spike"]));
     expect(triage.top_offender).toBe("breaker_retries");

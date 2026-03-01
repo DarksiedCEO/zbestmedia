@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
+import { parseBaselineRegistry, resolveTargetBaselineEntry } from "../../packages/policy-sdk/src/loadrun/baselineRegistry";
 import { executeCanaryRollout } from "../../packages/policy-sdk/src/canary/execute";
 import { parseCanaryObservation, parseCanaryPlan, type CanaryObservation, type CanaryStep } from "../../packages/policy-sdk/src/canary/types";
 
@@ -18,6 +19,10 @@ type CliArgs = {
 };
 
 type ObservationMap = Partial<Record<CanaryStep, Omit<CanaryObservation, "step">>>;
+type ProdGateReport = {
+  baseline_hash?: string | null;
+  guardrails_profile_hash?: string;
+};
 
 function parseArgs(argv: string[]): CliArgs {
   const args = new Map<string, string>();
@@ -126,7 +131,7 @@ async function main(): Promise<void> {
         generated_at: new Date().toISOString(),
         step,
         mode: cli.mode,
-        target: plan.target,
+        target_id: plan.target_id,
         note:
           cli.mode === "manual_apply"
             ? "manual apply required: generate env/deploy instruction"
@@ -160,20 +165,32 @@ async function main(): Promise<void> {
 
       const registry = JSON.parse(
         fs.readFileSync(path.resolve(process.cwd(), "ops/load_runs/baselines/registry.json"), "utf8")
-      ) as { baseline_run_path?: string };
-      const baselineRunPath = registry.baseline_run_path;
+      );
+      const baselineRunPath = resolveTargetBaselineEntry({
+        registry: parseBaselineRegistry(registry),
+        targetId: plan.target_id,
+        allowUnbaselinedStaging: false
+      }).baseline_run_path;
       if (!baselineRunPath) {
         throw new Error("baseline_run_path missing in registry");
       }
 
       let driftPassed = true;
+      let configHashesPassed = true;
       try {
         execSync(
-          `pnpm ops:loadrun:prod-gate --baseline ${JSON.stringify(baselineRunPath)} --candidate ${JSON.stringify(candidate)} --outDir ${JSON.stringify(
+          `pnpm ops:loadrun:prod-gate --target ${JSON.stringify(plan.target_id)} --baseline ${JSON.stringify(baselineRunPath)} --candidate ${JSON.stringify(candidate)} --outDir ${JSON.stringify(
             "ops/load_runs/prod/reports"
           )}`,
           { stdio: "inherit" }
         );
+        const reportPath = latestFile(path.resolve(process.cwd(), "ops/load_runs/prod/reports"), "__prod-gate.json");
+        if (reportPath) {
+          const report = JSON.parse(fs.readFileSync(reportPath, "utf8")) as ProdGateReport;
+          const baselineHash = report.baseline_hash ?? "";
+          const guardrailsHash = report.guardrails_profile_hash ?? "";
+          configHashesPassed = baselineHash === plan.baseline_hash && guardrailsHash === plan.guardrails_profile_hash;
+        }
       } catch {
         driftPassed = false;
       }
@@ -194,10 +211,13 @@ async function main(): Promise<void> {
 
       return parseCanaryObservation({
         step,
-        drift_passed: driftPassed,
+        drift_passed: driftPassed && configHashesPassed,
         error_rate_passed: errorRatePassed,
         current_governance_fingerprint: fingerprint,
-        reasons: driftPassed ? [] : ["drift_gate_failed"]
+        reasons: [
+          ...(driftPassed ? [] : ["drift_gate_failed"]),
+          ...(configHashesPassed ? [] : ["target_config_hash_mismatch"])
+        ]
       });
     }
   });

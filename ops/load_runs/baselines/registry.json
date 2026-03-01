@@ -1,9 +1,23 @@
 {
-  "baseline_report_path": "packages/policy-sdk/test/fixtures/loadrun/report.sample.json",
-  "baseline_hash": "",
-  "baseline_run_path": "packages/policy-sdk/test/fixtures/loadrun/baseline.sample.json",
-  "accepted_at": "2026-03-01T00:00:00.000Z",
-  "accepted_by": "seed",
-  "notes": "Seed baseline for CI gate bootstrapping; replace with accepted real run.",
-  "chaos_report_path": ""
+  "version": 2,
+  "targets": {
+    "prod/us-west/policy": {
+      "baseline_report_path": "packages/policy-sdk/test/fixtures/loadrun/report.sample.json",
+      "baseline_hash": "",
+      "baseline_run_path": "packages/policy-sdk/test/fixtures/loadrun/baseline.sample.json",
+      "accepted_at": "2026-03-01T00:00:00.000Z",
+      "accepted_by": "seed",
+      "notes": "Seed baseline for CI gate bootstrapping; replace with accepted real run.",
+      "chaos_report_path": ""
+    },
+    "staging/policy": {
+      "baseline_report_path": "packages/policy-sdk/test/fixtures/loadrun/report.sample.json",
+      "baseline_hash": "",
+      "baseline_run_path": "packages/policy-sdk/test/fixtures/loadrun/baseline.sample.json",
+      "accepted_at": "2026-03-01T00:00:00.000Z",
+      "accepted_by": "seed",
+      "notes": "Seed staging baseline for CI gate bootstrapping; replace with accepted real run.",
+      "chaos_report_path": ""
+    }
+  }
 }

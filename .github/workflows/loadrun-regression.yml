@@ -13,9 +13,14 @@ on:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target_id:
+          - prod/us-west/policy
     env:
       LOADRUN_TARGET_BASE_URL: ${{ secrets.LOADRUN_TARGET_BASE_URL }}
       LOADRUN_AUTH_TOKEN: ${{ secrets.LOADRUN_AUTH_TOKEN }}
+      LOADRUN_TARGET_ID: ${{ matrix.target_id }}
       CANDIDATE_RUN: ops/load_runs/ci/${{ github.sha }}__candidate.json
     steps:
       - uses: actions/checkout@v4
@@ -38,12 +43,10 @@ jobs:
             ${LOADRUN_AUTH_TOKEN:+--authToken "$LOADRUN_AUTH_TOKEN"}
       - name: Loadrun CI gate
         run: |
-          BASELINE_RUN=$(node -e "const r=require('./ops/load_runs/baselines/registry.json'); process.stdout.write(r.baseline_run_path||'')")
-          test -n "$BASELINE_RUN" || (echo "baseline_run_path missing in registry" && exit 1)
-          pnpm ops:loadrun:ci-gate --baseline "$BASELINE_RUN" --candidate "$CANDIDATE_RUN" --outDir ops/load_runs/ci
+          pnpm ops:loadrun:ci-gate --target "$LOADRUN_TARGET_ID" --candidate "$CANDIDATE_RUN" --outDir ops/load_runs/ci
       - name: Build SLO summary
         if: always()
-        run: pnpm ops:slo:summary --last 30 --out ops/slo/summary.md
+        run: pnpm ops:slo:summary --target "$LOADRUN_TARGET_ID" --last 30 --out ops/slo/summary.md
       - name: Upload loadrun artifacts
         if: always()
         uses: actions/upload-artifact@v4

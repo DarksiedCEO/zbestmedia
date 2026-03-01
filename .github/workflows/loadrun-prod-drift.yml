@@ -8,13 +8,20 @@ on:
 jobs:
   prod-drift:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target_id: prod/us-west/policy
+            target_slug: prod-us-west-policy
+            policy_base_url_secret: POLICY_BASE_URL_US_WEST
     env:
-      POLICY_BASE_URL: ${{ secrets.POLICY_BASE_URL }}
+      POLICY_BASE_URL: ${{ secrets[matrix.policy_base_url_secret] }}
       POLICY_AUTH_TOKEN: ${{ secrets.POLICY_AUTH_TOKEN }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       LOADRUN_EMAIL_WEBHOOK_URL: ${{ secrets.LOADRUN_EMAIL_WEBHOOK_URL }}
       LOADRUN_ALERT_EMAIL_TO: ${{ secrets.LOADRUN_ALERT_EMAIL_TO }}
-      CANDIDATE_RUN: ops/load_runs/prod/${{ github.run_id }}__candidate.json
+      LOADRUN_TARGET_ID: ${{ matrix.target_id }}
+      CANDIDATE_RUN: ops/load_runs/prod/${{ matrix.target_slug }}/${{ github.run_id }}__candidate.json
       GATE_OUT_DIR: ops/load_runs/prod/reports
       REGISTRY_PATH: ops/load_runs/baselines/registry.json
     steps:
@@ -32,17 +39,12 @@ jobs:
           test -n "$POLICY_BASE_URL" || (echo "Missing POLICY_BASE_URL" && exit 1)
       - name: Run prod canary
         run: pnpm ops:loadrun:prod-canary --target "$POLICY_BASE_URL" --out "$CANDIDATE_RUN" ${POLICY_AUTH_TOKEN:+--authToken "$POLICY_AUTH_TOKEN"}
-      - name: Resolve baseline path
-        run: |
-          BASELINE_RUN=$(node -e "const r=require('./ops/load_runs/baselines/registry.json'); process.stdout.write(r.baseline_run_path||'')")
-          test -n "$BASELINE_RUN" || (echo "baseline_run_path missing in registry" && exit 1)
-          echo "BASELINE_RUN=$BASELINE_RUN" >> "$GITHUB_ENV"
       - name: Gate prod drift
         id: gate
-        run: pnpm ops:loadrun:prod-gate --baseline "$BASELINE_RUN" --candidate "$CANDIDATE_RUN" --outDir "$GATE_OUT_DIR" --registry "$REGISTRY_PATH"
+        run: pnpm ops:loadrun:prod-gate --target "$LOADRUN_TARGET_ID" --candidate "$CANDIDATE_RUN" --outDir "$GATE_OUT_DIR" --registry "$REGISTRY_PATH"
       - name: Build SLO summary
         if: always()
-        run: pnpm ops:slo:summary --last 30 --out ops/slo/summary.md
+        run: pnpm ops:slo:summary --target "$LOADRUN_TARGET_ID" --last 30 --out ops/slo/summary.md
       - name: Alert on drift failure
         if: failure()
         run: |

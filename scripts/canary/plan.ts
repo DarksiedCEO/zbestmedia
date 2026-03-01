@@ -5,8 +5,11 @@ import { buildCanaryPlan } from "../../packages/policy-sdk/src/canary/plan";
 
 type CliArgs = {
   proposal: string;
-  target: string;
+  targetId: string;
   out: string;
+  baselineHash: string;
+  guardrailsProfileKey: string;
+  guardrailsProfileHash: string;
   expectedFingerprint: string;
   rollbackPacket: string;
   by: string;
@@ -26,23 +29,29 @@ function parseArgs(argv: string[]): CliArgs {
   }
 
   const proposal = args.get("proposal");
-  const target = args.get("target");
+  const targetId = args.get("target");
+  const baselineHash = args.get("baseline-hash");
+  const guardrailsProfileKey = args.get("guardrails-profile-key");
+  const guardrailsProfileHash = args.get("guardrails-profile-hash");
   const expectedFingerprint = args.get("expected-fingerprint");
   const rollbackPacket = args.get("rollback-packet");
   const by = args.get("by");
   const reason = args.get("reason");
-  if (!proposal || !target || !expectedFingerprint || !rollbackPacket || !by || !reason) {
+  if (!proposal || !targetId || !baselineHash || !guardrailsProfileKey || !guardrailsProfileHash || !expectedFingerprint || !rollbackPacket || !by || !reason) {
     throw new Error(
-      "Usage: pnpm ops:canary:plan --proposal <proposal.json> --target <env> --expected-fingerprint <hash> --rollback-packet <file> --by <actor> --reason <text> [--out <plan.json>]"
+      "Usage: pnpm ops:canary:plan --proposal <proposal.json> --target <target_id> --baseline-hash <sha> --guardrails-profile-key <key> --guardrails-profile-hash <sha> --expected-fingerprint <hash> --rollback-packet <file> --by <actor> --reason <text> [--out <plan.json>]"
     );
   }
 
   return {
     proposal,
-    target,
+    targetId,
     out:
       args.get("out") ??
       `ops/canary/plans/${new Date().toISOString().replace(/[:.]/g, "-")}__plan.json`,
+    baselineHash,
+    guardrailsProfileKey,
+    guardrailsProfileHash,
     expectedFingerprint,
     rollbackPacket,
     by,
@@ -57,7 +66,10 @@ function main(): void {
 
   const plan = buildCanaryPlan({
     proposalFile: proposalPath,
-    target: cli.target,
+    targetId: cli.targetId,
+    baselineHash: cli.baselineHash,
+    guardrailsProfileKey: cli.guardrailsProfileKey,
+    guardrailsProfileHash: cli.guardrailsProfileHash,
     expectedGovernanceFingerprint: cli.expectedFingerprint,
     rollbackPacketPointer: path.resolve(process.cwd(), cli.rollbackPacket),
     approvedBy: cli.by,

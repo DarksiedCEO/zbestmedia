@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import { parseBaselineRegistry, writeBaselineRegistry } from "./baselineRegistry";
+import {
+  parseBaselineRegistry,
+  writeBaselineRegistry
+} from "./baselineRegistry";
+import { DEFAULT_TARGET_ID, parseTargetId } from "./target";
 import { parseLoadRun } from "./schema";
 
 type AnalyzeReport = {
@@ -13,6 +17,7 @@ export type AcceptBaselineArgs = {
   reportPath: string;
   baselinesDir: string;
   registryPath: string;
+  targetId: string;
   by: string;
   note: string;
   approved: boolean;
@@ -21,6 +26,7 @@ export type AcceptBaselineArgs = {
 
 export type AcceptBaselineResult = {
   registry: string;
+  target_id: string;
   baseline_report_path: string;
   baseline_run_path: string;
 };
@@ -49,6 +55,7 @@ export function acceptBaseline(args: AcceptBaselineArgs): AcceptBaselineResult {
   if (!args.by.trim()) {
     throw new Error("Missing --by");
   }
+  const targetId = parseTargetId(args.targetId || DEFAULT_TARGET_ID);
 
   const reportRaw = fs.readFileSync(args.reportPath, "utf8");
   const report = JSON.parse(reportRaw) as AnalyzeReport;
@@ -71,30 +78,32 @@ export function acceptBaseline(args: AcceptBaselineArgs): AcceptBaselineResult {
 
   const currentRegistry = fs.existsSync(args.registryPath)
     ? parseBaselineRegistry(JSON.parse(fs.readFileSync(args.registryPath, "utf8")))
-    : parseBaselineRegistry({
-        baseline_report_path: "",
-        baseline_hash: "",
-        baseline_run_path: "",
-        accepted_at: "",
-        accepted_by: "",
-        notes: "",
-        chaos_report_path: ""
-      });
+    : parseBaselineRegistry({ version: 2, targets: {} });
 
-  const updated = {
-    ...currentRegistry,
+  const entry = {
     baseline_report_path: path.relative(process.cwd(), acceptedReportPath),
     baseline_hash: sha256Hex(reportRaw),
     baseline_run_path: path.relative(process.cwd(), acceptedRunPath),
     accepted_at: new Date().toISOString(),
     accepted_by: args.by,
-    notes: `${args.note} | reason=${args.reason}`
+    notes: `${args.note} | reason=${args.reason}`,
+    chaos_report_path: ""
+  };
+
+  const updated = {
+    ...currentRegistry,
+    version: 2 as const,
+    targets: {
+      ...currentRegistry.targets,
+      [targetId]: entry
+    }
   };
   writeBaselineRegistry(args.registryPath, updated);
 
   return {
     registry: args.registryPath,
-    baseline_report_path: updated.baseline_report_path,
-    baseline_run_path: updated.baseline_run_path
+    target_id: targetId,
+    baseline_report_path: entry.baseline_report_path,
+    baseline_run_path: entry.baseline_run_path
   };
 }

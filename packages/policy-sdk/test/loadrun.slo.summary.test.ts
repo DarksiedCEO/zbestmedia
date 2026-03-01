@@ -8,6 +8,7 @@ const jsonl = [
     ts: "2026-03-01T00:00:00.000Z",
     source: "ci",
     service: "policy",
+    target_id: "prod/us-west/policy",
     baseline: { path: "a", hash: "h1", accepted_at: "2026-03-01T00:00:00.000Z" },
     candidate: { path: "c1", hash: "hc1" },
     verdict: { passed: true, reasons: [] },
@@ -41,6 +42,7 @@ const jsonl = [
     ts: "2026-03-01T01:00:00.000Z",
     source: "prod",
     service: "policy",
+    target_id: "prod/us-west/policy",
     baseline: { path: "a", hash: "h1", accepted_at: "2026-03-01T00:00:00.000Z" },
     candidate: { path: "c2", hash: "hc2" },
     verdict: { passed: false, reasons: ["p95_inflation_cap"] },
@@ -74,10 +76,11 @@ const jsonl = [
 describe("slo summary", () => {
   it("builds summary and markdown", () => {
     const events = parseEventsJsonl(jsonl);
-    const summary = buildSloSummary(events, 30);
+    const summary = buildSloSummary(events, 30, "prod/us-west/policy");
     const md = renderSloSummaryMarkdown(summary);
 
     expect(summary.total_runs).toBe(2);
+    expect(summary.target_id).toBe("prod/us-west/policy");
     expect(summary.pass_rate).toBe(0.5);
     expect(summary.top_fail_reasons[0]?.reason).toBe("p95_inflation_cap");
     expect(md).toContain("# Loadrun SLO Summary");

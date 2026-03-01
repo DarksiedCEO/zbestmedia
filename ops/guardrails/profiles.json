@@ -1,0 +1,28 @@
+{
+  "profiles": {
+    "*": {
+      "p95InflationRatioCap": 1.25,
+      "p99InflationRatioCap": 1.5,
+      "errorRateIncreasePctPointsCap": 0.25,
+      "timeoutIncreasePctPointsCap": 0.1,
+      "breakerOpenRateIncreasePctPointsCap": 2,
+      "retryAmplificationIncreaseCap": 0.15
+    },
+    "staging/*": {
+      "p95InflationRatioCap": 1.5,
+      "p99InflationRatioCap": 1.8,
+      "errorRateIncreasePctPointsCap": 0.5,
+      "timeoutIncreasePctPointsCap": 0.2,
+      "breakerOpenRateIncreasePctPointsCap": 3,
+      "retryAmplificationIncreaseCap": 0.25
+    },
+    "prod/*": {
+      "p95InflationRatioCap": 1.25,
+      "p99InflationRatioCap": 1.5,
+      "errorRateIncreasePctPointsCap": 0.25,
+      "timeoutIncreasePctPointsCap": 0.1,
+      "breakerOpenRateIncreasePctPointsCap": 2,
+      "retryAmplificationIncreaseCap": 0.15
+    }
+  }
+}

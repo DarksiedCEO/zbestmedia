@@ -53,6 +53,7 @@ describe("accept baseline approval gate", () => {
         reportPath,
         baselinesDir: path.join(tmp, "baselines"),
         registryPath: path.join(tmp, "baselines", "registry.json"),
+        targetId: "prod/us-west/policy",
         by: "andre",
         note: "note",
         approved: false,

@@ -11,6 +11,7 @@ const event: LoadRunSloEvent = {
   ts: "2026-03-01T00:00:00.000Z",
   source: "ci",
   service: "policy",
+  target_id: "prod/us-west/policy",
   baseline: { path: "a", hash: "h1", accepted_at: "2026-03-01T00:00:00.000Z" },
   candidate: { path: "c", hash: "h2" },
   verdict: { passed: true, reasons: [] },

@@ -60,7 +60,10 @@ describe("canary plan", () => {
 
     const plan = buildCanaryPlan({
       proposalFile: proposal,
-      target: "prod",
+      targetId: "prod/us-west/policy",
+      baselineHash: "baseline-hash",
+      guardrailsProfileKey: "prod/*",
+      guardrailsProfileHash: "guardrails-hash",
       expectedGovernanceFingerprint: "fp",
       rollbackPacketPointer: "rollback.env",
       approvedBy: "andre",
@@ -68,6 +71,9 @@ describe("canary plan", () => {
     });
 
     expect(plan.steps).toEqual([5, 25, 50, 100]);
+    expect(plan.target_id).toBe("prod/us-west/policy");
+    expect(plan.baseline_hash).toBe("baseline-hash");
+    expect(plan.guardrails_profile_hash).toBe("guardrails-hash");
     expect(plan.expected_governance_fingerprint).toBe("fp");
   });
 });

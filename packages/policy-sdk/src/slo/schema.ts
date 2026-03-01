@@ -5,6 +5,7 @@ export const loadRunSloEventSchema = z.object({
   ts: z.string().datetime(),
   source: z.enum(["ci", "prod"]),
   service: z.string().min(1),
+  target_id: z.string().min(1),
   baseline: z.object({
     path: z.string().min(1),
     hash: z.string().min(1),

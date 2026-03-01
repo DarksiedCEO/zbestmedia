@@ -69,6 +69,7 @@ describe("slo event", () => {
       ts: "2026-03-01T12:00:00.000Z",
       source: "ci",
       service: "policy",
+      targetId: "prod/us-west/policy",
       baselinePath,
       candidatePath,
       gate,
@@ -80,6 +81,7 @@ describe("slo event", () => {
     const parsed = parseLoadRunSloEvent(event);
     expect(parsed.event_id).toHaveLength(64);
     expect(parsed.source).toBe("ci");
+    expect(parsed.target_id).toBe("prod/us-west/policy");
     expect(parsed.verdict.passed).toBe(false);
     expect(parsed.tags).toContain("5xx_spike");
   });

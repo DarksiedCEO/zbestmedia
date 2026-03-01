@@ -7,6 +7,7 @@ type CliArgs = {
   events: string;
   last: number;
   out: string;
+  target?: string;
 };
 
 function parseArgs(argv: string[]): CliArgs {
@@ -26,7 +27,8 @@ function parseArgs(argv: string[]): CliArgs {
   return {
     events: args.get("events") ?? "ops/slo/loadrun_events.jsonl",
     last: Number(args.get("last") ?? "30"),
-    out: args.get("out") ?? "ops/slo/summary.md"
+    out: args.get("out") ?? "ops/slo/summary.md",
+    target: args.get("target")
   };
 }
 
@@ -36,13 +38,13 @@ function main(): void {
   const outPath = path.resolve(process.cwd(), cli.out);
 
   const events = readEventsFromJsonl(eventsPath);
-  const summary = buildSloSummary(events, cli.last);
+  const summary = buildSloSummary(events, cli.last, cli.target);
   const markdown = `${renderSloSummaryMarkdown(summary)}\n`;
 
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, markdown, "utf8");
 
-  console.log(JSON.stringify({ events: eventsPath, out: outPath, total_runs: summary.total_runs }, null, 2));
+  console.log(JSON.stringify({ events: eventsPath, out: outPath, total_runs: summary.total_runs, target: cli.target ?? "all" }, null, 2));
 }
 
 main();

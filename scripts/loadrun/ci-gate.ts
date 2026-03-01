@@ -1,18 +1,22 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { loadBaselineRegistry } from "../../packages/policy-sdk/src/loadrun/baselineRegistry";
+import { loadBaselineRegistry, resolveTargetBaselineEntry } from "../../packages/policy-sdk/src/loadrun/baselineRegistry";
 import { evaluateCiGate } from "../../packages/policy-sdk/src/loadrun/ciGate";
+import { loadGuardrailProfiles, resolveThresholdsForTarget } from "../../packages/policy-sdk/src/loadrun/guardrailProfiles";
 import { buildCiGateMarkdownSummary } from "../../packages/policy-sdk/src/loadrun/markdownSummary";
 import { parseLoadRun } from "../../packages/policy-sdk/src/loadrun/schema";
+import { parseTargetId } from "../../packages/policy-sdk/src/loadrun/target";
 import { computeSlices } from "../../packages/policy-sdk/src/loadrun/slice";
 import { buildLoadRunSloEvent, emitLoadRunSloEvent } from "../../packages/policy-sdk/src/slo/emit";
 
 type CliArgs = {
-  baseline: string;
+  baseline?: string;
   candidate: string;
   outDir: string;
   registry: string;
+  targetId: string;
+  guardrailProfiles: string;
 };
 
 function parseArgs(argv: string[]): CliArgs {
@@ -28,18 +32,22 @@ function parseArgs(argv: string[]): CliArgs {
     args.set(key, value);
     i += 1;
   }
-  const baseline = args.get("baseline");
+
   const candidate = args.get("candidate");
-  if (!baseline || !candidate) {
+  if (!candidate) {
     throw new Error(
-      "Usage: pnpm ops:loadrun:ci-gate --baseline <run.json> --candidate <run.json> [--outDir <dir>] [--registry <path>]"
+      "Usage: pnpm ops:loadrun:ci-gate --target <target_id> --candidate <run.json> [--baseline <run.json>] [--outDir <dir>] [--registry <path>] [--guardrail-profiles <path>]"
     );
   }
+
+  const targetId = parseTargetId(args.get("target") ?? process.env.LOADRUN_TARGET_ID ?? "prod/us-west/policy");
   return {
-    baseline,
+    baseline: args.get("baseline"),
     candidate,
     outDir: args.get("outDir") ?? "ops/load_runs/ci",
-    registry: args.get("registry") ?? "ops/load_runs/baselines/registry.json"
+    registry: args.get("registry") ?? "ops/load_runs/baselines/registry.json",
+    targetId,
+    guardrailProfiles: args.get("guardrail-profiles") ?? "ops/guardrails/profiles.json"
   };
 }
 
@@ -55,28 +63,38 @@ function timestampSlug(date: Date): string {
 
 async function main(): Promise<void> {
   const cli = parseArgs(process.argv);
-  const baselinePath = path.resolve(process.cwd(), cli.baseline);
-  const candidatePath = path.resolve(process.cwd(), cli.candidate);
   const registryPath = path.resolve(process.cwd(), cli.registry);
+  const registry = loadBaselineRegistry(registryPath);
+  const baselineEntry = resolveTargetBaselineEntry({ registry, targetId: cli.targetId, allowUnbaselinedStaging: false });
+
+  const baselinePath = path.resolve(
+    process.cwd(),
+    cli.baseline ?? baselineEntry.baseline_run_path
+  );
+  const candidatePath = path.resolve(process.cwd(), cli.candidate);
 
   const baseline = parseLoadRun(JSON.parse(fs.readFileSync(baselinePath, "utf8")));
   const candidate = parseLoadRun(JSON.parse(fs.readFileSync(candidatePath, "utf8")));
+
+  const { profiles, hash: guardrailsHash } = loadGuardrailProfiles(path.resolve(process.cwd(), cli.guardrailProfiles));
+  const resolvedProfile = resolveThresholdsForTarget({ targetId: cli.targetId, profiles });
+
   const gate = evaluateCiGate({
     baseline: computeSlices(baseline),
-    candidate: computeSlices(candidate)
+    candidate: computeSlices(candidate),
+    thresholds: resolvedProfile.thresholds
   });
-
-  const registry = fs.existsSync(registryPath) ? loadBaselineRegistry(registryPath) : null;
 
   const event = buildLoadRunSloEvent({
     source: "ci",
     service: "policy",
+    targetId: cli.targetId,
     baselinePath,
     candidatePath,
     gate,
     baselineConcurrency: baseline.config.concurrency,
     candidateConcurrency: candidate.config.concurrency,
-    baselineRegistry: registry
+    baselineRegistryEntry: baselineEntry
   });
 
   await emitLoadRunSloEvent({
@@ -94,12 +112,37 @@ async function main(): Promise<void> {
   const mdPath = path.join(outDir, `${base}.md`);
   fs.writeFileSync(
     jsonPath,
-    `${JSON.stringify({ baseline: baselinePath, candidate: candidatePath, gate, slo_event_id: event.event_id }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        target_id: cli.targetId,
+        baseline: baselinePath,
+        baseline_hash: baselineEntry.baseline_hash || null,
+        candidate: candidatePath,
+        gate,
+        guardrails_profile_key: resolvedProfile.profileKey,
+        guardrails_profile_hash: guardrailsHash,
+        slo_event_id: event.event_id
+      },
+      null,
+      2
+    )}\n`,
     "utf8"
   );
   fs.writeFileSync(mdPath, `${buildCiGateMarkdownSummary({ baselineFile: baselinePath, candidateFile: candidatePath, gate })}\n`, "utf8");
 
-  console.log(JSON.stringify({ passed: gate.passed, output_json: jsonPath, output_md: mdPath, slo_event_id: event.event_id }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        target_id: cli.targetId,
+        passed: gate.passed,
+        output_json: jsonPath,
+        output_md: mdPath,
+        slo_event_id: event.event_id
+      },
+      null,
+      2
+    )
+  );
   if (!gate.passed) {
     process.exit(1);
   }

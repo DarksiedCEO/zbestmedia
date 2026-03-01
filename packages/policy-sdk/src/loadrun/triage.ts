@@ -1,4 +1,4 @@
-import type { BaselineRegistry } from "./baselineRegistry";
+import type { BaselineRegistryEntry } from "./baselineRegistry";
 import type { CiGateResult } from "./ciGate";
 
 export type TriageTag =
@@ -12,7 +12,10 @@ export type TriageTopOffender = "latency" | "errors" | "breaker_retries";
 
 export type LoadRunTriage = {
   generated_at: string;
-  baseline_registry: BaselineRegistry;
+  baseline_registry: {
+    target_id: string;
+    entry: BaselineRegistryEntry;
+  };
   gate: {
     passed: boolean;
     checks: Array<{ name: string; passed: boolean; details: string }>;
@@ -39,7 +42,8 @@ function pctPointsIncrease(args: { baseline: number; candidate: number; totalBas
 
 export function buildTriage(args: {
   gate: CiGateResult;
-  baselineRegistry: BaselineRegistry;
+  baselineRegistryEntry: BaselineRegistryEntry;
+  targetId: string;
   generatedAt?: string;
 }): LoadRunTriage {
   const baseline = args.gate.baseline;
@@ -112,7 +116,10 @@ export function buildTriage(args: {
 
   return {
     generated_at: args.generatedAt ?? new Date().toISOString(),
-    baseline_registry: args.baselineRegistry,
+    baseline_registry: {
+      target_id: args.targetId,
+      entry: args.baselineRegistryEntry
+    },
     gate: {
       passed: args.gate.passed,
       checks: args.gate.checks

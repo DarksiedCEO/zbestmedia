@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { parseLoadRunSloEvent, type LoadRunSloEvent } from "./schema";
 
 export type SloSummary = {
+  target_id: string | null;
   total_runs: number;
   pass_rate: number;
   p95: { min: number; median: number; max: number };
@@ -12,6 +13,7 @@ export type SloSummary = {
   rows: Array<{
     ts: string;
     source: "ci" | "prod";
+    target_id: string;
     passed: boolean;
     p95: number;
     p99: number;
@@ -41,8 +43,9 @@ export function readEventsFromJsonl(filePath: string): LoadRunSloEvent[] {
   return parseEventsJsonl(fs.readFileSync(filePath, "utf8"));
 }
 
-export function buildSloSummary(events: LoadRunSloEvent[], last: number): SloSummary {
-  const recent = [...events].sort((a, b) => a.ts.localeCompare(b.ts)).slice(-Math.max(1, last));
+export function buildSloSummary(events: LoadRunSloEvent[], last: number, targetId?: string): SloSummary {
+  const filtered = targetId ? events.filter((event) => event.target_id === targetId) : events;
+  const recent = [...filtered].sort((a, b) => a.ts.localeCompare(b.ts)).slice(-Math.max(1, last));
   const passedCount = recent.filter((event) => event.verdict.passed).length;
   const passRate = recent.length > 0 ? passedCount / recent.length : 0;
   const p95Values = recent.map((event) => event.metrics.latency.p95);
@@ -62,6 +65,7 @@ export function buildSloSummary(events: LoadRunSloEvent[], last: number): SloSum
   const lastFailure = [...recent].reverse().find((event) => !event.verdict.passed);
 
   return {
+    target_id: targetId ?? null,
     total_runs: recent.length,
     pass_rate: Number(passRate.toFixed(6)),
     p95: {
@@ -75,6 +79,7 @@ export function buildSloSummary(events: LoadRunSloEvent[], last: number): SloSum
     rows: recent.map((event) => ({
       ts: event.ts,
       source: event.source,
+      target_id: event.target_id,
       passed: event.verdict.passed,
       p95: event.metrics.latency.p95,
       p99: event.metrics.latency.p99,
@@ -90,16 +95,17 @@ export function renderSloSummaryMarkdown(summary: SloSummary): string {
   lines.push("# Loadrun SLO Summary");
   lines.push("");
   lines.push(`- Total runs: ${summary.total_runs}`);
+  lines.push(`- Target: ${summary.target_id ?? "all"}`);
   lines.push(`- Pass rate: ${(summary.pass_rate * 100).toFixed(2)}%`);
   lines.push(`- P95 range (min/median/max): ${summary.p95.min.toFixed(2)} / ${summary.p95.median.toFixed(2)} / ${summary.p95.max.toFixed(2)} ms`);
   lines.push(`- Current baseline: ${summary.current_baseline || "n/a"}`);
   lines.push("");
   lines.push("## Last Runs");
   lines.push("");
-  lines.push("| ts | source | passed | p95 | p99 | error_rate_total | breaker_open_rate | retry_amplification |\n|---|---|---:|---:|---:|---:|---:|---:|");
+  lines.push("| ts | source | target_id | passed | p95 | p99 | error_rate_total | breaker_open_rate | retry_amplification |\n|---|---|---|---:|---:|---:|---:|---:|---:|");
   for (const row of summary.rows) {
     lines.push(
-      `| ${row.ts} | ${row.source} | ${row.passed ? "yes" : "no"} | ${row.p95.toFixed(2)} | ${row.p99.toFixed(2)} | ${(row.error_rate_total * 100).toFixed(3)}% | ${(row.breaker_open_rate * 100).toFixed(3)}% | ${row.retry_amplification.toFixed(3)} |`
+      `| ${row.ts} | ${row.source} | ${row.target_id} | ${row.passed ? "yes" : "no"} | ${row.p95.toFixed(2)} | ${row.p99.toFixed(2)} | ${(row.error_rate_total * 100).toFixed(3)}% | ${(row.breaker_open_rate * 100).toFixed(3)}% | ${row.retry_amplification.toFixed(3)} |`
     );
   }
 

@@ -11,12 +11,14 @@ function mkPlan(): CanaryPlan {
   return {
     plan_id: "p1",
     generated_at: "2026-03-01T00:00:00.000Z",
-    target: "prod",
+    target_id: "prod/us-west/policy",
     defaults_proposal_file: "proposal.json",
     defaults_proposal_sha256: "abc",
+    baseline_hash: "baseline-hash",
+    guardrails_profile_key: "prod/*",
+    guardrails_profile_hash: "guardrails-hash",
     steps: [5, 25, 50, 100],
     observe_window_minutes: 10,
-    guardrail_profile: "default-ci-gate",
     rollback_packet_pointer: "rollback.env",
     expected_governance_fingerprint: "fp-good",
     approvals: [{ by: "andre", at: "2026-03-01T00:00:00.000Z", reason: "ship" }]

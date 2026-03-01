@@ -4,11 +4,15 @@ import fs from "node:fs";
 import { z } from "zod";
 
 import { parseDefaultsProposal } from "../loadrun/propose";
+import { parseTargetId } from "../loadrun/target";
 import { parseCanaryPlan, type CanaryPlan } from "./types";
 
 const planArgsSchema = z.object({
   proposalFile: z.string().min(1),
-  target: z.string().min(1),
+  targetId: z.string().min(1),
+  baselineHash: z.string().min(1),
+  guardrailsProfileKey: z.string().min(1),
+  guardrailsProfileHash: z.string().min(1),
   observeWindowMinutes: z.number().int().positive().default(10),
   expectedGovernanceFingerprint: z.string().min(1),
   rollbackPacketPointer: z.string().min(1),
@@ -32,6 +36,7 @@ function timestampSlug(date: Date): string {
 
 export function buildCanaryPlan(input: z.input<typeof planArgsSchema>): CanaryPlan {
   const args = planArgsSchema.parse(input);
+  const targetId = parseTargetId(args.targetId);
   const proposalRaw = fs.readFileSync(args.proposalFile, "utf8");
   parseDefaultsProposal(JSON.parse(proposalRaw));
 
@@ -39,12 +44,14 @@ export function buildCanaryPlan(input: z.input<typeof planArgsSchema>): CanaryPl
   const plan: CanaryPlan = {
     plan_id: `canary-plan-${timestampSlug(new Date())}`,
     generated_at: generatedAt,
-    target: args.target,
+    target_id: targetId,
     defaults_proposal_file: args.proposalFile,
     defaults_proposal_sha256: sha256Hex(proposalRaw),
+    baseline_hash: args.baselineHash,
+    guardrails_profile_key: args.guardrailsProfileKey,
+    guardrails_profile_hash: args.guardrailsProfileHash,
     steps: [5, 25, 50, 100],
     observe_window_minutes: args.observeWindowMinutes,
-    guardrail_profile: "default-ci-gate",
     rollback_packet_pointer: args.rollbackPacketPointer,
     expected_governance_fingerprint: args.expectedGovernanceFingerprint,
     approvals: [
