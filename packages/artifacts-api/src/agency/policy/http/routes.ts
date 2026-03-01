@@ -5,6 +5,7 @@ import type { Pool } from "pg";
 import { withTenant } from "../../../db/withTenant";
 import { POLICY_CONTRACT_VERSION } from "../contract";
 import { encodePolicyResolveReceipt } from "../receipt";
+import { receiptKid, receiptKeyOrThrow, shouldSignReceipts, signReceiptBase64UrlPayload } from "../receiptSign";
 import { PolicyError } from "../types";
 import { PolicyService } from "../policyService";
 import { requireRole } from "./authz";
@@ -100,6 +101,15 @@ export const policyRoutes: FastifyPluginAsync<PolicyRoutesOptions> = async (app,
           issued_at: new Date().toISOString()
         });
         reply.header("X-Policy-Receipt", receipt);
+        const kid = receiptKid(process.env);
+        reply.header("X-Policy-Receipt-Kid", kid);
+        if (shouldSignReceipts(process.env)) {
+          const sig = signReceiptBase64UrlPayload({
+            receiptB64Url: receipt,
+            key: receiptKeyOrThrow(process.env)
+          });
+          reply.header("X-Policy-Receipt-Sig", sig);
+        }
       }
       if (etagValue) {
         reply.header("ETag", `"${etagValue}"`);
