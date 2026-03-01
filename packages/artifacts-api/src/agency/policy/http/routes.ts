@@ -4,6 +4,7 @@ import type { Pool } from "pg";
 
 import { withTenant } from "../../../db/withTenant";
 import { POLICY_CONTRACT_VERSION } from "../contract";
+import { readGovernanceSnapshotCached } from "../governance/snapshot";
 import { defaultPolicyReceiptTtlSec, encodePolicyResolveReceipt } from "../receipt";
 import { receiptKid, receiptKeyOrThrow, shouldSignReceipts, signReceiptBase64UrlPayload } from "../receiptSign";
 import { PolicyError } from "../types";
@@ -76,6 +77,50 @@ function toHttp(err: unknown): { status: number; body: Record<string, unknown> }
 }
 
 export const policyRoutes: FastifyPluginAsync<PolicyRoutesOptions> = async (app, opts) => {
+  app.get(
+    "/policy/internal/governance",
+    {
+      config: {
+        rateLimit: {
+          max: 30,
+          timeWindow: 60_000
+        }
+      }
+    },
+    async (req, reply) => {
+      if (process.env.POLICY_INTROSPECTION_ENABLED !== "true") {
+        return reply.code(404).send({ error: "NOT_FOUND" });
+      }
+
+      const configuredToken = process.env.POLICY_INTROSPECTION_TOKEN?.trim();
+      if (!configuredToken) {
+        return reply.code(503).send({
+          error: "INTROSPECTION_MISCONFIGURED",
+          message: "POLICY_INTROSPECTION_TOKEN missing"
+        });
+      }
+
+      const suppliedToken = req.headers["x-policy-introspection-token"];
+      if (suppliedToken !== configuredToken) {
+        return reply.code(403).send({
+          error: "FORBIDDEN",
+          message: "Invalid introspection token"
+        });
+      }
+
+      try {
+        const snapshot = readGovernanceSnapshotCached(process.env);
+        return reply.send(snapshot);
+      } catch (error) {
+        req.log.error({ err: error }, "policy governance snapshot failed");
+        return reply.code(500).send({
+          error: "INTROSPECTION_FAILED",
+          message: "Failed to build governance snapshot"
+        });
+      }
+    }
+  );
+
   app.get("/v1/policies/resolve", async (req, reply) => {
     const parsed = resolveQuerySchema.safeParse(req.query);
     if (!parsed.success) {
