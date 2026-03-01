@@ -12,6 +12,7 @@ import { PolicyCache, type CacheMode } from "./cache";
 import { PolicySdkError } from "./errors";
 import { noopLogger, type PolicyLogger } from "./logger";
 import { noopTelemetry, type PolicyTelemetry } from "./telemetry";
+import type { PolicyResolveReceipt } from "./types";
 
 const DEFAULT_MIN_CONTRACT_VERSION = "policy-resolve@1.0.0";
 
@@ -48,6 +49,19 @@ function compareContractVersions(a: ParsedContractVersion, b: ParsedContractVers
 function shouldEnforceContractVersionByDefault(): boolean {
   const nodeEnv = (typeof process !== "undefined" ? process.env.NODE_ENV : undefined) ?? "development";
   return nodeEnv === "production";
+}
+
+function decodePolicyReceiptHeader(header: string | null): PolicyResolveReceipt | null {
+  if (!header) return null;
+  try {
+    const decoded = Buffer.from(header, "base64url").toString("utf8");
+    const parsed = JSON.parse(decoded) as PolicyResolveReceipt;
+    if (typeof parsed !== "object" || parsed === null) return null;
+    if (!parsed.contract_version || !parsed.resolution_hash || !parsed.issued_at) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 export class PolicyClient {
@@ -275,13 +289,32 @@ export class PolicyClient {
         async () => {
           const res = await httpGetJson<unknown>(url, { timeoutMs: this.cfg.timeoutMs, headers });
           this.validateContractVersion(res.headers.get("x-policy-contract-version"), opts.correlationId);
+          const receiptHeader = res.headers.get("x-policy-receipt");
+          const parsedReceipt = decodePolicyReceiptHeader(receiptHeader);
           if (res.status === 304) {
             if (!staleEntry) {
               throw new PolicySdkError("REVALIDATION_CACHE_MISS", "Server returned 304 but no cached policy is available");
             }
-            return staleEntry.value;
+            if (!receiptHeader) return staleEntry.value;
+            return {
+              ...staleEntry.value,
+              meta: {
+                ...(staleEntry.value.meta ?? {}),
+                policy_receipt_header: receiptHeader,
+                ...(parsedReceipt ? { policy_receipt: parsedReceipt } : {})
+              }
+            };
           }
-          return PolicyResolveOutputSchema.parse(res.json);
+          const parsed = PolicyResolveOutputSchema.parse(res.json);
+          if (!receiptHeader) return parsed;
+          return {
+            ...parsed,
+            meta: {
+              ...(parsed.meta ?? {}),
+              policy_receipt_header: receiptHeader,
+              ...(parsedReceipt ? { policy_receipt: parsedReceipt } : {})
+            }
+          };
         },
         {
           maxRetries: 2,
@@ -304,7 +337,14 @@ export class PolicyClient {
           resolutionHash: out.meta?.resolution_hash
         });
       }
-      this.telemetry.onResolveEnd?.({ key, correlationId: opts.correlationId, ok: true, latencyMs, status: revalidated ? 304 : 200 });
+      this.telemetry.onResolveEnd?.({
+        key,
+        correlationId: opts.correlationId,
+        ok: true,
+        latencyMs,
+        status: revalidated ? 304 : 200,
+        policyReceiptPresent: Boolean(out.meta?.policy_receipt_header)
+      });
       this.log.info(
         {
           correlationId: opts.correlationId,
@@ -313,7 +353,8 @@ export class PolicyClient {
           key,
           policy_id: out.meta?.policy_id,
           active_version: out.meta?.active_version,
-          resolution_hash: out.meta?.resolution_hash
+          resolution_hash: out.meta?.resolution_hash,
+          policy_receipt_present: Boolean(out.meta?.policy_receipt_header)
         },
         "policy.resolve ok"
       );
@@ -331,7 +372,8 @@ export class PolicyClient {
         ok: false,
         latencyMs,
         status: e?.status,
-        errorCode: code
+        errorCode: code,
+        policyReceiptPresent: false
       });
       this.log.error(
         { correlationId: opts.correlationId, latencyMs, key, code, status: e?.status, details: e?.details },

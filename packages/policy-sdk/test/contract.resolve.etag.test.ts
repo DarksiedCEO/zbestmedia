@@ -56,6 +56,9 @@ describe.runIf(Boolean(BASE_URL && TOKEN))("policy-sdk <-> artifacts-api resolve
 
     const etag = first.headers.get("etag");
     expect(etag).toBe(`"${resolutionHash}"`);
+    const receipt = first.headers.get("x-policy-receipt");
+    expect(typeof receipt).toBe("string");
+    expect((receipt?.length ?? 0) > 10).toBe(true);
     const contractVersion = first.headers.get("x-policy-contract-version");
     expect(typeof contractVersion).toBe("string");
     expect(versionGte(String(contractVersion), MIN_CONTRACT_VERSION)).toBe(true);

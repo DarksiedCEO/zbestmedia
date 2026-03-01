@@ -11,11 +11,21 @@ export const PolicyResolveInputSchema = z.object({
 export type PolicyResolveInput = z.input<typeof PolicyResolveInputSchema>;
 export type ParsedPolicyResolveInput = z.output<typeof PolicyResolveInputSchema>;
 
+export type PolicyResolveReceipt = {
+  contract_version: string;
+  resolution_hash: string;
+  policy_id?: string;
+  active_version?: string;
+  issued_at: string;
+};
+
 export const PolicyResolveMetaSchema = z
   .object({
     resolution_hash: z.string().min(1),
     policy_id: z.string().optional(),
-    active_version: z.string().optional()
+    active_version: z.string().optional(),
+    policy_receipt_header: z.string().optional(),
+    policy_receipt: z.custom<PolicyResolveReceipt>().optional()
   })
   .passthrough();
 

@@ -10,6 +10,7 @@ export type ResolveEndEvent = {
   latencyMs: number;
   status?: number;
   errorCode?: string;
+  policyReceiptPresent?: boolean;
 };
 
 export type CacheEvent = {
