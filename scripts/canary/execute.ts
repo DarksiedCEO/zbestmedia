@@ -4,10 +4,14 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 
 import { parseBaselineRegistry, resolveTargetBaselineEntry } from "../../packages/policy-sdk/src/loadrun/baselineRegistry";
+import { consumeBudget } from "../../packages/policy-sdk/src/loadrun/budget";
+import { isCanaryExposureAllowed, readBlastRadiusCaps } from "../../packages/policy-sdk/src/loadrun/blastRadius";
 import { executeCanaryRollout } from "../../packages/policy-sdk/src/canary/execute";
 import { parseCanaryObservation, parseCanaryPlan, type CanaryObservation, type CanaryStep } from "../../packages/policy-sdk/src/canary/types";
 import { buildIncidentBundle, writeIncidentBundle } from "../../packages/policy-sdk/src/loadrun/incident";
 import { classifyIncidentSeverity } from "../../packages/policy-sdk/src/loadrun/severity";
+import { loadDeployWindowsConfig, resolveActiveDeployWindow } from "../../packages/policy-sdk/src/loadrun/windows";
+import { emitOperationalSloEvent } from "../../packages/policy-sdk/src/slo/emit";
 
 type CliArgs = {
   plan: string;
@@ -132,6 +136,10 @@ async function main(): Promise<void> {
     reason: cli.reason,
     mode: cli.mode === "live" ? "manual_apply" : cli.mode,
     applyStep: async (step) => {
+      const caps = readBlastRadiusCaps();
+      if (!isCanaryExposureAllowed(step, caps)) {
+        throw new Error(`BLAST_RADIUS_CANARY_CAP_EXCEEDED: step=${step} cap=${caps.maxCanaryExposurePct}`);
+      }
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
       const artifactPath = path.join(rolloutsDir, `${stamp}__apply_${step}.json`);
       const payload = {
@@ -151,6 +159,28 @@ async function main(): Promise<void> {
       return { artifactPath };
     },
     observeStep: async (step) => {
+      const budget = consumeBudget({ kind: "canary_observe", requests: 0 });
+      if (!budget.allowed) {
+        await emitOperationalSloEvent({
+          source: "prod",
+          service: "policy",
+          targetId: plan.target_id,
+          tags: ["budget_block", "severity:WARNING"],
+          reason: budget.reason,
+          sink: (process.env.SLO_SINK as "file" | "postgres" | undefined) ?? "file",
+          jsonlPath: path.resolve(process.cwd(), process.env.SLO_EVENTS_JSONL_PATH ?? "ops/slo/loadrun_events.jsonl"),
+          archiveDir: path.resolve(process.cwd(), process.env.SLO_ARCHIVE_DIR ?? "ops/slo/archive"),
+          postgresUrl: process.env.SLO_POSTGRES_URL
+        });
+        return parseCanaryObservation({
+          step,
+          drift_passed: false,
+          error_rate_passed: false,
+          current_governance_fingerprint: plan.expected_governance_fingerprint,
+          reasons: ["canary_observe_budget_exceeded"]
+        });
+      }
+
       if (cli.mode !== "live") {
         const item = observationMap[step] ?? {
           drift_passed: true,
@@ -163,6 +193,28 @@ async function main(): Promise<void> {
 
       if (!cli.target) {
         throw new Error("live mode requires --target or POLICY_BASE_URL");
+      }
+      const windows = loadDeployWindowsConfig(path.resolve(process.cwd(), "ops/windows/deploy_windows.json"));
+      const activeWindow = resolveActiveDeployWindow({ targetId: plan.target_id, windows: windows.windows });
+      if (activeWindow) {
+        await emitOperationalSloEvent({
+          source: "prod",
+          service: "policy",
+          targetId: plan.target_id,
+          tags: ["deploy_window_suppressed", "severity:INFO"],
+          reason: activeWindow.reason,
+          sink: (process.env.SLO_SINK as "file" | "postgres" | undefined) ?? "file",
+          jsonlPath: path.resolve(process.cwd(), process.env.SLO_EVENTS_JSONL_PATH ?? "ops/slo/loadrun_events.jsonl"),
+          archiveDir: path.resolve(process.cwd(), process.env.SLO_ARCHIVE_DIR ?? "ops/slo/archive"),
+          postgresUrl: process.env.SLO_POSTGRES_URL
+        });
+        return parseCanaryObservation({
+          step,
+          drift_passed: false,
+          error_rate_passed: false,
+          current_governance_fingerprint: plan.expected_governance_fingerprint,
+          reasons: ["deploy_window_suppressed"]
+        });
       }
 
       const candidate = path.resolve(process.cwd(), `ops/canary/rollouts/${new Date().toISOString().replace(/[:.]/g, "-")}__candidate_${step}.json`);

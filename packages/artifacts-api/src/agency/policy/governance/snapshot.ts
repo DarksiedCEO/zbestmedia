@@ -64,7 +64,8 @@ const PolicyGovernanceSnapshotSchema = z.object({
       base_delay_ms: z.number().int().nonnegative(),
       jitter_pct: z.number().nonnegative(),
       rolling_amplification_estimate: z.number().nonnegative()
-    })
+    }),
+    blast_radius_violation: z.boolean()
   }),
   baseline: z.object({
     current_baseline_hash: z.string(),
@@ -105,6 +106,16 @@ const PolicyGovernanceSnapshotSchema = z.object({
       retryAmplificationIncreaseCap: z.number()
     }),
     guardrail_hash: z.string()
+  }),
+  budget: z.object({
+    daily_remaining: z.number().int().nonnegative(),
+    monthly_remaining: z.number().int().nonnegative(),
+    canary_observe_runs_remaining: z.number().int().nonnegative()
+  }),
+  blast_radius: z.object({
+    max_concurrency_cap: z.number().int().positive(),
+    canary_cap_pct: z.number().int().positive(),
+    max_retry_amplification_runtime: z.number().nonnegative()
   }),
   governance_fingerprint: z.string()
 });
@@ -177,6 +188,31 @@ function readThresholds(raw: NodeJS.ProcessEnv): typeof DefaultThresholds {
       DefaultThresholds.retryAmplificationIncreaseCap
     )
   };
+}
+
+function readBudgetState(rawEnv: NodeJS.ProcessEnv): {
+  daily_requests_used: number;
+  monthly_requests_used: number;
+  canary_observe_runs_daily: number;
+} {
+  const file = resolvePathFromEnv(rawEnv, "POLICY_BUDGET_STATE_PATH", "ops/incidents/budget_state.json");
+  if (!fs.existsSync(file)) {
+    return { daily_requests_used: 0, monthly_requests_used: 0, canary_observe_runs_daily: 0 };
+  }
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as {
+      daily_requests_used?: number;
+      monthly_requests_used?: number;
+      canary_observe_runs_daily?: number;
+    };
+    return {
+      daily_requests_used: Number(parsed.daily_requests_used ?? 0),
+      monthly_requests_used: Number(parsed.monthly_requests_used ?? 0),
+      canary_observe_runs_daily: Number(parsed.canary_observe_runs_daily ?? 0)
+    };
+  } catch {
+    return { daily_requests_used: 0, monthly_requests_used: 0, canary_observe_runs_daily: 0 };
+  }
 }
 
 function resolvePathFromEnv(raw: NodeJS.ProcessEnv, key: string, fallback: string): string {
@@ -259,6 +295,23 @@ export function readAndBuildGovernanceSnapshot(rawEnv: NodeJS.ProcessEnv = proce
   const guardrailHash = sha256Hex(canonicalJson(thresholds));
   const defaultsHash = sha256Hex(canonicalJson(defaults));
   const defaultsVersion = rawEnv.POLICY_DEFAULTS_VERSION?.trim() || `runtime-defaults@${defaultsHash.slice(0, 12)}`;
+  const budgetState = readBudgetState(rawEnv);
+  const blastRadius = {
+    max_concurrency_cap: Number(rawEnv.POLICY_BLAST_MAX_CONCURRENCY_PER_TARGET ?? 200),
+    canary_cap_pct: Number(rawEnv.POLICY_CANARY_MAX_EXPOSURE_PCT ?? 50),
+    max_retry_amplification_runtime: Number(rawEnv.POLICY_RETRY_AMP_GUARD_MAX ?? 1.4)
+  };
+  const rollingRetry = rollingRetryAmplification(events);
+  const retryAmpGuardViolation = rollingRetry > blastRadius.max_retry_amplification_runtime;
+  const breakerState = killSwitchActive || retryAmpGuardViolation ? "OPEN" : deriveBreakerState(lastProd);
+  const budget = {
+    daily_remaining: Math.max(0, Number(rawEnv.POLICY_LOAD_BUDGET_DAILY_MAX_REQUESTS ?? 200_000) - budgetState.daily_requests_used),
+    monthly_remaining: Math.max(0, Number(rawEnv.POLICY_LOAD_BUDGET_MONTHLY_MAX_REQUESTS ?? 2_000_000) - budgetState.monthly_requests_used),
+    canary_observe_runs_remaining: Math.max(
+      0,
+      Number(rawEnv.POLICY_CANARY_MAX_OBSERVE_RUNS_PER_DAY ?? 24) - budgetState.canary_observe_runs_daily
+    )
+  };
 
   const snapshot: PolicyGovernanceSnapshot = {
     runtime: {
@@ -268,7 +321,7 @@ export function readAndBuildGovernanceSnapshot(rawEnv: NodeJS.ProcessEnv = proce
       freeze_mode: freezeMode,
       kill_switch_active: killSwitchActive,
       breaker: {
-        state: killSwitchActive ? "OPEN" : deriveBreakerState(lastProd),
+        state: breakerState,
         window_ms: Number(defaults.POLICY_BREAKER_RESET_AFTER_MS ?? 15_000),
         open_threshold: Number(defaults.POLICY_BREAKER_FAILURE_THRESHOLD ?? 5),
         half_open_cooldown_ms: Number(defaults.POLICY_BREAKER_RESET_AFTER_MS ?? 15_000)
@@ -278,8 +331,9 @@ export function readAndBuildGovernanceSnapshot(rawEnv: NodeJS.ProcessEnv = proce
         backoff_strategy: "exponential",
         base_delay_ms: Number(defaults.POLICY_RETRY_BASE_DELAY_MS ?? 80),
         jitter_pct: 0.25,
-        rolling_amplification_estimate: rollingRetryAmplification(events)
-      }
+        rolling_amplification_estimate: rollingRetry
+      },
+      blast_radius_violation: retryAmpGuardViolation
     },
     baseline: {
       current_baseline_hash: registry.baseline_hash,
@@ -310,6 +364,8 @@ export function readAndBuildGovernanceSnapshot(rawEnv: NodeJS.ProcessEnv = proce
       thresholds,
       guardrail_hash: guardrailHash
     },
+    budget,
+    blast_radius: blastRadius,
     governance_fingerprint: fingerprintFromParts([defaultsHash, registry.baseline_hash, guardrailHash])
   };
 

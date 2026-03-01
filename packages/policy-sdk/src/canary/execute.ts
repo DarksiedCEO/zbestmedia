@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { isCanaryExposureAllowed, readBlastRadiusCaps } from "../loadrun/blastRadius";
 import { assertGovernanceMutableOperationAllowed, isRuntimeKillSwitchEnabled } from "../loadrun/governanceControls";
 import { applyStateForStep, observeStateForStep, validateTransition } from "./stateMachine";
 import {
@@ -133,6 +134,16 @@ export async function executeCanaryRollout(args: ExecuteCanaryArgs): Promise<Can
   }
 
   for (const step of plan.steps) {
+    const caps = readBlastRadiusCaps();
+    if (!isCanaryExposureAllowed(step, caps)) {
+      await runRollback({
+        rollout,
+        rolloutsPath,
+        rollbacksDir: args.rollbacksDir,
+        reason: `BLAST_RADIUS_CANARY_CAP_EXCEEDED: step=${step} cap=${caps.maxCanaryExposurePct}`
+      });
+      return rollout;
+    }
     const applyState = applyStateForStep(step);
     transition({
       rollout,

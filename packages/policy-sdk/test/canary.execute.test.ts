@@ -29,6 +29,7 @@ describe("canary execute", () => {
   afterEach(() => {
     delete process.env.POLICY_GOVERNANCE_FREEZE;
     delete process.env.POLICY_RUNTIME_KILL_SWITCH;
+    delete process.env.POLICY_CANARY_MAX_EXPOSURE_PCT;
   });
 
   it("requires approval", async () => {
@@ -144,5 +145,28 @@ describe("canary execute", () => {
     });
     expect(res.status).toBe("FAILED");
     expect(res.failure_reason).toContain("runtime_kill_switch_active");
+  });
+
+  it("blocks promotion when canary exposure cap is exceeded", async () => {
+    process.env.POLICY_CANARY_MAX_EXPOSURE_PCT = "25";
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "canary-test-"));
+    const res = await executeCanaryRollout({
+      plan: mkPlan(),
+      rolloutsDir: path.join(root, "rollouts"),
+      rollbacksDir: path.join(root, "rollbacks"),
+      approved: true,
+      reason: "ship",
+      mode: "simulation",
+      applyStep: async (step) => ({ artifactPath: path.join(root, `apply-${step}.json`) }),
+      observeStep: async (step) => ({
+        step,
+        drift_passed: true,
+        error_rate_passed: true,
+        current_governance_fingerprint: "fp-good",
+        reasons: []
+      })
+    });
+    expect(res.status).toBe("FAILED");
+    expect(res.failure_reason).toContain("BLAST_RADIUS_CANARY_CAP_EXCEEDED");
   });
 });

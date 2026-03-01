@@ -134,3 +134,60 @@ export async function emitLoadRunSloEvent(args: {
 
   await emitLoadRunSloEventToPostgres({ event: args.event, postgresUrl: args.postgresUrl });
 }
+
+export async function emitOperationalSloEvent(args: {
+  source: "ci" | "prod";
+  service: string;
+  targetId: string;
+  tags: string[];
+  reason?: string;
+  sink: SloSink;
+  jsonlPath: string;
+  archiveDir: string;
+  postgresUrl?: string;
+}): Promise<LoadRunSloEvent> {
+  const ts = new Date().toISOString();
+  const reason = args.reason ?? "operational_event";
+  const event = parseLoadRunSloEvent({
+    event_id: sha256Hex(`${ts}|${args.targetId}|${reason}|${args.tags.join(",")}`),
+    ts,
+    source: args.source,
+    service: args.service,
+    target_id: args.targetId,
+    baseline: { path: "n/a", hash: "n/a" },
+    candidate: { path: "n/a", hash: "n/a" },
+    verdict: { passed: true, reasons: [reason] },
+    metrics: {
+      latency: { p50: 0, p95: 0, p99: 0, max: 0 },
+      throughput_rps: 0,
+      error_rate_total: 0,
+      error_rate_4xx: 0,
+      error_rate_5xx: 0,
+      error_rate_timeout: 0,
+      breaker_open_rate: 0,
+      retry_amplification: 0
+    },
+    deltas: {
+      latency_p50_ratio: 1,
+      latency_p95_ratio: 1,
+      latency_p99_ratio: 1,
+      latency_max_ratio: 1,
+      throughput_rps_delta: 0,
+      error_rate_total_delta: 0,
+      error_rate_4xx_delta: 0,
+      error_rate_5xx_delta: 0,
+      error_rate_timeout_delta: 0,
+      breaker_open_rate_delta: 0,
+      retry_amplification_delta: 0
+    },
+    tags: args.tags
+  });
+  await emitLoadRunSloEvent({
+    event,
+    sink: args.sink,
+    jsonlPath: args.jsonlPath,
+    archiveDir: args.archiveDir,
+    postgresUrl: args.postgresUrl
+  });
+  return event;
+}

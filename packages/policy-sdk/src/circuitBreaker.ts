@@ -40,4 +40,9 @@ export class CircuitBreaker {
       this.openedAt = now;
     }
   }
+
+  forceOpen(now = Date.now()): void {
+    this.state = "OPEN";
+    this.openedAt = now;
+  }
 }

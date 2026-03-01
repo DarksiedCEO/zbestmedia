@@ -1,11 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { assertConcurrencyWithinCap, readBlastRadiusCaps } from "../../packages/policy-sdk/src/loadrun/blastRadius";
+import { consumeBudget } from "../../packages/policy-sdk/src/loadrun/budget";
 import { resolveProdCanaryProfile } from "../../packages/policy-sdk/src/loadrun/prodProfiles";
 import { parseLoadRun } from "../../packages/policy-sdk/src/loadrun/schema";
+import { parseTargetId } from "../../packages/policy-sdk/src/loadrun/target";
+import { resolveActiveDeployWindow, loadDeployWindowsConfig } from "../../packages/policy-sdk/src/loadrun/windows";
+import { emitOperationalSloEvent } from "../../packages/policy-sdk/src/slo/emit";
 
 type CliArgs = {
   out: string;
+  targetId: string;
   targetBaseUrl: string;
   total: number;
   concurrency: number;
@@ -39,9 +45,11 @@ function parseArgs(argv: string[]): CliArgs {
   if (!targetBaseUrl) {
     throw new Error("Missing --target or POLICY_BASE_URL");
   }
+  const targetId = parseTargetId(args.get("targetId") ?? process.env.LOADRUN_TARGET_ID ?? "prod/us-west/policy");
 
   return {
     out: args.get("out") ?? `ops/load_runs/prod/${new Date().toISOString().replace(/[:.]/g, "-")}__prod-canary.json`,
+    targetId,
     targetBaseUrl,
     total: Number(args.get("total") ?? String(defaults.total)),
     concurrency: Number(args.get("concurrency") ?? String(defaults.concurrency)),
@@ -113,6 +121,85 @@ async function runPreflight(args: { url: string; headers: Record<string, string>
 
 async function main(): Promise<void> {
   const cfg = parseArgs(process.argv);
+  const caps = readBlastRadiusCaps();
+  assertConcurrencyWithinCap(cfg.concurrency, caps);
+  const windows = loadDeployWindowsConfig(path.resolve(process.cwd(), "ops/windows/deploy_windows.json"));
+  const activeWindow = resolveActiveDeployWindow({ targetId: cfg.targetId, windows: windows.windows });
+  if (activeWindow) {
+    const synthetic = parseLoadRun({
+      config: {
+        target_base_url: cfg.targetBaseUrl,
+        precheck_path: cfg.precheckPath,
+        read_path: cfg.readPath,
+        mutate_path: cfg.mutatePath,
+        concurrency: 1,
+        total: 1,
+        mutate_ratio: 0,
+        seed: cfg.seed,
+        timeout_sec: cfg.timeoutSec,
+        policy_key: "performance_limits",
+        role: "sebastian",
+        client_pool_size: 1,
+        campaign_pool_size: 1
+      },
+      preflight: {
+        ok: true,
+        status: 200,
+        url: `${cfg.targetBaseUrl.replace(/\/+$/, "")}${cfg.precheckPath}`
+      },
+      counts: {
+        success: 1,
+        fail_status: 0,
+        transport_failures: 0,
+        status: { "200": 1 },
+        error_codes: { DEPLOY_WINDOW_SUPPRESSED: 1 },
+        blocked_mutate: {},
+        transport_failure_types: {},
+        transport_failure_samples: []
+      },
+      latency_ms: { mean: 0, p50: 0, p95: 0, p99: 0 },
+      breaker_states: {},
+      retry_count_distribution: {},
+      cache_states: {}
+    });
+    const outPath = path.resolve(process.cwd(), cfg.out);
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    fs.writeFileSync(outPath, `${JSON.stringify(synthetic, null, 2)}\n`, "utf8");
+    await emitOperationalSloEvent({
+      source: "prod",
+      service: "policy",
+      targetId: cfg.targetId,
+      tags: ["deploy_window_suppressed", "severity:INFO"],
+      reason: activeWindow.reason,
+      sink: (process.env.SLO_SINK as "file" | "postgres" | undefined) ?? "file",
+      jsonlPath: path.resolve(process.cwd(), process.env.SLO_EVENTS_JSONL_PATH ?? "ops/slo/loadrun_events.jsonl"),
+      archiveDir: path.resolve(process.cwd(), process.env.SLO_ARCHIVE_DIR ?? "ops/slo/archive"),
+      postgresUrl: process.env.SLO_POSTGRES_URL
+    });
+    console.log(
+      JSON.stringify(
+        { suppressed: true, reason: activeWindow.reason, target_id: cfg.targetId, window: activeWindow, output: outPath },
+        null,
+        2
+      )
+    );
+    return;
+  }
+  const budget = consumeBudget({ kind: "prod_drift", requests: cfg.total });
+  if (!budget.allowed) {
+    await emitOperationalSloEvent({
+      source: "prod",
+      service: "policy",
+      targetId: cfg.targetId,
+      tags: ["budget_block", "severity:WARNING"],
+      reason: budget.reason,
+      sink: (process.env.SLO_SINK as "file" | "postgres" | undefined) ?? "file",
+      jsonlPath: path.resolve(process.cwd(), process.env.SLO_EVENTS_JSONL_PATH ?? "ops/slo/loadrun_events.jsonl"),
+      archiveDir: path.resolve(process.cwd(), process.env.SLO_ARCHIVE_DIR ?? "ops/slo/archive"),
+      postgresUrl: process.env.SLO_POSTGRES_URL
+    });
+    throw new Error(`LOAD_BUDGET_BLOCKED: ${budget.reason}`);
+  }
   const rng = new LcgRandom(cfg.seed);
   const clientIds = buildUuidPool(20, 1);
   const campaignIds = buildUuidPool(200, 10_001);

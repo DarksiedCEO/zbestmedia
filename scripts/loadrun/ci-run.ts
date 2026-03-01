@@ -1,11 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { assertConcurrencyWithinCap, readBlastRadiusCaps } from "../../packages/policy-sdk/src/loadrun/blastRadius";
+import { consumeBudget } from "../../packages/policy-sdk/src/loadrun/budget";
 import { parseLoadRun } from "../../packages/policy-sdk/src/loadrun/schema";
+import { parseTargetId } from "../../packages/policy-sdk/src/loadrun/target";
+import { emitOperationalSloEvent } from "../../packages/policy-sdk/src/slo/emit";
 
 type CliArgs = {
   out: string;
   targetBaseUrl: string;
+  targetId: string;
   total: number;
   concurrency: number;
   mutateRatio: number;
@@ -33,10 +38,12 @@ function parseArgs(argv: string[]): CliArgs {
 
   const targetBaseUrl = args.get("targetBaseUrl") ?? process.env.LOADRUN_TARGET_BASE_URL ?? "http://127.0.0.1:8080";
   const authToken = args.get("authToken") ?? process.env.LOADRUN_AUTH_TOKEN;
+  const targetId = parseTargetId(args.get("targetId") ?? process.env.LOADRUN_TARGET_ID ?? "prod/us-west/policy");
 
   return {
     out: args.get("out") ?? `ops/load_runs/ci/${process.env.GITHUB_SHA ?? "local"}__candidate.json`,
     targetBaseUrl,
+    targetId,
     total: Number(args.get("total") ?? "2000"),
     concurrency: Number(args.get("concurrency") ?? "50"),
     mutateRatio: Number(args.get("mutateRatio") ?? "0.2"),
@@ -87,6 +94,23 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutSec: numb
 
 async function main(): Promise<void> {
   const cfg = parseArgs(process.argv);
+  const caps = readBlastRadiusCaps();
+  assertConcurrencyWithinCap(cfg.concurrency, caps);
+  const budget = consumeBudget({ kind: "ci_loadrun", requests: cfg.total });
+  if (!budget.allowed) {
+    await emitOperationalSloEvent({
+      source: "ci",
+      service: "policy",
+      targetId: cfg.targetId,
+      tags: ["budget_block", "severity:WARNING"],
+      reason: budget.reason,
+      sink: (process.env.SLO_SINK as "file" | "postgres" | undefined) ?? "file",
+      jsonlPath: path.resolve(process.cwd(), process.env.SLO_EVENTS_JSONL_PATH ?? "ops/slo/loadrun_events.jsonl"),
+      archiveDir: path.resolve(process.cwd(), process.env.SLO_ARCHIVE_DIR ?? "ops/slo/archive"),
+      postgresUrl: process.env.SLO_POSTGRES_URL
+    });
+    throw new Error(`LOAD_BUDGET_BLOCKED: ${budget.reason}`);
+  }
   const rng = new LcgRandom(cfg.seed);
   const clientIds = buildUuidPool(20, 1);
   const campaignIds = buildUuidPool(200, 10_001);

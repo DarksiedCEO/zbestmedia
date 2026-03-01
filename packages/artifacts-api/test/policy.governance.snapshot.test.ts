@@ -89,6 +89,8 @@ describe("policy governance snapshot", () => {
     expect(snapshotA.runtime.kill_switch_active).toBe(false);
     expect(snapshotA.slo.last_prod_verdict?.event_id).toBe("e-prod-1");
     expect(snapshotA.guardrails.thresholds.p95InflationRatioCap).toBe(1.25);
+    expect(snapshotA.budget.daily_remaining).toBeGreaterThanOrEqual(0);
+    expect(snapshotA.blast_radius.max_concurrency_cap).toBe(200);
   });
 
   it("reflects freeze and kill switch flags in runtime snapshot", () => {
@@ -104,6 +106,19 @@ describe("policy governance snapshot", () => {
     const snapshot = readAndBuildGovernanceSnapshot(env);
     expect(snapshot.runtime.freeze_mode).toBe(true);
     expect(snapshot.runtime.kill_switch_active).toBe(true);
+    expect(snapshot.runtime.breaker.state).toBe("OPEN");
+  });
+
+  it("forces breaker open when retry amplification guard is exceeded", () => {
+    const fx = writeFixtureFiles();
+    const env = {
+      POLICY_RUNTIME_DEFAULTS_PATH: fx.defaultsPath,
+      POLICY_BASELINE_REGISTRY_PATH: fx.registryPath,
+      SLO_EVENTS_JSONL_PATH: fx.eventsPath,
+      POLICY_RETRY_AMP_GUARD_MAX: "0.1"
+    } as NodeJS.ProcessEnv;
+    const snapshot = readAndBuildGovernanceSnapshot(env);
+    expect(snapshot.runtime.blast_radius_violation).toBe(true);
     expect(snapshot.runtime.breaker.state).toBe("OPEN");
   });
 

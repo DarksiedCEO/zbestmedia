@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { loadBaselineRegistry, resolveTargetBaselineEntry } from "../../packages/policy-sdk/src/loadrun/baselineRegistry";
 import { evaluateCiGate } from "../../packages/policy-sdk/src/loadrun/ciGate";
 import { buildIncidentBundle, writeIncidentBundle } from "../../packages/policy-sdk/src/loadrun/incident";
+import { isRetryAmpViolation, readBlastRadiusCaps } from "../../packages/policy-sdk/src/loadrun/blastRadius";
 import { loadGuardrailProfiles, resolveThresholdsForTarget } from "../../packages/policy-sdk/src/loadrun/guardrailProfiles";
 import { isRuntimeKillSwitchEnabled } from "../../packages/policy-sdk/src/loadrun/governanceControls";
 import { buildCiGateMarkdownSummary } from "../../packages/policy-sdk/src/loadrun/markdownSummary";
@@ -92,6 +93,9 @@ async function main(): Promise<void> {
     candidate: computeSlices(candidate),
     thresholds: resolvedProfile.thresholds
   });
+  const caps = readBlastRadiusCaps();
+  const retryAmpViolation = isRetryAmpViolation(gate.candidate.retryAmplification, caps);
+  const gatePassed = gate.passed && !retryAmpViolation;
   const killSwitchActive = isRuntimeKillSwitchEnabled();
 
   fs.mkdirSync(outDir, { recursive: true });
@@ -106,12 +110,16 @@ async function main(): Promise<void> {
   let triagePath = "";
   let triageTags: string[] = [];
   let recommendationTags: string[] = [];
-  if (!gate.passed) {
+  if (!gatePassed) {
     const triage = buildTriage({ gate, baselineRegistryEntry: baselineEntry, targetId: cli.targetId });
     triagePath = path.join(triageDir, `${stamp}__triage.json`);
     fs.writeFileSync(triagePath, `${JSON.stringify(triage, null, 2)}\n`, "utf8");
     triageTags = triage.tags;
     recommendationTags = triage.recommended_actions;
+    if (retryAmpViolation) {
+      triageTags = [...new Set([...triageTags, "blast_radius_violation"])];
+      recommendationTags = [...new Set([...recommendationTags, "lower retry attempts"])];
+    }
   }
   if (killSwitchActive) {
     triageTags = [...new Set([...triageTags, "runtime_kill_switch_active"])];
@@ -148,6 +156,7 @@ async function main(): Promise<void> {
     guardrails_profile_key: resolvedProfile.profileKey,
     guardrails_profile_hash: guardrailsHash,
     severity,
+    blast_radius_violation: retryAmpViolation,
     gate,
     slo_event_id: sloEvent.event_id
   };
@@ -156,7 +165,7 @@ async function main(): Promise<void> {
   fs.writeFileSync(reportMd, `${buildCiGateMarkdownSummary({ baselineFile: baselinePath, candidateFile: candidatePath, gate })}\n`, "utf8");
 
   let incidentPath: string | null = null;
-  if (!gate.passed || severity === "CRITICAL") {
+  if (!gatePassed || severity === "CRITICAL") {
     const defaultsPath = path.resolve(process.cwd(), process.env.POLICY_RUNTIME_DEFAULTS_PATH ?? "packages/policy-sdk/src/defaults/runtime.defaults.json");
     const defaultsHash = fs.existsSync(defaultsPath) ? sha256Hex(fs.readFileSync(defaultsPath, "utf8")) : "";
     const governanceFingerprint = sha256Hex(`${defaultsHash}|${baselineEntry.baseline_hash}|${guardrailsHash}`);
@@ -184,8 +193,18 @@ async function main(): Promise<void> {
     target_id: cli.targetId,
     severity,
     freeze_recommended: severity === "CRITICAL",
-    passed: gate.passed,
-    reasons: gate.checks.filter((check) => !check.passed).map((check) => ({ name: check.name, details: check.details })),
+    passed: gatePassed,
+    reasons: [
+      ...gate.checks.filter((check) => !check.passed).map((check) => ({ name: check.name, details: check.details })),
+      ...(retryAmpViolation
+        ? [
+            {
+              name: "blast_radius_retry_amp_cap",
+              details: `retry_amplification=${gate.candidate.retryAmplification.toFixed(3)} cap=${caps.maxRetryAmplificationRuntime.toFixed(3)}`
+            }
+          ]
+        : [])
+    ],
     deltas: {
       p95_ratio: gate.baseline.latencyMs.p95 > 0 ? gate.candidate.latencyMs.p95 / gate.baseline.latencyMs.p95 : null,
       p99_ratio: gate.baseline.latencyMs.p99 > 0 ? gate.candidate.latencyMs.p99 / gate.baseline.latencyMs.p99 : null,
@@ -194,6 +213,7 @@ async function main(): Promise<void> {
       breaker_open_increase_pct_points: (gate.candidate.breakerOpenRate - gate.baseline.breakerOpenRate) * 100,
       retry_amplification_increase: gate.candidate.retryAmplification - gate.baseline.retryAmplification
     },
+    blast_radius_violation: retryAmpViolation,
     outputs: {
       report_json: reportJson,
       report_md: reportMd,
@@ -205,7 +225,7 @@ async function main(): Promise<void> {
 
   fs.writeFileSync(verdictJson, `${JSON.stringify(verdict, null, 2)}\n`, "utf8");
   console.log(JSON.stringify({ ...verdict, verdict_json: verdictJson }, null, 2));
-  if (!gate.passed) {
+  if (!gatePassed) {
     process.exit(1);
   }
 }

@@ -56,4 +56,5 @@ export type PolicySdkConfig = {
   receiptVerifyEnabled?: boolean;
   receiptVerifyEnforce?: boolean;
   receiptHmacKeys?: Record<string, string>;
+  retryAmpGuardMax?: number;
 };

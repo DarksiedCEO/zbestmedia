@@ -87,6 +87,7 @@ export class PolicyClient {
   private readonly cfg: Required<Pick<PolicySdkConfig, "timeoutMs" | "userAgent">> & PolicySdkConfig;
   private readonly breaker = new CircuitBreaker({ failureThreshold: 5, resetAfterMs: 15_000 });
   private readonly cache = new PolicyCache();
+  private retryAmpRolling: number[] = [];
 
   constructor(
     cfg: PolicySdkConfig,
@@ -255,6 +256,21 @@ export class PolicyClient {
     }
   }
 
+  private retryAmpGuardCap(): number {
+    const fromCfg = this.cfg.retryAmpGuardMax;
+    if (typeof fromCfg === "number" && Number.isFinite(fromCfg)) return Math.max(0, fromCfg);
+    const fromEnv = Number(process.env.POLICY_RETRY_AMP_GUARD_MAX ?? "1.4");
+    if (!Number.isFinite(fromEnv)) return 1.4;
+    return Math.max(0, fromEnv);
+  }
+
+  private recordRetryAmplification(retries: number): number {
+    this.retryAmpRolling.push(retries);
+    if (this.retryAmpRolling.length > 20) this.retryAmpRolling = this.retryAmpRolling.slice(-20);
+    const sum = this.retryAmpRolling.reduce((acc, value) => acc + value, 0);
+    return sum / this.retryAmpRolling.length;
+  }
+
   async resolvePolicy(input: PolicyResolveInput, opts: ResolveOptions = {}): Promise<PolicyResolveOutput> {
     const parsedInput = PolicyResolveInputSchema.parse(input);
 
@@ -316,6 +332,7 @@ export class PolicyClient {
     if (this.cfg.apiKey) headers.authorization = `Bearer ${this.cfg.apiKey}`;
 
     const started = Date.now();
+    let retryAttempts = 0;
 
     try {
       this.telemetry.onCacheMiss?.({
@@ -414,12 +431,21 @@ export class PolicyClient {
           baseDelayMs: 80,
           maxDelayMs: 400,
           onRetry: ({ attempt, backoffMs, reason }) => {
+            retryAttempts = Math.max(retryAttempts, attempt);
             this.telemetry.onRetry?.({ key, correlationId: opts.correlationId, attempt, backoffMs, reason });
           }
         }
       );
 
       this.breaker.onSuccess();
+      const rollingAmp = this.recordRetryAmplification(retryAttempts);
+      if (rollingAmp > this.retryAmpGuardCap()) {
+        this.breaker.forceOpen();
+        this.log.warn(
+          { correlationId: opts.correlationId, key, rolling_retry_amplification: rollingAmp, cap: this.retryAmpGuardCap() },
+          "policy.resolve retry amplification guard triggered"
+        );
+      }
 
       const latencyMs = Date.now() - started;
       const revalidated = staleHash != null && staleHash === out.meta?.resolution_hash;
@@ -458,6 +484,7 @@ export class PolicyClient {
       return out;
     } catch (e: any) {
       this.breaker.onFailure();
+      this.recordRetryAmplification(retryAttempts);
 
       const latencyMs = Date.now() - started;
       const code = e?.code ?? "UNKNOWN";
@@ -509,6 +536,8 @@ export function createPolicyClientFromEnv(env: Record<string, string | undefined
     ? defaultEnforce(env.NODE_ENV ?? process.env.NODE_ENV ?? "development", env.POLICY_RECEIPT_VERIFY_ENFORCE)
     : false;
   const receiptHmacKeys = parseKeysJson(env.POLICY_RECEIPT_HMAC_KEYS_JSON);
+  const retryAmpGuardMaxRaw = Number(env.POLICY_RETRY_AMP_GUARD_MAX ?? "1.4");
+  const retryAmpGuardMax = Number.isFinite(retryAmpGuardMaxRaw) ? retryAmpGuardMaxRaw : 1.4;
 
   if (!baseUrl) throw new Error("Missing POLICY_API_BASE_URL");
 
@@ -520,7 +549,8 @@ export function createPolicyClientFromEnv(env: Record<string, string | undefined
       enforceContractVersion,
       receiptVerifyEnabled,
       receiptVerifyEnforce,
-      receiptHmacKeys
+      receiptHmacKeys,
+      retryAmpGuardMax
     },
     log ?? noopLogger
   );
