@@ -15,6 +15,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
+    "test:contract": "vitest run test/contract.resolve.etag.test.ts",
     "lint": "eslint ."
   },
   "dependencies": {
