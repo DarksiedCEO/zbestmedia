@@ -79,6 +79,10 @@ function decodePolicyReceiptHeader(header: string | null): PolicyResolveReceipt 
   }
 }
 
+function runtimeKillSwitchEnabled(): boolean {
+  return String(process.env.POLICY_RUNTIME_KILL_SWITCH ?? "").toLowerCase() === "true";
+}
+
 export class PolicyClient {
   private readonly cfg: Required<Pick<PolicySdkConfig, "timeoutMs" | "userAgent">> & PolicySdkConfig;
   private readonly breaker = new CircuitBreaker({ failureThreshold: 5, resetAfterMs: 15_000 });
@@ -275,6 +279,16 @@ export class PolicyClient {
     }
 
     const staleEntry = this.cache.getStaleEntry(key);
+
+    if (runtimeKillSwitchEnabled()) {
+      this.telemetry.onCircuitOpen?.({ key, correlationId: opts.correlationId, mode: cacheMode });
+      this.log.warn({ correlationId: opts.correlationId, key }, "policy.resolve blocked by runtime kill switch");
+      if (cacheMode === "READ") {
+        const stale = staleEntry?.value ?? this.cache.getStale(key);
+        if (stale) return stale;
+      }
+      throw new PolicySdkError("POLICY_RUNTIME_KILL_SWITCH_ACTIVE", "Policy runtime kill switch is active");
+    }
 
     if (!this.breaker.canRequest()) {
       this.telemetry.onCircuitOpen?.({ key, correlationId: opts.correlationId, mode: cacheMode });

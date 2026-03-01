@@ -6,6 +6,7 @@ import {
   parseBaselineRegistry,
   writeBaselineRegistry
 } from "./baselineRegistry";
+import { assertGovernanceMutableOperationAllowed } from "./governanceControls";
 import { DEFAULT_TARGET_ID, parseTargetId } from "./target";
 import { parseLoadRun } from "./schema";
 
@@ -46,6 +47,7 @@ function sha256Hex(input: string): string {
 }
 
 export function acceptBaseline(args: AcceptBaselineArgs): AcceptBaselineResult {
+  assertGovernanceMutableOperationAllowed({ operation: "accept-baseline" });
   if (!args.approved) {
     throw new Error("Approval required: pass --approve");
   }

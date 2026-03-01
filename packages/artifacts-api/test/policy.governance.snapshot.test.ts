@@ -85,8 +85,26 @@ describe("policy governance snapshot", () => {
 
     expect(snapshotA.governance_fingerprint).toBe(snapshotB.governance_fingerprint);
     expect(snapshotA.runtime.breaker.state).toBe("OPEN");
+    expect(snapshotA.runtime.freeze_mode).toBe(false);
+    expect(snapshotA.runtime.kill_switch_active).toBe(false);
     expect(snapshotA.slo.last_prod_verdict?.event_id).toBe("e-prod-1");
     expect(snapshotA.guardrails.thresholds.p95InflationRatioCap).toBe(1.25);
+  });
+
+  it("reflects freeze and kill switch flags in runtime snapshot", () => {
+    const fx = writeFixtureFiles();
+    const env = {
+      POLICY_RUNTIME_DEFAULTS_PATH: fx.defaultsPath,
+      POLICY_BASELINE_REGISTRY_PATH: fx.registryPath,
+      SLO_EVENTS_JSONL_PATH: fx.eventsPath,
+      POLICY_GOVERNANCE_FREEZE: "true",
+      POLICY_RUNTIME_KILL_SWITCH: "true"
+    } as NodeJS.ProcessEnv;
+
+    const snapshot = readAndBuildGovernanceSnapshot(env);
+    expect(snapshot.runtime.freeze_mode).toBe(true);
+    expect(snapshot.runtime.kill_switch_active).toBe(true);
+    expect(snapshot.runtime.breaker.state).toBe("OPEN");
   });
 
   it("uses cached snapshot within ttl window", () => {

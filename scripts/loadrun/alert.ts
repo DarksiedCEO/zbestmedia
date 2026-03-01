@@ -31,8 +31,28 @@ function parseArgs(argv: string[]): CliArgs {
 }
 
 function renderSummary(triage: LoadRunTriage, triagePath: string): string {
+  let incidentSeverity = "UNKNOWN";
+  let freezeRecommended = false;
+  let incidentPath = "";
+  const incidentsDir = path.resolve(process.cwd(), "ops/incidents");
+  if (fs.existsSync(incidentsDir)) {
+    const latest = fs
+      .readdirSync(incidentsDir)
+      .filter((name) => name.endsWith("__incident.json"))
+      .sort()
+      .slice(-1)[0];
+    if (latest) {
+      incidentPath = path.join(incidentsDir, latest);
+      const incident = JSON.parse(fs.readFileSync(incidentPath, "utf8")) as { severity?: string };
+      incidentSeverity = incident.severity ?? "UNKNOWN";
+      freezeRecommended = incidentSeverity === "CRITICAL";
+    }
+  }
+
   return [
     `policy drift verdict=FAIL`,
+    `severity=${incidentSeverity}`,
+    `FREEZE_RECOMMENDED=${freezeRecommended}`,
     `top_offender=${triage.top_offender}`,
     `tags=${triage.tags.join(",") || "none"}`,
     `p95_ratio=${triage.deltas.p95_ratio}`,
@@ -41,7 +61,8 @@ function renderSummary(triage: LoadRunTriage, triagePath: string): string {
     `breaker_open_increase_pp=${triage.deltas.breaker_open_increase_pct_points}`,
     `retry_amp_increase=${triage.deltas.retry_amplification_increase}`,
     `recommended_actions=${triage.recommended_actions.join(" | ")}`,
-    `triage_path=${triagePath}`
+    `triage_path=${triagePath}`,
+    `incident_path=${incidentPath || "none"}`
   ].join("\n");
 }
 

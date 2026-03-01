@@ -1,10 +1,13 @@
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 
 import { parseBaselineRegistry, resolveTargetBaselineEntry } from "../../packages/policy-sdk/src/loadrun/baselineRegistry";
 import { executeCanaryRollout } from "../../packages/policy-sdk/src/canary/execute";
 import { parseCanaryObservation, parseCanaryPlan, type CanaryObservation, type CanaryStep } from "../../packages/policy-sdk/src/canary/types";
+import { buildIncidentBundle, writeIncidentBundle } from "../../packages/policy-sdk/src/loadrun/incident";
+import { classifyIncidentSeverity } from "../../packages/policy-sdk/src/loadrun/severity";
 
 type CliArgs = {
   plan: string;
@@ -75,6 +78,10 @@ function latestFile(patternDir: string, suffix: string): string | null {
     .map((name) => path.join(patternDir, name))
     .sort();
   return files[files.length - 1] ?? null;
+}
+
+function sha256Hex(input: string): string {
+  return createHash("sha256").update(input, "utf8").digest("hex");
 }
 
 async function fetchFingerprint(url: string, authToken: string | undefined, introspectionToken: string): Promise<string> {
@@ -224,7 +231,50 @@ async function main(): Promise<void> {
 
   const out = path.resolve(process.cwd(), `ops/canary/rollouts/${new Date().toISOString().replace(/[:.]/g, "-")}__result.json`);
   fs.writeFileSync(out, `${JSON.stringify(rollout, null, 2)}\n`, "utf8");
-  console.log(JSON.stringify({ out, status: rollout.status, state: rollout.state, failure_reason: rollout.failure_reason }, null, 2));
+
+  let incidentPath: string | null = null;
+  if (rollout.status === "FAILED") {
+    const registry = parseBaselineRegistry(
+      JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "ops/load_runs/baselines/registry.json"), "utf8"))
+    );
+    const baselineEntry = resolveTargetBaselineEntry({
+      registry,
+      targetId: plan.target_id,
+      allowUnbaselinedStaging: false
+    });
+    const defaultsPath = path.resolve(process.cwd(), process.env.POLICY_RUNTIME_DEFAULTS_PATH ?? "packages/policy-sdk/src/defaults/runtime.defaults.json");
+    const defaultsHash = fs.existsSync(defaultsPath) ? sha256Hex(fs.readFileSync(defaultsPath, "utf8")) : "";
+    const governanceFingerprint = sha256Hex(`${defaultsHash}|${baselineEntry.baseline_hash}|${plan.guardrails_profile_hash}`);
+    const fingerprintMismatch = String(rollout.failure_reason ?? "").includes("fingerprint_mismatch");
+    const killSwitchActive = String(rollout.failure_reason ?? "").includes("runtime_kill_switch_active");
+    const severity = classifyIncidentSeverity({ fingerprintMismatch, killSwitchActive });
+    const bundle = buildIncidentBundle({
+      targetId: plan.target_id,
+      severity,
+      summary: `canary rollout failed: ${rollout.failure_reason ?? "unknown"}`,
+      baseline: baselineEntry,
+      guardrailsHash: plan.guardrails_profile_hash,
+      governanceFingerprint,
+      defaultsHash,
+      triageTags: [killSwitchActive ? "runtime_kill_switch_active" : "", fingerprintMismatch ? "fingerprint_mismatch" : ""].filter(Boolean),
+      recommendationTags: ["rollback defaults env block"],
+      retryAmplification: 0,
+      breakerOpenRate: 0,
+      canaryRollout: rollout,
+      sloEventsPath: path.resolve(process.cwd(), process.env.SLO_EVENTS_JSONL_PATH ?? "ops/slo/loadrun_events.jsonl")
+    });
+    incidentPath = writeIncidentBundle({
+      incidentDir: path.resolve(process.cwd(), "ops/incidents"),
+      bundle
+    });
+  }
+  console.log(
+    JSON.stringify(
+      { out, status: rollout.status, state: rollout.state, failure_reason: rollout.failure_reason, incident_json: incidentPath },
+      null,
+      2
+    )
+  );
 
   if (rollout.status === "FAILED") {
     process.exit(1);

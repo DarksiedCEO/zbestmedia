@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { executeCanaryRollout } from "../src/canary/execute";
 import type { CanaryPlan, CanaryStep } from "../src/canary/types";
@@ -26,6 +26,11 @@ function mkPlan(): CanaryPlan {
 }
 
 describe("canary execute", () => {
+  afterEach(() => {
+    delete process.env.POLICY_GOVERNANCE_FREEZE;
+    delete process.env.POLICY_RUNTIME_KILL_SWITCH;
+  });
+
   it("requires approval", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "canary-test-"));
     await expect(
@@ -46,6 +51,29 @@ describe("canary execute", () => {
         })
       })
     ).rejects.toThrow("Approval required");
+  });
+
+  it("blocks execution while governance freeze is active", async () => {
+    process.env.POLICY_GOVERNANCE_FREEZE = "true";
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "canary-test-"));
+    await expect(
+      executeCanaryRollout({
+        plan: mkPlan(),
+        rolloutsDir: path.join(root, "rollouts"),
+        rollbacksDir: path.join(root, "rollbacks"),
+        approved: true,
+        reason: "ship",
+        mode: "simulation",
+        applyStep: async () => ({ artifactPath: "a" }),
+        observeStep: async (step) => ({
+          step,
+          drift_passed: true,
+          error_rate_passed: true,
+          current_governance_fingerprint: "fp-good",
+          reasons: []
+        })
+      })
+    ).rejects.toThrow("GOVERNANCE_FREEZE_ACTIVE");
   });
 
   it("fails at 25% and rolls back", async () => {
@@ -93,5 +121,28 @@ describe("canary execute", () => {
 
     expect(res.status).toBe("FAILED");
     expect(res.failure_reason).toContain("fingerprint_mismatch");
+  });
+
+  it("fails immediately when runtime kill switch is active", async () => {
+    process.env.POLICY_RUNTIME_KILL_SWITCH = "true";
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "canary-test-"));
+    const res = await executeCanaryRollout({
+      plan: mkPlan(),
+      rolloutsDir: path.join(root, "rollouts"),
+      rollbacksDir: path.join(root, "rollbacks"),
+      approved: true,
+      reason: "ship",
+      mode: "simulation",
+      applyStep: async (step) => ({ artifactPath: path.join(root, `apply-${step}.json`) }),
+      observeStep: async (step) => ({
+        step,
+        drift_passed: true,
+        error_rate_passed: true,
+        current_governance_fingerprint: "fp-good",
+        reasons: []
+      })
+    });
+    expect(res.status).toBe("FAILED");
+    expect(res.failure_reason).toContain("runtime_kill_switch_active");
   });
 });

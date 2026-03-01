@@ -3,6 +3,7 @@ import fs from "node:fs";
 
 import { z } from "zod";
 
+import { assertGovernanceMutableOperationAllowed } from "../loadrun/governanceControls";
 import { parseDefaultsProposal } from "../loadrun/propose";
 import { parseTargetId } from "../loadrun/target";
 import { parseCanaryPlan, type CanaryPlan } from "./types";
@@ -35,6 +36,7 @@ function timestampSlug(date: Date): string {
 }
 
 export function buildCanaryPlan(input: z.input<typeof planArgsSchema>): CanaryPlan {
+  assertGovernanceMutableOperationAllowed({ operation: "canary-plan" });
   const args = planArgsSchema.parse(input);
   const targetId = parseTargetId(args.targetId);
   const proposalRaw = fs.readFileSync(args.proposalFile, "utf8");

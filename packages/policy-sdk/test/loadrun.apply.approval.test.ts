@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { applyDefaultsFromProposal } from "../src/loadrun/apply";
 import type { DefaultsProposal } from "../src/loadrun/propose";
@@ -56,6 +56,10 @@ function makeProposal(args: { noChange?: boolean; guardrailsPassed?: boolean }):
 }
 
 describe("loadrun apply defaults approval gate", () => {
+  afterEach(() => {
+    delete process.env.POLICY_GOVERNANCE_FREEZE;
+  });
+
   it("requires approve flag", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "apply-defaults-"));
     const proposal = makeProposal({});
@@ -104,5 +108,20 @@ describe("loadrun apply defaults approval gate", () => {
     expect(fs.existsSync(result.rollbackPath)).toBe(true);
     const current = JSON.parse(fs.readFileSync(defaultsPath, "utf8"));
     expect(current).toEqual(before);
+  });
+
+  it("blocks apply when governance freeze is enabled", () => {
+    process.env.POLICY_GOVERNANCE_FREEZE = "true";
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "apply-defaults-"));
+    const proposal = makeProposal({});
+    expect(() =>
+      applyDefaultsFromProposal({
+        proposal,
+        defaultsPath: path.join(tmpDir, "runtime.defaults.json"),
+        rollbackDir: path.join(tmpDir, "rollbacks"),
+        approved: true,
+        reason: "test"
+      })
+    ).toThrow("GOVERNANCE_FREEZE_ACTIVE");
   });
 });

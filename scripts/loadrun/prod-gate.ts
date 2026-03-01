@@ -1,11 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 
 import { loadBaselineRegistry, resolveTargetBaselineEntry } from "../../packages/policy-sdk/src/loadrun/baselineRegistry";
 import { evaluateCiGate } from "../../packages/policy-sdk/src/loadrun/ciGate";
+import { buildIncidentBundle, writeIncidentBundle } from "../../packages/policy-sdk/src/loadrun/incident";
 import { loadGuardrailProfiles, resolveThresholdsForTarget } from "../../packages/policy-sdk/src/loadrun/guardrailProfiles";
+import { isRuntimeKillSwitchEnabled } from "../../packages/policy-sdk/src/loadrun/governanceControls";
 import { buildCiGateMarkdownSummary } from "../../packages/policy-sdk/src/loadrun/markdownSummary";
 import { parseLoadRun } from "../../packages/policy-sdk/src/loadrun/schema";
+import { classifyIncidentSeverity } from "../../packages/policy-sdk/src/loadrun/severity";
 import { parseTargetId } from "../../packages/policy-sdk/src/loadrun/target";
 import { computeSlices } from "../../packages/policy-sdk/src/loadrun/slice";
 import { buildTriage } from "../../packages/policy-sdk/src/loadrun/triage";
@@ -62,6 +66,10 @@ function timestampSlug(date: Date): string {
   return `${yyyy}${mm}${dd}_${hh}${mi}${ss}`;
 }
 
+function sha256Hex(input: string): string {
+  return createHash("sha256").update(input, "utf8").digest("hex");
+}
+
 async function main(): Promise<void> {
   const cli = parseArgs(process.argv);
   const registryPath = path.resolve(process.cwd(), cli.registry);
@@ -84,6 +92,7 @@ async function main(): Promise<void> {
     candidate: computeSlices(candidate),
     thresholds: resolvedProfile.thresholds
   });
+  const killSwitchActive = isRuntimeKillSwitchEnabled();
 
   fs.mkdirSync(outDir, { recursive: true });
   fs.mkdirSync(triageDir, { recursive: true });
@@ -96,12 +105,18 @@ async function main(): Promise<void> {
 
   let triagePath = "";
   let triageTags: string[] = [];
+  let recommendationTags: string[] = [];
   if (!gate.passed) {
     const triage = buildTriage({ gate, baselineRegistryEntry: baselineEntry, targetId: cli.targetId });
     triagePath = path.join(triageDir, `${stamp}__triage.json`);
     fs.writeFileSync(triagePath, `${JSON.stringify(triage, null, 2)}\n`, "utf8");
     triageTags = triage.tags;
+    recommendationTags = triage.recommended_actions;
   }
+  if (killSwitchActive) {
+    triageTags = [...new Set([...triageTags, "runtime_kill_switch_active"])];
+  }
+  const severity = classifyIncidentSeverity({ gate, killSwitchActive });
 
   const sloEvent = buildLoadRunSloEvent({
     source: "prod",
@@ -132,6 +147,7 @@ async function main(): Promise<void> {
     candidate_file: candidatePath,
     guardrails_profile_key: resolvedProfile.profileKey,
     guardrails_profile_hash: guardrailsHash,
+    severity,
     gate,
     slo_event_id: sloEvent.event_id
   };
@@ -139,8 +155,35 @@ async function main(): Promise<void> {
   fs.writeFileSync(reportJson, `${JSON.stringify(reportPayload, null, 2)}\n`, "utf8");
   fs.writeFileSync(reportMd, `${buildCiGateMarkdownSummary({ baselineFile: baselinePath, candidateFile: candidatePath, gate })}\n`, "utf8");
 
+  let incidentPath: string | null = null;
+  if (!gate.passed || severity === "CRITICAL") {
+    const defaultsPath = path.resolve(process.cwd(), process.env.POLICY_RUNTIME_DEFAULTS_PATH ?? "packages/policy-sdk/src/defaults/runtime.defaults.json");
+    const defaultsHash = fs.existsSync(defaultsPath) ? sha256Hex(fs.readFileSync(defaultsPath, "utf8")) : "";
+    const governanceFingerprint = sha256Hex(`${defaultsHash}|${baselineEntry.baseline_hash}|${guardrailsHash}`);
+    const incident = buildIncidentBundle({
+      targetId: cli.targetId,
+      severity,
+      summary: !gate.passed ? "prod drift gate failed" : "critical runtime condition detected",
+      baseline: baselineEntry,
+      guardrailsHash,
+      governanceFingerprint,
+      defaultsHash,
+      triageTags,
+      recommendationTags,
+      retryAmplification: gate.candidate.retryAmplification,
+      breakerOpenRate: gate.candidate.breakerOpenRate,
+      sloEventsPath: path.resolve(process.cwd(), process.env.SLO_EVENTS_JSONL_PATH ?? "ops/slo/loadrun_events.jsonl")
+    });
+    incidentPath = writeIncidentBundle({
+      incidentDir: path.resolve(process.cwd(), "ops/incidents"),
+      bundle: incident
+    });
+  }
+
   const verdict = {
     target_id: cli.targetId,
+    severity,
+    freeze_recommended: severity === "CRITICAL",
     passed: gate.passed,
     reasons: gate.checks.filter((check) => !check.passed).map((check) => ({ name: check.name, details: check.details })),
     deltas: {
@@ -154,7 +197,8 @@ async function main(): Promise<void> {
     outputs: {
       report_json: reportJson,
       report_md: reportMd,
-      triage_json: triagePath || null
+      triage_json: triagePath || null,
+      incident_json: incidentPath
     },
     slo_event_id: sloEvent.event_id
   };

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { defaultsToEnvBlock, writeRuntimeDefaults } from "./defaults";
+import { assertGovernanceMutableOperationAllowed } from "./governanceControls";
 import type { RuntimeDefaults } from "./defaults";
 import type { DefaultsProposal } from "./propose";
 
@@ -29,6 +30,7 @@ export function applyDefaultsFromProposal(args: {
   approved: boolean;
   reason: string | undefined;
 }): ApplyDefaultsResult {
+  assertGovernanceMutableOperationAllowed({ operation: "apply-defaults" });
   if (!args.approved) {
     throw new Error("Approval required: pass --approve");
   }

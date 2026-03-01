@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { assertGovernanceMutableOperationAllowed, isRuntimeKillSwitchEnabled } from "../loadrun/governanceControls";
 import { applyStateForStep, observeStateForStep, validateTransition } from "./stateMachine";
 import {
   parseCanaryObservation,
@@ -94,6 +95,7 @@ async function runRollback(args: {
 }
 
 export async function executeCanaryRollout(args: ExecuteCanaryArgs): Promise<CanaryRollout> {
+  assertGovernanceMutableOperationAllowed({ operation: "canary-execute" });
   const plan = parseCanaryPlan(args.plan);
   if (!args.approved) {
     throw new Error("Approval required: pass --approve");
@@ -119,6 +121,16 @@ export async function executeCanaryRollout(args: ExecuteCanaryArgs): Promise<Can
 
   const rolloutsPath = path.join(args.rolloutsDir, `${timestampSlug(new Date())}__rollout.json`);
   saveRollout(rolloutsPath, rollout);
+
+  if (isRuntimeKillSwitchEnabled()) {
+    await runRollback({
+      rollout,
+      rolloutsPath,
+      rollbacksDir: args.rollbacksDir,
+      reason: "runtime_kill_switch_active"
+    });
+    return rollout;
+  }
 
   for (const step of plan.steps) {
     const applyState = applyStateForStep(step);

@@ -14,7 +14,7 @@ const DefaultThresholds = {
   retryAmplificationIncreaseCap: 0.15
 };
 
-const BaselineRegistrySchema = z.object({
+const BaselineRegistryEntrySchema = z.object({
   baseline_report_path: z.string(),
   baseline_hash: z.string(),
   baseline_run_path: z.string(),
@@ -22,6 +22,10 @@ const BaselineRegistrySchema = z.object({
   accepted_by: z.string(),
   notes: z.string(),
   chaos_report_path: z.string().optional().default("")
+});
+const BaselineRegistrySchemaV2 = z.object({
+  version: z.literal(2).default(2),
+  targets: z.record(z.string(), BaselineRegistryEntrySchema)
 });
 
 const SloEventSchema = z.object({
@@ -46,6 +50,8 @@ const PolicyGovernanceSnapshotSchema = z.object({
     defaults_hash: z.string(),
     defaults_version: z.string(),
     enforcement_mode: z.string(),
+    freeze_mode: z.boolean(),
+    kill_switch_active: z.boolean(),
     breaker: z.object({
       state: z.enum(["CLOSED", "OPEN", "HALF_OPEN"]),
       window_ms: z.number().int().positive(),
@@ -177,13 +183,52 @@ function resolvePathFromEnv(raw: NodeJS.ProcessEnv, key: string, fallback: strin
   return path.resolve(process.cwd(), raw[key] ?? fallback);
 }
 
+function readControlFile(rawEnv: NodeJS.ProcessEnv): { freeze?: boolean; runtime_kill_switch?: boolean } {
+  const controlsPath = resolvePathFromEnv(rawEnv, "POLICY_CONTROLS_PATH", "ops/incidents/controls.json");
+  if (!fs.existsSync(controlsPath)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(controlsPath, "utf8")) as { freeze?: boolean; runtime_kill_switch?: boolean };
+  } catch {
+    return {};
+  }
+}
+
+function parseTargetId(rawTargetId: string): { env: string; service: string; full: string } {
+  const cleaned = rawTargetId.trim();
+  const parts = cleaned.split("/").filter(Boolean);
+  if (parts.length === 2) return { env: parts[0]!, service: parts[1]!, full: cleaned };
+  if (parts.length === 3) return { env: parts[0]!, service: parts[2]!, full: cleaned };
+  throw new Error(`Invalid POLICY_GOVERNANCE_TARGET_ID=${rawTargetId}`);
+}
+
+function resolveBaselineForTarget(input: unknown, targetIdRaw: string): z.infer<typeof BaselineRegistryEntrySchema> {
+  const parsedV2 = BaselineRegistrySchemaV2.safeParse(input);
+  if (!parsedV2.success) {
+    return BaselineRegistryEntrySchema.parse(input);
+  }
+
+  const target = parseTargetId(targetIdRaw);
+  const exact = parsedV2.data.targets[target.full];
+  if (exact) return exact;
+
+  const envServiceFallback = parsedV2.data.targets[`${target.env}/${target.service}`];
+  if (envServiceFallback) return envServiceFallback;
+
+  throw new Error(`Missing baseline for governance target_id=${target.full}`);
+}
+
 export function readAndBuildGovernanceSnapshot(rawEnv: NodeJS.ProcessEnv = process.env): PolicyGovernanceSnapshot {
   const defaultsPath = resolvePathFromEnv(rawEnv, "POLICY_RUNTIME_DEFAULTS_PATH", "packages/policy-sdk/src/defaults/runtime.defaults.json");
   const registryPath = resolvePathFromEnv(rawEnv, "POLICY_BASELINE_REGISTRY_PATH", "ops/load_runs/baselines/registry.json");
   const sloEventsPath = resolvePathFromEnv(rawEnv, "SLO_EVENTS_JSONL_PATH", "ops/slo/loadrun_events.jsonl");
+  const targetId = rawEnv.POLICY_GOVERNANCE_TARGET_ID ?? "prod/us-west/policy";
+  const controls = readControlFile(rawEnv);
+  const freezeMode = String(rawEnv.POLICY_GOVERNANCE_FREEZE ?? "").toLowerCase() === "true" || controls.freeze === true;
+  const killSwitchActive =
+    String(rawEnv.POLICY_RUNTIME_KILL_SWITCH ?? "").toLowerCase() === "true" || controls.runtime_kill_switch === true;
 
   const defaults = readJsonFile(defaultsPath) as Record<string, unknown>;
-  const registry = BaselineRegistrySchema.parse(readJsonFile(registryPath));
+  const registry = resolveBaselineForTarget(readJsonFile(registryPath), targetId);
   const events = readSloEvents(sloEventsPath);
 
   const lastCi = latestBySource(events, "ci");
@@ -220,8 +265,10 @@ export function readAndBuildGovernanceSnapshot(rawEnv: NodeJS.ProcessEnv = proce
       defaults_hash: defaultsHash,
       defaults_version: defaultsVersion,
       enforcement_mode: rawEnv.POLICY_ENFORCEMENT_MODE ?? "ENFORCE_READ_ONLY",
+      freeze_mode: freezeMode,
+      kill_switch_active: killSwitchActive,
       breaker: {
-        state: deriveBreakerState(lastProd),
+        state: killSwitchActive ? "OPEN" : deriveBreakerState(lastProd),
         window_ms: Number(defaults.POLICY_BREAKER_RESET_AFTER_MS ?? 15_000),
         open_threshold: Number(defaults.POLICY_BREAKER_FAILURE_THRESHOLD ?? 5),
         half_open_cooldown_ms: Number(defaults.POLICY_BREAKER_RESET_AFTER_MS ?? 15_000)

@@ -24,6 +24,7 @@ export function validateTransition(args: {
     "IDLE->APPLY_25",
     "IDLE->APPLY_50",
     "IDLE->APPLY_100",
+    "IDLE->ROLLBACK",
     "APPLY_5->OBSERVE_5",
     "APPLY_25->OBSERVE_25",
     "APPLY_50->OBSERVE_50",
