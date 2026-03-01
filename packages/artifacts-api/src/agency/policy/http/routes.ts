@@ -4,6 +4,7 @@ import type { Pool } from "pg";
 
 import { withTenant } from "../../../db/withTenant";
 import { POLICY_CONTRACT_VERSION } from "../contract";
+import { encodePolicyResolveReceipt } from "../receipt";
 import { PolicyError } from "../types";
 import { PolicyService } from "../policyService";
 import { requireRole } from "./authz";
@@ -90,6 +91,16 @@ export const policyRoutes: FastifyPluginAsync<PolicyRoutesOptions> = async (app,
       const etagValue = out.meta.resolution_hash;
       reply.header("Cache-Control", "private, max-age=0, must-revalidate");
       reply.header("X-Policy-Contract-Version", POLICY_CONTRACT_VERSION);
+      if (etagValue) {
+        const receipt = encodePolicyResolveReceipt({
+          contract_version: POLICY_CONTRACT_VERSION,
+          resolution_hash: etagValue,
+          policy_id: out.provenance?.policyVersionId,
+          active_version: out.provenance ? String(out.provenance.version) : undefined,
+          issued_at: new Date().toISOString()
+        });
+        reply.header("X-Policy-Receipt", receipt);
+      }
       if (etagValue) {
         reply.header("ETag", `"${etagValue}"`);
         const ifNoneMatchHeader = typeof req.headers["if-none-match"] === "string" ? req.headers["if-none-match"] : undefined;
