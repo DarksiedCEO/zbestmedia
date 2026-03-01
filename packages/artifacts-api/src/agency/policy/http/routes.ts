@@ -8,6 +8,7 @@ import { defaultPolicyReceiptTtlSec, encodePolicyResolveReceipt } from "../recei
 import { receiptKid, receiptKeyOrThrow, shouldSignReceipts, signReceiptBase64UrlPayload } from "../receiptSign";
 import { PolicyError } from "../types";
 import { PolicyService } from "../policyService";
+import { maybeApplyChaosLatency, readPolicyChaosConfig, shouldInjectChaosError } from "./chaos";
 import { requireRole } from "./authz";
 import { approveSchema, createDraftSchema, resolveQuerySchema, rollbackSchema } from "./validators";
 
@@ -82,8 +83,20 @@ export const policyRoutes: FastifyPluginAsync<PolicyRoutesOptions> = async (app,
 
     const tenantId = req.auth.tenantId;
     const actorId = req.auth.actorId;
+    const chaos = readPolicyChaosConfig(process.env);
+    const chaosFingerprint = `${tenantId}:${parsed.data.policyKey}:${parsed.data.clientId ?? ""}:${parsed.data.campaignId ?? ""}:${req.id}`;
 
     try {
+      await maybeApplyChaosLatency(chaos);
+      if (shouldInjectChaosError(chaos, chaosFingerprint)) {
+        return reply.code(503).send({
+          error: {
+            code: "CHAOS_INJECTED",
+            message: "Chaos injected for policy resolve"
+          }
+        });
+      }
+
       const out = await withTenant(opts.pool, tenantId, async (client) => {
         const svc = new PolicyService(client);
         return svc.resolve(tenantId, parsed.data.policyKey, new Date(), parsed.data.clientId, parsed.data.campaignId);
