@@ -22,6 +22,8 @@ jobs:
         run: |
           pnpm ops:contracts:verify --strict
           pnpm ops:audit:verify-ledger --strict
+      - name: Readiness check
+        run: pnpm ops:readiness:check --strict
       - name: Rollover ledger (dry approval reason)
         run: pnpm ops:audit:rollover-ledger --approve --reason "scheduled rollover"
       - name: Push immutable artifacts (dry-run unless configured)

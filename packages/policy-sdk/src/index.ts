@@ -37,3 +37,7 @@ export * from "./audit/storage";
 export * from "./audit/exportBundle";
 export * from "./audit/keys";
 export * from "./contracts/sloContracts";
+export * from "./ops/drill";
+export * from "./ops/readiness";
+export * from "./ops/runbook";
+export * from "./ops/fortressReport";
