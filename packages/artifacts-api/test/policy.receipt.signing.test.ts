@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { defaultPolicyReceiptTtlSec, encodePolicyResolveReceipt } from "../src/agency/policy/receipt";
 import {
   receiptKid,
   receiptKeyOrThrow,
@@ -45,5 +46,31 @@ describe("policy receipt signing", () => {
     expect(sigK1).not.toBe(sigK2);
     expect(signReceiptBase64UrlPayload({ receiptB64Url: payload, key: "k1-secret" })).toBe(sigK1);
     expect(signReceiptBase64UrlPayload({ receiptB64Url: payload, key: "k2-secret" })).toBe(sigK2);
+  });
+
+  it("encodes receipt ttl and expires_at fields", () => {
+    const issuedAt = new Date("2026-02-28T00:00:00.000Z");
+    const ttlSec = 300;
+    const encoded = encodePolicyResolveReceipt({
+      contract_version: "policy-resolve@1.0.0",
+      resolution_hash: "h1",
+      issued_at: issuedAt.toISOString(),
+      expires_at: new Date(issuedAt.getTime() + ttlSec * 1000).toISOString(),
+      ttl_sec: ttlSec
+    });
+    const decoded = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as {
+      issued_at: string;
+      expires_at: string;
+      ttl_sec: number;
+    };
+
+    expect(decoded.ttl_sec).toBe(300);
+    expect(new Date(decoded.expires_at).getTime()).toBeGreaterThanOrEqual(new Date(decoded.issued_at).getTime());
+  });
+
+  it("uses env-specific ttl defaults", () => {
+    expect(defaultPolicyReceiptTtlSec({ NODE_ENV: "production" })).toBe(300);
+    expect(defaultPolicyReceiptTtlSec({ NODE_ENV: "development" })).toBe(600);
+    expect(defaultPolicyReceiptTtlSec({ NODE_ENV: "production", POLICY_RECEIPT_TTL_SEC: "120" })).toBe(120);
   });
 });
