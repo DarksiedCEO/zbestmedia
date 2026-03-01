@@ -1,4 +1,5 @@
 import { resetBudgetState } from "../../packages/policy-sdk/src/loadrun/budget";
+import { appendAuditLedgerEntryFromEnv } from "../../packages/policy-sdk/src/audit/ledger";
 
 function parseArgs(argv: string[]): { approve: boolean; reason?: string } {
   const flags = new Set<string>();
@@ -24,6 +25,14 @@ function main(): void {
   if (!cli.approve) throw new Error("Approval required: pass --approve");
   if (!cli.reason || cli.reason.trim().length < 3) throw new Error("Approval reason required: pass --reason \"...\"");
   const state = resetBudgetState();
+  appendAuditLedgerEntryFromEnv({
+    type: "budget_reset",
+    targetId: process.env.LOADRUN_TARGET_ID ?? "prod/us-west/policy",
+    payload: {
+      reason: cli.reason,
+      state
+    }
+  });
   console.log(JSON.stringify({ ok: true, reason: cli.reason, state }, null, 2));
 }
 

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { buildCanaryPlan } from "../../packages/policy-sdk/src/canary/plan";
+import { appendAuditLedgerEntryFromEnv } from "../../packages/policy-sdk/src/audit/ledger";
 
 type CliArgs = {
   proposal: string;
@@ -78,6 +79,17 @@ function main(): void {
 
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, `${JSON.stringify(plan, null, 2)}\n`, "utf8");
+  appendAuditLedgerEntryFromEnv({
+    type: "canary_plan",
+    targetId: plan.target_id,
+    payload: {
+      plan_id: plan.plan_id,
+      out: path.relative(process.cwd(), outPath),
+      steps: plan.steps,
+      baseline_hash: plan.baseline_hash,
+      guardrails_profile_hash: plan.guardrails_profile_hash
+    }
+  });
   console.log(JSON.stringify({ out: outPath, plan_id: plan.plan_id }, null, 2));
 }
 

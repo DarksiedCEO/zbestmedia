@@ -5,6 +5,7 @@ import { defaultsToEnvBlock, writeRuntimeDefaults } from "./defaults";
 import { assertGovernanceMutableOperationAllowed } from "./governanceControls";
 import type { RuntimeDefaults } from "./defaults";
 import type { DefaultsProposal } from "./propose";
+import { appendAuditLedgerEntryFromEnv } from "../audit/ledger";
 
 export type ApplyDefaultsResult = {
   changed: boolean;
@@ -54,6 +55,15 @@ export function applyDefaultsFromProposal(args: {
   fs.writeFileSync(rollbackPath, `${rollbackBlock}\n`, "utf8");
 
   if (args.proposal.no_change) {
+    appendAuditLedgerEntryFromEnv({
+      type: "defaults_apply_noop",
+      targetId: process.env.LOADRUN_TARGET_ID ?? "prod/us-west/policy",
+      payload: {
+        report_file: args.proposal.report_file,
+        reason: args.reason,
+        changed: false
+      }
+    });
     return {
       changed: false,
       defaultsPath: args.defaultsPath,
@@ -63,6 +73,16 @@ export function applyDefaultsFromProposal(args: {
   }
 
   writeRuntimeDefaults(args.defaultsPath, args.proposal.proposed as RuntimeDefaults);
+  appendAuditLedgerEntryFromEnv({
+    type: "defaults_apply",
+    targetId: process.env.LOADRUN_TARGET_ID ?? "prod/us-west/policy",
+    payload: {
+      report_file: args.proposal.report_file,
+      reason: args.reason,
+      changed: true,
+      defaults_path: args.defaultsPath
+    }
+  });
   return {
     changed: true,
     defaultsPath: args.defaultsPath,

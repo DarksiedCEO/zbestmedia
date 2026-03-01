@@ -1,0 +1,9 @@
+{
+  "payload_hash": "4db8c2bc61dd73f0533ee3d6741896c0d9c676fa8c60054f40ed09c09a7dea51",
+  "signature": {
+    "kid": "k1",
+    "algo": "ed25519",
+    "created_at": "2026-03-01T18:26:19.667Z",
+    "signature": "DuLQP3k9tgk936y0nxyULguPLTXtBrwB-4KS21IkrfDKYz9ltl-8WjkCtDILOdktQnRg3FsReQSHVCeqDaaNCg"
+  }
+}

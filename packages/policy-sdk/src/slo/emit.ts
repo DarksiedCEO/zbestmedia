@@ -7,6 +7,7 @@ import type { CiGateResult } from "../loadrun/ciGate";
 import { emitLoadRunSloEventToFile } from "./sinks/file";
 import { emitLoadRunSloEventToPostgres } from "./sinks/postgres";
 import { parseLoadRunSloEvent, type LoadRunSloEvent } from "./schema";
+import { appendAuditLedgerEntryFromEnv } from "../audit/ledger";
 
 export type SloSink = "file" | "postgres";
 
@@ -125,6 +126,11 @@ export async function emitLoadRunSloEvent(args: {
 }): Promise<void> {
   if (args.sink === "file") {
     emitLoadRunSloEventToFile({ event: args.event, jsonlPath: args.jsonlPath, archiveDir: args.archiveDir });
+    appendAuditLedgerEntryFromEnv({
+      type: "slo_event",
+      targetId: args.event.target_id,
+      payload: args.event
+    });
     return;
   }
 
@@ -133,6 +139,11 @@ export async function emitLoadRunSloEvent(args: {
   }
 
   await emitLoadRunSloEventToPostgres({ event: args.event, postgresUrl: args.postgresUrl });
+  appendAuditLedgerEntryFromEnv({
+    type: "slo_event",
+    targetId: args.event.target_id,
+    payload: args.event
+  });
 }
 
 export async function emitOperationalSloEvent(args: {

@@ -4,6 +4,8 @@ import path from "node:path";
 import { z } from "zod";
 
 import { canonicalJson, fingerprintFromParts, sha256Hex } from "./hash";
+import { loadContractsAndSignature, loadContractsKeyring, verifySloContractsSignature } from "../../../../../policy-sdk/src/contracts/sloContracts";
+import { verifyAuditLedger } from "../../../../../policy-sdk/src/audit/ledger";
 
 const DefaultThresholds = {
   p95InflationRatioCap: 1.25,
@@ -117,6 +119,15 @@ const PolicyGovernanceSnapshotSchema = z.object({
     canary_cap_pct: z.number().int().positive(),
     max_retry_amplification_runtime: z.number().nonnegative()
   }),
+  contracts_version: z.string().nullable(),
+  contracts_signature_status: z.object({
+    ok: z.boolean(),
+    reason: z.string(),
+    kid: z.string().nullable()
+  }),
+  ledger_head_hash: z.string().nullable(),
+  ledger_verified_recently: z.string().nullable(),
+  keyring_kids: z.array(z.string()),
   governance_fingerprint: z.string()
 });
 
@@ -229,6 +240,85 @@ function readControlFile(rawEnv: NodeJS.ProcessEnv): { freeze?: boolean; runtime
   }
 }
 
+function readContractsStatus(rawEnv: NodeJS.ProcessEnv): {
+  contractsVersion: string | null;
+  contractsSignatureStatus: { ok: boolean; reason: string; kid: string | null };
+  keyringKids: string[];
+} {
+  const contractsPath = resolvePathFromEnv(rawEnv, "POLICY_SLO_CONTRACTS_PATH", "ops/contracts/slo_contracts.json");
+  const signaturePath = resolvePathFromEnv(rawEnv, "POLICY_SLO_CONTRACTS_SIGNATURE_PATH", "ops/contracts/slo_contracts.sig.json");
+  const keyringPath = resolvePathFromEnv(rawEnv, "POLICY_AUDIT_KEYRING_PATH", "ops/keys/keyring.json");
+
+  if (!fs.existsSync(contractsPath)) {
+    return {
+      contractsVersion: null,
+      contractsSignatureStatus: { ok: false, reason: "contracts_missing", kid: null },
+      keyringKids: []
+    };
+  }
+  if (!fs.existsSync(signaturePath)) {
+    return {
+      contractsVersion: null,
+      contractsSignatureStatus: { ok: false, reason: "signature_missing", kid: null },
+      keyringKids: []
+    };
+  }
+  if (!fs.existsSync(keyringPath)) {
+    const { contracts } = loadContractsAndSignature({ contractsPath, signaturePath });
+    return {
+      contractsVersion: contracts.version,
+      contractsSignatureStatus: { ok: false, reason: "keyring_missing", kid: null },
+      keyringKids: []
+    };
+  }
+
+  try {
+    const { contracts, signed } = loadContractsAndSignature({ contractsPath, signaturePath });
+    const keyring = loadContractsKeyring(keyringPath);
+    const verifyResult = verifySloContractsSignature({ contracts, signed, keyring });
+    return {
+      contractsVersion: contracts.version,
+      contractsSignatureStatus: {
+        ok: verifyResult.ok,
+        reason: verifyResult.reason ?? "verified",
+        kid: signed.signature.kid
+      },
+      keyringKids: Object.keys(keyring.keys).sort()
+    };
+  } catch (error) {
+    return {
+      contractsVersion: null,
+      contractsSignatureStatus: {
+        ok: false,
+        reason: `contracts_invalid:${error instanceof Error ? error.message : String(error)}`,
+        kid: null
+      },
+      keyringKids: []
+    };
+  }
+}
+
+function readLedgerStatus(rawEnv: NodeJS.ProcessEnv): {
+  ledgerHeadHash: string | null;
+  ledgerVerifiedRecently: string | null;
+} {
+  const ledgerPath = resolvePathFromEnv(rawEnv, "POLICY_AUDIT_LEDGER_PATH", "ops/audit/ledger.jsonl");
+  const keyringPath = resolvePathFromEnv(rawEnv, "POLICY_AUDIT_KEYRING_PATH", "ops/keys/keyring.json");
+  if (!fs.existsSync(ledgerPath)) {
+    return { ledgerHeadHash: null, ledgerVerifiedRecently: null };
+  }
+  const keyring = fs.existsSync(keyringPath) ? loadContractsKeyring(keyringPath) : undefined;
+  const verify = verifyAuditLedger({
+    ledgerPath,
+    keyring,
+    strictSignatures: false
+  });
+  return {
+    ledgerHeadHash: verify.head_hash,
+    ledgerVerifiedRecently: verify.verified_at
+  };
+}
+
 function parseTargetId(rawTargetId: string): { env: string; service: string; full: string } {
   const cleaned = rawTargetId.trim();
   const parts = cleaned.split("/").filter(Boolean);
@@ -292,6 +382,8 @@ export function readAndBuildGovernanceSnapshot(rawEnv: NodeJS.ProcessEnv = proce
         };
 
   const thresholds = readThresholds(rawEnv);
+  const contractsStatus = readContractsStatus(rawEnv);
+  const ledgerStatus = readLedgerStatus(rawEnv);
   const guardrailHash = sha256Hex(canonicalJson(thresholds));
   const defaultsHash = sha256Hex(canonicalJson(defaults));
   const defaultsVersion = rawEnv.POLICY_DEFAULTS_VERSION?.trim() || `runtime-defaults@${defaultsHash.slice(0, 12)}`;
@@ -366,6 +458,11 @@ export function readAndBuildGovernanceSnapshot(rawEnv: NodeJS.ProcessEnv = proce
     },
     budget,
     blast_radius: blastRadius,
+    contracts_version: contractsStatus.contractsVersion,
+    contracts_signature_status: contractsStatus.contractsSignatureStatus,
+    ledger_head_hash: ledgerStatus.ledgerHeadHash,
+    ledger_verified_recently: ledgerStatus.ledgerVerifiedRecently,
+    keyring_kids: contractsStatus.keyringKids,
     governance_fingerprint: fingerprintFromParts([defaultsHash, registry.baseline_hash, guardrailHash])
   };
 

@@ -29,3 +29,8 @@ jobs:
         run: pnpm schemas:check
       - name: Schema Compatibility
         run: pnpm schemas:compat
+      - name: Verify audit ledger and signed contracts (main only)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          pnpm ops:contracts:verify --strict
+          pnpm ops:audit:verify-ledger --strict

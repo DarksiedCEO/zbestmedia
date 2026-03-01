@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "keys": {
+    "k1": {
+      "algo": "ed25519",
+      "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAZCu+zhIWuT2vmau3yXFrWfKY8bHyxNcj9CqWMsVeh7w=\n-----END PUBLIC KEY-----\n"
+    }
+  }
+}

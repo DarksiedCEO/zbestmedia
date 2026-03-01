@@ -5,6 +5,7 @@ import type { CanaryRollout } from "../canary/types";
 import { parseLoadRunSloEvent } from "../slo/schema";
 import type { BaselineRegistryEntry } from "./baselineRegistry";
 import type { IncidentSeverity } from "./severity";
+import { appendAuditLedgerEntryFromEnv } from "../audit/ledger";
 
 export type IncidentBundle = {
   generated_at: string;
@@ -103,5 +104,16 @@ export function writeIncidentBundle(args: {
   const outPath = path.join(args.incidentDir, `${stamp}__incident.json`);
   fs.mkdirSync(args.incidentDir, { recursive: true });
   fs.writeFileSync(outPath, `${JSON.stringify(args.bundle, null, 2)}\n`, "utf8");
+  appendAuditLedgerEntryFromEnv({
+    type: "incident_bundle",
+    targetId: args.bundle.target_id,
+    payload: {
+      file: path.relative(process.cwd(), outPath),
+      severity: args.bundle.severity,
+      summary: args.bundle.summary,
+      governance_fingerprint: args.bundle.governance_fingerprint,
+      defaults_hash: args.bundle.defaults_hash
+    }
+  });
   return outPath;
 }

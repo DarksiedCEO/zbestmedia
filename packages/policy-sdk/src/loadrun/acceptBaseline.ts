@@ -6,6 +6,7 @@ import {
   parseBaselineRegistry,
   writeBaselineRegistry
 } from "./baselineRegistry";
+import { appendAuditLedgerEntryFromEnv } from "../audit/ledger";
 import { assertGovernanceMutableOperationAllowed } from "./governanceControls";
 import { DEFAULT_TARGET_ID, parseTargetId } from "./target";
 import { parseLoadRun } from "./schema";
@@ -101,6 +102,18 @@ export function acceptBaseline(args: AcceptBaselineArgs): AcceptBaselineResult {
     }
   };
   writeBaselineRegistry(args.registryPath, updated);
+  appendAuditLedgerEntryFromEnv({
+    type: "baseline_accept",
+    targetId,
+    payload: {
+      target_id: targetId,
+      baseline_report_path: entry.baseline_report_path,
+      baseline_run_path: entry.baseline_run_path,
+      baseline_hash: entry.baseline_hash,
+      accepted_at: entry.accepted_at,
+      accepted_by: entry.accepted_by
+    }
+  });
 
   return {
     registry: args.registryPath,

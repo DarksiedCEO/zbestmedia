@@ -12,6 +12,7 @@ import { buildIncidentBundle, writeIncidentBundle } from "../../packages/policy-
 import { classifyIncidentSeverity } from "../../packages/policy-sdk/src/loadrun/severity";
 import { loadDeployWindowsConfig, resolveActiveDeployWindow } from "../../packages/policy-sdk/src/loadrun/windows";
 import { emitOperationalSloEvent } from "../../packages/policy-sdk/src/slo/emit";
+import { appendAuditLedgerEntryFromEnv } from "../../packages/policy-sdk/src/audit/ledger";
 
 type CliArgs = {
   plan: string;
@@ -283,6 +284,18 @@ async function main(): Promise<void> {
 
   const out = path.resolve(process.cwd(), `ops/canary/rollouts/${new Date().toISOString().replace(/[:.]/g, "-")}__result.json`);
   fs.writeFileSync(out, `${JSON.stringify(rollout, null, 2)}\n`, "utf8");
+  appendAuditLedgerEntryFromEnv({
+    type: "canary_rollout",
+    targetId: plan.target_id,
+    payload: {
+      rollout_id: rollout.rollout_id,
+      plan_id: rollout.plan_id,
+      status: rollout.status,
+      state: rollout.state,
+      failure_reason: rollout.failure_reason,
+      out: path.relative(process.cwd(), out)
+    }
+  });
 
   let incidentPath: string | null = null;
   if (rollout.status === "FAILED") {

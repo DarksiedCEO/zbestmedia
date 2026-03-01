@@ -29,3 +29,7 @@ export * from "./canary/stateMachine";
 export * from "./canary/plan";
 export * from "./canary/execute";
 export * from "./canary/rollout";
+export * from "./audit/keyring";
+export * from "./audit/signing";
+export * from "./audit/ledger";
+export * from "./contracts/sloContracts";

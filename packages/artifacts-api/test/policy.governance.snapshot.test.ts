@@ -91,6 +91,8 @@ describe("policy governance snapshot", () => {
     expect(snapshotA.guardrails.thresholds.p95InflationRatioCap).toBe(1.25);
     expect(snapshotA.budget.daily_remaining).toBeGreaterThanOrEqual(0);
     expect(snapshotA.blast_radius.max_concurrency_cap).toBe(200);
+    expect(snapshotA.contracts_signature_status).toBeTruthy();
+    expect(Array.isArray(snapshotA.keyring_kids)).toBe(true);
   });
 
   it("reflects freeze and kill switch flags in runtime snapshot", () => {
