@@ -1,0 +1,12 @@
+{
+  "targets": [
+    {
+      "target_id": "prod/us-west/policy",
+      "base_url_env": "POLICY_BASE_URL_US_WEST"
+    },
+    {
+      "target_id": "staging/policy",
+      "base_url_env": "POLICY_BASE_URL_STAGING"
+    }
+  ]
+}

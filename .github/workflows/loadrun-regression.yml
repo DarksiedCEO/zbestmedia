@@ -32,6 +32,8 @@ jobs:
         run: corepack enable
       - name: Install
         run: pnpm install --frozen-lockfile
+      - name: Validate target registry preflight
+        run: pnpm ops:targets:validate --strict
       - name: Validate loadrun target env
         run: |
           test -n "$LOADRUN_TARGET_BASE_URL" || (echo "Missing LOADRUN_TARGET_BASE_URL secret" && exit 1)

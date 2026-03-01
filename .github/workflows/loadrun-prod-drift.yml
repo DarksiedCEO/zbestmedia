@@ -34,6 +34,8 @@ jobs:
         run: corepack enable
       - name: Install
         run: pnpm install --frozen-lockfile
+      - name: Validate target registry preflight
+        run: pnpm ops:targets:validate --strict
       - name: Validate target
         run: |
           test -n "$POLICY_BASE_URL" || (echo "Missing POLICY_BASE_URL" && exit 1)

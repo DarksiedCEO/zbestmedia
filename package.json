@@ -20,6 +20,7 @@
     "ops:canary:abort": "tsx scripts/canary/abort.ts",
     "ops:loadrun:propose-defaults": "tsx scripts/loadrun/propose-defaults.ts",
     "ops:loadrun:apply-defaults": "tsx scripts/loadrun/apply-defaults.ts",
+    "ops:targets:validate": "tsx scripts/loadrun/targets-validate.ts",
     "ops:policy:print-env-defaults": "tsx scripts/loadrun/print-env-defaults.ts",
     "schemas:gen": "tsx scripts/generate-json-schemas.ts",
     "schemas:check": "tsx scripts/generate-json-schemas.ts --check && git diff --exit-code -- packages/brand-trinity-schemas/schemas packages/eval-gates-schemas/schemas packages/brand-events-contracts/schemas",
