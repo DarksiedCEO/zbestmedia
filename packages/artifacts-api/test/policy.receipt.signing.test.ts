@@ -34,4 +34,16 @@ describe("policy receipt signing", () => {
     expect(() => receiptKeyOrThrow({})).toThrow("Missing POLICY_RECEIPT_HMAC_KEY");
     expect(receiptKeyOrThrow({ POLICY_RECEIPT_HMAC_KEY: "abc" })).toBe("abc");
   });
+
+  it("signs per kid with different keys for same payload", () => {
+    const payload = "eyJyZXNvbHZlZCI6eyJmb28iOiJiYXIifX0";
+    const sigK1 = signReceiptBase64UrlPayload({ receiptB64Url: payload, key: "k1-secret" });
+    const sigK2 = signReceiptBase64UrlPayload({ receiptB64Url: payload, key: "k2-secret" });
+
+    expect(receiptKid({ POLICY_RECEIPT_HMAC_KID: "k1" })).toBe("k1");
+    expect(receiptKid({ POLICY_RECEIPT_HMAC_KID: "k2" })).toBe("k2");
+    expect(sigK1).not.toBe(sigK2);
+    expect(signReceiptBase64UrlPayload({ receiptB64Url: payload, key: "k1-secret" })).toBe(sigK1);
+    expect(signReceiptBase64UrlPayload({ receiptB64Url: payload, key: "k2-secret" })).toBe(sigK2);
+  });
 });
