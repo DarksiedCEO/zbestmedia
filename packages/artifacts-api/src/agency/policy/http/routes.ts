@@ -12,6 +12,22 @@ type PolicyRoutesOptions = {
   pool: Pool;
 };
 
+function normalizeEtag(value: string): string {
+  const trimmed = value.trim();
+  const withoutWeak = trimmed.startsWith("W/") ? trimmed.slice(2) : trimmed;
+  const unquoted =
+    withoutWeak.startsWith("\"") && withoutWeak.endsWith("\"")
+      ? withoutWeak.slice(1, -1)
+      : withoutWeak;
+  return unquoted;
+}
+
+function matchesIfNoneMatch(header: string | undefined, etagValue: string): boolean {
+  if (!header) return false;
+  const candidates = header.split(",").map((v) => normalizeEtag(v));
+  return candidates.includes("*") || candidates.includes(etagValue);
+}
+
 function toHttp(err: unknown): { status: number; body: Record<string, unknown> } {
   if (err instanceof PolicyError) {
     const statusByCode: Record<PolicyError["code"], number> = {
@@ -69,6 +85,16 @@ export const policyRoutes: FastifyPluginAsync<PolicyRoutesOptions> = async (app,
         const svc = new PolicyService(client);
         return svc.resolve(tenantId, parsed.data.policyKey, new Date(), parsed.data.clientId, parsed.data.campaignId);
       });
+
+      const etagValue = out.meta.resolution_hash;
+      reply.header("Cache-Control", "private, max-age=0, must-revalidate");
+      if (etagValue) {
+        reply.header("ETag", `"${etagValue}"`);
+        const ifNoneMatchHeader = typeof req.headers["if-none-match"] === "string" ? req.headers["if-none-match"] : undefined;
+        if (matchesIfNoneMatch(ifNoneMatchHeader, etagValue)) {
+          return reply.code(304).send();
+        }
+      }
 
       return reply.send({
         policyKey: parsed.data.policyKey,
