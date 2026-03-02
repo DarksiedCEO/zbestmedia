@@ -13,6 +13,11 @@ const ALLOW = new Set([
   "cc-by-4.0",
   "cc-by-sa-4.0"
 ]);
+const ALLOWED_POLICY_PACKS = new Set([
+  "core.v1",
+  "vertical.general.v1",
+  "vertical.legal-attorney.v1"
+]);
 
 function listJsonFiles(dir) {
   const out = [];
@@ -39,6 +44,11 @@ for (const path of files) {
   }
   if (!ALLOW.has(license)) {
     fail(`fixture license not allowed (${license}): ${path}`);
+  }
+
+  const policyPackId = data._meta?.policyPackId;
+  if (policyPackId !== undefined && !ALLOWED_POLICY_PACKS.has(policyPackId)) {
+    fail(`fixture _meta.policyPackId not allowed (${policyPackId}): ${path}`);
   }
 }
 

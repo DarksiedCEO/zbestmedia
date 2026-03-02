@@ -1,0 +1,4 @@
+{
+  "riskCodes": ["CLAIM_GUARANTEE", "CLAIM_SUPERLATIVE", "CLAIM_UNVERIFIABLE", "LEGAL_ADVICE"],
+  "severities": ["low", "medium", "high"]
+}

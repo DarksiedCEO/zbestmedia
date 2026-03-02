@@ -7,6 +7,7 @@ import { execSync } from "node:child_process";
 import { callOrca } from "../runtime/orcaClient.mjs";
 import { parseStrictJson } from "../runtime/strictJson.mjs";
 import { evaluateDrift } from "../runtime/diff.mjs";
+import { resolvePolicy } from "../runtime/policyResolver.mjs";
 
 function nowIso() {
   return new Date().toISOString();
@@ -93,6 +94,20 @@ for (const p of orderedPrompts) {
   const fixturePath = p.fixture ?? `intelligence/evaluations/fixtures/${p.id}.fixture.v${p.promptVersion}.json`;
   const fixtureBase = readJson(fixturePath);
   const fixture = applyDependencyInput(p, fixtureBase, outputsById);
+  let inputForModel = fixture;
+  let policyInfo = null;
+
+  if (p.id.startsWith("governance.")) {
+    const policyPackId = fixture.policyPackId ?? fixture._meta?.policyPackId;
+    if (!policyPackId) fail(`[${p.id}] missing policyPackId in fixture`);
+    const { resolved, resolvedPolicyHash } = resolvePolicy(policyPackId);
+    policyInfo = { policyPackId, resolvedPolicyHash };
+    inputForModel = {
+      ...fixture,
+      _policy: resolved,
+      _policyHash: resolvedPolicyHash
+    };
+  }
 
   const inputSchema = readJson(p.inputSchema);
   const outputSchema = readJson(p.outputSchema);
@@ -103,7 +118,7 @@ for (const p of orderedPrompts) {
   }
 
   const promptText = readFileSync(p.path, "utf8");
-  const orca = await callOrca({ promptId: p.id, promptText, inputJson: fixture });
+  const orca = await callOrca({ promptId: p.id, promptText, inputJson: inputForModel });
   const output = parseStrictJson(orca.raw);
 
   const validateOut = ajv.compile(outputSchema);
@@ -146,6 +161,7 @@ for (const p of orderedPrompts) {
       sha256: sha256File(fixturePath),
       meta: fixture._meta ?? null
     },
+    policy: policyInfo,
     result: {
       ok: true,
       outputSha256: sha256String(JSON.stringify(output)),

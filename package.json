@@ -46,9 +46,11 @@
     "prompts:check": "node intelligence/scripts/gates/prompts-check.mjs",
     "prompts:compat": "node intelligence/scripts/gates/prompts-compat.mjs",
     "license:gate": "node intelligence/scripts/gates/license-gate.mjs",
+    "policy:check": "node intelligence/scripts/gates/policy-check.mjs",
+    "taxonomy:check": "node intelligence/scripts/gates/taxonomy-check.mjs",
     "eval:content-score": "node intelligence/scripts/eval/run-eval.mjs",
     "eval:all": "node intelligence/scripts/eval/run-all.mjs",
-    "ag:ci": "pnpm prompts:check && pnpm prompts:compat && pnpm license:gate && pnpm eval:all",
+    "ag:ci": "pnpm prompts:check && pnpm prompts:compat && pnpm license:gate && pnpm policy:check && pnpm taxonomy:check && pnpm eval:all",
     "schemas:gen": "tsx scripts/generate-json-schemas.ts",
     "schemas:check": "tsx scripts/generate-json-schemas.ts --check && git diff --exit-code -- packages/brand-trinity-schemas/schemas packages/eval-gates-schemas/schemas packages/brand-events-contracts/schemas",
     "schemas:compat": "tsx scripts/check-schema-compat.ts"
