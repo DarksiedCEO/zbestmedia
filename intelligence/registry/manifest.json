@@ -16,6 +16,45 @@
       "owner": "Brand Trinity",
       "status": "approved",
       "sha256": "7d618efdf3a7560d95f91f243975ac955b3b0d3845fe77937af33894d372d9d7"
+    },
+    {
+      "id": "content.rewrite",
+      "name": "Content Rewrite",
+      "promptVersion": 1,
+      "path": "intelligence/prompts/content/rewrite.v1.md",
+      "inputSchema": "intelligence/prompts/schemas/content.rewrite.input.schema.json",
+      "outputSchema": "intelligence/prompts/schemas/content.rewrite.output.schema.json",
+      "golden": "intelligence/evaluations/goldens/content.rewrite.v1.json",
+      "driftPolicy": {
+        "maxWarningsIncrease": 3
+      },
+      "owner": "Brand Trinity",
+      "status": "approved",
+      "sha256": "68467223b7a7774767e7aaa3da26e8f3303b74e572e12e8e1fcc3b3f8df62c9d"
+    },
+    {
+      "id": "research.summarize",
+      "name": "Research Summarize",
+      "promptVersion": 1,
+      "path": "intelligence/prompts/research/summarize.v1.md",
+      "inputSchema": "intelligence/prompts/schemas/research.summarize.input.schema.json",
+      "outputSchema": "intelligence/prompts/schemas/research.summarize.output.schema.json",
+      "golden": "intelligence/evaluations/goldens/research.summarize.v1.json",
+      "owner": "Brand Trinity",
+      "status": "approved",
+      "sha256": "c461b46533d993dc494192cfdf9f0e6f888e5b2942a79b8bf548450396ddb8d2"
+    },
+    {
+      "id": "governance.riskcheck",
+      "name": "Governance Riskcheck",
+      "promptVersion": 1,
+      "path": "intelligence/prompts/governance/riskcheck.v1.md",
+      "inputSchema": "intelligence/prompts/schemas/governance.riskcheck.input.schema.json",
+      "outputSchema": "intelligence/prompts/schemas/governance.riskcheck.output.schema.json",
+      "golden": "intelligence/evaluations/goldens/governance.riskcheck.v1.json",
+      "owner": "Brand Trinity",
+      "status": "approved",
+      "sha256": "d24592c544557e9b4f8acf7a56ad6623e709c70e6d07c48dfecccde37c67c5e8"
     }
   ]
 }

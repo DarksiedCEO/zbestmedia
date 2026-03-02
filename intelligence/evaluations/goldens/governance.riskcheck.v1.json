@@ -1,0 +1,11 @@
+{
+  "riskLevel": "medium",
+  "flags": [
+    { "phrase": "guarantee results in 7 days", "reason": "Guarantees can be interpreted as misleading performance claims." },
+    { "phrase": "Best agency in the world", "reason": "Absolute superlatives can be viewed as unverifiable marketing claims." }
+  ],
+  "safeAlternatives": [
+    "We aim to deliver measurable improvements quickly-timelines vary by project.",
+    "A high-discipline creative partner built for enterprise execution."
+  ]
+}

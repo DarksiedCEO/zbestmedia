@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "zbestmedia.governance.riskcheck.input.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["text", "category"],
+  "properties": {
+    "text": { "type": "string", "minLength": 1, "maxLength": 5000 },
+    "category": { "type": "string", "minLength": 3, "maxLength": 80 }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "zbestmedia.research.summarize.input.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["topic", "evidence", "timeline"],
+  "properties": {
+    "topic": { "type": "string", "minLength": 3, "maxLength": 200 },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "note"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "note": { "type": "string", "minLength": 3, "maxLength": 2000 }
+        }
+      }
+    },
+    "timeline": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ts", "event"],
+        "properties": {
+          "ts": { "type": "string", "minLength": 5, "maxLength": 40 },
+          "event": { "type": "string", "minLength": 3, "maxLength": 500 }
+        }
+      }
+    }
+  }
+}

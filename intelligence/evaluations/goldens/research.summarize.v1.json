@@ -1,0 +1,15 @@
+{
+  "summary": "Competitors cluster around speed or aesthetics, with limited emphasis on governance, auditability, or disciplined operational workflows.",
+  "findings": [
+    {
+      "title": "Speed-first messaging dominates",
+      "detail": "At least one competitor markets speed as the primary differentiator, with limited discussion of governance or audit controls.",
+      "evidenceIds": ["e1"]
+    },
+    {
+      "title": "Polish without operational depth",
+      "detail": "Another competitor leads with design polish but appears to lack robust operational tooling for repeatable, governed execution.",
+      "evidenceIds": ["e2"]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "zbestmedia.governance.riskcheck.output.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["riskLevel", "flags", "safeAlternatives"],
+  "properties": {
+    "riskLevel": { "type": "string", "enum": ["low", "medium", "high"] },
+    "flags": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["phrase", "reason"],
+        "properties": {
+          "phrase": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "reason": { "type": "string", "minLength": 10, "maxLength": 500 }
+        }
+      }
+    },
+    "safeAlternatives": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "type": "string", "minLength": 5, "maxLength": 500 }
+    }
+  }
+}

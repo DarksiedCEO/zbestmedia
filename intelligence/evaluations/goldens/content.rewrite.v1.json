@@ -1,0 +1,7 @@
+{
+  "variants": [
+    { "id": "v1", "text": "Z Best Media builds enterprise-grade creative systems that ship faster-without sacrificing brand authority.", "reasoning": "Direct enterprise claim + authority tone." },
+    { "id": "v2", "text": "Speed is useless without control. Z Best Media delivers disciplined creative ops for brands that can't afford drift.", "reasoning": "Contrast hook + controlled tone." },
+    { "id": "v3", "text": "If your brand needs precision at scale, Z Best Media is the operating system-strategy to execution, governed end to end.", "reasoning": "OS metaphor + end-to-end governance." }
+  ]
+}
