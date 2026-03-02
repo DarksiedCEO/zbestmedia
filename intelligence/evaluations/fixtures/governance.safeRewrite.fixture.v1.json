@@ -1,0 +1,19 @@
+{
+  "_meta": { "license": "public-domain", "source": "synthetic" },
+  "policyPackId": "vertical.general.v1",
+  "text": "We guarantee results in 7 days. Best agency in the world.",
+  "flags": [
+    {
+      "riskCode": "CLAIM_GUARANTEE",
+      "severity": "high",
+      "phrase": "guarantee results in 7 days",
+      "reason": "Guarantees can be interpreted as misleading performance claims."
+    },
+    {
+      "riskCode": "CLAIM_SUPERLATIVE",
+      "severity": "medium",
+      "phrase": "Best agency in the world",
+      "reason": "Absolute superlatives can be viewed as unverifiable marketing claims."
+    }
+  ]
+}

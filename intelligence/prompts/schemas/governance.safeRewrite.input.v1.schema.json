@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "zbestmedia.governance.safeRewrite.input.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["policyPackId", "text", "flags"],
+  "properties": {
+    "policyPackId": { "type": "string", "minLength": 3, "maxLength": 80 },
+    "text": { "type": "string", "minLength": 1, "maxLength": 5000 },
+    "flags": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["riskCode", "severity", "phrase", "reason"],
+        "properties": {
+          "riskCode": {
+            "type": "string",
+            "enum": ["CLAIM_GUARANTEE", "CLAIM_SUPERLATIVE", "CLAIM_UNVERIFIABLE", "LEGAL_ADVICE"]
+          },
+          "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+          "phrase": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "reason": { "type": "string", "minLength": 10, "maxLength": 500 }
+        }
+      }
+    }
+  }
+}

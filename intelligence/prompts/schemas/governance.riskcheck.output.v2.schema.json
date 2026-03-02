@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "zbestmedia.governance.riskcheck.output.v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["policyPackId", "riskLevel", "flags", "safeAlternatives"],
+  "properties": {
+    "policyPackId": { "type": "string", "minLength": 3 },
+    "riskLevel": { "type": "string", "enum": ["low", "medium", "high"] },
+    "flags": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["riskCode", "severity", "phrase", "reason"],
+        "properties": {
+          "riskCode": {
+            "type": "string",
+            "enum": ["CLAIM_GUARANTEE", "CLAIM_SUPERLATIVE", "CLAIM_UNVERIFIABLE", "LEGAL_ADVICE"]
+          },
+          "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+          "phrase": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "reason": { "type": "string", "minLength": 10, "maxLength": 500 }
+        }
+      }
+    },
+    "safeAlternatives": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "type": "string", "minLength": 5, "maxLength": 500 }
+    }
+  }
+}

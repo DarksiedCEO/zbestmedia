@@ -1,0 +1,9 @@
+{
+  "id": "core.v1",
+  "rules": {
+    "noLegalAdvice": true,
+    "noGuarantees": true,
+    "noAbsoluteSuperlatives": true,
+    "noMedicalClaims": true
+  }
+}

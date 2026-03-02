@@ -23,6 +23,10 @@ for (const p of manifest.prompts) {
   if (!existsSync(p.path)) fail(`prompt file missing: ${p.path}`);
   if (!existsSync(p.inputSchema)) fail(`input schema missing: ${p.inputSchema}`);
   if (!existsSync(p.outputSchema)) fail(`output schema missing: ${p.outputSchema}`);
+  if (p.golden && !existsSync(p.golden)) fail(`golden file missing: ${p.golden}`);
+  if (p.dependsOn && !manifest.prompts.find((x) => x.id === p.dependsOn)) {
+    fail(`dependsOn target missing for ${p.id}: ${p.dependsOn}`);
+  }
 
   const actual = sha256File(p.path);
   if (p.sha256 !== actual) {

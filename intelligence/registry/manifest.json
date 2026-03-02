@@ -10,6 +10,7 @@
       "outputSchema": "intelligence/prompts/schemas/content.score.output.schema.json",
       "golden": "intelligence/evaluations/goldens/content.score.v1.json",
       "driftPolicy": {
+        "mode": "score",
         "maxScoreDelta": 10,
         "maxWarningsIncrease": 3
       },
@@ -26,6 +27,7 @@
       "outputSchema": "intelligence/prompts/schemas/content.rewrite.output.schema.json",
       "golden": "intelligence/evaluations/goldens/content.rewrite.v1.json",
       "driftPolicy": {
+        "mode": "structure",
         "maxWarningsIncrease": 3
       },
       "owner": "Brand Trinity",
@@ -40,6 +42,9 @@
       "inputSchema": "intelligence/prompts/schemas/research.summarize.input.schema.json",
       "outputSchema": "intelligence/prompts/schemas/research.summarize.output.schema.json",
       "golden": "intelligence/evaluations/goldens/research.summarize.v1.json",
+      "driftPolicy": {
+        "mode": "structure"
+      },
       "owner": "Brand Trinity",
       "status": "approved",
       "sha256": "c461b46533d993dc494192cfdf9f0e6f888e5b2942a79b8bf548450396ddb8d2"
@@ -47,14 +52,34 @@
     {
       "id": "governance.riskcheck",
       "name": "Governance Riskcheck",
-      "promptVersion": 1,
-      "path": "intelligence/prompts/governance/riskcheck.v1.md",
-      "inputSchema": "intelligence/prompts/schemas/governance.riskcheck.input.schema.json",
-      "outputSchema": "intelligence/prompts/schemas/governance.riskcheck.output.schema.json",
-      "golden": "intelligence/evaluations/goldens/governance.riskcheck.v1.json",
+      "promptVersion": 2,
+      "path": "intelligence/prompts/governance/riskcheck.v2.md",
+      "inputSchema": "intelligence/prompts/schemas/governance.riskcheck.input.v2.schema.json",
+      "outputSchema": "intelligence/prompts/schemas/governance.riskcheck.output.v2.schema.json",
+      "golden": "intelligence/evaluations/goldens/governance.riskcheck.v2.json",
+      "driftPolicy": {
+        "mode": "taxonomy",
+        "maxFlagsIncrease": 2
+      },
       "owner": "Brand Trinity",
       "status": "approved",
-      "sha256": "d24592c544557e9b4f8acf7a56ad6623e709c70e6d07c48dfecccde37c67c5e8"
+      "sha256": "853555e05526473d06df5ff561a399406fd4477ee7e1d130d6d0cff9b26c673a"
+    },
+    {
+      "id": "governance.safeRewrite",
+      "name": "Governance Safe Rewrite",
+      "promptVersion": 1,
+      "path": "intelligence/prompts/governance/safeRewrite.v1.md",
+      "inputSchema": "intelligence/prompts/schemas/governance.safeRewrite.input.v1.schema.json",
+      "outputSchema": "intelligence/prompts/schemas/governance.safeRewrite.output.v1.schema.json",
+      "golden": "intelligence/evaluations/goldens/governance.safeRewrite.v1.json",
+      "dependsOn": "governance.riskcheck",
+      "driftPolicy": {
+        "mode": "structure"
+      },
+      "owner": "Brand Trinity",
+      "status": "approved",
+      "sha256": "5a4821e0854bd58945c9acc682d762954ddfeb4be89ed90df0af4875b5f60133"
     }
   ]
 }

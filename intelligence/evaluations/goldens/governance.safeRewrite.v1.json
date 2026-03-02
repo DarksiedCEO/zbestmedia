@@ -1,0 +1,17 @@
+{
+  "policyPackId": "vertical.general.v1",
+  "rewrites": [
+    {
+      "id": "sr1",
+      "text": "We aim to deliver measurable improvements quickly, with timelines tailored to each engagement.",
+      "mitigatedRiskCodes": ["CLAIM_GUARANTEE"],
+      "reasoning": "Removes the guarantee while preserving intent around speed and outcomes."
+    },
+    {
+      "id": "sr2",
+      "text": "A disciplined creative partner for enterprise teams that need consistent execution and measurable progress.",
+      "mitigatedRiskCodes": ["CLAIM_SUPERLATIVE", "CLAIM_UNVERIFIABLE"],
+      "reasoning": "Replaces absolute superlatives with verifiable capability language."
+    }
+  ]
+}

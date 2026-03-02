@@ -1,0 +1,14 @@
+{
+  "id": "vertical.general.v1",
+  "inherits": ["core.v1"],
+  "bannedPatterns": [
+    "guarantee",
+    "best in the world",
+    "100% success",
+    "no risk"
+  ],
+  "recommendedStyle": {
+    "disclaimerTone": "operational",
+    "language": "enterprise-neutral"
+  }
+}

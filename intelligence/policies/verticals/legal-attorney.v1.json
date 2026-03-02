@@ -1,0 +1,14 @@
+{
+  "id": "vertical.legal-attorney.v1",
+  "inherits": ["core.v1"],
+  "bannedPatterns": [
+    "guaranteed settlement",
+    "we will win",
+    "guaranteed outcome",
+    "no fee if we lose"
+  ],
+  "recommendedStyle": {
+    "disclaimerTone": "compliance-forward",
+    "language": "strict"
+  }
+}
