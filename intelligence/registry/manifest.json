@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "prompts": [
+    {
+      "id": "content.score",
+      "name": "Content Scoring",
+      "promptVersion": 1,
+      "path": "intelligence/prompts/content/score.v1.md",
+      "inputSchema": "intelligence/prompts/schemas/content.score.input.schema.json",
+      "outputSchema": "intelligence/prompts/schemas/content.score.output.schema.json",
+      "owner": "Brand Trinity",
+      "status": "approved",
+      "sha256": "7d618efdf3a7560d95f91f243975ac955b3b0d3845fe77937af33894d372d9d7"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "_meta": {
+    "license": "public-domain",
+    "source": "synthetic"
+  },
+  "platform": "instagram",
+  "text": "Black-and-gold luxury brand drop. Clean, confident, no fluff. Book now.",
+  "target": { "id": "zbest", "name": "Z Best Media" },
+  "constraints": { "tone": "enterprise-luxury", "maxChars": 2200 }
+}
