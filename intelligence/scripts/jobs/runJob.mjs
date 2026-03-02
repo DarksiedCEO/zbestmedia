@@ -8,6 +8,7 @@ import { parseStrictJson } from "../runtime/strictJson.mjs";
 import { evaluateDrift } from "../runtime/diff.mjs";
 import { createJobId } from "../runtime/jobId.mjs";
 import { getOrcaEnv } from "../runtime/orcaEnv.mjs";
+import { getProvider } from "../runtime/provider.mjs";
 
 function nowIso() {
   return new Date().toISOString();
@@ -52,7 +53,7 @@ export async function runJob({
     mkdirSync(reportsDir, { recursive: true });
   }
 
-  const orca = await callOrca({ promptId: prompt.id, promptText, inputJson: inputForModel });
+  const orca = await callOrca({ promptEntry: prompt, promptText, inputJson: inputForModel });
   const output = parseStrictJson(orca.raw);
 
   const validateOut = ajv.compile(outputSchema);
@@ -111,7 +112,8 @@ export async function runJob({
     writeJson(reportPath, report);
   }
 
-  const orcaEnv = getOrcaEnv();
+  const provider = getProvider();
+  const orcaEnv = provider === "orca" ? getOrcaEnv() : null;
   const manifest = {
     jobId,
     createdAt: nowIso(),
@@ -129,13 +131,17 @@ export async function runJob({
     execMeta: {
       gitSha,
       nodeVersion: process.version,
-      orca: {
-        baseUrl: orcaEnv.baseUrl,
-        model: orcaEnv.model,
-        timeoutMs: orcaEnv.timeoutMs,
-        retryMax: orcaEnv.retryMax,
-        retryBaseMs: orcaEnv.retryBaseMs
-      }
+      provider,
+      orca:
+        provider === "orca"
+          ? {
+              baseUrl: orcaEnv.baseUrl,
+              model: orcaEnv.model,
+              timeoutMs: orcaEnv.timeoutMs,
+              retryMax: orcaEnv.retryMax,
+              retryBaseMs: orcaEnv.retryBaseMs
+            }
+          : null
     },
     reports: [
       {

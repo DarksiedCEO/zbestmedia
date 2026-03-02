@@ -5,6 +5,15 @@
   "additionalProperties": false,
   "required": ["topic", "evidence", "timeline"],
   "properties": {
+    "_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "license": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "policyPackId": { "type": "string", "minLength": 1 }
+      }
+    },
     "topic": { "type": "string", "minLength": 3, "maxLength": 200 },
     "evidence": {
       "type": "array",

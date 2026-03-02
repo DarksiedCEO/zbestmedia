@@ -10,9 +10,10 @@ function nowIso() {
 const promptId = "orca.smoke";
 const promptText = 'Return ONLY JSON: {"ok":true,"ping":"pong"}';
 const inputJson = { ping: "pong" };
+const promptEntry = { id: promptId, golden: null };
 
 const started = Date.now();
-const orca = await callOrca({ promptId, promptText, inputJson });
+const orca = await callOrca({ promptEntry, promptText, inputJson });
 const latencyMs = Date.now() - started;
 
 const parsed = parseStrictJson(orca.raw);

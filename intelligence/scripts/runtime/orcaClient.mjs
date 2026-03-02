@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getOrcaEnv } from "./orcaEnv.mjs";
+import { getProvider } from "./provider.mjs";
+import { mockCall } from "./mockProvider.mjs";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -20,7 +22,12 @@ function isRetryError(err) {
   return name === "AbortError" || code === "ECONNRESET" || code === "ENOTFOUND" || code === "ETIMEDOUT";
 }
 
-export async function callOrca({ promptId, promptText, inputJson }) {
+export async function callOrca({ promptEntry, promptText, inputJson }) {
+  const provider = getProvider();
+  if (provider === "mock") {
+    return mockCall({ promptEntry });
+  }
+
   const env = getOrcaEnv();
   const correlationId = randomUUID();
   const url = `${env.baseUrl}/v1/chat/completions`;
@@ -29,7 +36,7 @@ export async function callOrca({ promptId, promptText, inputJson }) {
     model: env.model,
     temperature: 0,
     messages: [
-      { role: "system", content: `You are executing prompt ${promptId}. Return ONLY valid JSON.` },
+      { role: "system", content: `You are executing prompt ${promptEntry.id}. Return ONLY valid JSON.` },
       { role: "user", content: promptText.replace("{{input_json}}", JSON.stringify(inputJson)) }
     ]
   };

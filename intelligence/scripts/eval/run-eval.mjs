@@ -43,7 +43,7 @@ const outputSchema = readJson(prompt.outputSchema);
 const validateIn = ajv.compile(inputSchema);
 if (!validateIn(input)) fail(`input schema validation failed: ${ajv.errorsText(validateIn.errors)}`);
 
-const orca = await callOrca({ promptId: prompt.id, promptText, inputJson: input });
+const orca = await callOrca({ promptEntry: prompt, promptText, inputJson: input });
 const output = parseStrictJson(orca.raw);
 
 const validateOut = ajv.compile(outputSchema);

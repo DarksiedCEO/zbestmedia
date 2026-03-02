@@ -5,6 +5,15 @@
   "additionalProperties": false,
   "required": ["platform", "text", "constraints"],
   "properties": {
+    "_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "license": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "policyPackId": { "type": "string", "minLength": 1 }
+      }
+    },
     "platform": { "type": "string", "minLength": 2 },
     "text": { "type": "string", "minLength": 1, "maxLength": 5000 },
     "constraints": {
