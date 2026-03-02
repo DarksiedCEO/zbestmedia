@@ -8,6 +8,11 @@
       "path": "intelligence/prompts/content/score.v1.md",
       "inputSchema": "intelligence/prompts/schemas/content.score.input.schema.json",
       "outputSchema": "intelligence/prompts/schemas/content.score.output.schema.json",
+      "golden": "intelligence/evaluations/goldens/content.score.v1.json",
+      "driftPolicy": {
+        "maxScoreDelta": 10,
+        "maxWarningsIncrease": 3
+      },
       "owner": "Brand Trinity",
       "status": "approved",
       "sha256": "7d618efdf3a7560d95f91f243975ac955b3b0d3845fe77937af33894d372d9d7"

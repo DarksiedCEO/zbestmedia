@@ -1,0 +1,10 @@
+{
+  "score": 82,
+  "signals": [
+    { "key": "clarity", "value": 0.9 },
+    { "key": "brand_fit", "value": 0.85 },
+    { "key": "platform_fit", "value": 0.8 }
+  ],
+  "warnings": [],
+  "recommendations": ["Add one concrete outcome promise (e.g., 'book 3 calls this week')."]
+}

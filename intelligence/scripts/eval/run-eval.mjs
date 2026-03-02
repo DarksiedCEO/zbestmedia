@@ -1,8 +1,12 @@
 import Ajv2020 from "ajv/dist/2020.js";
+import { readFileSync } from "node:fs";
 import { readJson } from "../../../tools/fs/read-json.mjs";
 import { writeJson } from "../../../tools/fs/write-json.mjs";
 import { sha256File, sha256String } from "../../../tools/crypto/sha256.mjs";
 import { execSync } from "node:child_process";
+import { callOrca } from "../runtime/orcaClient.mjs";
+import { parseStrictJson } from "../runtime/strictJson.mjs";
+import { diffScore, diffSignalKeys, diffCounts } from "../runtime/diff.mjs";
 
 function nowIso() {
   return new Date().toISOString();
@@ -30,6 +34,8 @@ if (!prompt) fail("manifest missing prompt id=content.score");
 const fixturePath = "intelligence/evaluations/fixtures/content.score.fixture.v1.json";
 const input = readJson(fixturePath);
 
+const promptText = readFileSync(prompt.path, "utf8");
+
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 const inputSchema = readJson(prompt.inputSchema);
 const outputSchema = readJson(prompt.outputSchema);
@@ -37,19 +43,37 @@ const outputSchema = readJson(prompt.outputSchema);
 const validateIn = ajv.compile(inputSchema);
 if (!validateIn(input)) fail(`input schema validation failed: ${ajv.errorsText(validateIn.errors)}`);
 
-const output = {
-  score: 82,
-  signals: [
-    { key: "clarity", value: 0.9 },
-    { key: "brand_fit", value: 0.85 },
-    { key: "platform_fit", value: 0.8 }
-  ],
-  warnings: [],
-  recommendations: ["Add one concrete outcome promise (e.g., 'book 3 calls this week')."]
-};
+const orca = await callOrca({ promptId: prompt.id, promptText, inputJson: input });
+const output = parseStrictJson(orca.raw);
 
 const validateOut = ajv.compile(outputSchema);
 if (!validateOut(output)) fail(`output schema validation failed: ${ajv.errorsText(validateOut.errors)}`);
+
+const golden = prompt.golden ? readJson(prompt.golden) : null;
+let drift = null;
+
+if (golden) {
+  const policy = prompt.driftPolicy ?? { maxScoreDelta: 10, maxWarningsIncrease: 3 };
+
+  const score = diffScore(output, golden, policy.maxScoreDelta);
+  const signalKeys = diffSignalKeys(output, golden);
+  const counts = diffCounts(output, golden);
+
+  const warningsOk = counts.warningsDelta <= (policy.maxWarningsIncrease ?? 3);
+  const ok = score.ok && signalKeys.ok && warningsOk;
+
+  drift = {
+    ok,
+    score,
+    signalKeys,
+    counts,
+    policy
+  };
+
+  if (!ok) {
+    fail(`golden drift detected: ${JSON.stringify(drift, null, 2)}`);
+  }
+}
 
 const report = {
   at: nowIso(),
@@ -61,7 +85,13 @@ const report = {
     promptSha256: sha256File(prompt.path),
     inputSchema: prompt.inputSchema,
     outputSchema: prompt.outputSchema,
-    outputSchemaSha256: sha256File(prompt.outputSchema)
+    outputSchemaSha256: sha256File(prompt.outputSchema),
+    golden: prompt.golden ?? null
+  },
+  orca: {
+    correlationId: orca.correlationId,
+    responseCorrelationId: orca.responseCorrelationId,
+    durationMs: orca.durationMs
   },
   fixture: {
     path: fixturePath,
@@ -71,7 +101,8 @@ const report = {
   result: {
     ok: true,
     outputSha256: sha256String(JSON.stringify(output)),
-    output
+    output,
+    drift
   }
 };
 
