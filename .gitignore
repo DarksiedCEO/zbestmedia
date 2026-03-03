@@ -16,3 +16,20 @@ apps/*/.env
 apps/*/.env.local
 services/*/.env
 services/*/.env.local
+
+############################
+# Dependencies
+############################
+node_modules/
+**/node_modules/
+
+############################
+# IDE
+############################
+.idea/
+
+############################
+# Prisma / Generated
+############################
+services/brandgraph/prisma/dev.db
+services/**/src/generated/
