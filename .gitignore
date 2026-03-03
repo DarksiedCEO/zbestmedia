@@ -1,16 +1,18 @@
-node_modules/
-dist/
-.pnpm-store/
-.DS_Store
-.idea/
-services/**/prisma/*.db
-services/**/prisma/dev.db
-services/**/src/generated/prisma/
-services/brandgraph/prisma/test.db
-services/**/prisma/test.db
+############################
+# Environment / Secrets
+############################
 .env
-# env files
 .env.local
-apps/*/.env.local
-apps/*/.env.*
+.env.production
+.env.development
+.env.test
 
+# allow templates (tracked)
+!.env.example
+!.env.sample
+
+# workspace envs (ignore real secrets only)
+apps/*/.env
+apps/*/.env.local
+services/*/.env
+services/*/.env.local
