@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
+    "web:build": "pnpm --filter @zbest/web build",
+    "web:preview": "pnpm --filter @zbest/web preview --host 0.0.0.0 --port $PORT",
+    "app:build": "pnpm --filter @zbest/app build",
+    "app:preview": "pnpm --filter @zbest/app preview --host 0.0.0.0 --port $PORT",
     "lint": "eslint \"packages/**/src/**/*.ts\" \"packages/**/test/**/*.ts\" \"scripts/**/*.ts\"",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
