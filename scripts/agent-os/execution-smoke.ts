@@ -95,11 +95,15 @@ function assertPromptOutput(value: unknown, context: string): Record<string, unk
 }
 
 async function main(): Promise<void> {
-  const env = resolveAgentOsEnv();
   const smokeMode = mode();
+  const env = resolveAgentOsEnv(smokeMode);
   const baseUrl = env.baseUrl?.replace(/\/+$/, '');
   if (!baseUrl) {
-    fail('missing required env AGENT_OS_BASE_URL. Tried aliases: AGENT_OS_BASE_URL, ARTIFACTS_BASE_URL, ARTIFACTS_API_BASE_URL, ZBESTMEDIA_API_BASE_URL, API_BASE_URL, BACKEND_BASE_URL');
+    fail(
+      smokeMode === 'deployed'
+        ? 'missing required env AGENT_OS_BASE_URL for deployed smoke. Do not reuse ARTIFACTS_BASE_URL for Agent OS checks.'
+        : 'missing required env AGENT_OS_BASE_URL. Tried aliases: AGENT_OS_BASE_URL, ARTIFACTS_BASE_URL, ARTIFACTS_API_BASE_URL, ZBESTMEDIA_API_BASE_URL, API_BASE_URL, BACKEND_BASE_URL'
+    );
   }
 
   const token = await authToken(

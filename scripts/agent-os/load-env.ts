@@ -14,6 +14,8 @@ export type ResolvedAgentOsEnv = {
   verifyDb: boolean;
 };
 
+export type AgentOsEnvMode = "local" | "deployed";
+
 export function loadAgentOsEnv(cwd: string = process.cwd()): void {
   for (const rel of ['.env.local', '.env']) {
     const abs = path.resolve(cwd, rel);
@@ -50,7 +52,7 @@ export function redact(value: string | undefined): string {
   return `${value.slice(0, 4)}...${value.slice(-4)}`;
 }
 
-export function resolveAgentOsEnv(): ResolvedAgentOsEnv {
+export function resolveAgentOsEnv(mode: AgentOsEnvMode = "local"): ResolvedAgentOsEnv {
   loadAgentOsEnv();
 
   const tenantId = requireEnvValue('AGENT_OS_TENANT_ID', [
@@ -60,14 +62,17 @@ export function resolveAgentOsEnv(): ResolvedAgentOsEnv {
     'DEFAULT_TENANT_ID'
   ]);
 
-  const baseUrl = optionalEnvValue([
-    'AGENT_OS_BASE_URL',
-    'ARTIFACTS_BASE_URL',
-    'ARTIFACTS_API_BASE_URL',
-    'ZBESTMEDIA_API_BASE_URL',
-    'API_BASE_URL',
-    'BACKEND_BASE_URL'
-  ]);
+  const baseUrl =
+    mode === "deployed"
+      ? optionalEnvValue(["AGENT_OS_BASE_URL"])
+      : optionalEnvValue([
+          "AGENT_OS_BASE_URL",
+          "ARTIFACTS_BASE_URL",
+          "ARTIFACTS_API_BASE_URL",
+          "ZBESTMEDIA_API_BASE_URL",
+          "API_BASE_URL",
+          "BACKEND_BASE_URL"
+        ]);
 
   const authToken = optionalEnvValue([
     'AGENT_OS_AUTH_TOKEN',
@@ -104,9 +109,9 @@ export function resolveAgentOsEnv(): ResolvedAgentOsEnv {
   };
 }
 
-export function printResolvedAgentOsEnvSummary(): void {
-  const env = resolveAgentOsEnv();
-  console.log('[agent-os:env] resolved env summary');
+export function printResolvedAgentOsEnvSummary(mode: AgentOsEnvMode = "local"): void {
+  const env = resolveAgentOsEnv(mode);
+  console.log(`[agent-os:env] resolved env summary mode=${mode}`);
   console.log(`  baseUrl: ${env.baseUrl ?? '<missing>'}`);
   console.log(`  tenantId: ${env.tenantId}`);
   console.log(`  authToken: ${redact(env.authToken)}`);

@@ -18,7 +18,7 @@
     "agent-os:ops:smoke": "tsx scripts/agent-os/ops-smoke.ts",
     "agent-os:ops:smoke:deployed": "AGENT_OS_SMOKE_MODE=deployed tsx scripts/agent-os/ops-smoke.ts",
     "agent-os:release:check": "pnpm agent-os:verify:migrations && pnpm agent-os:worker:release:check && pnpm agent-os:execution:smoke && pnpm agent-os:ops:smoke",
-    "agent-os:release:check:deployed": "pnpm agent-os:env:preflight && AGENT_OS_VERIFY_DB=true pnpm agent-os:verify:migrations && pnpm agent-os:execution:smoke:deployed && pnpm agent-os:ops:smoke:deployed",
+    "agent-os:release:check:deployed": "AGENT_OS_ENV_MODE=deployed pnpm agent-os:env:preflight && AGENT_OS_VERIFY_DB=true pnpm agent-os:verify:migrations && pnpm agent-os:execution:smoke:deployed && pnpm agent-os:ops:smoke:deployed",
     "lint": "eslint \"packages/**/src/**/*.ts\" \"packages/**/test/**/*.ts\" \"scripts/**/*.ts\"",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",

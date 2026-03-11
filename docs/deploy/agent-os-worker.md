@@ -60,6 +60,8 @@ For deployed checks, provide:
 - either `AGENT_OS_AUTH_TOKEN` or `AGENT_OS_AUTH_JWT_SECRET`
 - `AGENT_OS_DATABASE_URL` or `DATABASE_URL` when `AGENT_OS_VERIFY_DB=true`
 
+Do not rely on `ARTIFACTS_BASE_URL` for deployed Agent OS checks. The Agent OS release lane must target the API service that actually serves `/v1/agents/*` and `/v1/orchestration/*`.
+
 ## Operational surfaces
 
 - Replay bundle export:
