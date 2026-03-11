@@ -3,6 +3,7 @@
     "target": "ES2020",
     "module": "CommonJS",
     "moduleResolution": "Node",
+    "jsx": "react-jsx",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -12,6 +13,7 @@
     "baseUrl": ".",
     "types": ["node"],
     "paths": {
+      "@zbest/agent-os": ["packages/agent-os/src/index.ts"],
       "@zbest/artifacts-api": ["packages/artifacts-api/src/index.ts"],
       "@zbest/brand-trinity-schemas": ["packages/brand-trinity-schemas/src/index.ts"],
       "@zbest/eval-gates-schemas": ["packages/eval-gates-schemas/src/index.ts"],
