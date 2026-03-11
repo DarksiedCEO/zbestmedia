@@ -13,6 +13,18 @@ export type EvalRunStatus = z.infer<typeof EvalRunStatusSchema>;
 export const ApprovalDecisionSchema = z.enum(["APPROVE", "REJECT"]);
 export type ApprovalDecision = z.infer<typeof ApprovalDecisionSchema>;
 
+export const ExecutionStatusSchema = z.enum([
+  "QUEUED",
+  "PENDING_APPROVAL",
+  "RUNNING",
+  "COMPLETED",
+  "FAILED"
+]);
+export type ExecutionStatus = z.infer<typeof ExecutionStatusSchema>;
+
+export const ExecutionStepStatusSchema = z.enum(["PENDING", "COMPLETED", "FAILED", "SKIPPED"]);
+export type ExecutionStepStatus = z.infer<typeof ExecutionStepStatusSchema>;
+
 export const AgentRecordSchema = z.object({
   tenantId: z.string().uuid(),
   agentId: z.custom<AgentId>(),
@@ -135,6 +147,56 @@ export const EvalScoreRecordSchema = z.object({
   createdAt: z.string().datetime()
 });
 export type EvalScoreRecord = z.infer<typeof EvalScoreRecordSchema>;
+
+export const ExecutionRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  executionId: z.string().min(1),
+  agentId: z.custom<AgentId>(),
+  agentVersionId: z.string().min(1),
+  correlationId: z.string().min(1),
+  requestSource: z.string().min(1),
+  requestedBy: z.string().min(1),
+  subjectType: z.string().min(1),
+  subjectId: z.string().min(1),
+  status: ExecutionStatusSchema,
+  inputPayload: z.record(z.string(), z.unknown()),
+  outputPayload: z.record(z.string(), z.unknown()).nullable().optional(),
+  failureClass: z.string().nullable().optional(),
+  failureMessage: z.string().nullable().optional(),
+  approvalRequestId: z.string().nullable().optional(),
+  startedAt: z.string().datetime().nullable().optional(),
+  completedAt: z.string().datetime().nullable().optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+export type ExecutionRecord = z.infer<typeof ExecutionRecordSchema>;
+
+export const ExecutionStepRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  executionStepId: z.string().min(1),
+  executionId: z.string().min(1),
+  stepName: z.string().min(1),
+  stepOrder: z.number().int().nonnegative(),
+  status: ExecutionStepStatusSchema,
+  payload: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime()
+});
+export type ExecutionStepRecord = z.infer<typeof ExecutionStepRecordSchema>;
+
+export const MemoryEntryRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  memoryEntryId: z.string().min(1),
+  partitionId: z.string().min(1),
+  agentId: z.custom<AgentId>(),
+  collection: z.string().min(1),
+  entryKey: z.string().min(1),
+  entryValue: z.record(z.string(), z.unknown()),
+  classification: z.enum(["owned", "shared_policy"]),
+  createdBy: z.string().min(1),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+export type MemoryEntryRecord = z.infer<typeof MemoryEntryRecordSchema>;
 
 export type AgentOsFoundationBundle = {
   agents: AgentRecord[];

@@ -164,9 +164,6 @@ importers:
 
   packages/agent-os:
     dependencies:
-      '@zbest/artifacts-api':
-        specifier: workspace:*
-        version: link:../artifacts-api
       pg:
         specifier: ^8.18.0
         version: 8.18.0
@@ -184,6 +181,9 @@ importers:
       '@fastify/rate-limit':
         specifier: ^10.3.0
         version: 10.3.0
+      '@zbest/agent-os':
+        specifier: workspace:*
+        version: link:../agent-os
       canonicalize:
         specifier: ^2.1.0
         version: 2.1.0

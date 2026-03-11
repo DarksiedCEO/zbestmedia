@@ -1,11 +1,37 @@
 export { loadEnv, type AppEnv } from "./config/env";
 export * from "./crypto";
+export { agentRoutes } from "./agents/routes";
 export { artifactRoutes } from "./artifacts/routes";
-export { ArtifactService, type ArtifactRecord } from "./artifacts/service";
+export { ArtifactGenerationOrchestrator, type OrcaGenerationClient, type OrcaGenerationResult } from "./artifacts/generationOrchestrator";
+export { createOrcaGenerationClient } from "./artifacts/orcaClient";
+export { mapArtifactRecordToDetail, mapArtifactRecordToSummary, type ArtifactGenerationDetail, type ArtifactGenerationSummary } from "./artifacts/retrieval";
+export { buildArtifactReplayEvalSnapshot, type ArtifactReplayEvalSnapshot } from "./artifacts/replay";
+export { buildArtifactReplayFreeze, type ReplayFreezeResult } from "./artifacts/freeze";
+export { ArtifactService, type ArtifactRecord, type ListArtifactsArgs } from "./artifacts/service";
+export {
+  ArtifactGenerateRequestSchema,
+  ArtifactGenerationErrorSchema,
+  ArtifactGenerationFailureClassSchema,
+  ArtifactGenerationLineageSchema,
+  ArtifactGenerationResponseSchema,
+  ArtifactGenerationStatusSchema,
+  ArtifactGenerationStateError,
+  assertArtifactGenerationTransition,
+  buildInitialArtifactGenerationRecord,
+  canTransitionArtifactGenerationStatus,
+  type ArtifactGenerateRequest,
+  type ArtifactGenerationError,
+  type ArtifactGenerationFailureClass,
+  type ArtifactGenerationLineage,
+  type ArtifactGenerationResponse,
+  type ArtifactGenerationStatus
+} from "./artifacts/generation";
 export {
   ArtifactIdParamSchema,
   CreateArtifactBodySchema,
   EvalGateSchema,
+  GenerateArtifactBodySchema,
+  ListArtifactsQuerySchema,
   EvalReportSchema,
   SupersedeArtifactBodySchema
 } from "./artifacts/schemas";

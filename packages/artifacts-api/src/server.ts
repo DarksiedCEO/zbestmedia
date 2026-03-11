@@ -1,7 +1,18 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import rateLimit from "@fastify/rate-limit";
+import {
+  AgentExecutionService,
+  AgentOsRepository,
+  ApprovalWorkflowService,
+  BrandPipelineOrchestrator,
+  EvalRunnerService,
+  MemoryPartitionService
+} from "@zbest/agent-os";
 
+import { agentRoutes } from "./agents/routes";
 import { artifactRoutes } from "./artifacts/routes";
+import { ArtifactGenerationOrchestrator } from "./artifacts/generationOrchestrator";
+import { createOrcaGenerationClient } from "./artifacts/orcaClient";
 import { ArtifactService } from "./artifacts/service";
 import { TenantWriteBudget } from "./budgets/tenantBudget";
 import { loadEnv, type AppEnv } from "./config/env";
@@ -44,6 +55,13 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   });
   const pool = createPool(env.DATABASE_URL);
   const artifactService = new ArtifactService(pool, env.ARTIFACT_SIGNING_KEY);
+  const generation = new ArtifactGenerationOrchestrator(artifactService, createOrcaGenerationClient(env));
+  const agentRepository = new AgentOsRepository(pool);
+  const approvalWorkflow = new ApprovalWorkflowService(agentRepository);
+  const agentExecutionService = new AgentExecutionService(agentRepository, approvalWorkflow);
+  const memoryService = new MemoryPartitionService(agentRepository);
+  const evalRunner = new EvalRunnerService(agentRepository);
+  const brandWorkflow = new BrandPipelineOrchestrator(agentExecutionService, evalRunner);
   const writeBudget = new TenantWriteBudget(env.MAX_ARTIFACT_WRITES_PER_MINUTE);
   const policyFirewall = new PolicyFirewall(env);
 
@@ -61,9 +79,19 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   await app.register(
     artifactRoutes({
       service: artifactService,
+      generation,
       writeBudget,
       policyFirewall,
       maxProvenanceDepth: env.MAX_PROVENANCE_DEPTH
+    })
+  );
+  await app.register(
+    agentRoutes({
+      repository: agentRepository,
+      executionService: agentExecutionService,
+      memoryService,
+      evalRunner,
+      workflow: brandWorkflow
     })
   );
   await app.register(leadModule, {

@@ -22,6 +22,7 @@
     "start": "tsx src/main.ts"
   },
   "dependencies": {
+    "@zbest/agent-os": "workspace:*",
     "@fastify/helmet": "^13.0.2",
     "@fastify/rate-limit": "^10.3.0",
     "canonicalize": "^2.1.0",

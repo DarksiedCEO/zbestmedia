@@ -1,7 +1,5 @@
 import type { Pool, PoolClient } from "pg";
 
-import { withTenant } from "@zbest/artifacts-api";
-
 import type { AgentId } from "../agents/registry.js";
 import {
   AGENT_DEFINITIONS,
@@ -19,10 +17,16 @@ import type {
   ApprovalDecision,
   ApprovalDecisionRecord,
   ApprovalRequestRecord,
+  ExecutionRecord,
+  ExecutionStatus,
+  ExecutionStepRecord,
+  ExecutionStepStatus,
   EvalRunRecord,
-  EvalScoreRecord
+  EvalScoreRecord,
+  MemoryEntryRecord
 } from "./contracts.js";
 import { buildAgentOsFoundationBundle } from "./foundation.js";
+import { withTenant } from "./withTenant.js";
 
 export type RunWithTenant = <T>(
   pool: Pool,
@@ -531,5 +535,289 @@ export class AgentOsRepository {
       },
       scores: scoreRows
     };
+  }
+
+  async createExecution(args: {
+    tenantId: string;
+    agentId: AgentId;
+    correlationId: string;
+    requestSource: string;
+    requestedBy: string;
+    subjectType: string;
+    subjectId: string;
+    inputPayload: Record<string, unknown>;
+    status?: ExecutionStatus;
+    approvalRequestId?: string | null;
+    createdAt?: string;
+  }): Promise<ExecutionRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+
+    return this.runWithTenant(this.pool, args.tenantId, async (client) => {
+      const agentRes = await client.query<{ current_version_id: string }>(
+        `SELECT current_version_id FROM agents WHERE tenant_id = $1 AND agent_id = $2`,
+        [args.tenantId, args.agentId]
+      );
+      const current = agentRes.rows[0];
+      if (!current) {
+        throw new Error("agent_not_found");
+      }
+
+      const executionId = buildScopedId("execution", [args.agentId, args.subjectId, createdAt]);
+      const status = args.status ?? "QUEUED";
+      const startedAt = status === "RUNNING" ? createdAt : null;
+
+      await client.query(
+        `
+        INSERT INTO executions (
+          tenant_id, execution_id, agent_id, agent_version_id, correlation_id,
+          request_source, requested_by, subject_type, subject_id, status,
+          input_payload, output_payload, failure_class, failure_message, approval_request_id,
+          started_at, completed_at, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9, $10,
+          $11::jsonb, NULL, NULL, NULL, $12,
+          $13, NULL, $14, $15
+        )
+        `,
+        [
+          args.tenantId,
+          executionId,
+          args.agentId,
+          current.current_version_id,
+          args.correlationId,
+          args.requestSource,
+          args.requestedBy,
+          args.subjectType,
+          args.subjectId,
+          status,
+          JSON.stringify(args.inputPayload),
+          args.approvalRequestId ?? null,
+          startedAt,
+          createdAt,
+          createdAt
+        ]
+      );
+
+      return {
+        tenantId: args.tenantId,
+        executionId,
+        agentId: args.agentId,
+        agentVersionId: current.current_version_id,
+        correlationId: args.correlationId,
+        requestSource: args.requestSource,
+        requestedBy: args.requestedBy,
+        subjectType: args.subjectType,
+        subjectId: args.subjectId,
+        status,
+        inputPayload: args.inputPayload,
+        outputPayload: null,
+        failureClass: null,
+        failureMessage: null,
+        approvalRequestId: args.approvalRequestId ?? null,
+        startedAt,
+        completedAt: null,
+        createdAt,
+        updatedAt: createdAt
+      };
+    });
+  }
+
+  async appendExecutionStep(args: {
+    tenantId: string;
+    executionId: string;
+    stepName: string;
+    stepOrder: number;
+    status: ExecutionStepStatus;
+    payload?: Record<string, unknown>;
+    createdAt?: string;
+  }): Promise<ExecutionStepRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const executionStepId = buildScopedId("execution-step", [args.executionId, String(args.stepOrder), createdAt]);
+
+    await this.runWithTenant(this.pool, args.tenantId, async (client) => {
+      await client.query(
+        `
+        INSERT INTO execution_steps (
+          tenant_id, execution_step_id, execution_id, step_name,
+          step_order, status, payload, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+        `,
+        [
+          args.tenantId,
+          executionStepId,
+          args.executionId,
+          args.stepName,
+          args.stepOrder,
+          args.status,
+          JSON.stringify(args.payload ?? {}),
+          createdAt
+        ]
+      );
+    });
+
+    return {
+      tenantId: args.tenantId,
+      executionStepId,
+      executionId: args.executionId,
+      stepName: args.stepName,
+      stepOrder: args.stepOrder,
+      status: args.status,
+      payload: args.payload ?? {},
+      createdAt
+    };
+  }
+
+  async completeExecution(args: {
+    tenantId: string;
+    executionId: string;
+    outputPayload: Record<string, unknown>;
+    completedAt?: string;
+  }): Promise<void> {
+    const completedAt = args.completedAt ?? new Date().toISOString();
+    await this.runWithTenant(this.pool, args.tenantId, async (client) => {
+      await client.query(
+        `
+        UPDATE executions
+        SET status = 'COMPLETED',
+            output_payload = $3::jsonb,
+            failure_class = NULL,
+            failure_message = NULL,
+            completed_at = $4,
+            updated_at = $4
+        WHERE tenant_id = $1 AND execution_id = $2
+        `,
+        [args.tenantId, args.executionId, JSON.stringify(args.outputPayload), completedAt]
+      );
+    });
+  }
+
+  async failExecution(args: {
+    tenantId: string;
+    executionId: string;
+    failureClass: string;
+    failureMessage: string;
+    completedAt?: string;
+  }): Promise<void> {
+    const completedAt = args.completedAt ?? new Date().toISOString();
+    await this.runWithTenant(this.pool, args.tenantId, async (client) => {
+      await client.query(
+        `
+        UPDATE executions
+        SET status = 'FAILED',
+            failure_class = $3,
+            failure_message = $4,
+            completed_at = $5,
+            updated_at = $5
+        WHERE tenant_id = $1 AND execution_id = $2
+        `,
+        [args.tenantId, args.executionId, args.failureClass, args.failureMessage, completedAt]
+      );
+    });
+  }
+
+  async storeMemoryEntry(args: {
+    tenantId: string;
+    partitionId: string;
+    agentId: AgentId;
+    collection: string;
+    entryKey: string;
+    entryValue: Record<string, unknown>;
+    classification: "owned" | "shared_policy";
+    createdBy: string;
+    createdAt?: string;
+  }): Promise<MemoryEntryRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const memoryEntryId = buildScopedId("memory", [args.partitionId, args.collection, args.entryKey]);
+
+    await this.runWithTenant(this.pool, args.tenantId, async (client) => {
+      await client.query(
+        `
+        INSERT INTO agent_memory_entries (
+          tenant_id, memory_entry_id, partition_id, agent_id, collection_name,
+          entry_key, entry_value, classification, created_by, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11)
+        ON CONFLICT (tenant_id, partition_id, collection_name, entry_key) DO UPDATE SET
+          entry_value = EXCLUDED.entry_value,
+          classification = EXCLUDED.classification,
+          created_by = EXCLUDED.created_by,
+          updated_at = EXCLUDED.updated_at
+        `,
+        [
+          args.tenantId,
+          memoryEntryId,
+          args.partitionId,
+          args.agentId,
+          args.collection,
+          args.entryKey,
+          JSON.stringify(args.entryValue),
+          args.classification,
+          args.createdBy,
+          createdAt,
+          createdAt
+        ]
+      );
+    });
+
+    return {
+      tenantId: args.tenantId,
+      memoryEntryId,
+      partitionId: args.partitionId,
+      agentId: args.agentId,
+      collection: args.collection,
+      entryKey: args.entryKey,
+      entryValue: args.entryValue,
+      classification: args.classification,
+      createdBy: args.createdBy,
+      createdAt,
+      updatedAt: createdAt
+    };
+  }
+
+  async listMemoryEntries(args: {
+    tenantId: string;
+    partitionId: string;
+    collection?: string;
+  }): Promise<MemoryEntryRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, async (client) => {
+      return client.query<{
+        tenant_id: string;
+        memory_entry_id: string;
+        partition_id: string;
+        agent_id: AgentId;
+        collection_name: string;
+        entry_key: string;
+        entry_value: Record<string, unknown>;
+        classification: "owned" | "shared_policy";
+        created_by: string;
+        created_at: string | Date;
+        updated_at: string | Date;
+      }>(
+        `
+        SELECT tenant_id, memory_entry_id, partition_id, agent_id, collection_name, entry_key,
+               entry_value, classification, created_by, created_at, updated_at
+        FROM agent_memory_entries
+        WHERE tenant_id = $1
+          AND partition_id = $2
+          AND ($3::text IS NULL OR collection_name = $3)
+        ORDER BY updated_at DESC, entry_key ASC
+        `,
+        [args.tenantId, args.partitionId, args.collection ?? null]
+      );
+    });
+
+    return res.rows.map((row) => ({
+      tenantId: row.tenant_id,
+      memoryEntryId: row.memory_entry_id,
+      partitionId: row.partition_id,
+      agentId: row.agent_id,
+      collection: row.collection_name,
+      entryKey: row.entry_key,
+      entryValue: row.entry_value,
+      classification: row.classification,
+      createdBy: row.created_by,
+      createdAt: toIsoString(row.created_at),
+      updatedAt: toIsoString(row.updated_at)
+    }));
   }
 }
