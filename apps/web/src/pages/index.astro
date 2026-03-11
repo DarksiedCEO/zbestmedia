@@ -1,0 +1,87 @@
+---
+import Hero from "../components/Hero.astro";
+import Pillars from "../components/Pillars.astro";
+import ProofPanels from "../components/ProofPanels.astro";
+import SiteLayout from "../layouts/SiteLayout.astro";
+---
+
+<SiteLayout
+  title="Z Best Media - Fortress-Governed Command Platform"
+  description="Enterprise command platform for content operations, campaign orchestration, competitive intelligence, and governance enforcement with signed contracts and immutable audit trails."
+  path="/"
+>
+  <Hero
+    title="The Fortress-Governed Command Platform."
+    body="Content, campaigns, and competitive intelligence operated under cryptographic audit and autonomous integrity control."
+    primaryHref="/contact"
+    primaryLabel="Book a Strategic Brief"
+    secondaryHref="/platform"
+    secondaryLabel="Explore the Platform"
+  >
+    <div slot="left" class="grid gap-3">
+      <div class="rounded-xl border border-border bg-surface p-4 grid gap-2 text-sm">
+        <div class="flex justify-between"><span class="text-muted">Integrity Score</span><span class="text-gold font-semibold">100</span></div>
+        <div class="flex justify-between"><span class="text-muted">Audit Ledger</span><span class="text-gold font-semibold">Verified</span></div>
+        <div class="flex justify-between"><span class="text-muted">Contracts</span><span class="text-gold font-semibold">Signed</span></div>
+        <div class="flex justify-between"><span class="text-muted">Canary Protection</span><span class="text-gold font-semibold">Active</span></div>
+      </div>
+      <div class="text-xs text-muted">
+        Direct access: <a class="hover:text-text" href="tel:+12136328384">(213) 632-8384</a> |
+        <a class="hover:text-text" href="mailto:hello@zbestmedia.com"> hello@zbestmedia.com</a>
+      </div>
+    </div>
+
+    <div slot="right" class="rounded-xl border border-border bg-panel overflow-hidden">
+      <div class="p-4 border-b border-border text-sm text-muted">Command Interface (Hero Still)</div>
+      <div class="aspect-[16/10] flex items-center justify-center text-muted text-center px-6">
+        Drop Sora hero still here: <code class="text-gold">apps/web/src/assets/hero.webp</code>
+      </div>
+    </div>
+  </Hero>
+
+  <section class="mt-14 grid gap-4">
+    <h2 class="text-2xl font-semibold">Operate Without Drift.</h2>
+    <p class="text-muted max-w-[72ch]">
+      Most teams publish content. We operate systems. Every action runs through approval gates, blast-radius controls, and audit
+      verification. Nothing deploys by accident. Nothing changes without traceability. Every decision can be explained to an executive,
+      an operator, and an auditor with the same evidence set.
+    </p>
+  </section>
+
+  <Pillars
+    heading="Platform Pillars"
+    items={[
+      {
+        title: "Campaign Command",
+        body: "Scheduling, queues, and real-time monitoring streams across channels."
+      },
+      {
+        title: "Content Engine",
+        body: "Pre-publication scoring, platform adaptation, and risk detection before deployment."
+      },
+      {
+        title: "Intelligence Workspace",
+        body: "Structured competitive and opposition research with executive-grade exports."
+      },
+      {
+        title: "Governance Layer",
+        body: "Signed contracts, canary rollouts, immutable ledger, autonomous integrity monitoring."
+      }
+    ]}
+  />
+
+  <ProofPanels
+    heading="Governance Built In - Not Bolted On."
+    bullets={[
+      "Signed SLO Contracts",
+      "Canary Rollout Gates",
+      "Budget and blast radius controls",
+      "Tamper-evident audit chain",
+      "Continuous self-verification"
+    ]}
+    primaryHref="/contact"
+    primaryLabel="Book a Strategic Brief"
+    secondaryHref="/governance"
+    secondaryLabel="View Governance Proof"
+  />
+</SiteLayout>

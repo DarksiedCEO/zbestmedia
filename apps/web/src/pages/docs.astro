@@ -1,0 +1,83 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+---
+
+<SiteLayout
+  title="Docs | Z Best Media"
+  description="Documentation overview for Z Best Media operations, governance contracts, security controls, runbooks, and implementation guidance."
+  path="/docs"
+>
+  <section class="grid gap-5">
+    <h1 class="text-4xl font-semibold leading-tight">Docs</h1>
+    <p class="text-muted max-w-[75ch]">
+      Documentation is a control surface, not a formality. Z Best Media documentation is structured so operators can execute reliably,
+      leaders can evaluate posture quickly, and auditors can validate evidence without ambiguity. The docs model links architecture,
+      contracts, runtime behavior, and response procedures into one coherent system. This page outlines what teams can expect from the
+      documentation stack and how it supports day-to-day operations, incident readiness, and governance transparency.
+    </p>
+  </section>
+
+  <section class="mt-10 grid gap-4">
+    <h2 class="text-2xl font-semibold">Architecture and Data Model Documentation</h2>
+    <p class="text-muted max-w-[75ch]">
+      Core architecture docs explain service boundaries, event flows, dependency constraints, and data contracts with enough precision for
+      engineering and operations teams to align quickly. Every critical surface is documented with intent, input assumptions, output
+      guarantees, and failure semantics. Data model documentation includes schema ownership, evolution rules, and compatibility guidance so
+      downstream systems can integrate safely. This lowers onboarding cost for new team members and reduces errors caused by implicit
+      assumptions that never made it into formal records.
+    </p>
+  </section>
+
+  <section class="mt-10 grid gap-4">
+    <h2 class="text-2xl font-semibold">Governance Contracts and Policy Specs</h2>
+    <p class="text-muted max-w-[75ch]">
+      Governance docs define the enforceable rules that shape runtime behavior. Teams can review signed contract expectations, threshold
+      definitions, escalation logic, and enforcement modes in plain language with technical references attached. Changes are versioned so
+      policy drift can be identified and reviewed before it impacts production. This gives legal, compliance, and operations functions a
+      shared interpretation layer and reduces disagreement during high-pressure reviews.
+    </p>
+  </section>
+
+  <section class="mt-10 grid gap-4">
+    <h2 class="text-2xl font-semibold">Runbooks and Incident Procedures</h2>
+    <p class="text-muted max-w-[75ch]">
+      Runbooks are designed for real incidents where time and clarity matter. Each runbook includes trigger conditions, containment
+      actions, decision checkpoints, communication requirements, and post-incident evidence capture. Procedures are mapped to system
+      capabilities like freeze actions, rollback paths, and audit exports so teams can execute directly instead of improvising. This
+      approach improves consistency across responders and shortens time from alert to coordinated action.
+    </p>
+  </section>
+
+  <section class="mt-10 grid gap-4">
+    <h2 class="text-2xl font-semibold">Operational Metrics and Reporting Guides</h2>
+    <p class="text-muted max-w-[75ch]">
+      Metrics documentation defines what is measured, why it matters, and how to interpret trend changes. Teams can tie technical
+      indicators to business and governance outcomes, making reporting useful for executives as well as operators. Definitions for score
+      thresholds, alert severity, and review cadences keep analytics consistent across teams. This prevents conflicting narratives that
+      emerge when departments use different metric logic for the same system behavior.
+    </p>
+  </section>
+
+  <section class="mt-10 grid gap-4">
+    <h2 class="text-2xl font-semibold">Implementation and Adoption Playbook</h2>
+    <p class="text-muted max-w-[75ch]">
+      Adoption guidance includes phased rollout patterns, ownership frameworks, and governance activation milestones so implementation is
+      orderly and measurable. Teams can start with limited scope, validate controls, then expand coverage while maintaining stability.
+      This prevents the common failure mode of broad launches without operational readiness. Documentation remains actionable and aligned
+      with working reality, which is essential for long-term reliability.
+    </p>
+  </section>
+
+  <section class="mt-12 rounded-xl border border-border bg-surface p-6 grid gap-3">
+    <h2 class="text-2xl font-semibold">Need Documentation for Your Environment</h2>
+    <p class="text-muted max-w-[72ch]">
+      We can tailor docs for your governance, security, and delivery model so teams have clear execution guidance from day one. Call
+      <a class="hover:text-text" href="tel:+12136328384"> (213) 632-8384</a> or email
+      <a class="hover:text-text" href="mailto:hello@zbestmedia.com"> hello@zbestmedia.com</a>.
+    </p>
+    <div class="flex flex-wrap gap-3">
+      <a href="/contact" class="rounded-xl bg-gold px-5 py-3 text-bg font-semibold">Book a Strategic Brief</a>
+      <a href="/security" class="rounded-xl border border-border px-5 py-3">Review Security Controls</a>
+    </div>
+  </section>
+</SiteLayout>

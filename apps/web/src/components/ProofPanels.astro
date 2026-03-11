@@ -1,0 +1,25 @@
+---
+type Props = {
+  heading: string;
+  bullets: string[];
+  primaryHref: string;
+  primaryLabel: string;
+  secondaryHref: string;
+  secondaryLabel: string;
+};
+
+const { heading, bullets, primaryHref, primaryLabel, secondaryHref, secondaryLabel } = Astro.props;
+---
+
+<section class="mt-14 rounded-xl border border-border bg-surface p-6 grid gap-4">
+  <h2 class="text-2xl font-semibold">{heading}</h2>
+  <ul class="grid gap-2 text-sm text-muted">
+    {bullets.map((bullet) => (
+      <li>- {bullet}</li>
+    ))}
+  </ul>
+  <div class="flex gap-3 flex-wrap">
+    <a href={secondaryHref} class="rounded-xl border border-border px-5 py-3">{secondaryLabel}</a>
+    <a href={primaryHref} class="rounded-xl bg-gold px-5 py-3 text-bg font-semibold">{primaryLabel}</a>
+  </div>
+</section>

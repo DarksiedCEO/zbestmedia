@@ -1,0 +1,77 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+---
+
+<SiteLayout
+  title="Security | Z Best Media"
+  description="Security posture for Z Best Media enterprise operations: layered controls, access boundaries, immutable logging, and incident readiness."
+  path="/security"
+>
+  <section class="grid gap-5">
+    <h1 class="text-4xl font-semibold leading-tight">Security</h1>
+    <p class="text-muted max-w-[75ch]">
+      Security has to support speed, not block it. Z Best Media is designed with layered controls that protect operational workflows while
+      preserving execution velocity for campaign and intelligence teams. We align architecture, policy, and runbooks so security behavior
+      is predictable under normal load and resilient under stress. This page summarizes the core model: identity boundaries, data and
+      event protection, release controls, and incident readiness. The objective is simple: reduce avoidable risk while keeping delivery
+      practical for real enterprise operations.
+    </p>
+  </section>
+
+  <section class="mt-10 grid gap-4">
+    <h2 class="text-2xl font-semibold">Identity, Access, and Scope Control</h2>
+    <p class="text-muted max-w-[75ch]">
+      Access is managed through role-aware boundaries with explicit scope constraints. Teams receive the minimum privileges required for
+      their function, and privileged flows require stronger verification and auditable approvals. Tokens and integration credentials are
+      validated against policy contracts before high-impact actions execute. This avoids broad, persistent permissions that often create
+      hidden attack surfaces. The platform is built to surface who can do what, where, and under which approval context at any point in
+      time, making access posture observable and governable.
+    </p>
+  </section>
+
+  <section class="mt-10 grid gap-4">
+    <h2 class="text-2xl font-semibold">Data and Event Integrity Protections</h2>
+    <p class="text-muted max-w-[75ch]">
+      Operational data and governance events are protected through strict validation, structured schemas, and immutable lineage markers.
+      Inputs are validated early, contract conformance is checked continuously, and provenance metadata is attached to policy-relevant
+      events. This reduces silent corruption risk and shortens forensic timelines during review. Security controls focus on preserving the
+      integrity of decision-critical signals, not only perimeter defense. If an event stream drifts from expected structure or policy, the
+      system raises deterministic alerts and can enforce containment behavior.
+    </p>
+  </section>
+
+  <section class="mt-10 grid gap-4">
+    <h2 class="text-2xl font-semibold">Release Safety and Runtime Guardrails</h2>
+    <p class="text-muted max-w-[75ch]">
+      Security depends on safe release behavior. Canary deployment gates, blast radius limits, and rollback controls are integrated into
+      runtime operations. Changes are introduced in stages with measurable checkpoints so anomalies can be isolated before broad exposure.
+      Runtime defaults are fingerprinted, and enforcement mode can be tightened automatically when integrity posture degrades. This is how
+      organizations scale updates without accepting uncontrolled operational risk. The system is designed to fail safely, preserve
+      evidence, and maintain service continuity whenever possible.
+    </p>
+  </section>
+
+  <section class="mt-10 grid gap-4">
+    <h2 class="text-2xl font-semibold">Incident Response Readiness</h2>
+    <p class="text-muted max-w-[75ch]">
+      Incident response is treated as a practiced capability, not a theoretical process. Z Best Media supports freeze semantics,
+      kill-switch pathways, audit exports, and investigation-friendly telemetry to shorten mean time to containment. Operators can move
+      from detection to decision with one evidence chain, including contract state, event timelines, and affected scope. This improves
+      communication quality during pressure events and reduces recovery uncertainty. Security teams can coordinate with operations and
+      leadership from one consistent dataset instead of stitching logs manually across disconnected systems.
+    </p>
+  </section>
+
+  <section class="mt-12 rounded-xl border border-border bg-surface p-6 grid gap-3">
+    <h2 class="text-2xl font-semibold">Security Review and Architecture Brief</h2>
+    <p class="text-muted max-w-[72ch]">
+      We will map your current controls, identify critical exposure points, and propose a staged hardening plan that preserves delivery
+      velocity. Reach us at <a class="hover:text-text" href="tel:+12136328384">(213) 632-8384</a> or
+      <a class="hover:text-text" href="mailto:hello@zbestmedia.com"> hello@zbestmedia.com</a>.
+    </p>
+    <div class="flex flex-wrap gap-3">
+      <a href="/contact" class="rounded-xl bg-gold px-5 py-3 text-bg font-semibold">Book a Strategic Brief</a>
+      <a href="/docs" class="rounded-xl border border-border px-5 py-3">Open Operational Docs</a>
+    </div>
+  </section>
+</SiteLayout>

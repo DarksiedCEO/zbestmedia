@@ -1,0 +1,83 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+---
+
+<SiteLayout
+  title="Governance | Z Best Media"
+  description="Understand the governance model behind Z Best Media: signed contracts, canary gates, audit ledger verification, and integrity monitoring."
+  path="/governance"
+>
+  <section class="grid gap-5">
+    <h1 class="text-4xl font-semibold leading-tight">Governance</h1>
+    <p class="text-muted max-w-[75ch]">
+      Governance is where enterprise confidence is won or lost. Z Best Media enforces governance as an operational runtime, not a policy
+      slide deck. Our architecture combines signed contracts, automated checks, event provenance, and integrity scoring into a single
+      control fabric. This gives leadership a clear answer to three questions at any time: are we compliant, are we stable, and can we
+      prove it quickly? The governance surface is designed for operators, executives, auditors, and legal teams to work from shared
+      evidence rather than competing interpretations.
+    </p>
+  </section>
+
+  <section class="mt-10 grid gap-4">
+    <h2 class="text-2xl font-semibold">Signed Contract Enforcement</h2>
+    <p class="text-muted max-w-[75ch]">
+      Policy and service-level commitments are represented as signed contracts that define acceptable behavior boundaries. These contracts
+      include thresholds, guardrail defaults, escalation semantics, and change controls. Because contracts are cryptographically signed,
+      unauthorized mutation is detectable and reviewable. Operators can deploy confidently because controls are machine-readable and
+      deterministic. Executives benefit because standards are enforced by the platform itself, not by manual memory or fragmented review
+      rituals. This reduces exception risk and creates a durable trail for internal and external governance checks.
+    </p>
+  </section>
+
+  <section class="mt-10 grid gap-4">
+    <h2 class="text-2xl font-semibold">Canary Gates and Blast Radius Controls</h2>
+    <p class="text-muted max-w-[75ch]">
+      High-speed teams still need safe rollout behavior. Canary gates stage changes through pre-defined exposure windows and quality
+      checkpoints before full deployment. Blast radius controls limit impact by audience, tenant, region, or channel while real-time
+      telemetry validates behavior under load. If integrity thresholds degrade, the system can pause progression or trigger containment
+      protocols. This minimizes the operational cost of mistakes and keeps incidents from propagating across the full production surface.
+      Teams preserve momentum without sacrificing the caution enterprise environments require.
+    </p>
+    <div class="rounded-xl border border-border bg-panel overflow-hidden max-w-[75ch]">
+      <div class="p-3 border-b border-border text-sm text-muted">Governance Visual Slot</div>
+      <div class="aspect-[16/8] flex items-center justify-center text-sm text-muted text-center px-6">
+        Drop governance still at <code class="text-gold">apps/web/src/assets/governance.webp</code>
+      </div>
+    </div>
+  </section>
+
+  <section class="mt-10 grid gap-4">
+    <h2 class="text-2xl font-semibold">Tamper-Evident Audit Chain</h2>
+    <p class="text-muted max-w-[75ch]">
+      Every governance-relevant action writes an auditable record with actor context, timing, payload fingerprints, and correlation IDs.
+      The ledger is designed to be tamper-evident so any attempted alteration becomes detectable. This creates durable accountability for
+      approvals, overrides, policy updates, and release progression. During incident response, teams can reconstruct event timelines
+      quickly and reliably. During compliance review, evidence retrieval is straightforward because metadata is structured by design.
+      Governance becomes inspectable in near real time, not only after quarterly reconciliation cycles.
+    </p>
+  </section>
+
+  <section class="mt-10 grid gap-4">
+    <h2 class="text-2xl font-semibold">Continuous Integrity Monitoring</h2>
+    <p class="text-muted max-w-[75ch]">
+      The platform continuously computes integrity posture from self-check outcomes, policy flags, runtime defaults, and contract state.
+      Leaders can view current fingerprint, risk indicators, and enforcement mode in one place. This is not passive monitoring. It is an
+      active control loop that can recommend freeze actions, block risky flows, or escalate ownership based on deterministic rules.
+      Continuous verification reduces the lag between drift and detection, which is essential for protecting brand safety, data handling,
+      and customer trust in fast-moving environments.
+    </p>
+  </section>
+
+  <section class="mt-12 rounded-xl border border-border bg-surface p-6 grid gap-3">
+    <h2 class="text-2xl font-semibold">Request Governance Walkthrough</h2>
+    <p class="text-muted max-w-[72ch]">
+      We can review your current control model and map a target-state governance runtime that aligns legal, technical, and operational
+      requirements. Contact us at <a class="hover:text-text" href="tel:+12136328384">(213) 632-8384</a> or
+      <a class="hover:text-text" href="mailto:hello@zbestmedia.com"> hello@zbestmedia.com</a>.
+    </p>
+    <div class="flex flex-wrap gap-3">
+      <a href="/contact" class="rounded-xl bg-gold px-5 py-3 text-bg font-semibold">Book a Strategic Brief</a>
+      <a href="/security" class="rounded-xl border border-border px-5 py-3">Review Security Model</a>
+    </div>
+  </section>
+</SiteLayout>
