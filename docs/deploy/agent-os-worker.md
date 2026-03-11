@@ -52,10 +52,18 @@ Use a dedicated worker service/process profile. Do not colocate long-running wor
   - `POST /v1/orchestration/executions/:executionId/export-bundle`
 - Diagnostics:
   - `GET /v1/orchestration/ops/diagnostics`
+  - `POST /v1/orchestration/ops/diagnostics/export`
+  - `GET /v1/orchestration/ops/diagnostics/exports`
+  - `POST /v1/orchestration/ops/diagnostics/exports/verify-history`
 - Inventory:
   - `GET /v1/orchestration/ops/inventory`
+  - `POST /v1/orchestration/ops/inventory/export`
+  - `GET /v1/orchestration/ops/inventory/exports`
+  - `POST /v1/orchestration/ops/inventory/exports/verify-history`
 - Worker health:
   - `GET /v1/orchestration/ops/workers`
+- Worker SLO summary:
+  - `GET /v1/orchestration/ops/workers/slo`
 - Worker freshness:
   - `GET /v1/orchestration/ops/workers/freshness`
 - Worker freshness export:

@@ -611,14 +611,14 @@ export class MaestroOrchestrationService {
 
   async listOpsSnapshotExports(args: {
     tenantId: string;
-    snapshotType: "worker_freshness" | "alerts";
+    snapshotType: "worker_freshness" | "alerts" | "diagnostics" | "inventory";
   }) {
     return this.repository.listOrchestrationOpsSnapshotExports(args);
   }
 
   async verifyOpsSnapshotHistory(args: {
     tenantId: string;
-    snapshotType: "worker_freshness" | "alerts";
+    snapshotType: "worker_freshness" | "alerts" | "diagnostics" | "inventory";
     sealedAt: string;
     payloadHash: string;
     signature: string;
@@ -668,6 +668,96 @@ export class MaestroOrchestrationService {
       matchedExport: matched ?? null,
       verification,
       exportCount: exports.length
+    };
+  }
+
+  async exportDiagnosticsSnapshot(args: {
+    tenantId: string;
+    actorId: string;
+    olderThanMinutes: number;
+    signSnapshot: (bundle: unknown, executionId: string) => {
+      sealedAt: string;
+      payloadHash: string;
+      signature: string;
+    };
+    createdAt?: string;
+  }) {
+    const snapshot = await this.getDiagnostics({
+      tenantId: args.tenantId,
+      olderThanMinutes: args.olderThanMinutes
+    });
+    const signature = args.signSnapshot(snapshot, "ops:diagnostics");
+    const exportRecord = await this.repository.createOrchestrationOpsSnapshotExport({
+      tenantId: args.tenantId,
+      snapshotType: "diagnostics",
+      exportedBy: args.actorId,
+      payloadHash: signature.payloadHash,
+      signature: signature.signature,
+      sealedAt: signature.sealedAt,
+      snapshot: snapshot as Record<string, unknown>,
+      createdAt: args.createdAt
+    });
+
+    return { exportRecord, snapshot, signature };
+  }
+
+  async exportInventorySnapshot(args: {
+    tenantId: string;
+    actorId: string;
+    signSnapshot: (bundle: unknown, executionId: string) => {
+      sealedAt: string;
+      payloadHash: string;
+      signature: string;
+    };
+    createdAt?: string;
+  }) {
+    const snapshot = await this.getOperationsInventory({
+      tenantId: args.tenantId
+    });
+    const signature = args.signSnapshot(snapshot, "ops:inventory");
+    const exportRecord = await this.repository.createOrchestrationOpsSnapshotExport({
+      tenantId: args.tenantId,
+      snapshotType: "inventory",
+      exportedBy: args.actorId,
+      payloadHash: signature.payloadHash,
+      signature: signature.signature,
+      sealedAt: signature.sealedAt,
+      snapshot: snapshot as Record<string, unknown>,
+      createdAt: args.createdAt
+    });
+
+    return { exportRecord, snapshot, signature };
+  }
+
+  async getWorkerSloSummary(args: {
+    tenantId: string;
+    staleAfterMinutes: number;
+    nowIso?: string;
+  }) {
+    const freshness = await this.getWorkerFreshnessReport({
+      tenantId: args.tenantId,
+      staleAfterMinutes: args.staleAfterMinutes,
+      nowIso: args.nowIso
+    });
+
+    const healthyWorkers = freshness.totalWorkers - freshness.staleWorkers;
+    const coverage =
+      freshness.totalWorkers === 0 ? 0 : Number((healthyWorkers / freshness.totalWorkers).toFixed(4));
+    const status =
+      freshness.totalWorkers === 0
+        ? "critical"
+        : freshness.staleWorkers > 0
+          ? "warning"
+          : "healthy";
+
+    return {
+      staleAfterMinutes: freshness.staleAfterMinutes,
+      totalWorkers: freshness.totalWorkers,
+      healthyWorkers,
+      staleWorkers: freshness.staleWorkers,
+      freshnessCoverage: coverage,
+      status,
+      items: freshness.items
     };
   }
 

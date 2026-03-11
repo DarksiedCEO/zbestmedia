@@ -172,6 +172,21 @@ describe("agent routes", () => {
         policies: { maestro: { staleAfterMinutes: 45, maxEscalations: 3 } }
       }
     })),
+    exportDiagnosticsSnapshot: vi.fn(async () => ({
+      exportRecord: {
+        exportId: "ops-export:diagnostics:1",
+        snapshotType: "diagnostics",
+        exportedBy: "actor-1"
+      },
+      snapshot: {
+        executions: { total: 1 }
+      },
+      signature: {
+        sealedAt: "2026-03-11T00:00:00.000Z",
+        payloadHash: "abc123",
+        signature: "sig456"
+      }
+    })),
     getOperationsInventory: vi.fn(async () => ({
       deadLettered: [
         {
@@ -192,6 +207,22 @@ describe("agent routes", () => {
         }
       ]
     })),
+    exportInventorySnapshot: vi.fn(async () => ({
+      exportRecord: {
+        exportId: "ops-export:inventory:1",
+        snapshotType: "inventory",
+        exportedBy: "actor-1"
+      },
+      snapshot: {
+        deadLettered: [],
+        retryQueue: []
+      },
+      signature: {
+        sealedAt: "2026-03-11T00:00:00.000Z",
+        payloadHash: "abc123",
+        signature: "sig456"
+      }
+    })),
     getWorkerHealth: vi.fn(async () => ({
       totalWorkers: 1,
       items: [
@@ -203,6 +234,15 @@ describe("agent routes", () => {
           observedAt: "2026-03-11T00:00:00.000Z"
         }
       ]
+    })),
+    getWorkerSloSummary: vi.fn(async () => ({
+      staleAfterMinutes: 15,
+      totalWorkers: 1,
+      healthyWorkers: 1,
+      staleWorkers: 0,
+      freshnessCoverage: 1,
+      status: "healthy",
+      items: []
     })),
     getWorkerFreshnessReport: vi.fn(async () => ({
       staleAfterMinutes: 15,
@@ -278,29 +318,16 @@ describe("agent routes", () => {
         signature: "sig456"
       }
     })),
-    listOpsSnapshotExports: vi.fn(async ({ snapshotType }: { snapshotType: string }) =>
-      snapshotType === "worker_freshness"
-        ? [
-            {
-              exportId: "ops-export:worker-freshness:1",
-              snapshotType: "worker_freshness",
-              exportedBy: "actor-1",
-              payloadHash: "abc123",
-              signature: "sig456",
-              sealedAt: "2026-03-11T00:00:00.000Z"
-            }
-          ]
-        : [
-            {
-              exportId: "ops-export:alerts:1",
-              snapshotType: "alerts",
-              exportedBy: "actor-1",
-              payloadHash: "abc123",
-              signature: "sig456",
-              sealedAt: "2026-03-11T00:00:00.000Z"
-            }
-          ]
-    ),
+    listOpsSnapshotExports: vi.fn(async ({ snapshotType }: { snapshotType: string }) => [
+      {
+        exportId: `ops-export:${snapshotType}:1`,
+        snapshotType,
+        exportedBy: "actor-1",
+        payloadHash: "abc123",
+        signature: "sig456",
+        sealedAt: "2026-03-11T00:00:00.000Z"
+      }
+    ]),
     verifyOpsSnapshotHistory: vi.fn(async () => ({
       verified: true,
       matchedExport: {
@@ -571,13 +598,51 @@ describe("agent routes", () => {
       method: "GET",
       url: "/v1/orchestration/ops/diagnostics?olderThanMinutes=30"
     });
+    const diagnosticsExportRes = await app.inject({
+      method: "POST",
+      url: "/v1/orchestration/ops/diagnostics/export?olderThanMinutes=30"
+    });
+    const diagnosticsExportsRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/ops/diagnostics/exports"
+    });
+    const diagnosticsVerifyHistoryRes = await app.inject({
+      method: "POST",
+      url: "/v1/orchestration/ops/diagnostics/exports/verify-history",
+      payload: {
+        sealedAt: "2026-03-11T00:00:00.000Z",
+        payloadHash: "abc123",
+        signature: "sig456"
+      }
+    });
     const inventoryRes = await app.inject({
       method: "GET",
       url: "/v1/orchestration/ops/inventory"
     });
+    const inventoryExportRes = await app.inject({
+      method: "POST",
+      url: "/v1/orchestration/ops/inventory/export"
+    });
+    const inventoryExportsRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/ops/inventory/exports"
+    });
+    const inventoryVerifyHistoryRes = await app.inject({
+      method: "POST",
+      url: "/v1/orchestration/ops/inventory/exports/verify-history",
+      payload: {
+        sealedAt: "2026-03-11T00:00:00.000Z",
+        payloadHash: "abc123",
+        signature: "sig456"
+      }
+    });
     const workerHealthRes = await app.inject({
       method: "GET",
       url: "/v1/orchestration/ops/workers"
+    });
+    const workerSloRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/ops/workers/slo?staleAfterMinutes=15"
     });
     const workerFreshnessRes = await app.inject({
       method: "GET",
@@ -693,10 +758,24 @@ describe("agent routes", () => {
     expect(diagnosticsRes.statusCode).toBe(200);
     expect(diagnosticsRes.json().approvalSla.policies.maestro.maxEscalations).toBe(3);
     expect(diagnosticsRes.json().executions.queuedRetries).toBe(0);
+    expect(diagnosticsExportRes.statusCode).toBe(201);
+    expect(diagnosticsExportRes.json().exportRecord.snapshotType).toBe("diagnostics");
+    expect(diagnosticsExportsRes.statusCode).toBe(200);
+    expect(diagnosticsExportsRes.json().items[0].snapshotType).toBe("diagnostics");
+    expect(diagnosticsVerifyHistoryRes.statusCode).toBe(200);
+    expect(diagnosticsVerifyHistoryRes.json().verified).toBe(true);
     expect(inventoryRes.statusCode).toBe(200);
     expect(inventoryRes.json().deadLettered[0].executionId).toBe("execution:maestro:dead-1");
+    expect(inventoryExportRes.statusCode).toBe(201);
+    expect(inventoryExportRes.json().exportRecord.snapshotType).toBe("inventory");
+    expect(inventoryExportsRes.statusCode).toBe(200);
+    expect(inventoryExportsRes.json().items[0].snapshotType).toBe("inventory");
+    expect(inventoryVerifyHistoryRes.statusCode).toBe(200);
+    expect(inventoryVerifyHistoryRes.json().verified).toBe(true);
     expect(workerHealthRes.statusCode).toBe(200);
     expect(workerHealthRes.json().totalWorkers).toBe(1);
+    expect(workerSloRes.statusCode).toBe(200);
+    expect(workerSloRes.json().status).toBe("healthy");
     expect(workerFreshnessRes.statusCode).toBe(200);
     expect(workerFreshnessRes.json().staleWorkers).toBe(0);
     expect(workerFreshnessExportRes.statusCode).toBe(200);

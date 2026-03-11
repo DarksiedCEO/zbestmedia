@@ -221,7 +221,12 @@ export const OrchestrationBundleExportRecordSchema = z.object({
 });
 export type OrchestrationBundleExportRecord = z.infer<typeof OrchestrationBundleExportRecordSchema>;
 
-export const OrchestrationOpsSnapshotTypeSchema = z.enum(["worker_freshness", "alerts"]);
+export const OrchestrationOpsSnapshotTypeSchema = z.enum([
+  "worker_freshness",
+  "alerts",
+  "diagnostics",
+  "inventory"
+]);
 export type OrchestrationOpsSnapshotType = z.infer<typeof OrchestrationOpsSnapshotTypeSchema>;
 
 export const OrchestrationOpsSnapshotExportRecordSchema = z.object({

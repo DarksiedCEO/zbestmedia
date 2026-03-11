@@ -543,6 +543,50 @@ describe("MaestroOrchestrationService", () => {
         }
       })
     });
+    const diagnosticsExport = await opsService.exportDiagnosticsSnapshot({
+      tenantId: "tenant-1",
+      actorId: "ops-1",
+      olderThanMinutes: 60,
+      signSnapshot: () => ({
+        sealedAt: "2026-03-11T00:10:00.000Z",
+        payloadHash: "hash-1",
+        signature: "sig-1"
+      })
+    });
+    const inventoryExport = await opsService.exportInventorySnapshot({
+      tenantId: "tenant-1",
+      actorId: "ops-1",
+      signSnapshot: () => ({
+        sealedAt: "2026-03-11T00:10:00.000Z",
+        payloadHash: "hash-1",
+        signature: "sig-1"
+      })
+    });
+    const diagnosticsVerify = await opsService.verifyOpsSnapshotHistory({
+      tenantId: "tenant-1",
+      snapshotType: "diagnostics",
+      sealedAt: "2026-03-11T00:10:00.000Z",
+      payloadHash: "hash-1",
+      signature: "sig-1",
+      verifySnapshot: () => ({
+        verified: true,
+        payloadHashMatches: true,
+        signatureMatches: true,
+        expectedPayloadHash: "hash-1",
+        expectedSignature: "sig-1",
+        trustChain: {
+          algorithm: "hmac-sha256",
+          artifactId: "ops:diagnostics",
+          sealedAt: "2026-03-11T00:10:00.000Z",
+          payloadHash: "hash-1"
+        }
+      })
+    });
+    const workerSlo = await opsService.getWorkerSloSummary({
+      tenantId: "tenant-1",
+      staleAfterMinutes: 15,
+      nowIso: "2026-03-11T00:30:00.000Z"
+    });
 
     expect(exported?.exportRecord.exportId).toBe("bundle-export:1");
     expect(exports).toHaveLength(1);
@@ -560,8 +604,13 @@ describe("MaestroOrchestrationService", () => {
     expect(reopened.reopenedBy).toBe("ops-2");
     expect(workerExport.exportRecord.snapshotType).toBe("worker_freshness");
     expect(alertsExport.exportRecord.snapshotType).toBe("alerts");
+    expect(diagnosticsExport.exportRecord.snapshotType).toBe("diagnostics");
+    expect(inventoryExport.exportRecord.snapshotType).toBe("inventory");
     expect(workerOpsExports).toHaveLength(1);
     expect(workerOpsVerify.verified).toBe(true);
+    expect(diagnosticsVerify.verified).toBe(true);
+    expect(workerSlo.status).toBe("warning");
+    expect(workerSlo.freshnessCoverage).toBe(0);
   });
 
   it("creates replay approvals for dead-lettered executions", async () => {

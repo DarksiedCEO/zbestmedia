@@ -163,7 +163,7 @@ type OrchestrationBundleExportRow = {
 type OrchestrationOpsSnapshotExportRow = {
   tenant_id: string;
   export_id: string;
-  snapshot_type: "worker_freshness" | "alerts";
+  snapshot_type: "worker_freshness" | "alerts" | "diagnostics" | "inventory";
   exported_by: string;
   payload_hash: string;
   signature: string;
@@ -1403,7 +1403,7 @@ export class AgentOsRepository {
 
   async createOrchestrationOpsSnapshotExport(args: {
     tenantId: string;
-    snapshotType: "worker_freshness" | "alerts";
+    snapshotType: "worker_freshness" | "alerts" | "diagnostics" | "inventory";
     exportedBy: string;
     payloadHash: string;
     signature: string;
@@ -1442,7 +1442,7 @@ export class AgentOsRepository {
 
   async listOrchestrationOpsSnapshotExports(args: {
     tenantId: string;
-    snapshotType: "worker_freshness" | "alerts";
+    snapshotType: "worker_freshness" | "alerts" | "diagnostics" | "inventory";
   }): Promise<OrchestrationOpsSnapshotExportRecord[]> {
     const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
       client.query<OrchestrationOpsSnapshotExportRow>(

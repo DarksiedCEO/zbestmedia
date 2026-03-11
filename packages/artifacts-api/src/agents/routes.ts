@@ -752,6 +752,46 @@ export function agentRoutes(opts: {
       return reply.send(result);
     });
 
+    app.post("/v1/orchestration/ops/diagnostics/export", async (req, reply) => {
+      const query = OrchestrationDiagnosticsQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.orchestrationService.exportDiagnosticsSnapshot({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        olderThanMinutes: query.data.olderThanMinutes,
+        signSnapshot: opts.signOrchestrationBundle
+      });
+      return reply.code(201).send(result);
+    });
+
+    app.get("/v1/orchestration/ops/diagnostics/exports", async (req, reply) => {
+      const items = await opts.orchestrationService.listOpsSnapshotExports({
+        tenantId: req.auth.tenantId,
+        snapshotType: "diagnostics"
+      });
+      return reply.send({ items });
+    });
+
+    app.post("/v1/orchestration/ops/diagnostics/exports/verify-history", async (req, reply) => {
+      const body = OrchestrationOpsHistoryVerifyBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.orchestrationService.verifyOpsSnapshotHistory({
+        tenantId: req.auth.tenantId,
+        snapshotType: "diagnostics",
+        sealedAt: body.data.sealedAt,
+        payloadHash: body.data.payloadHash,
+        signature: body.data.signature,
+        verifySnapshot: opts.verifyOrchestrationBundle
+      });
+      return reply.send(result);
+    });
+
     app.get("/v1/orchestration/ops/inventory", async (req, reply) => {
       const result = await opts.orchestrationService.getOperationsInventory({
         tenantId: req.auth.tenantId
@@ -759,9 +799,56 @@ export function agentRoutes(opts: {
       return reply.send(result);
     });
 
+    app.post("/v1/orchestration/ops/inventory/export", async (req, reply) => {
+      const result = await opts.orchestrationService.exportInventorySnapshot({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        signSnapshot: opts.signOrchestrationBundle
+      });
+      return reply.code(201).send(result);
+    });
+
+    app.get("/v1/orchestration/ops/inventory/exports", async (req, reply) => {
+      const items = await opts.orchestrationService.listOpsSnapshotExports({
+        tenantId: req.auth.tenantId,
+        snapshotType: "inventory"
+      });
+      return reply.send({ items });
+    });
+
+    app.post("/v1/orchestration/ops/inventory/exports/verify-history", async (req, reply) => {
+      const body = OrchestrationOpsHistoryVerifyBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.orchestrationService.verifyOpsSnapshotHistory({
+        tenantId: req.auth.tenantId,
+        snapshotType: "inventory",
+        sealedAt: body.data.sealedAt,
+        payloadHash: body.data.payloadHash,
+        signature: body.data.signature,
+        verifySnapshot: opts.verifyOrchestrationBundle
+      });
+      return reply.send(result);
+    });
+
     app.get("/v1/orchestration/ops/workers", async (req, reply) => {
       const result = await opts.orchestrationService.getWorkerHealth({
         tenantId: req.auth.tenantId
+      });
+      return reply.send(result);
+    });
+
+    app.get("/v1/orchestration/ops/workers/slo", async (req, reply) => {
+      const query = WorkerFreshnessQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.orchestrationService.getWorkerSloSummary({
+        tenantId: req.auth.tenantId,
+        staleAfterMinutes: query.data.staleAfterMinutes
       });
       return reply.send(result);
     });
