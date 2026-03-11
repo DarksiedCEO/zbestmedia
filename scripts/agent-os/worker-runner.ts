@@ -14,6 +14,7 @@ async function main() {
   const tenantId = requireEnv("AGENT_OS_TENANT_ID");
   const limit = Number(process.env.AGENT_OS_WORKER_LIMIT ?? "10");
   const retryDelayMs = process.env.AGENT_OS_RETRY_DELAY_MS ? Number(process.env.AGENT_OS_RETRY_DELAY_MS) : undefined;
+  const workerId = process.env.AGENT_OS_WORKER_ID?.trim() || `worker-run-once:${process.pid}`;
   const agentId = (process.env.AGENT_OS_AGENT_ID?.trim() || undefined) as
     | "brandyn"
     | "jordyn"
@@ -27,11 +28,32 @@ async function main() {
   try {
     const repository = new AgentOsRepository(pool);
     const runner = new AgentWorkerRunner(repository);
+    await repository.recordWorkerHeartbeat({
+      tenantId,
+      workerId,
+      workerKind: "agent-os",
+      agentId,
+      status: "starting",
+      details: { mode: "run-once", limit }
+    });
     const result = await runner.runOnce({
       tenantId,
       agentId,
       limit,
       retryDelayMs
+    });
+
+    await repository.recordWorkerHeartbeat({
+      tenantId,
+      workerId,
+      workerKind: "agent-os",
+      agentId,
+      status: "idle",
+      details: {
+        mode: "run-once",
+        executionsCompleted: result.executions.completed.length,
+        evalsCompleted: result.evals.completed.length
+      }
     });
 
     console.log(JSON.stringify(result, null, 2));

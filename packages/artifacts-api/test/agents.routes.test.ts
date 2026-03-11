@@ -101,6 +101,31 @@ describe("agent routes", () => {
       handoffs: [{ stepName: "handoff_planned:brandyn->jordyn" }],
       auditTrail: [{ stepName: "handoff_planned:brandyn->jordyn" }]
     })),
+    exportSignedReplayBundle: vi.fn(async () => ({
+      exportRecord: {
+        exportId: "bundle-export:1",
+        executionId: "execution:maestro:campaign-2",
+        exportedBy: "actor-1"
+      },
+      bundle: {
+        execution: { executionId: "execution:maestro:campaign-2", agentId: "maestro", status: "COMPLETED" }
+      },
+      signature: {
+        sealedAt: "2026-03-11T00:00:00.000Z",
+        payloadHash: "abc123",
+        signature: "sig456"
+      }
+    })),
+    listReplayBundleExports: vi.fn(async () => [
+      {
+        exportId: "bundle-export:1",
+        executionId: "execution:maestro:campaign-2",
+        exportedBy: "actor-1",
+        payloadHash: "abc123",
+        signature: "sig456",
+        sealedAt: "2026-03-11T00:00:00.000Z"
+      }
+    ]),
     getHandoffAudit: vi.fn(async () => ({
       execution: { executionId: "execution:maestro:campaign-2", status: "COMPLETED" },
       handoffs: [{ stepName: "handoff_planned:brandyn->jordyn" }]
@@ -145,6 +170,38 @@ describe("agent routes", () => {
           maxRetries: 3
         }
       ]
+    })),
+    getWorkerHealth: vi.fn(async () => ({
+      totalWorkers: 1,
+      items: [
+        {
+          workerId: "worker-daemon:1",
+          workerKind: "agent-os",
+          agentId: "maestro",
+          status: "idle",
+          observedAt: "2026-03-11T00:00:00.000Z"
+        }
+      ]
+    })),
+    getAlerts: vi.fn(async () => ({
+      alerts: [
+        {
+          code: "dead_letter_backlog",
+          severity: "warning",
+          message: "Dead-lettered orchestration executions require operator review.",
+          metrics: { deadLettered: 1 }
+        }
+      ],
+      diagnostics: {
+        executions: {
+          total: 1,
+          deadLettered: 1,
+          queuedRetries: 0,
+          pendingApproval: 0,
+          byStatus: { FAILED: 1 },
+          byFailureClass: { TRANSIENT_RUNTIME_ERROR: 1 }
+        }
+      }
     })),
     escalateApprovals: vi.fn(async () => [{ approvalRequestId: "approval:escalated", status: "PENDING" }]),
     requestDeadLetterReplayApproval: vi.fn(async () => ({
@@ -322,6 +379,14 @@ describe("agent routes", () => {
         signature: "sig456"
       }
     });
+    const exportBundleRes = await app.inject({
+      method: "POST",
+      url: "/v1/orchestration/executions/execution:maestro:campaign-2/export-bundle"
+    });
+    const exportHistoryRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/executions/execution:maestro:campaign-2/exports"
+    });
     const handoffRes = await app.inject({
       method: "GET",
       url: "/v1/orchestration/executions/execution:maestro:campaign-2/handoffs"
@@ -337,6 +402,14 @@ describe("agent routes", () => {
     const inventoryRes = await app.inject({
       method: "GET",
       url: "/v1/orchestration/ops/inventory"
+    });
+    const workerHealthRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/ops/workers"
+    });
+    const alertsRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/ops/alerts?olderThanMinutes=30&heartbeatStaleMinutes=15"
     });
     const runbookRes = await app.inject({
       method: "GET",
@@ -375,6 +448,10 @@ describe("agent routes", () => {
     expect(replayVerifyRes.statusCode).toBe(200);
     expect(replayVerifyRes.json().verified).toBe(true);
     expect(verifyOrchestrationBundle).toHaveBeenCalledOnce();
+    expect(exportBundleRes.statusCode).toBe(201);
+    expect(exportBundleRes.json().exportRecord.exportId).toBe("bundle-export:1");
+    expect(exportHistoryRes.statusCode).toBe(200);
+    expect(exportHistoryRes.json().items[0].exportId).toBe("bundle-export:1");
     expect(handoffRes.statusCode).toBe(200);
     expect(handoffRes.json().handoffs[0].stepName).toBe("handoff_planned:brandyn->jordyn");
     expect(slaRes.statusCode).toBe(200);
@@ -384,9 +461,14 @@ describe("agent routes", () => {
     expect(diagnosticsRes.json().executions.queuedRetries).toBe(0);
     expect(inventoryRes.statusCode).toBe(200);
     expect(inventoryRes.json().deadLettered[0].executionId).toBe("execution:maestro:dead-1");
+    expect(workerHealthRes.statusCode).toBe(200);
+    expect(workerHealthRes.json().totalWorkers).toBe(1);
+    expect(alertsRes.statusCode).toBe(200);
+    expect(alertsRes.json().alerts[0].code).toBe("dead_letter_backlog");
     expect(runbookRes.statusCode).toBe(200);
     expect(runbookRes.json().commands.runLoop).toBe("pnpm agent-os:worker:loop");
     expect(runbookRes.json().commands.daemon).toBe("pnpm agent-os:worker:daemon");
+    expect(runbookRes.json().validation.deploymentProfileCheck).toBe("pnpm agent-os:deployment:check");
     expect(escalateRes.statusCode).toBe(200);
     expect(escalateRes.json().items[0].approvalRequestId).toBe("approval:escalated");
     expect(processRes.statusCode).toBe(200);

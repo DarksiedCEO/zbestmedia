@@ -288,6 +288,111 @@ describe("MaestroOrchestrationService", () => {
     expect(inventory.deadLettered[0]?.failureClass).toBe("TRANSIENT_RUNTIME_ERROR");
   });
 
+  it("persists signed replay exports, reports worker health, and emits ops alerts", async () => {
+    const repositoryWithOps = {
+      ...repository,
+      createOrchestrationBundleExport: vi.fn(async () => ({
+        exportId: "bundle-export:1",
+        executionId: "execution:maestro:campaign-6",
+        exportedBy: "ops-1",
+        payloadHash: "hash-1",
+        signature: "sig-1",
+        sealedAt: "2026-03-11T00:10:00.000Z",
+        bundleSnapshot: { replay: { workflow: "brand_pipeline" } },
+        createdAt: "2026-03-11T00:10:00.000Z"
+      })),
+      listOrchestrationBundleExports: vi.fn(async () => [
+        {
+          exportId: "bundle-export:1",
+          executionId: "execution:maestro:campaign-6",
+          exportedBy: "ops-1",
+          payloadHash: "hash-1",
+          signature: "sig-1",
+          sealedAt: "2026-03-11T00:10:00.000Z",
+          bundleSnapshot: { replay: { workflow: "brand_pipeline" } },
+          createdAt: "2026-03-11T00:10:00.000Z"
+        }
+      ]),
+      getExecution: vi.fn(async () => ({
+        execution: {
+          executionId: "execution:maestro:campaign-6",
+          agentId: "maestro",
+          subjectType: "orchestration_workflow",
+          subjectId: "campaign-6",
+          inputPayload: { routedWorkflow: "brand_pipeline", delegatedAgents: ["brandyn", "jordyn"] },
+          outputPayload: { kind: "orchestration_output" },
+          failureClass: null,
+          failureMessage: null,
+          retryCount: 1,
+          deadLetteredAt: "2026-03-11T00:05:00.000Z",
+          status: "FAILED",
+          maxRetries: 3,
+          nextRetryAt: null
+        },
+        steps: [{ stepName: "handoff_planned:brandyn->jordyn" }]
+      })),
+      listExecutions: vi.fn(async () => [
+        {
+          executionId: "execution:maestro:campaign-6",
+          agentId: "maestro",
+          status: "FAILED",
+          retryCount: 1,
+          maxRetries: 3,
+          nextRetryAt: null,
+          deadLetteredAt: "2026-03-11T00:05:00.000Z",
+          failureClass: "TRANSIENT_RUNTIME_ERROR"
+        }
+      ]),
+      listApprovalRequests: vi.fn(async () => [{ agentId: "maestro", escalatedAt: null }]),
+      listStaleApprovalRequests: vi.fn(async () => [{ agentId: "maestro" }]),
+      listWorkerHeartbeats: vi.fn(async () => [
+        {
+          workerId: "worker-daemon:1",
+          workerKind: "agent-os",
+          agentId: "maestro",
+          status: "idle",
+          details: { mode: "daemon" },
+          observedAt: "2026-03-11T00:00:00.000Z"
+        }
+      ])
+    } as any;
+    const opsService = new MaestroOrchestrationService(
+      repositoryWithOps,
+      executionService,
+      approvalEscalation
+    );
+
+    const exported = await opsService.exportSignedReplayBundle({
+      tenantId: "tenant-1",
+      executionId: "execution:maestro:campaign-6",
+      actorId: "ops-1",
+      signBundle: () => ({
+        sealedAt: "2026-03-11T00:10:00.000Z",
+        payloadHash: "hash-1",
+        signature: "sig-1"
+      })
+    });
+    const exports = await opsService.listReplayBundleExports({
+      tenantId: "tenant-1",
+      executionId: "execution:maestro:campaign-6"
+    });
+    const workers = await opsService.getWorkerHealth({
+      tenantId: "tenant-1"
+    });
+    const alerts = await opsService.getAlerts({
+      tenantId: "tenant-1",
+      olderThanMinutes: 60,
+      heartbeatStaleMinutes: 15
+    });
+
+    expect(exported?.exportRecord.exportId).toBe("bundle-export:1");
+    expect(exports).toHaveLength(1);
+    expect(workers.totalWorkers).toBe(1);
+    expect(alerts.alerts.map((item) => item.code)).toContain("dead_letter_backlog");
+    expect(alerts.alerts.map((item) => item.code)).toContain("stale_replay_approvals");
+    expect(alerts.alerts.map((item) => item.code)).toContain("worker_heartbeat_stale");
+  });
+
   it("creates replay approvals for dead-lettered executions", async () => {
     const repositoryWithReplayApproval = {
       ...repository,

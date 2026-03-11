@@ -10,6 +10,7 @@
     "agent-os:worker:run-once": "tsx scripts/agent-os/worker-runner.ts",
     "agent-os:worker:loop": "tsx scripts/agent-os/worker-loop.ts",
     "agent-os:worker:daemon": "tsx scripts/agent-os/worker-daemon.ts",
+    "agent-os:deployment:check": "tsx scripts/agent-os/check-deployment-profile.ts",
     "lint": "eslint \"packages/**/src/**/*.ts\" \"packages/**/test/**/*.ts\" \"scripts/**/*.ts\"",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",

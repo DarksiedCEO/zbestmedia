@@ -208,6 +208,31 @@ export const MemoryEntryRecordSchema = z.object({
 });
 export type MemoryEntryRecord = z.infer<typeof MemoryEntryRecordSchema>;
 
+export const OrchestrationBundleExportRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  exportId: z.string().min(1),
+  executionId: z.string().min(1),
+  exportedBy: z.string().min(1),
+  payloadHash: z.string().min(1),
+  signature: z.string().min(1),
+  sealedAt: z.string().datetime(),
+  bundleSnapshot: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime()
+});
+export type OrchestrationBundleExportRecord = z.infer<typeof OrchestrationBundleExportRecordSchema>;
+
+export const WorkerHeartbeatRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  workerHeartbeatId: z.string().min(1),
+  workerId: z.string().min(1),
+  workerKind: z.string().min(1),
+  agentId: z.custom<AgentId>().nullable().optional(),
+  status: z.enum(["starting", "idle", "running", "error"]),
+  details: z.record(z.string(), z.unknown()),
+  observedAt: z.string().datetime()
+});
+export type WorkerHeartbeatRecord = z.infer<typeof WorkerHeartbeatRecordSchema>;
+
 export type AgentOsFoundationBundle = {
   agents: AgentRecord[];
   versions: AgentVersionRecord[];

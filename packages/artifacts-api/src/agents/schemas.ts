@@ -162,6 +162,11 @@ export const OrchestrationDiagnosticsQuerySchema = z.object({
   olderThanMinutes: z.coerce.number().int().positive().max(10_080).default(60)
 });
 
+export const OrchestrationAlertsQuerySchema = z.object({
+  olderThanMinutes: z.coerce.number().int().positive().max(10_080).default(60),
+  heartbeatStaleMinutes: z.coerce.number().int().positive().max(10_080).default(15)
+});
+
 export const OrchestrationWorkerProcessBodySchema = z.object({
   limit: z.number().int().positive().max(50).default(10),
   retryDelayMs: z.number().int().positive().max(3_600_000).optional()

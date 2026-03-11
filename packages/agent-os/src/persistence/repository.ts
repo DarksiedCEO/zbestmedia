@@ -23,7 +23,9 @@ import type {
   ExecutionStepStatus,
   EvalRunRecord,
   EvalScoreRecord,
-  MemoryEntryRecord
+  MemoryEntryRecord,
+  OrchestrationBundleExportRecord,
+  WorkerHeartbeatRecord
 } from "./contracts.js";
 import { buildAgentOsFoundationBundle } from "./foundation.js";
 import { withTenant } from "./withTenant.js";
@@ -144,6 +146,29 @@ type ExecutionStepRow = {
   created_at: string | Date;
 };
 
+type OrchestrationBundleExportRow = {
+  tenant_id: string;
+  export_id: string;
+  execution_id: string;
+  exported_by: string;
+  payload_hash: string;
+  signature: string;
+  sealed_at: string | Date;
+  bundle_snapshot: Record<string, unknown>;
+  created_at: string | Date;
+};
+
+type WorkerHeartbeatRow = {
+  tenant_id: string;
+  worker_heartbeat_id: string;
+  worker_id: string;
+  worker_kind: string;
+  agent_id: AgentId | null;
+  status: WorkerHeartbeatRecord["status"];
+  details: Record<string, unknown>;
+  observed_at: string | Date;
+};
+
 function toIsoString(value: string | Date): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
@@ -260,6 +285,33 @@ function mapEvalRunRow(row: EvalRunRow): EvalRunRecord {
     createdBy: row.created_by,
     createdAt: toIsoString(row.created_at),
     completedAt: row.completed_at ? toIsoString(row.completed_at) : null
+  };
+}
+
+function mapOrchestrationBundleExportRow(row: OrchestrationBundleExportRow): OrchestrationBundleExportRecord {
+  return {
+    tenantId: row.tenant_id,
+    exportId: row.export_id,
+    executionId: row.execution_id,
+    exportedBy: row.exported_by,
+    payloadHash: row.payload_hash,
+    signature: row.signature,
+    sealedAt: toIsoString(row.sealed_at),
+    bundleSnapshot: row.bundle_snapshot,
+    createdAt: toIsoString(row.created_at)
+  };
+}
+
+function mapWorkerHeartbeatRow(row: WorkerHeartbeatRow): WorkerHeartbeatRecord {
+  return {
+    tenantId: row.tenant_id,
+    workerHeartbeatId: row.worker_heartbeat_id,
+    workerId: row.worker_id,
+    workerKind: row.worker_kind,
+    agentId: row.agent_id,
+    status: row.status,
+    details: row.details,
+    observedAt: toIsoString(row.observed_at)
   };
 }
 
@@ -1232,6 +1284,65 @@ export class AgentOsRepository {
     });
   }
 
+  async createOrchestrationBundleExport(args: {
+    tenantId: string;
+    executionId: string;
+    exportedBy: string;
+    payloadHash: string;
+    signature: string;
+    sealedAt: string;
+    bundleSnapshot: Record<string, unknown>;
+    createdAt?: string;
+  }): Promise<OrchestrationBundleExportRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const exportId = buildScopedId("bundle-export", [args.executionId, createdAt]);
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OrchestrationBundleExportRow>(
+        `
+        INSERT INTO orchestration_bundle_exports (
+          tenant_id, export_id, execution_id, exported_by,
+          payload_hash, signature, sealed_at, bundle_snapshot, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
+        RETURNING tenant_id, export_id, execution_id, exported_by,
+                  payload_hash, signature, sealed_at, bundle_snapshot, created_at
+        `,
+        [
+          args.tenantId,
+          exportId,
+          args.executionId,
+          args.exportedBy,
+          args.payloadHash,
+          args.signature,
+          args.sealedAt,
+          JSON.stringify(args.bundleSnapshot),
+          createdAt
+        ]
+      )
+    );
+
+    return mapOrchestrationBundleExportRow(res.rows[0]!);
+  }
+
+  async listOrchestrationBundleExports(args: {
+    tenantId: string;
+    executionId: string;
+  }): Promise<OrchestrationBundleExportRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OrchestrationBundleExportRow>(
+        `
+        SELECT tenant_id, export_id, execution_id, exported_by,
+               payload_hash, signature, sealed_at, bundle_snapshot, created_at
+        FROM orchestration_bundle_exports
+        WHERE tenant_id = $1 AND execution_id = $2
+        ORDER BY created_at DESC
+        `,
+        [args.tenantId, args.executionId]
+      )
+    );
+
+    return res.rows.map(mapOrchestrationBundleExportRow);
+  }
+
   async listExecutions(args: {
     tenantId: string;
     agentId?: AgentId;
@@ -1256,6 +1367,66 @@ export class AgentOsRepository {
     );
 
     return res.rows.map(mapExecutionRow);
+  }
+
+  async recordWorkerHeartbeat(args: {
+    tenantId: string;
+    workerId: string;
+    workerKind: string;
+    agentId?: AgentId;
+    status: WorkerHeartbeatRecord["status"];
+    details?: Record<string, unknown>;
+    observedAt?: string;
+  }): Promise<WorkerHeartbeatRecord> {
+    const observedAt = args.observedAt ?? new Date().toISOString();
+    const workerHeartbeatId = buildScopedId("worker-heartbeat", [args.workerId, observedAt]);
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<WorkerHeartbeatRow>(
+        `
+        INSERT INTO worker_heartbeats (
+          tenant_id, worker_heartbeat_id, worker_id, worker_kind,
+          agent_id, status, details, observed_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+        RETURNING tenant_id, worker_heartbeat_id, worker_id, worker_kind,
+                  agent_id, status, details, observed_at
+        `,
+        [
+          args.tenantId,
+          workerHeartbeatId,
+          args.workerId,
+          args.workerKind,
+          args.agentId ?? null,
+          args.status,
+          JSON.stringify(args.details ?? {}),
+          observedAt
+        ]
+      )
+    );
+
+    return mapWorkerHeartbeatRow(res.rows[0]!);
+  }
+
+  async listWorkerHeartbeats(args: {
+    tenantId: string;
+    workerKind?: string;
+    agentId?: AgentId;
+  }): Promise<WorkerHeartbeatRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<WorkerHeartbeatRow>(
+        `
+        SELECT tenant_id, worker_heartbeat_id, worker_id, worker_kind,
+               agent_id, status, details, observed_at
+        FROM worker_heartbeats
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR worker_kind = $2)
+          AND ($3::text IS NULL OR agent_id = $3)
+        ORDER BY observed_at DESC
+        `,
+        [args.tenantId, args.workerKind ?? null, args.agentId ?? null]
+      )
+    );
+
+    return res.rows.map(mapWorkerHeartbeatRow);
   }
 
   async claimQueuedExecutions(args: {

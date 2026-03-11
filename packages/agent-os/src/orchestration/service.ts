@@ -236,6 +236,51 @@ export class MaestroOrchestrationService {
     };
   }
 
+  async exportSignedReplayBundle(args: {
+    tenantId: string;
+    executionId: string;
+    actorId: string;
+    signBundle: (bundle: unknown, executionId: string) => {
+      sealedAt: string;
+      payloadHash: string;
+      signature: string;
+    };
+    createdAt?: string;
+  }) {
+    const bundle = await this.buildReplayBundle({
+      tenantId: args.tenantId,
+      executionId: args.executionId
+    });
+    if (!bundle) {
+      return null;
+    }
+
+    const signature = args.signBundle(bundle, args.executionId);
+    const exportRecord = await this.repository.createOrchestrationBundleExport({
+      tenantId: args.tenantId,
+      executionId: args.executionId,
+      exportedBy: args.actorId,
+      payloadHash: signature.payloadHash,
+      signature: signature.signature,
+      sealedAt: signature.sealedAt,
+      bundleSnapshot: bundle as Record<string, unknown>,
+      createdAt: args.createdAt
+    });
+
+    return {
+      exportRecord,
+      bundle,
+      signature
+    };
+  }
+
+  async listReplayBundleExports(args: {
+    tenantId: string;
+    executionId: string;
+  }) {
+    return this.repository.listOrchestrationBundleExports(args);
+  }
+
   async requestDeadLetterReplayApproval(args: {
     tenantId: string;
     executionId: string;
@@ -396,6 +441,97 @@ export class MaestroOrchestrationService {
           nextRetryAt: item.nextRetryAt,
           maxRetries: item.maxRetries
         }))
+    };
+  }
+
+  async getWorkerHealth(args: {
+    tenantId: string;
+  }) {
+    const heartbeats = await this.repository.listWorkerHeartbeats({
+      tenantId: args.tenantId,
+      workerKind: "agent-os"
+    });
+    const latestByWorker = new Map<string, (typeof heartbeats)[number]>();
+    for (const heartbeat of heartbeats) {
+      if (!latestByWorker.has(heartbeat.workerId)) {
+        latestByWorker.set(heartbeat.workerId, heartbeat);
+      }
+    }
+
+    return {
+      totalWorkers: latestByWorker.size,
+      items: Array.from(latestByWorker.values())
+    };
+  }
+
+  async getAlerts(args: {
+    tenantId: string;
+    olderThanMinutes: number;
+    heartbeatStaleMinutes?: number;
+  }) {
+    const diagnostics = await this.getDiagnostics(args);
+    const inventory = await this.getOperationsInventory({
+      tenantId: args.tenantId
+    });
+    const workerHealth = await this.getWorkerHealth({
+      tenantId: args.tenantId
+    });
+    const heartbeatStaleMinutes = args.heartbeatStaleMinutes ?? 15;
+    const staleThresholdMs = heartbeatStaleMinutes * 60_000;
+    const nowMs = Date.now();
+
+    const alerts: Array<{
+      code: string;
+      severity: "info" | "warning" | "critical";
+      message: string;
+      metrics: Record<string, unknown>;
+    }> = [];
+
+    if (diagnostics.executions.deadLettered > 0) {
+      alerts.push({
+        code: "dead_letter_backlog",
+        severity: diagnostics.executions.deadLettered >= 3 ? "critical" : "warning",
+        message: "Dead-lettered orchestration executions require operator review.",
+        metrics: { deadLettered: diagnostics.executions.deadLettered }
+      });
+    }
+
+    if (diagnostics.executions.queuedRetries > 0) {
+      alerts.push({
+        code: "retry_queue_backlog",
+        severity: diagnostics.executions.queuedRetries >= 5 ? "critical" : "warning",
+        message: "Queued orchestration retries are accumulating.",
+        metrics: { queuedRetries: diagnostics.executions.queuedRetries }
+      });
+    }
+
+    if (diagnostics.approvalSla.totals.stale > 0) {
+      alerts.push({
+        code: "stale_replay_approvals",
+        severity: "warning",
+        message: "Stale orchestration approvals exceed SLA thresholds.",
+        metrics: diagnostics.approvalSla.totals
+      });
+    }
+
+    const staleWorkers = workerHealth.items.filter((item) => nowMs - Date.parse(item.observedAt) > staleThresholdMs);
+    if (workerHealth.totalWorkers === 0 || staleWorkers.length > 0) {
+      alerts.push({
+        code: "worker_heartbeat_stale",
+        severity: workerHealth.totalWorkers === 0 ? "critical" : "warning",
+        message: "No recent Agent OS worker heartbeat is available.",
+        metrics: {
+          totalWorkers: workerHealth.totalWorkers,
+          staleWorkers: staleWorkers.map((item) => item.workerId)
+        }
+      });
+    }
+
+    return {
+      alerts,
+      diagnostics,
+      inventory,
+      workerHealth
     };
   }
 }

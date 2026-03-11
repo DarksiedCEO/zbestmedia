@@ -22,6 +22,7 @@ import {
   ApprovalDecisionBodySchema,
   ApprovalListQuerySchema,
   OrchestrationApprovalSlaQuerySchema,
+  OrchestrationAlertsQuerySchema,
   OrchestrationBundleVerifyBodySchema,
   OrchestrationDiagnosticsQuerySchema,
   ApprovalRequestIdParamSchema,
@@ -543,6 +544,37 @@ export function agentRoutes(opts: {
       });
     });
 
+    app.post("/v1/orchestration/executions/:executionId/export-bundle", async (req, reply) => {
+      const path = ExecutionIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      const result = await opts.orchestrationService.exportSignedReplayBundle({
+        tenantId: req.auth.tenantId,
+        executionId: path.data.executionId,
+        actorId: req.auth.actorId,
+        signBundle: opts.signOrchestrationBundle
+      });
+      if (!result) {
+        return reply.code(404).send({ error: "execution_not_found" });
+      }
+      return reply.code(201).send(result);
+    });
+
+    app.get("/v1/orchestration/executions/:executionId/exports", async (req, reply) => {
+      const path = ExecutionIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      const items = await opts.orchestrationService.listReplayBundleExports({
+        tenantId: req.auth.tenantId,
+        executionId: path.data.executionId
+      });
+      return reply.send({ items });
+    });
+
     app.post("/v1/orchestration/executions/:executionId/replay-bundle/verify", async (req, reply) => {
       const path = ExecutionIdParamSchema.safeParse(req.params);
       const body = OrchestrationBundleVerifyBodySchema.safeParse(req.body ?? {});
@@ -696,6 +728,27 @@ export function agentRoutes(opts: {
       return reply.send(result);
     });
 
+    app.get("/v1/orchestration/ops/workers", async (req, reply) => {
+      const result = await opts.orchestrationService.getWorkerHealth({
+        tenantId: req.auth.tenantId
+      });
+      return reply.send(result);
+    });
+
+    app.get("/v1/orchestration/ops/alerts", async (req, reply) => {
+      const query = OrchestrationAlertsQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.orchestrationService.getAlerts({
+        tenantId: req.auth.tenantId,
+        olderThanMinutes: query.data.olderThanMinutes,
+        heartbeatStaleMinutes: query.data.heartbeatStaleMinutes
+      });
+      return reply.send(result);
+    });
+
     app.get("/v1/orchestration/ops/runbook", async (_req, reply) => {
       return reply.send({
         commands: {
@@ -703,8 +756,19 @@ export function agentRoutes(opts: {
           runLoop: "pnpm agent-os:worker:loop",
           daemon: "pnpm agent-os:worker:daemon"
         },
+        validation: {
+          deploymentProfileCheck: "pnpm agent-os:deployment:check"
+        },
         requiredEnv: ["DATABASE_URL", "AGENT_OS_TENANT_ID"],
-        optionalEnv: ["AGENT_OS_AGENT_ID", "AGENT_OS_WORKER_LIMIT", "AGENT_OS_RETRY_DELAY_MS", "AGENT_OS_LOOP_INTERVAL_MS", "AGENT_OS_MAX_ITERATIONS"]
+        optionalEnv: [
+          "AGENT_OS_AGENT_ID",
+          "AGENT_OS_WORKER_LIMIT",
+          "AGENT_OS_RETRY_DELAY_MS",
+          "AGENT_OS_LOOP_INTERVAL_MS",
+          "AGENT_OS_MAX_ITERATIONS",
+          "AGENT_OS_WORKER_ID",
+          "AGENT_OS_DEPLOYMENT_PROFILE"
+        ]
       });
     });
 

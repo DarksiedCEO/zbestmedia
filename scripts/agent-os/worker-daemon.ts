@@ -15,6 +15,7 @@ async function main() {
   const limit = Number(process.env.AGENT_OS_WORKER_LIMIT ?? "10");
   const retryDelayMs = process.env.AGENT_OS_RETRY_DELAY_MS ? Number(process.env.AGENT_OS_RETRY_DELAY_MS) : undefined;
   const intervalMs = Number(process.env.AGENT_OS_LOOP_INTERVAL_MS ?? "5000");
+  const workerId = process.env.AGENT_OS_WORKER_ID?.trim() || `worker-daemon:${process.pid}`;
   const agentId = (process.env.AGENT_OS_AGENT_ID?.trim() || undefined) as
     | "brandyn"
     | "jordyn"
@@ -28,12 +29,29 @@ async function main() {
   try {
     const repository = new AgentOsRepository(pool);
     const runner = new AgentWorkerRunner(repository);
+    await repository.recordWorkerHeartbeat({
+      tenantId,
+      workerId,
+      workerKind: "agent-os",
+      agentId,
+      status: "running",
+      details: { mode: "daemon", limit, intervalMs }
+    });
     const result = await runner.runLoop({
       tenantId,
       agentId,
       limit,
       retryDelayMs,
       intervalMs
+    });
+
+    await repository.recordWorkerHeartbeat({
+      tenantId,
+      workerId,
+      workerKind: "agent-os",
+      agentId,
+      status: "idle",
+      details: { mode: "daemon", iterations: result.iterations }
     });
 
     console.log(JSON.stringify(result, null, 2));

@@ -29,4 +29,24 @@ export class AgentWorkerService {
   }) {
     return this.repository.claimPendingEvalRuns(args);
   }
+
+  async recordHeartbeat(args: {
+    tenantId: string;
+    workerId: string;
+    workerKind: string;
+    agentId?: AgentId;
+    status: "starting" | "idle" | "running" | "error";
+    details?: Record<string, unknown>;
+    observedAt?: string;
+  }) {
+    return this.repository.recordWorkerHeartbeat(args);
+  }
+
+  async listHeartbeats(args: {
+    tenantId: string;
+    workerKind?: string;
+    agentId?: AgentId;
+  }) {
+    return this.repository.listWorkerHeartbeats(args);
+  }
 }
