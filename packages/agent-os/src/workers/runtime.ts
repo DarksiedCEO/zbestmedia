@@ -95,6 +95,27 @@ export class AgentRuntimeService {
       }
 
       const output = buildDeterministicExecutionOutput(execution.agentId, execution.inputPayload);
+      const handoffPlan = Array.isArray(output.handoffPlan) ? output.handoffPlan : [];
+      for (const [index, step] of handoffPlan.entries()) {
+        if (
+          step &&
+          typeof step === "object" &&
+          "fromAgent" in step &&
+          "toAgent" in step &&
+          typeof step.fromAgent === "string" &&
+          typeof step.toAgent === "string"
+        ) {
+          await this.repository.appendExecutionStep({
+            tenantId: args.tenantId,
+            executionId: execution.executionId,
+            stepName: `handoff_executed:${step.fromAgent}->${step.toAgent}`,
+            stepOrder: 20 + index,
+            status: "COMPLETED",
+            payload: step as Record<string, unknown>,
+            createdAt: now
+          });
+        }
+      }
       await this.repository.appendExecutionStep({
         tenantId: args.tenantId,
         executionId: execution.executionId,

@@ -88,14 +88,33 @@ describe("agent routes", () => {
         output: { kind: "orchestration_output" }
       }
     })),
+    listWorkflowExecutions: vi.fn(async () => [
+      { executionId: "execution:maestro:campaign-2", agentId: "maestro", status: "COMPLETED", deadLetteredAt: null }
+    ]),
+    getWorkflowExecution: vi.fn(async () => ({
+      execution: { executionId: "execution:maestro:campaign-2", agentId: "maestro", status: "COMPLETED" },
+      steps: [{ stepName: "handoff_planned:brandyn->jordyn" }]
+    })),
     getHandoffAudit: vi.fn(async () => ({
       execution: { executionId: "execution:maestro:campaign-2", status: "COMPLETED" },
       handoffs: [{ stepName: "handoff_planned:brandyn->jordyn" }]
+    })),
+    buildApprovalSlaReport: vi.fn(async () => ({
+      olderThanMinutes: 30,
+      totals: { pending: 1, stale: 0, escalated: 0 },
+      byAgent: { maestro: { pending: 1, stale: 0, escalated: 0 } }
     })),
     escalateApprovals: vi.fn(async () => [{ approvalRequestId: "approval:escalated", status: "PENDING" }])
   } as never;
   const approvalEscalationService = {
     escalateStaleRequests: vi.fn(async () => [{ approvalRequestId: "approval:escalated", status: "PENDING" }])
+  } as never;
+  const runtimeService = {
+    processExecutionJobs: vi.fn(async () => ({
+      completed: [{ executionId: "execution:maestro:queued", status: "COMPLETED" }],
+      retried: [],
+      deadLettered: []
+    }))
   } as never;
 
   beforeAll(async () => {
@@ -118,7 +137,8 @@ describe("agent routes", () => {
         versionService,
         workerService,
         orchestrationService,
-        approvalEscalationService
+        approvalEscalationService,
+        runtimeService
       })
     );
     await app.ready();
@@ -200,12 +220,25 @@ describe("agent routes", () => {
       payload: {
         workflow: "brand_pipeline",
         subjectId: "campaign-2",
-        payload: { campaign: "spring" }
+        payload: { campaign: "spring" },
+        queueForWorker: true
       }
+    });
+    const orchestrationListRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/executions?deadLetteredOnly=false"
+    });
+    const orchestrationDetailRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/executions/execution:maestro:campaign-2"
     });
     const handoffRes = await app.inject({
       method: "GET",
       url: "/v1/orchestration/executions/execution:maestro:campaign-2/handoffs"
+    });
+    const slaRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/approvals/sla?olderThanMinutes=30"
     });
     const escalateRes = await app.inject({
       method: "POST",
@@ -215,16 +248,27 @@ describe("agent routes", () => {
         agentId: "maestro"
       }
     });
+    const processRes = await app.inject({
+      method: "POST",
+      url: "/v1/internal/workers/orchestration/process",
+      payload: { limit: 2 }
+    });
 
     expect(planRes.statusCode).toBe(201);
     expect(planRes.json()).toMatchObject({
       workflow: "brand_pipeline",
       delegatedAgents: ["brandyn", "jordyn", "kobe", "oracle", "titan"]
     });
+    expect(orchestrationListRes.statusCode).toBe(200);
+    expect(orchestrationDetailRes.statusCode).toBe(200);
     expect(handoffRes.statusCode).toBe(200);
     expect(handoffRes.json().handoffs[0].stepName).toBe("handoff_planned:brandyn->jordyn");
+    expect(slaRes.statusCode).toBe(200);
+    expect(slaRes.json().totals).toEqual({ pending: 1, stale: 0, escalated: 0 });
     expect(escalateRes.statusCode).toBe(200);
     expect(escalateRes.json().items[0].approvalRequestId).toBe("approval:escalated");
+    expect(processRes.statusCode).toBe(200);
+    expect(processRes.json().completed[0].executionId).toBe("execution:maestro:queued");
   });
 
   it("exposes versions, approvals, executions, and worker hooks", async () => {

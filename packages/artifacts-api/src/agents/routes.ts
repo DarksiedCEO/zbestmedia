@@ -5,6 +5,7 @@ import {
   AgentOsRepository,
   AgentExecutionService,
   AgentMemoryAccessError,
+  AgentRuntimeService,
   ApprovalEscalationService,
   AgentVersionService,
   AgentWorkerService,
@@ -20,9 +21,12 @@ import {
   AgentIdParamSchema,
   ApprovalDecisionBodySchema,
   ApprovalListQuerySchema,
+  OrchestrationApprovalSlaQuerySchema,
   ApprovalRequestIdParamSchema,
   OrchestrationEscalateBodySchema,
+  OrchestrationExecutionListQuerySchema,
   OrchestrationPlanBodySchema,
+  OrchestrationWorkerProcessBodySchema,
   BrandPipelineAdvanceBodySchema,
   ExecutionIdParamSchema,
   ExecutionListQuerySchema,
@@ -50,6 +54,7 @@ export function agentRoutes(opts: {
   workerService: AgentWorkerService;
   orchestrationService: MaestroOrchestrationService;
   approvalEscalationService: ApprovalEscalationService;
+  runtimeService: AgentRuntimeService;
 }): FastifyPluginAsync {
   return async (app) => {
     function handleAgentError(reply: { code: (statusCode: number) => { send: (body: unknown) => unknown } }, error: unknown) {
@@ -451,13 +456,44 @@ export function agentRoutes(opts: {
           workflow: body.data.workflow,
           subjectId: body.data.subjectId,
           payload: body.data.payload,
-          delegatedAgents: body.data.delegatedAgents
+          delegatedAgents: body.data.delegatedAgents,
+          queueForWorker: body.data.queueForWorker
         });
 
         return reply.code(result.execution.approvalRequired ? 202 : 201).send(result);
       } catch (error) {
         return handleAgentError(reply, error);
       }
+    });
+
+    app.get("/v1/orchestration/executions", async (req, reply) => {
+      const query = OrchestrationExecutionListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const items = await opts.orchestrationService.listWorkflowExecutions({
+        tenantId: req.auth.tenantId,
+        status: query.data.status,
+        deadLetteredOnly: query.data.deadLetteredOnly
+      });
+      return reply.send({ items });
+    });
+
+    app.get("/v1/orchestration/executions/:executionId", async (req, reply) => {
+      const path = ExecutionIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      const result = await opts.orchestrationService.getWorkflowExecution({
+        tenantId: req.auth.tenantId,
+        executionId: path.data.executionId
+      });
+      if (!result) {
+        return reply.code(404).send({ error: "execution_not_found" });
+      }
+      return reply.send(result);
     });
 
     app.get("/v1/orchestration/executions/:executionId/handoffs", async (req, reply) => {
@@ -490,6 +526,20 @@ export function agentRoutes(opts: {
       return reply.send({ items });
     });
 
+    app.get("/v1/orchestration/approvals/sla", async (req, reply) => {
+      const query = OrchestrationApprovalSlaQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const report = await opts.orchestrationService.buildApprovalSlaReport({
+        tenantId: req.auth.tenantId,
+        olderThanMinutes: query.data.olderThanMinutes,
+        agentId: query.data.agentId
+      });
+      return reply.send(report);
+    });
+
     app.post("/v1/internal/workers/executions/claim", async (req, reply) => {
       const body = WorkerClaimExecutionsBodySchema.safeParse(req.body ?? {});
       if (!body.success) {
@@ -502,6 +552,21 @@ export function agentRoutes(opts: {
         limit: body.data.limit
       });
       return reply.send({ items });
+    });
+
+    app.post("/v1/internal/workers/orchestration/process", async (req, reply) => {
+      const body = OrchestrationWorkerProcessBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.runtimeService.processExecutionJobs({
+        tenantId: req.auth.tenantId,
+        agentId: "maestro",
+        limit: body.data.limit,
+        retryDelayMs: body.data.retryDelayMs
+      });
+      return reply.send(result);
     });
 
     app.post("/v1/internal/workers/evals/queue", async (req, reply) => {

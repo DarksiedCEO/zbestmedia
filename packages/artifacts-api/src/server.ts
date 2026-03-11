@@ -3,6 +3,7 @@ import rateLimit from "@fastify/rate-limit";
 import {
   AgentExecutionService,
   AgentOsRepository,
+  AgentRuntimeService,
   ApprovalEscalationService,
   ApprovalWorkflowService,
   AgentVersionService,
@@ -68,6 +69,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const brandWorkflow = new BrandPipelineOrchestrator(agentExecutionService, evalRunner);
   const versionService = new AgentVersionService(agentRepository);
   const workerService = new AgentWorkerService(agentRepository);
+  const runtimeService = new AgentRuntimeService(agentRepository);
   const approvalEscalationService = new ApprovalEscalationService(agentRepository);
   const orchestrationService = new MaestroOrchestrationService(
     agentRepository,
@@ -107,7 +109,8 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       versionService,
       workerService,
       orchestrationService,
-      approvalEscalationService
+      approvalEscalationService,
+      runtimeService
     })
   );
   await app.register(leadModule, {

@@ -127,10 +127,26 @@ export const OrchestrationPlanBodySchema = z.object({
   workflow: z.enum(["brand_pipeline"]),
   subjectId: z.string().min(1),
   payload: z.record(z.string(), z.unknown()),
-  delegatedAgents: z.array(AgentIdSchema).optional()
+  delegatedAgents: z.array(AgentIdSchema).optional(),
+  queueForWorker: z.boolean().optional().default(false)
 });
 
 export const OrchestrationEscalateBodySchema = z.object({
   olderThanMinutes: z.number().int().positive().max(10_080),
   agentId: AgentIdSchema.optional()
+});
+
+export const OrchestrationExecutionListQuerySchema = z.object({
+  status: z.enum(["QUEUED", "PENDING_APPROVAL", "RUNNING", "COMPLETED", "FAILED"]).optional(),
+  deadLetteredOnly: z.coerce.boolean().optional().default(false)
+});
+
+export const OrchestrationApprovalSlaQuerySchema = z.object({
+  olderThanMinutes: z.coerce.number().int().positive().max(10_080).default(60),
+  agentId: AgentIdSchema.optional()
+});
+
+export const OrchestrationWorkerProcessBodySchema = z.object({
+  limit: z.number().int().positive().max(50).default(10),
+  retryDelayMs: z.number().int().positive().max(3_600_000).optional()
 });

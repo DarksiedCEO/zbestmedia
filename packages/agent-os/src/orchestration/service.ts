@@ -50,6 +50,7 @@ export class MaestroOrchestrationService {
     subjectId: string;
     payload: Record<string, unknown>;
     delegatedAgents?: AgentId[];
+    queueForWorker?: boolean;
     createdAt?: string;
   }) {
     const delegatedAgents = args.delegatedAgents ?? WORKFLOW_DEFAULT_DELEGATION[args.workflow];
@@ -75,6 +76,7 @@ export class MaestroOrchestrationService {
         handoffPlan,
         ...args.payload
       },
+      queueForWorker: args.queueForWorker,
       createdAt: args.createdAt
     });
 
@@ -117,6 +119,31 @@ export class MaestroOrchestrationService {
     };
   }
 
+  async getWorkflowExecution(args: {
+    tenantId: string;
+    executionId: string;
+  }) {
+    const execution = await this.repository.getExecution(args);
+    if (!execution || execution.execution.agentId !== "maestro") {
+      return null;
+    }
+    return execution;
+  }
+
+  async listWorkflowExecutions(args: {
+    tenantId: string;
+    status?: "QUEUED" | "PENDING_APPROVAL" | "RUNNING" | "COMPLETED" | "FAILED";
+    deadLetteredOnly?: boolean;
+  }) {
+    const items = await this.repository.listExecutions({
+      tenantId: args.tenantId,
+      agentId: "maestro",
+      status: args.status
+    });
+
+    return args.deadLetteredOnly ? items.filter((item) => item.deadLetteredAt) : items;
+  }
+
   async escalateApprovals(args: {
     tenantId: string;
     olderThanMinutes: number;
@@ -128,5 +155,47 @@ export class MaestroOrchestrationService {
       olderThanIso,
       agentId: args.agentId
     });
+  }
+
+  async buildApprovalSlaReport(args: {
+    tenantId: string;
+    olderThanMinutes: number;
+    agentId?: AgentId;
+  }) {
+    const olderThanIso = new Date(Date.now() - args.olderThanMinutes * 60_000).toISOString();
+    const pending = await this.repository.listApprovalRequests({
+      tenantId: args.tenantId,
+      agentId: args.agentId,
+      status: "PENDING"
+    });
+    const stale = await this.repository.listStaleApprovalRequests({
+      tenantId: args.tenantId,
+      olderThanIso,
+      agentId: args.agentId
+    });
+
+    const byAgent = pending.reduce<Record<string, { pending: number; stale: number; escalated: number }>>((acc, item) => {
+      const bucket = (acc[item.agentId] ??= { pending: 0, stale: 0, escalated: 0 });
+      bucket.pending += 1;
+      if (item.escalatedAt) {
+        bucket.escalated += 1;
+      }
+      return acc;
+    }, {});
+
+    for (const item of stale) {
+      const bucket = (byAgent[item.agentId] ??= { pending: 0, stale: 0, escalated: 0 });
+      bucket.stale += 1;
+    }
+
+    return {
+      olderThanMinutes: args.olderThanMinutes,
+      totals: {
+        pending: pending.length,
+        stale: stale.length,
+        escalated: pending.filter((item) => item.escalatedAt).length
+      },
+      byAgent
+    };
   }
 }

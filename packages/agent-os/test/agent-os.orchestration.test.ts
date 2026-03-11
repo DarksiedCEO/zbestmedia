@@ -86,4 +86,54 @@ describe("MaestroOrchestrationService", () => {
     expect(items).toEqual([{ approvalRequestId: "approval:1" }]);
     expect(approvalEscalation.escalateStaleRequests).toHaveBeenCalledOnce();
   });
+
+  it("lists maestro workflow executions and filters dead-lettered items", async () => {
+    const repositoryWithExecutions = {
+      ...repository,
+      listExecutions: vi.fn(async () => [
+        { executionId: "execution:maestro:1", agentId: "maestro", deadLetteredAt: null },
+        { executionId: "execution:maestro:2", agentId: "maestro", deadLetteredAt: "2026-03-11T00:00:00.000Z" }
+      ])
+    } as any;
+    const serviceWithExecutions = new MaestroOrchestrationService(
+      repositoryWithExecutions,
+      executionService,
+      approvalEscalation
+    );
+
+    const all = await serviceWithExecutions.listWorkflowExecutions({
+      tenantId: "tenant-1"
+    });
+    const deadOnly = await serviceWithExecutions.listWorkflowExecutions({
+      tenantId: "tenant-1",
+      deadLetteredOnly: true
+    });
+
+    expect(all).toHaveLength(2);
+    expect(deadOnly).toEqual([{ executionId: "execution:maestro:2", agentId: "maestro", deadLetteredAt: "2026-03-11T00:00:00.000Z" }]);
+  });
+
+  it("builds approval SLA report from pending and stale approvals", async () => {
+    const repositoryWithApprovals = {
+      ...repository,
+      listApprovalRequests: vi.fn(async () => [
+        { agentId: "brandyn", escalatedAt: null },
+        { agentId: "kobe", escalatedAt: "2026-03-11T00:00:00.000Z" }
+      ]),
+      listStaleApprovalRequests: vi.fn(async () => [{ agentId: "kobe" }])
+    } as any;
+    const serviceWithApprovals = new MaestroOrchestrationService(
+      repositoryWithApprovals,
+      executionService,
+      approvalEscalation
+    );
+
+    const report = await serviceWithApprovals.buildApprovalSlaReport({
+      tenantId: "tenant-1",
+      olderThanMinutes: 60
+    });
+
+    expect(report.totals).toEqual({ pending: 2, stale: 1, escalated: 1 });
+    expect(report.byAgent.kobe).toEqual({ pending: 1, stale: 1, escalated: 1 });
+  });
 });

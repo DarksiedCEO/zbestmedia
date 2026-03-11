@@ -91,6 +91,53 @@ describe("agent-os runtime controls", () => {
     expect(deadLetterExecution).toHaveBeenCalledTimes(1);
   });
 
+  it("appends executed handoff steps for queued maestro orchestration jobs", async () => {
+    const appendExecutionStep = vi.fn(async () => ({}));
+    const repository = {
+      claimQueuedExecutions: vi.fn(async () => [
+        {
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          executionId: "execution:maestro:campaign-1",
+          agentId: "maestro",
+          inputPayload: {
+            routedWorkflow: "brand_pipeline",
+            delegatedAgents: ["brandyn", "jordyn", "kobe", "oracle", "titan"],
+            handoffPlan: [
+              { fromAgent: "brandyn", toAgent: "jordyn" },
+              { fromAgent: "jordyn", toAgent: "kobe" }
+            ]
+          },
+          retryCount: 0,
+          maxRetries: 2
+        }
+      ]),
+      appendExecutionStep,
+      completeExecution: vi.fn(async () => undefined),
+      getExecution: vi.fn(async () => ({
+        execution: { executionId: "execution:maestro:campaign-1", status: "COMPLETED" }
+      }))
+    } as never;
+
+    const service = new AgentRuntimeService(repository);
+    await service.processExecutionJobs({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      agentId: "maestro",
+      limit: 1,
+      now: "2026-03-11T00:00:00.000Z"
+    });
+
+    expect(appendExecutionStep).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stepName: "handoff_executed:brandyn->jordyn"
+      })
+    );
+    expect(appendExecutionStep).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stepName: "handoff_executed:jordyn->kobe"
+      })
+    );
+  });
+
   it("completes eval jobs and dead-letters exhausted failing evals", async () => {
     const completeEvalRun = vi.fn(async () => ({
       evalRun: { evalRunId: "eval:brandyn:pass", status: "COMPLETED" },
