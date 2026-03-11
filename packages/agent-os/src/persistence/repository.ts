@@ -52,6 +52,75 @@ type AgentRow = {
   retired_at: string | Date | null;
 };
 
+type AgentVersionRow = {
+  tenant_id: string;
+  agent_version_id: string;
+  agent_id: AgentId;
+  version_label: string;
+  definition_snapshot: Record<string, unknown>;
+  created_by: string;
+  created_at: string | Date;
+  replaced_by_version_id: string | null;
+};
+
+type ApprovalRequestRow = {
+  tenant_id: string;
+  approval_request_id: string;
+  agent_id: AgentId;
+  subject_type: string;
+  subject_id: string;
+  requested_by: string;
+  required_approvers: string[];
+  status: ApprovalRequestRecord["status"];
+  payload: Record<string, unknown>;
+  created_at: string | Date;
+  resolved_at: string | Date | null;
+};
+
+type ApprovalDecisionRow = {
+  tenant_id: string;
+  approval_decision_id: string;
+  approval_request_id: string;
+  approver_id: string;
+  decision: ApprovalDecision;
+  rationale: string;
+  payload: Record<string, unknown>;
+  created_at: string | Date;
+};
+
+type ExecutionRow = {
+  tenant_id: string;
+  execution_id: string;
+  agent_id: AgentId;
+  agent_version_id: string;
+  correlation_id: string;
+  request_source: string;
+  requested_by: string;
+  subject_type: string;
+  subject_id: string;
+  status: ExecutionStatus;
+  input_payload: Record<string, unknown>;
+  output_payload: Record<string, unknown> | null;
+  failure_class: string | null;
+  failure_message: string | null;
+  approval_request_id: string | null;
+  started_at: string | Date | null;
+  completed_at: string | Date | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+};
+
+type ExecutionStepRow = {
+  tenant_id: string;
+  execution_step_id: string;
+  execution_id: string;
+  step_name: string;
+  step_order: number;
+  status: ExecutionStepStatus;
+  payload: Record<string, unknown>;
+  created_at: string | Date;
+};
+
 function toIsoString(value: string | Date): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
@@ -77,6 +146,85 @@ function mapAgentRow(row: AgentRow): AgentRecord {
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at),
     retiredAt: row.retired_at ? toIsoString(row.retired_at) : null
+  };
+}
+
+function mapAgentVersionRow(row: AgentVersionRow) {
+  return {
+    tenantId: row.tenant_id,
+    agentVersionId: row.agent_version_id,
+    agentId: row.agent_id,
+    versionLabel: row.version_label,
+    definitionSnapshot: row.definition_snapshot,
+    createdBy: row.created_by,
+    createdAt: toIsoString(row.created_at),
+    replacedByVersionId: row.replaced_by_version_id
+  };
+}
+
+function mapApprovalRequestRow(row: ApprovalRequestRow): ApprovalRequestRecord {
+  return {
+    tenantId: row.tenant_id,
+    approvalRequestId: row.approval_request_id,
+    agentId: row.agent_id,
+    subjectType: row.subject_type,
+    subjectId: row.subject_id,
+    requestedBy: row.requested_by,
+    requiredApprovers: row.required_approvers,
+    status: row.status,
+    payload: row.payload,
+    createdAt: toIsoString(row.created_at),
+    resolvedAt: row.resolved_at ? toIsoString(row.resolved_at) : null
+  };
+}
+
+function mapApprovalDecisionRow(row: ApprovalDecisionRow): ApprovalDecisionRecord {
+  return {
+    tenantId: row.tenant_id,
+    approvalDecisionId: row.approval_decision_id,
+    approvalRequestId: row.approval_request_id,
+    approverId: row.approver_id,
+    decision: row.decision,
+    rationale: row.rationale,
+    payload: row.payload,
+    createdAt: toIsoString(row.created_at)
+  };
+}
+
+function mapExecutionRow(row: ExecutionRow): ExecutionRecord {
+  return {
+    tenantId: row.tenant_id,
+    executionId: row.execution_id,
+    agentId: row.agent_id,
+    agentVersionId: row.agent_version_id,
+    correlationId: row.correlation_id,
+    requestSource: row.request_source,
+    requestedBy: row.requested_by,
+    subjectType: row.subject_type,
+    subjectId: row.subject_id,
+    status: row.status,
+    inputPayload: row.input_payload,
+    outputPayload: row.output_payload,
+    failureClass: row.failure_class,
+    failureMessage: row.failure_message,
+    approvalRequestId: row.approval_request_id,
+    startedAt: row.started_at ? toIsoString(row.started_at) : null,
+    completedAt: row.completed_at ? toIsoString(row.completed_at) : null,
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at)
+  };
+}
+
+function mapExecutionStepRow(row: ExecutionStepRow): ExecutionStepRecord {
+  return {
+    tenantId: row.tenant_id,
+    executionStepId: row.execution_step_id,
+    executionId: row.execution_id,
+    stepName: row.step_name,
+    stepOrder: row.step_order,
+    status: row.status,
+    payload: row.payload,
+    createdAt: toIsoString(row.created_at)
   };
 }
 
@@ -241,6 +389,163 @@ export class AgentOsRepository {
     );
 
     return res.rows.map(mapAgentRow);
+  }
+
+  async getAgent(args: { tenantId: string; agentId: AgentId }): Promise<AgentRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AgentRow>(
+        `
+        SELECT tenant_id, agent_id, display_name, task_domain, workflow_role,
+               policy_profile_id, memory_partition_id, lifecycle_profile_id, eval_profile_id,
+               current_version_id, current_status, prohibited_domains, created_at, updated_at, retired_at
+        FROM agents
+        WHERE tenant_id = $1 AND agent_id = $2
+        `,
+        [args.tenantId, args.agentId]
+      )
+    );
+
+    return res.rows[0] ? mapAgentRow(res.rows[0]) : null;
+  }
+
+  async createAgentVersion(args: {
+    tenantId: string;
+    agentId: AgentId;
+    versionLabel: string;
+    definitionSnapshot: Record<string, unknown>;
+    createdBy: string;
+    createdAt?: string;
+  }) {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const agentVersionId = `${args.agentId}:${args.versionLabel}`;
+
+    await this.runWithTenant(this.pool, args.tenantId, async (client) => {
+      await client.query(
+        `
+        INSERT INTO agent_versions (
+          tenant_id, agent_version_id, agent_id, version_label,
+          definition_snapshot, created_by, created_at, replaced_by_version_id
+        ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, NULL)
+        `,
+        [
+          args.tenantId,
+          agentVersionId,
+          args.agentId,
+          args.versionLabel,
+          JSON.stringify(args.definitionSnapshot),
+          args.createdBy,
+          createdAt
+        ]
+      );
+    });
+
+    return {
+      tenantId: args.tenantId,
+      agentVersionId,
+      agentId: args.agentId,
+      versionLabel: args.versionLabel,
+      definitionSnapshot: args.definitionSnapshot,
+      createdBy: args.createdBy,
+      createdAt,
+      replacedByVersionId: null
+    };
+  }
+
+  async listAgentVersions(args: { tenantId: string; agentId: AgentId }) {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AgentVersionRow>(
+        `
+        SELECT tenant_id, agent_version_id, agent_id, version_label,
+               definition_snapshot, created_by, created_at, replaced_by_version_id
+        FROM agent_versions
+        WHERE tenant_id = $1 AND agent_id = $2
+        ORDER BY created_at DESC
+        `,
+        [args.tenantId, args.agentId]
+      )
+    );
+
+    return res.rows.map(mapAgentVersionRow);
+  }
+
+  async promoteAgentVersion(args: {
+    tenantId: string;
+    agentId: AgentId;
+    agentVersionId: string;
+    promotedBy: string;
+    reason: string;
+    createdAt?: string;
+  }) {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+
+    return this.runWithTenant(this.pool, args.tenantId, async (client) => {
+      const currentAgent = await client.query<{ current_version_id: string; current_status: AgentLifecycleStatus }>(
+        `SELECT current_version_id, current_status FROM agents WHERE tenant_id = $1 AND agent_id = $2`,
+        [args.tenantId, args.agentId]
+      );
+      const versionRes = await client.query<AgentVersionRow>(
+        `
+        SELECT tenant_id, agent_version_id, agent_id, version_label,
+               definition_snapshot, created_by, created_at, replaced_by_version_id
+        FROM agent_versions
+        WHERE tenant_id = $1 AND agent_version_id = $2 AND agent_id = $3
+        `,
+        [args.tenantId, args.agentVersionId, args.agentId]
+      );
+
+      const current = currentAgent.rows[0];
+      const promoted = versionRes.rows[0];
+      if (!current || !promoted) {
+        throw new Error("agent_or_version_not_found");
+      }
+
+      await client.query(
+        `
+        UPDATE agents
+        SET current_version_id = $3, updated_at = $4
+        WHERE tenant_id = $1 AND agent_id = $2
+        `,
+        [args.tenantId, args.agentId, args.agentVersionId, createdAt]
+      );
+
+      await client.query(
+        `
+        UPDATE agent_versions
+        SET replaced_by_version_id = $4
+        WHERE tenant_id = $1 AND agent_version_id = $2 AND agent_id = $3
+        `,
+        [args.tenantId, current.current_version_id, args.agentId, args.agentVersionId]
+      );
+
+      const lifecycleEventId = buildScopedId("lifecycle", [args.agentId, "replacement", createdAt]);
+      await client.query(
+        `
+        INSERT INTO agent_lifecycle_events (
+          tenant_id, lifecycle_event_id, agent_id, from_status, to_status,
+          actor_id, reason, metrics_snapshot, metadata, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, '{}'::jsonb, $8::jsonb, $9)
+        `,
+        [
+          args.tenantId,
+          lifecycleEventId,
+          args.agentId,
+          current.current_status,
+          current.current_status,
+          args.promotedBy,
+          args.reason,
+          JSON.stringify({
+            replacedVersionId: current.current_version_id,
+            promotedVersionId: args.agentVersionId
+          }),
+          createdAt
+        ]
+      );
+
+      return {
+        promotedVersion: mapAgentVersionRow(promoted),
+        previousVersionId: current.current_version_id
+      };
+    });
   }
 
   async appendLifecycleEvent(args: {
@@ -419,6 +724,64 @@ export class AgentOsRepository {
       payload: args.payload ?? {},
       createdAt
     };
+  }
+
+  async listApprovalRequests(args: {
+    tenantId: string;
+    agentId?: AgentId;
+    status?: ApprovalRequestRecord["status"];
+  }): Promise<ApprovalRequestRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<ApprovalRequestRow>(
+        `
+        SELECT tenant_id, approval_request_id, agent_id, subject_type, subject_id,
+               requested_by, required_approvers, status, payload, created_at, resolved_at
+        FROM approval_requests
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR agent_id = $2)
+          AND ($3::text IS NULL OR status = $3)
+        ORDER BY created_at DESC
+        `,
+        [args.tenantId, args.agentId ?? null, args.status ?? null]
+      )
+    );
+
+    return res.rows.map(mapApprovalRequestRow);
+  }
+
+  async getApprovalRequest(args: { tenantId: string; approvalRequestId: string }): Promise<{
+    request: ApprovalRequestRecord;
+    decisions: ApprovalDecisionRecord[];
+  } | null> {
+    return this.runWithTenant(this.pool, args.tenantId, async (client) => {
+      const requestRes = await client.query<ApprovalRequestRow>(
+        `
+        SELECT tenant_id, approval_request_id, agent_id, subject_type, subject_id,
+               requested_by, required_approvers, status, payload, created_at, resolved_at
+        FROM approval_requests
+        WHERE tenant_id = $1 AND approval_request_id = $2
+        `,
+        [args.tenantId, args.approvalRequestId]
+      );
+      const request = requestRes.rows[0];
+      if (!request) return null;
+
+      const decisionsRes = await client.query<ApprovalDecisionRow>(
+        `
+        SELECT tenant_id, approval_decision_id, approval_request_id, approver_id,
+               decision, rationale, payload, created_at
+        FROM approval_decisions
+        WHERE tenant_id = $1 AND approval_request_id = $2
+        ORDER BY created_at ASC
+        `,
+        [args.tenantId, args.approvalRequestId]
+      );
+
+      return {
+        request: mapApprovalRequestRow(request),
+        decisions: decisionsRes.rows.map(mapApprovalDecisionRow)
+      };
+    });
   }
 
   async createEvalRun(args: {
@@ -692,6 +1055,106 @@ export class AgentOsRepository {
     });
   }
 
+  async getExecution(args: { tenantId: string; executionId: string }): Promise<{
+    execution: ExecutionRecord;
+    steps: ExecutionStepRecord[];
+  } | null> {
+    return this.runWithTenant(this.pool, args.tenantId, async (client) => {
+      const executionRes = await client.query<ExecutionRow>(
+        `
+        SELECT tenant_id, execution_id, agent_id, agent_version_id, correlation_id,
+               request_source, requested_by, subject_type, subject_id, status,
+               input_payload, output_payload, failure_class, failure_message, approval_request_id,
+               started_at, completed_at, created_at, updated_at
+        FROM executions
+        WHERE tenant_id = $1 AND execution_id = $2
+        `,
+        [args.tenantId, args.executionId]
+      );
+      const execution = executionRes.rows[0];
+      if (!execution) return null;
+
+      const stepsRes = await client.query<ExecutionStepRow>(
+        `
+        SELECT tenant_id, execution_step_id, execution_id, step_name, step_order, status, payload, created_at
+        FROM execution_steps
+        WHERE tenant_id = $1 AND execution_id = $2
+        ORDER BY step_order ASC, created_at ASC
+        `,
+        [args.tenantId, args.executionId]
+      );
+
+      return {
+        execution: mapExecutionRow(execution),
+        steps: stepsRes.rows.map(mapExecutionStepRow)
+      };
+    });
+  }
+
+  async listExecutions(args: {
+    tenantId: string;
+    agentId?: AgentId;
+    status?: ExecutionStatus;
+  }): Promise<ExecutionRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<ExecutionRow>(
+        `
+        SELECT tenant_id, execution_id, agent_id, agent_version_id, correlation_id,
+               request_source, requested_by, subject_type, subject_id, status,
+               input_payload, output_payload, failure_class, failure_message, approval_request_id,
+               started_at, completed_at, created_at, updated_at
+        FROM executions
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR agent_id = $2)
+          AND ($3::text IS NULL OR status = $3)
+        ORDER BY created_at DESC
+        `,
+        [args.tenantId, args.agentId ?? null, args.status ?? null]
+      )
+    );
+
+    return res.rows.map(mapExecutionRow);
+  }
+
+  async claimQueuedExecutions(args: {
+    tenantId: string;
+    agentId?: AgentId;
+    limit: number;
+    startedAt?: string;
+  }): Promise<ExecutionRecord[]> {
+    const startedAt = args.startedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<ExecutionRow>(
+        `
+        WITH queued AS (
+          SELECT execution_id
+          FROM executions
+          WHERE tenant_id = $1
+            AND status = 'QUEUED'
+            AND ($2::text IS NULL OR agent_id = $2)
+          ORDER BY created_at ASC
+          LIMIT $3
+          FOR UPDATE SKIP LOCKED
+        )
+        UPDATE executions e
+        SET status = 'RUNNING',
+            started_at = $4,
+            updated_at = $4
+        FROM queued
+        WHERE e.tenant_id = $1
+          AND e.execution_id = queued.execution_id
+        RETURNING e.tenant_id, e.execution_id, e.agent_id, e.agent_version_id, e.correlation_id,
+                  e.request_source, e.requested_by, e.subject_type, e.subject_id, e.status,
+                  e.input_payload, e.output_payload, e.failure_class, e.failure_message, e.approval_request_id,
+                  e.started_at, e.completed_at, e.created_at, e.updated_at
+        `,
+        [args.tenantId, args.agentId ?? null, args.limit, startedAt]
+      )
+    );
+
+    return res.rows.map(mapExecutionRow);
+  }
+
   async failExecution(args: {
     tenantId: string;
     executionId: string;
@@ -818,6 +1281,107 @@ export class AgentOsRepository {
       createdBy: row.created_by,
       createdAt: toIsoString(row.created_at),
       updatedAt: toIsoString(row.updated_at)
+    }));
+  }
+
+  async queueEvalRun(args: {
+    tenantId: string;
+    agentId: AgentId;
+    suiteName: string;
+    createdBy: string;
+    createdAt?: string;
+  }): Promise<EvalRunRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const evalRunId = buildScopedId("eval", [args.agentId, args.suiteName, createdAt]);
+
+    return this.runWithTenant(this.pool, args.tenantId, async (client) => {
+      const agentRes = await client.query<{ current_version_id: string }>(
+        `SELECT current_version_id FROM agents WHERE tenant_id = $1 AND agent_id = $2`,
+        [args.tenantId, args.agentId]
+      );
+      const current = agentRes.rows[0];
+      if (!current) {
+        throw new Error("agent_not_found");
+      }
+
+      await client.query(
+        `
+        INSERT INTO eval_runs (
+          tenant_id, eval_run_id, agent_id, agent_version_id, suite_name,
+          status, score_summary, created_by, created_at, completed_at
+        ) VALUES ($1, $2, $3, $4, $5, 'PENDING', '{}'::jsonb, $6, $7, NULL)
+        `,
+        [args.tenantId, evalRunId, args.agentId, current.current_version_id, args.suiteName, args.createdBy, createdAt]
+      );
+
+      return {
+        tenantId: args.tenantId,
+        evalRunId,
+        agentId: args.agentId,
+        agentVersionId: current.current_version_id,
+        suiteName: args.suiteName,
+        status: "PENDING",
+        scoreSummary: {},
+        createdBy: args.createdBy,
+        createdAt,
+        completedAt: null
+      };
+    });
+  }
+
+  async claimPendingEvalRuns(args: {
+    tenantId: string;
+    agentId?: AgentId;
+    limit: number;
+  }): Promise<EvalRunRecord[]> {
+    const startedAt = new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<{
+        tenant_id: string;
+        eval_run_id: string;
+        agent_id: AgentId;
+        agent_version_id: string;
+        suite_name: string;
+        status: EvalRunRecord["status"];
+        score_summary: Record<string, unknown>;
+        created_by: string;
+        created_at: string | Date;
+        completed_at: string | Date | null;
+      }>(
+        `
+        WITH queued AS (
+          SELECT eval_run_id
+          FROM eval_runs
+          WHERE tenant_id = $1
+            AND status = 'PENDING'
+            AND ($2::text IS NULL OR agent_id = $2)
+          ORDER BY created_at ASC
+          LIMIT $3
+          FOR UPDATE SKIP LOCKED
+        )
+        UPDATE eval_runs e
+        SET status = 'RUNNING'
+        FROM queued
+        WHERE e.tenant_id = $1
+          AND e.eval_run_id = queued.eval_run_id
+        RETURNING e.tenant_id, e.eval_run_id, e.agent_id, e.agent_version_id, e.suite_name,
+                  e.status, e.score_summary, e.created_by, e.created_at, e.completed_at
+        `,
+        [args.tenantId, args.agentId ?? null, args.limit, startedAt]
+      )
+    );
+
+    return res.rows.map((row) => ({
+      tenantId: row.tenant_id,
+      evalRunId: row.eval_run_id,
+      agentId: row.agent_id,
+      agentVersionId: row.agent_version_id,
+      suiteName: row.suite_name,
+      status: row.status,
+      scoreSummary: row.score_summary,
+      createdBy: row.created_by,
+      createdAt: toIsoString(row.created_at),
+      completedAt: row.completed_at ? toIsoString(row.completed_at) : null
     }));
   }
 }

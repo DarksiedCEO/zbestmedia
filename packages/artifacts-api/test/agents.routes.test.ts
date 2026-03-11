@@ -10,13 +10,25 @@ describe("agent routes", () => {
     provisionFoundation: vi.fn(async () => ({
       agents: [{ agentId: "brandyn" }, { agentId: "jordyn" }, { agentId: "kobe" }]
     })),
+    getAgent: vi.fn(async () => ({ agentId: "brandyn", currentVersionId: "brandyn:foundation-v1" })),
     listAgents: vi.fn(async () => [
       { agentId: "brandyn", taskDomain: "brand_identity_governance", currentStatus: "draft" },
       { agentId: "jordyn", taskDomain: "visual_identity_governance", currentStatus: "draft" },
       { agentId: "kobe", taskDomain: "social_campaign_deployment", currentStatus: "draft" }
     ]),
+    listAgentVersions: vi.fn(async () => [{ agentVersionId: "brandyn:foundation-v1" }]),
     appendLifecycleEvent: vi.fn(async () => ({ lifecycleEventId: "lifecycle:brandyn", toStatus: "training" })),
-    recordApprovalDecision: vi.fn(async () => ({ approvalDecisionId: "decision:1" }))
+    recordApprovalDecision: vi.fn(async () => ({ approvalDecisionId: "decision:1" })),
+    listApprovalRequests: vi.fn(async () => [{ approvalRequestId: "approval:1", status: "PENDING" }]),
+    getApprovalRequest: vi.fn(async () => ({
+      request: { approvalRequestId: "approval:1", status: "PENDING" },
+      decisions: []
+    })),
+    listExecutions: vi.fn(async () => [{ executionId: "execution:1", status: "QUEUED" }]),
+    getExecution: vi.fn(async () => ({
+      execution: { executionId: "execution:1", status: "QUEUED" },
+      steps: []
+    }))
   } as never;
   const executionService = {
     execute: vi.fn(async () => ({
@@ -45,6 +57,18 @@ describe("agent routes", () => {
       evalResult: null
     }))
   } as never;
+  const versionService = {
+    createVersion: vi.fn(async () => ({ agentVersionId: "brandyn:foundation-v2" })),
+    promoteVersion: vi.fn(async () => ({
+      promotedVersion: { agentVersionId: "brandyn:foundation-v2" },
+      previousVersionId: "brandyn:foundation-v1"
+    }))
+  } as never;
+  const workerService = {
+    claimExecutionJobs: vi.fn(async () => [{ executionId: "execution:1", status: "RUNNING" }]),
+    queueEvalJob: vi.fn(async () => ({ evalRunId: "eval:1", status: "PENDING" })),
+    claimEvalJobs: vi.fn(async () => [{ evalRunId: "eval:1", status: "RUNNING" }])
+  } as never;
 
   beforeAll(async () => {
     app = Fastify();
@@ -62,7 +86,9 @@ describe("agent routes", () => {
         executionService,
         memoryService,
         evalRunner,
-        workflow
+        workflow,
+        versionService,
+        workerService
       })
     );
     await app.ready();
@@ -135,5 +161,70 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().completedSteps).toEqual(["brandyn_direction_approved"]);
+  });
+
+  it("exposes versions, approvals, executions, and worker hooks", async () => {
+    const versionsRes = await app.inject({
+      method: "GET",
+      url: "/v1/agents/brandyn/versions"
+    });
+    const createVersionRes = await app.inject({
+      method: "POST",
+      url: "/v1/agents/brandyn/versions",
+      payload: {
+        versionLabel: "foundation-v2",
+        definitionSnapshot: { toneGuardrails: ["clear"] }
+      }
+    });
+    const promoteVersionRes = await app.inject({
+      method: "POST",
+      url: "/v1/agents/brandyn/versions/promote",
+      payload: {
+        agentVersionId: "brandyn:foundation-v2",
+        reason: "improved tone system"
+      }
+    });
+    const approvalsRes = await app.inject({
+      method: "GET",
+      url: "/v1/approvals?status=PENDING"
+    });
+    const approvalDetailRes = await app.inject({
+      method: "GET",
+      url: "/v1/approvals/approval:1"
+    });
+    const executionsRes = await app.inject({
+      method: "GET",
+      url: "/v1/executions?status=QUEUED"
+    });
+    const executionDetailRes = await app.inject({
+      method: "GET",
+      url: "/v1/executions/execution:1"
+    });
+    const claimRes = await app.inject({
+      method: "POST",
+      url: "/v1/internal/workers/executions/claim",
+      payload: { agentId: "kobe", limit: 2 }
+    });
+    const queueEvalRes = await app.inject({
+      method: "POST",
+      url: "/v1/internal/workers/evals/queue",
+      payload: { agentId: "brandyn", suiteName: "brand-suite" }
+    });
+    const claimEvalRes = await app.inject({
+      method: "POST",
+      url: "/v1/internal/workers/evals/claim",
+      payload: { agentId: "brandyn", limit: 2 }
+    });
+
+    expect(versionsRes.statusCode).toBe(200);
+    expect(createVersionRes.statusCode).toBe(201);
+    expect(promoteVersionRes.statusCode).toBe(200);
+    expect(approvalsRes.statusCode).toBe(200);
+    expect(approvalDetailRes.statusCode).toBe(200);
+    expect(executionsRes.statusCode).toBe(200);
+    expect(executionDetailRes.statusCode).toBe(200);
+    expect(claimRes.statusCode).toBe(200);
+    expect(queueEvalRes.statusCode).toBe(201);
+    expect(claimEvalRes.statusCode).toBe(200);
   });
 });

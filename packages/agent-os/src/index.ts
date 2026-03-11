@@ -8,6 +8,8 @@ export * from "./evals/specs.js";
 export * from "./evals/runner.js";
 export * from "./approvals/service.js";
 export * from "./execution/service.js";
+export * from "./versions/service.js";
+export * from "./workers/service.js";
 export * from "./workflows/brandPipeline.js";
 export * from "./workflows/orchestrator.js";
 export * from "./persistence/contracts.js";

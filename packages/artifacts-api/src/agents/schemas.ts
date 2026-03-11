@@ -13,7 +13,8 @@ export const ProvisionFoundationBodySchema = z.object({
 export const ExecuteAgentBodySchema = z.object({
   subjectType: z.string().min(1),
   subjectId: z.string().min(1),
-  payload: z.record(z.string(), z.unknown())
+  payload: z.record(z.string(), z.unknown()),
+  queueForWorker: z.boolean().optional().default(false)
 });
 
 export const LifecycleTransitionBodySchema = z.object({
@@ -51,8 +52,47 @@ export const ApprovalDecisionBodySchema = z.object({
   payload: z.record(z.string(), z.unknown()).optional()
 });
 
+export const ApprovalListQuerySchema = z.object({
+  agentId: z.enum(["brandyn", "jordyn", "kobe"]).optional(),
+  status: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional()
+});
+
 export const ApprovalRequestIdParamSchema = z.object({
   approvalRequestId: z.string().min(1)
+});
+
+export const ExecutionIdParamSchema = z.object({
+  executionId: z.string().min(1)
+});
+
+export const ExecutionListQuerySchema = z.object({
+  agentId: z.enum(["brandyn", "jordyn", "kobe"]).optional(),
+  status: z.enum(["QUEUED", "PENDING_APPROVAL", "RUNNING", "COMPLETED", "FAILED"]).optional()
+});
+
+export const AgentVersionCreateBodySchema = z.object({
+  versionLabel: z.string().min(1),
+  definitionSnapshot: z.record(z.string(), z.unknown())
+});
+
+export const AgentVersionPromoteBodySchema = z.object({
+  agentVersionId: z.string().min(1),
+  reason: z.string().min(1)
+});
+
+export const WorkerClaimExecutionsBodySchema = z.object({
+  agentId: z.enum(["brandyn", "jordyn", "kobe"]).optional(),
+  limit: z.number().int().positive().max(50).default(10)
+});
+
+export const WorkerQueueEvalBodySchema = z.object({
+  agentId: z.enum(["brandyn", "jordyn", "kobe"]),
+  suiteName: z.string().min(1)
+});
+
+export const WorkerClaimEvalsBodySchema = z.object({
+  agentId: z.enum(["brandyn", "jordyn", "kobe"]).optional(),
+  limit: z.number().int().positive().max(50).default(10)
 });
 
 export const BrandPipelineAdvanceBodySchema = z.object({

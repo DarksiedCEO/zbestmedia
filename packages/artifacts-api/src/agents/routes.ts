@@ -5,6 +5,8 @@ import {
   AgentOsRepository,
   AgentExecutionService,
   AgentMemoryAccessError,
+  AgentVersionService,
+  AgentWorkerService,
   BrandPipelineWorkflowError,
   BrandPipelineOrchestrator,
   EvalRunnerService,
@@ -14,15 +16,23 @@ import {
 import {
   AgentIdParamSchema,
   ApprovalDecisionBodySchema,
+  ApprovalListQuerySchema,
   ApprovalRequestIdParamSchema,
   BrandPipelineAdvanceBodySchema,
+  ExecutionIdParamSchema,
+  ExecutionListQuerySchema,
   EvalRunBodySchema,
   ExecuteAgentBodySchema,
+  AgentVersionCreateBodySchema,
+  AgentVersionPromoteBodySchema,
   LifecycleTransitionBodySchema,
   ListAgentsQuerySchema,
   MemoryQuerySchema,
   MemoryWriteBodySchema,
-  ProvisionFoundationBodySchema
+  ProvisionFoundationBodySchema,
+  WorkerClaimEvalsBodySchema,
+  WorkerClaimExecutionsBodySchema,
+  WorkerQueueEvalBodySchema
 } from "./schemas";
 
 export function agentRoutes(opts: {
@@ -31,6 +41,8 @@ export function agentRoutes(opts: {
   memoryService: MemoryPartitionService;
   evalRunner: EvalRunnerService;
   workflow: BrandPipelineOrchestrator;
+  versionService: AgentVersionService;
+  workerService: AgentWorkerService;
 }): FastifyPluginAsync {
   return async (app) => {
     function handleAgentError(reply: { code: (statusCode: number) => { send: (body: unknown) => unknown } }, error: unknown) {
@@ -59,6 +71,22 @@ export function agentRoutes(opts: {
       });
 
       return reply.code(201).send({ agents: result.agents });
+    });
+
+    app.get("/v1/agents/:agentId", async (req, reply) => {
+      const path = AgentIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      const agent = await opts.repository.getAgent({
+        tenantId: req.auth.tenantId,
+        agentId: path.data.agentId
+      });
+      if (!agent) {
+        return reply.code(404).send({ error: "agent_not_found" });
+      }
+      return reply.send(agent);
     });
 
     app.get("/v1/agents", async (req, reply) => {
@@ -98,13 +126,73 @@ export function agentRoutes(opts: {
           requestSource: "artifacts-api",
           subjectType: body.data.subjectType,
           subjectId: body.data.subjectId,
-          payload: body.data.payload
+          payload: body.data.payload,
+          queueForWorker: body.data.queueForWorker
         });
 
         return reply.code(result.approvalRequired ? 202 : 200).send(result);
       } catch (error) {
         return handleAgentError(reply, error);
       }
+    });
+
+    app.get("/v1/agents/:agentId/versions", async (req, reply) => {
+      const path = AgentIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      const versions = await opts.repository.listAgentVersions({
+        tenantId: req.auth.tenantId,
+        agentId: path.data.agentId
+      });
+      return reply.send({ items: versions });
+    });
+
+    app.post("/v1/agents/:agentId/versions", async (req, reply) => {
+      const path = AgentIdParamSchema.safeParse(req.params);
+      const body = AgentVersionCreateBodySchema.safeParse(req.body);
+      if (!path.success || !body.success) {
+        return reply.code(400).send({
+          error: "invalid_request",
+          details: {
+            params: path.success ? null : path.error.flatten(),
+            body: body.success ? null : body.error.flatten()
+          }
+        });
+      }
+
+      const version = await opts.versionService.createVersion({
+        tenantId: req.auth.tenantId,
+        agentId: path.data.agentId,
+        versionLabel: body.data.versionLabel,
+        definitionSnapshot: body.data.definitionSnapshot,
+        createdBy: req.auth.actorId
+      });
+      return reply.code(201).send(version);
+    });
+
+    app.post("/v1/agents/:agentId/versions/promote", async (req, reply) => {
+      const path = AgentIdParamSchema.safeParse(req.params);
+      const body = AgentVersionPromoteBodySchema.safeParse(req.body);
+      if (!path.success || !body.success) {
+        return reply.code(400).send({
+          error: "invalid_request",
+          details: {
+            params: path.success ? null : path.error.flatten(),
+            body: body.success ? null : body.error.flatten()
+          }
+        });
+      }
+
+      const promoted = await opts.versionService.promoteVersion({
+        tenantId: req.auth.tenantId,
+        agentId: path.data.agentId,
+        agentVersionId: body.data.agentVersionId,
+        promotedBy: req.auth.actorId,
+        reason: body.data.reason
+      });
+      return reply.code(200).send(promoted);
     });
 
     app.post("/v1/agents/:agentId/lifecycle/transition", async (req, reply) => {
@@ -252,6 +340,66 @@ export function agentRoutes(opts: {
       return reply.code(201).send(decision);
     });
 
+    app.get("/v1/approvals", async (req, reply) => {
+      const query = ApprovalListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const items = await opts.repository.listApprovalRequests({
+        tenantId: req.auth.tenantId,
+        agentId: query.data.agentId,
+        status: query.data.status
+      });
+      return reply.send({ items });
+    });
+
+    app.get("/v1/approvals/:approvalRequestId", async (req, reply) => {
+      const path = ApprovalRequestIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      const approval = await opts.repository.getApprovalRequest({
+        tenantId: req.auth.tenantId,
+        approvalRequestId: path.data.approvalRequestId
+      });
+      if (!approval) {
+        return reply.code(404).send({ error: "approval_request_not_found" });
+      }
+      return reply.send(approval);
+    });
+
+    app.get("/v1/executions", async (req, reply) => {
+      const query = ExecutionListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const items = await opts.repository.listExecutions({
+        tenantId: req.auth.tenantId,
+        agentId: query.data.agentId,
+        status: query.data.status
+      });
+      return reply.send({ items });
+    });
+
+    app.get("/v1/executions/:executionId", async (req, reply) => {
+      const path = ExecutionIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      const execution = await opts.repository.getExecution({
+        tenantId: req.auth.tenantId,
+        executionId: path.data.executionId
+      });
+      if (!execution) {
+        return reply.code(404).send({ error: "execution_not_found" });
+      }
+      return reply.send(execution);
+    });
+
     app.post("/v1/workflows/brand-pipeline/advance", async (req, reply) => {
       const body = BrandPipelineAdvanceBodySchema.safeParse(req.body);
       if (!body.success) {
@@ -275,6 +423,49 @@ export function agentRoutes(opts: {
       } catch (error) {
         return handleAgentError(reply, error);
       }
+    });
+
+    app.post("/v1/internal/workers/executions/claim", async (req, reply) => {
+      const body = WorkerClaimExecutionsBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const items = await opts.workerService.claimExecutionJobs({
+        tenantId: req.auth.tenantId,
+        agentId: body.data.agentId,
+        limit: body.data.limit
+      });
+      return reply.send({ items });
+    });
+
+    app.post("/v1/internal/workers/evals/queue", async (req, reply) => {
+      const body = WorkerQueueEvalBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const item = await opts.workerService.queueEvalJob({
+        tenantId: req.auth.tenantId,
+        agentId: body.data.agentId,
+        suiteName: body.data.suiteName,
+        createdBy: req.auth.actorId
+      });
+      return reply.code(201).send(item);
+    });
+
+    app.post("/v1/internal/workers/evals/claim", async (req, reply) => {
+      const body = WorkerClaimEvalsBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const items = await opts.workerService.claimEvalJobs({
+        tenantId: req.auth.tenantId,
+        agentId: body.data.agentId,
+        limit: body.data.limit
+      });
+      return reply.send({ items });
     });
   };
 }

@@ -12,6 +12,7 @@ export type AgentExecutionInput = {
   subjectType: string;
   subjectId: string;
   payload: Record<string, unknown>;
+  queueForWorker?: boolean;
   createdAt?: string;
 };
 
@@ -106,6 +107,37 @@ export class AgentExecutionService {
         approvalRequestId: approval.approvalRequestId,
         requiredApprovers: approval.requiredApprovers,
         reason: approval.reason
+      };
+    }
+
+    if (args.queueForWorker) {
+      const execution = await this.repository.createExecution({
+        tenantId: args.tenantId,
+        agentId: args.agentId,
+        correlationId: args.correlationId,
+        requestSource: args.requestSource,
+        requestedBy: args.actorId,
+        subjectType: args.subjectType,
+        subjectId: args.subjectId,
+        inputPayload: args.payload,
+        status: "QUEUED",
+        createdAt: args.createdAt
+      });
+
+      await this.repository.appendExecutionStep({
+        tenantId: args.tenantId,
+        executionId: execution.executionId,
+        stepName: "execution_queued",
+        stepOrder: 1,
+        status: "PENDING",
+        payload: { queuedForWorker: true },
+        createdAt: args.createdAt
+      });
+
+      return {
+        execution,
+        approvalRequired: false,
+        output: { queued: true }
       };
     }
 

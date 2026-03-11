@@ -4,6 +4,8 @@ import {
   AgentExecutionService,
   AgentOsRepository,
   ApprovalWorkflowService,
+  AgentVersionService,
+  AgentWorkerService,
   BrandPipelineOrchestrator,
   EvalRunnerService,
   MemoryPartitionService
@@ -62,6 +64,8 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const memoryService = new MemoryPartitionService(agentRepository);
   const evalRunner = new EvalRunnerService(agentRepository);
   const brandWorkflow = new BrandPipelineOrchestrator(agentExecutionService, evalRunner);
+  const versionService = new AgentVersionService(agentRepository);
+  const workerService = new AgentWorkerService(agentRepository);
   const writeBudget = new TenantWriteBudget(env.MAX_ARTIFACT_WRITES_PER_MINUTE);
   const policyFirewall = new PolicyFirewall(env);
 
@@ -91,7 +95,9 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       executionService: agentExecutionService,
       memoryService,
       evalRunner,
-      workflow: brandWorkflow
+      workflow: brandWorkflow,
+      versionService,
+      workerService
     })
   );
   await app.register(leadModule, {
