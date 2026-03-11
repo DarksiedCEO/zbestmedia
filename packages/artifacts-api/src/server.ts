@@ -3,11 +3,13 @@ import rateLimit from "@fastify/rate-limit";
 import {
   AgentExecutionService,
   AgentOsRepository,
+  ApprovalEscalationService,
   ApprovalWorkflowService,
   AgentVersionService,
   AgentWorkerService,
   BrandPipelineOrchestrator,
   EvalRunnerService,
+  MaestroOrchestrationService,
   MemoryPartitionService
 } from "@zbest/agent-os";
 
@@ -66,6 +68,12 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const brandWorkflow = new BrandPipelineOrchestrator(agentExecutionService, evalRunner);
   const versionService = new AgentVersionService(agentRepository);
   const workerService = new AgentWorkerService(agentRepository);
+  const approvalEscalationService = new ApprovalEscalationService(agentRepository);
+  const orchestrationService = new MaestroOrchestrationService(
+    agentRepository,
+    agentExecutionService,
+    approvalEscalationService
+  );
   const writeBudget = new TenantWriteBudget(env.MAX_ARTIFACT_WRITES_PER_MINUTE);
   const policyFirewall = new PolicyFirewall(env);
 
@@ -97,7 +105,9 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       evalRunner,
       workflow: brandWorkflow,
       versionService,
-      workerService
+      workerService,
+      orchestrationService,
+      approvalEscalationService
     })
   );
   await app.register(leadModule, {

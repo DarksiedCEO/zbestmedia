@@ -8,13 +8,16 @@ describe("agent routes", () => {
   let app: ReturnType<typeof Fastify>;
   const repository = {
     provisionFoundation: vi.fn(async () => ({
-      agents: [{ agentId: "brandyn" }, { agentId: "jordyn" }, { agentId: "kobe" }]
+      agents: [{ agentId: "brandyn" }, { agentId: "jordyn" }, { agentId: "kobe" }, { agentId: "oracle" }, { agentId: "titan" }, { agentId: "maestro" }]
     })),
     getAgent: vi.fn(async () => ({ agentId: "brandyn", currentVersionId: "brandyn:foundation-v1" })),
     listAgents: vi.fn(async () => [
       { agentId: "brandyn", taskDomain: "brand_identity_governance", currentStatus: "draft" },
       { agentId: "jordyn", taskDomain: "visual_identity_governance", currentStatus: "draft" },
-      { agentId: "kobe", taskDomain: "social_campaign_deployment", currentStatus: "draft" }
+      { agentId: "kobe", taskDomain: "social_campaign_deployment", currentStatus: "draft" },
+      { agentId: "oracle", taskDomain: "growth_intelligence", currentStatus: "draft" },
+      { agentId: "titan", taskDomain: "revenue_optimization", currentStatus: "draft" },
+      { agentId: "maestro", taskDomain: "orchestration", currentStatus: "draft" }
     ]),
     listAgentVersions: vi.fn(async () => [{ agentVersionId: "brandyn:foundation-v1" }]),
     appendLifecycleEvent: vi.fn(async () => ({ lifecycleEventId: "lifecycle:brandyn", toStatus: "training" })),
@@ -69,6 +72,31 @@ describe("agent routes", () => {
     queueEvalJob: vi.fn(async () => ({ evalRunId: "eval:1", status: "PENDING" })),
     claimEvalJobs: vi.fn(async () => [{ evalRunId: "eval:1", status: "RUNNING" }])
   } as never;
+  const orchestrationService = {
+    createDelegatedPlan: vi.fn(async () => ({
+      workflow: "brand_pipeline",
+      delegatedAgents: ["brandyn", "jordyn", "kobe", "oracle", "titan"],
+      handoffPlan: [
+        { fromAgent: "brandyn", toAgent: "jordyn" },
+        { fromAgent: "jordyn", toAgent: "kobe" },
+        { fromAgent: "kobe", toAgent: "oracle" },
+        { fromAgent: "oracle", toAgent: "titan" }
+      ],
+      execution: {
+        execution: { executionId: "execution:maestro:campaign-2", status: "COMPLETED" },
+        approvalRequired: false,
+        output: { kind: "orchestration_output" }
+      }
+    })),
+    getHandoffAudit: vi.fn(async () => ({
+      execution: { executionId: "execution:maestro:campaign-2", status: "COMPLETED" },
+      handoffs: [{ stepName: "handoff_planned:brandyn->jordyn" }]
+    })),
+    escalateApprovals: vi.fn(async () => [{ approvalRequestId: "approval:escalated", status: "PENDING" }])
+  } as never;
+  const approvalEscalationService = {
+    escalateStaleRequests: vi.fn(async () => [{ approvalRequestId: "approval:escalated", status: "PENDING" }])
+  } as never;
 
   beforeAll(async () => {
     app = Fastify();
@@ -88,7 +116,9 @@ describe("agent routes", () => {
         evalRunner,
         workflow,
         versionService,
-        workerService
+        workerService,
+        orchestrationService,
+        approvalEscalationService
       })
     );
     await app.ready();
@@ -106,7 +136,7 @@ describe("agent routes", () => {
     });
 
     expect(res.statusCode).toBe(201);
-    expect(res.json().agents).toHaveLength(3);
+    expect(res.json().agents).toHaveLength(6);
   });
 
   it("executes an agent request with normalized response", async () => {
@@ -161,6 +191,40 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().completedSteps).toEqual(["brandyn_direction_approved"]);
+  });
+
+  it("creates orchestration plans, exposes handoff audit, and escalates stale approvals", async () => {
+    const planRes = await app.inject({
+      method: "POST",
+      url: "/v1/orchestration/plans",
+      payload: {
+        workflow: "brand_pipeline",
+        subjectId: "campaign-2",
+        payload: { campaign: "spring" }
+      }
+    });
+    const handoffRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/executions/execution:maestro:campaign-2/handoffs"
+    });
+    const escalateRes = await app.inject({
+      method: "POST",
+      url: "/v1/orchestration/approvals/escalate",
+      payload: {
+        olderThanMinutes: 30,
+        agentId: "maestro"
+      }
+    });
+
+    expect(planRes.statusCode).toBe(201);
+    expect(planRes.json()).toMatchObject({
+      workflow: "brand_pipeline",
+      delegatedAgents: ["brandyn", "jordyn", "kobe", "oracle", "titan"]
+    });
+    expect(handoffRes.statusCode).toBe(200);
+    expect(handoffRes.json().handoffs[0].stepName).toBe("handoff_planned:brandyn->jordyn");
+    expect(escalateRes.statusCode).toBe(200);
+    expect(escalateRes.json().items[0].approvalRequestId).toBe("approval:escalated");
   });
 
   it("exposes versions, approvals, executions, and worker hooks", async () => {

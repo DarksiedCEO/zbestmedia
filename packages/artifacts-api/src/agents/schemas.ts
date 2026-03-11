@@ -2,8 +2,17 @@ import { z } from "zod";
 
 import { AgentLifecycleStatusSchema, AgentTaskDomainSchema } from "@zbest/agent-os";
 
+const AgentIdSchema = z.enum(["brandyn", "jordyn", "kobe", "oracle", "titan", "maestro"]);
+const BrandPipelineStepSchema = z.enum([
+  "brandyn_direction_approved",
+  "jordyn_visual_alignment_approved",
+  "kobe_distribution_queued",
+  "oracle_performance_evaluated",
+  "titan_monetization_feedback_recorded"
+]);
+
 export const AgentIdParamSchema = z.object({
-  agentId: z.enum(["brandyn", "jordyn", "kobe"])
+  agentId: AgentIdSchema
 });
 
 export const ProvisionFoundationBodySchema = z.object({
@@ -53,7 +62,7 @@ export const ApprovalDecisionBodySchema = z.object({
 });
 
 export const ApprovalListQuerySchema = z.object({
-  agentId: z.enum(["brandyn", "jordyn", "kobe"]).optional(),
+  agentId: AgentIdSchema.optional(),
   status: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional()
 });
 
@@ -66,7 +75,7 @@ export const ExecutionIdParamSchema = z.object({
 });
 
 export const ExecutionListQuerySchema = z.object({
-  agentId: z.enum(["brandyn", "jordyn", "kobe"]).optional(),
+  agentId: AgentIdSchema.optional(),
   status: z.enum(["QUEUED", "PENDING_APPROVAL", "RUNNING", "COMPLETED", "FAILED"]).optional()
 });
 
@@ -81,36 +90,24 @@ export const AgentVersionPromoteBodySchema = z.object({
 });
 
 export const WorkerClaimExecutionsBodySchema = z.object({
-  agentId: z.enum(["brandyn", "jordyn", "kobe"]).optional(),
+  agentId: AgentIdSchema.optional(),
   limit: z.number().int().positive().max(50).default(10)
 });
 
 export const WorkerQueueEvalBodySchema = z.object({
-  agentId: z.enum(["brandyn", "jordyn", "kobe"]),
+  agentId: AgentIdSchema,
   suiteName: z.string().min(1)
 });
 
 export const WorkerClaimEvalsBodySchema = z.object({
-  agentId: z.enum(["brandyn", "jordyn", "kobe"]).optional(),
+  agentId: AgentIdSchema.optional(),
   limit: z.number().int().positive().max(50).default(10)
 });
 
 export const BrandPipelineAdvanceBodySchema = z.object({
   subjectId: z.string().min(1),
-  completedSteps: z.array(
-    z.enum([
-      "brandyn_direction_approved",
-      "jordyn_visual_alignment_approved",
-      "kobe_distribution_queued",
-      "oracle_performance_evaluated",
-      "titan_monetization_feedback_recorded"
-    ])
-  ),
-  nextStep: z.enum([
-    "brandyn_direction_approved",
-    "jordyn_visual_alignment_approved",
-    "kobe_distribution_queued"
-  ]),
+  completedSteps: z.array(BrandPipelineStepSchema),
+  nextStep: BrandPipelineStepSchema,
   payload: z.record(z.string(), z.unknown()),
   evalObservations: z.array(
     z.object({
@@ -124,4 +121,16 @@ export const BrandPipelineAdvanceBodySchema = z.object({
 export const ListAgentsQuerySchema = z.object({
   taskDomain: AgentTaskDomainSchema.optional(),
   status: AgentLifecycleStatusSchema.optional()
+});
+
+export const OrchestrationPlanBodySchema = z.object({
+  workflow: z.enum(["brand_pipeline"]),
+  subjectId: z.string().min(1),
+  payload: z.record(z.string(), z.unknown()),
+  delegatedAgents: z.array(AgentIdSchema).optional()
+});
+
+export const OrchestrationEscalateBodySchema = z.object({
+  olderThanMinutes: z.number().int().positive().max(10_080),
+  agentId: AgentIdSchema.optional()
 });

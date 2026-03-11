@@ -5,11 +5,14 @@ import {
   AgentOsRepository,
   AgentExecutionService,
   AgentMemoryAccessError,
+  ApprovalEscalationService,
   AgentVersionService,
   AgentWorkerService,
   BrandPipelineWorkflowError,
   BrandPipelineOrchestrator,
   EvalRunnerService,
+  MaestroOrchestrationError,
+  MaestroOrchestrationService,
   MemoryPartitionService
 } from "@zbest/agent-os";
 
@@ -18,6 +21,8 @@ import {
   ApprovalDecisionBodySchema,
   ApprovalListQuerySchema,
   ApprovalRequestIdParamSchema,
+  OrchestrationEscalateBodySchema,
+  OrchestrationPlanBodySchema,
   BrandPipelineAdvanceBodySchema,
   ExecutionIdParamSchema,
   ExecutionListQuerySchema,
@@ -43,13 +48,19 @@ export function agentRoutes(opts: {
   workflow: BrandPipelineOrchestrator;
   versionService: AgentVersionService;
   workerService: AgentWorkerService;
+  orchestrationService: MaestroOrchestrationService;
+  approvalEscalationService: ApprovalEscalationService;
 }): FastifyPluginAsync {
   return async (app) => {
     function handleAgentError(reply: { code: (statusCode: number) => { send: (body: unknown) => unknown } }, error: unknown) {
       if (error instanceof AgentLifecycleStateError) {
         return reply.code(409).send({ error: error.message });
       }
-      if (error instanceof AgentMemoryAccessError || error instanceof BrandPipelineWorkflowError) {
+      if (
+        error instanceof AgentMemoryAccessError ||
+        error instanceof BrandPipelineWorkflowError ||
+        error instanceof MaestroOrchestrationError
+      ) {
         return reply.code(400).send({ error: error.message });
       }
       if (error instanceof Error && error.message === "agent_not_found") {
@@ -423,6 +434,60 @@ export function agentRoutes(opts: {
       } catch (error) {
         return handleAgentError(reply, error);
       }
+    });
+
+    app.post("/v1/orchestration/plans", async (req, reply) => {
+      const body = OrchestrationPlanBodySchema.safeParse(req.body);
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      try {
+        const result = await opts.orchestrationService.createDelegatedPlan({
+          tenantId: req.auth.tenantId,
+          actorId: req.auth.actorId,
+          correlationId: req.requestId,
+          requestSource: "artifacts-api",
+          workflow: body.data.workflow,
+          subjectId: body.data.subjectId,
+          payload: body.data.payload,
+          delegatedAgents: body.data.delegatedAgents
+        });
+
+        return reply.code(result.execution.approvalRequired ? 202 : 201).send(result);
+      } catch (error) {
+        return handleAgentError(reply, error);
+      }
+    });
+
+    app.get("/v1/orchestration/executions/:executionId/handoffs", async (req, reply) => {
+      const path = ExecutionIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      const result = await opts.orchestrationService.getHandoffAudit({
+        tenantId: req.auth.tenantId,
+        executionId: path.data.executionId
+      });
+      if (!result) {
+        return reply.code(404).send({ error: "execution_not_found" });
+      }
+      return reply.send(result);
+    });
+
+    app.post("/v1/orchestration/approvals/escalate", async (req, reply) => {
+      const body = OrchestrationEscalateBodySchema.safeParse(req.body);
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const items = await opts.orchestrationService.escalateApprovals({
+        tenantId: req.auth.tenantId,
+        olderThanMinutes: body.data.olderThanMinutes,
+        agentId: body.data.agentId
+      });
+      return reply.send({ items });
     });
 
     app.post("/v1/internal/workers/executions/claim", async (req, reply) => {

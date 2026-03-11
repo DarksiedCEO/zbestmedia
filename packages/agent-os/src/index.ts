@@ -15,6 +15,7 @@ export * from "./workers/runtime.js";
 export * from "./workflows/brandPipeline.js";
 export * from "./workflows/orchestrator.js";
 export * from "./workflows/routing.js";
+export * from "./orchestration/service.js";
 export * from "./persistence/contracts.js";
 export * from "./persistence/foundation.js";
 export * from "./persistence/repository.js";
