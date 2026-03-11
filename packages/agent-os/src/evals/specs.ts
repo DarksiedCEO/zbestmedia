@@ -54,5 +54,15 @@ export const AGENT_EVAL_PROFILES: Record<AgentId, EvalProfile> = {
       { metric: "recommendation_relevance", minScore: 0.91, targetDirection: "higher_is_better" },
       { metric: "anomaly_detection_precision", minScore: 0.9, targetDirection: "higher_is_better" }
     ]
+  },
+  titan: {
+    profileId: "titan-evals-v1",
+    agentId: "titan",
+    metrics: [
+      { metric: "monetization_lift_precision", minScore: 0.91, targetDirection: "higher_is_better" },
+      { metric: "pricing_sensitivity_accuracy", minScore: 0.92, targetDirection: "higher_is_better" },
+      { metric: "recommendation_roi_confidence", minScore: 0.9, targetDirection: "higher_is_better" },
+      { metric: "pricing_risk_recall", minScore: 0.9, targetDirection: "higher_is_better" }
+    ]
   }
 };

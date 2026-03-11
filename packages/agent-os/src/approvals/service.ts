@@ -66,6 +66,19 @@ export function resolveApprovalPolicy(input: ApprovalWorkflowInput): ApprovalPol
         requiredApprovers: [],
         reason: "growth intelligence analysis remains advisory"
       };
+    case "titan":
+      if (requiresTruthy(input.payload, "pricingChange") || requiresTruthy(input.payload, "contractImpact")) {
+        return {
+          required: true,
+          requiredApprovers: ["founder", "revenue-lead"],
+          reason: "revenue-sensitive pricing or contract recommendations require dual approval"
+        };
+      }
+      return {
+        required: false,
+        requiredApprovers: [],
+        reason: "revenue optimization recommendation remains advisory"
+      };
   }
 }
 

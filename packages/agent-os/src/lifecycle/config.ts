@@ -85,6 +85,17 @@ export const AGENT_LIFECYCLE_PROFILES: Record<AgentId, AgentLifecycleProfile> = 
       "recommendation_relevance",
       "anomaly_detection_precision"
     ]
+  },
+  titan: {
+    profileId: "revenue-optimization-v1",
+    agentId: "titan",
+    allowedTransitions: COMMON_ALLOWED_TRANSITIONS,
+    requiredValidationMetrics: [
+      "monetization_lift_precision",
+      "pricing_sensitivity_accuracy",
+      "recommendation_roi_confidence",
+      "pricing_risk_recall"
+    ]
   }
 };
 

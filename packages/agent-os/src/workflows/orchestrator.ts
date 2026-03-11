@@ -6,7 +6,8 @@ const STEP_TO_AGENT = {
   brandyn_direction_approved: "brandyn",
   jordyn_visual_alignment_approved: "jordyn",
   kobe_distribution_queued: "kobe",
-  oracle_performance_evaluated: "oracle"
+  oracle_performance_evaluated: "oracle",
+  titan_monetization_feedback_recorded: "titan"
 } as const;
 
 export class BrandPipelineWorkflowError extends Error {

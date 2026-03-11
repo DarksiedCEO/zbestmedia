@@ -3,10 +3,11 @@ import {
   JORDYN_TASK_DOMAIN,
   KOBE_TASK_DOMAIN,
   ORACLE_TASK_DOMAIN,
+  TITAN_TASK_DOMAIN,
   type AgentTaskDomain
 } from "./domains.js";
 
-export type AgentId = "brandyn" | "jordyn" | "kobe" | "oracle";
+export type AgentId = "brandyn" | "jordyn" | "kobe" | "oracle" | "titan";
 
 export type AgentDefinition = {
   agentId: AgentId;
@@ -16,7 +17,12 @@ export type AgentDefinition = {
   memoryPartitionId: string;
   lifecycleProfileId: string;
   evalProfileId: string;
-  workflowRole: "brand_brain" | "visual_law" | "distribution_operator" | "intelligence_analyst";
+  workflowRole:
+    | "brand_brain"
+    | "visual_law"
+    | "distribution_operator"
+    | "intelligence_analyst"
+    | "revenue_strategist";
   prohibitedDomains: AgentTaskDomain[];
 };
 
@@ -30,7 +36,7 @@ export const AGENT_DEFINITIONS: Record<AgentId, AgentDefinition> = {
     lifecycleProfileId: "brand-governance-v1",
     evalProfileId: "brandyn-evals-v1",
     workflowRole: "brand_brain",
-    prohibitedDomains: [JORDYN_TASK_DOMAIN, KOBE_TASK_DOMAIN]
+    prohibitedDomains: [JORDYN_TASK_DOMAIN, KOBE_TASK_DOMAIN, ORACLE_TASK_DOMAIN, TITAN_TASK_DOMAIN]
   },
   jordyn: {
     agentId: "jordyn",
@@ -41,7 +47,7 @@ export const AGENT_DEFINITIONS: Record<AgentId, AgentDefinition> = {
     lifecycleProfileId: "visual-governance-v1",
     evalProfileId: "jordyn-evals-v1",
     workflowRole: "visual_law",
-    prohibitedDomains: [BRANDYN_TASK_DOMAIN, KOBE_TASK_DOMAIN]
+    prohibitedDomains: [BRANDYN_TASK_DOMAIN, KOBE_TASK_DOMAIN, ORACLE_TASK_DOMAIN, TITAN_TASK_DOMAIN]
   },
   kobe: {
     agentId: "kobe",
@@ -52,7 +58,7 @@ export const AGENT_DEFINITIONS: Record<AgentId, AgentDefinition> = {
     lifecycleProfileId: "social-deployment-v1",
     evalProfileId: "kobe-evals-v1",
     workflowRole: "distribution_operator",
-    prohibitedDomains: [BRANDYN_TASK_DOMAIN, JORDYN_TASK_DOMAIN, ORACLE_TASK_DOMAIN]
+    prohibitedDomains: [BRANDYN_TASK_DOMAIN, JORDYN_TASK_DOMAIN, ORACLE_TASK_DOMAIN, TITAN_TASK_DOMAIN]
   },
   oracle: {
     agentId: "oracle",
@@ -63,7 +69,18 @@ export const AGENT_DEFINITIONS: Record<AgentId, AgentDefinition> = {
     lifecycleProfileId: "growth-intelligence-v1",
     evalProfileId: "oracle-evals-v1",
     workflowRole: "intelligence_analyst",
-    prohibitedDomains: [BRANDYN_TASK_DOMAIN, JORDYN_TASK_DOMAIN, KOBE_TASK_DOMAIN]
+    prohibitedDomains: [BRANDYN_TASK_DOMAIN, JORDYN_TASK_DOMAIN, KOBE_TASK_DOMAIN, TITAN_TASK_DOMAIN]
+  },
+  titan: {
+    agentId: "titan",
+    displayName: "Titan",
+    taskDomain: TITAN_TASK_DOMAIN,
+    policyProfileId: "titan-revenue-v1",
+    memoryPartitionId: "titan-revenue-optimization-v1",
+    lifecycleProfileId: "revenue-optimization-v1",
+    evalProfileId: "titan-evals-v1",
+    workflowRole: "revenue_strategist",
+    prohibitedDomains: [BRANDYN_TASK_DOMAIN, JORDYN_TASK_DOMAIN, KOBE_TASK_DOMAIN, ORACLE_TASK_DOMAIN]
   }
 };
 

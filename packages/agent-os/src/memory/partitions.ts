@@ -66,6 +66,18 @@ export const AGENT_MEMORY_PARTITIONS: Record<AgentId, MemoryPartition> = {
       "recommendation_history"
     ],
     sharedAccess: ["company_policy_read"]
+  },
+  titan: {
+    partitionId: "titan-revenue-optimization-v1",
+    agentId: "titan",
+    namespace: "agent.titan",
+    ownedCollections: [
+      "monetization_experiments",
+      "pricing_decisions",
+      "revenue_playbooks",
+      "offer_performance_history"
+    ],
+    sharedAccess: ["company_policy_read"]
   }
 };
 

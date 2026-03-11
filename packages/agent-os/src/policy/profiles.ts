@@ -16,7 +16,11 @@ export type PolicyCapability =
   | "intelligence.analyze_performance"
   | "intelligence.aggregate_signals"
   | "intelligence.summarize_channels"
-  | "intelligence.draft_recommendations";
+  | "intelligence.draft_recommendations"
+  | "revenue.evaluate_monetization"
+  | "revenue.score_offers"
+  | "revenue.recommend_pricing"
+  | "revenue.assess_roi";
 
 export type PolicyRestriction =
   | "posting.direct_outbound"
@@ -29,7 +33,9 @@ export type PolicyRestriction =
   | "compliance.alter_sensitive_copy"
   | "pricing.modify"
   | "strategy.redefine_brand"
-  | "publishing.execute_campaign";
+  | "publishing.execute_campaign"
+  | "billing.execute_change"
+  | "contract.override_terms";
 
 export type AgentPolicyProfile = {
   profileId: string;
@@ -101,6 +107,22 @@ export const AGENT_POLICY_PROFILES: Record<AgentId, AgentPolicyProfile> = {
       "visual.identity_override",
       "publishing.execute_campaign",
       "pricing.modify"
+    ]
+  },
+  titan: {
+    profileId: "titan-revenue-v1",
+    agentId: "titan",
+    allowed: [
+      "revenue.evaluate_monetization",
+      "revenue.score_offers",
+      "revenue.recommend_pricing",
+      "revenue.assess_roi"
+    ],
+    denied: [
+      "billing.execute_change",
+      "contract.override_terms",
+      "publishing.execute_campaign",
+      "strategy.redefine_brand"
     ]
   }
 };

@@ -46,6 +46,13 @@ export function buildDeterministicExecutionOutput(agentId: AgentId, payload: Rec
         channelSignals: payload.channelSignals ?? [],
         recommendedActions: payload.recommendedActions ?? []
       };
+    case "titan":
+      return {
+        kind: "revenue_optimization_output",
+        monetizationHypotheses: payload.monetizationHypotheses ?? [],
+        pricingRecommendations: payload.pricingRecommendations ?? [],
+        roiAssessment: payload.roiAssessment ?? null
+      };
   }
 }
 
