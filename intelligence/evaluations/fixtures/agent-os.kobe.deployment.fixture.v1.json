@@ -1,0 +1,25 @@
+{
+  "agentId": "kobe",
+  "taskDomain": "social_campaign_deployment",
+  "objective": "Package and schedule the approved launch copy across LinkedIn and Instagram.",
+  "context": [
+    "Creative package is approved.",
+    "Campaign must stay inside scheduled rollout window."
+  ],
+  "policyConstraints": [
+    "messaging.rewrite_strategy",
+    "visual.identity_override",
+    "approval.override"
+  ],
+  "memoryContext": [
+    "posting_schedules",
+    "channel_mappings",
+    "post_history"
+  ],
+  "handoffFrom": "jordyn",
+  "handoffTo": "oracle",
+  "_meta": {
+    "license": "public-domain",
+    "source": "synthetic"
+  }
+}

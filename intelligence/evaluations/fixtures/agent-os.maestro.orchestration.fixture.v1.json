@@ -1,0 +1,29 @@
+{
+  "agentId": "maestro",
+  "taskDomain": "orchestration",
+  "objective": "Route the full brand pipeline for the spring launch campaign.",
+  "context": [
+    "All specialist agents are available.",
+    "The workflow must remain Brandyn to Titan in order."
+  ],
+  "policyConstraints": [
+    "orchestration.override_policy",
+    "orchestration.modify_outputs",
+    "publishing.execute_campaign"
+  ],
+  "memoryContext": [
+    "workflow_routing_rules",
+    "handoff_decisions",
+    "execution_routing_audit"
+  ],
+  "handoffFrom": null,
+  "handoffTo": "brandyn",
+  "approvalContext": {
+    "required": false,
+    "roles": []
+  },
+  "_meta": {
+    "license": "public-domain",
+    "source": "synthetic"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "summary": "Jordyn executed visual_identity_governance as visual_law.",
+  "actions": [
+    "Validate typography and layout direction for the launch page hero.",
+    "Score the layout against approved visual tokens and asset QA standards.",
+    "Handoff the approved creative package to Kobe for channel deployment."
+  ],
+  "risks": [
+    "Denied capabilities: messaging.rewrite_strategy, posting.direct_outbound, budget.modify",
+    "Visual governance cannot redefine brand messaging without Brandyn approval."
+  ],
+  "approvalRequired": false,
+  "handoffTarget": "kobe",
+  "evidence": [
+    "memoryCollections=brand_kit, typography_rules, approved_layouts",
+    "evalMetrics=design_token_compliance, visual_consistency_score, brand_alignment_score, creative_drift_rate"
+  ]
+}

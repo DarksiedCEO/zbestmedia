@@ -1,0 +1,25 @@
+{
+  "agentId": "brandyn",
+  "taskDomain": "brand_identity_governance",
+  "objective": "Define proof-led positioning for the Z Best Media launch page.",
+  "context": [
+    "Founder wants sharper enterprise-luxury voice.",
+    "Target launch window is this quarter."
+  ],
+  "policyConstraints": [
+    "posting.direct_outbound",
+    "visual.identity_override",
+    "budget.modify"
+  ],
+  "memoryContext": [
+    "approved_taglines",
+    "messaging_pillars",
+    "tone_decisions"
+  ],
+  "handoffFrom": null,
+  "handoffTo": "jordyn",
+  "_meta": {
+    "license": "public-domain",
+    "source": "synthetic"
+  }
+}

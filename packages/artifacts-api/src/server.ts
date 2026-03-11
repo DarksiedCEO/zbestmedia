@@ -3,6 +3,7 @@ import rateLimit from "@fastify/rate-limit";
 import {
   AgentExecutionService,
   AgentOsRepository,
+  createAgentPromptExecutorFromEnv,
   AgentRuntimeService,
   ApprovalEscalationService,
   ApprovalWorkflowService,
@@ -64,7 +65,11 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const generation = new ArtifactGenerationOrchestrator(artifactService, createOrcaGenerationClient(env));
   const agentRepository = new AgentOsRepository(pool);
   const approvalWorkflow = new ApprovalWorkflowService(agentRepository);
-  const agentExecutionService = new AgentExecutionService(agentRepository, approvalWorkflow);
+  const agentExecutionService = new AgentExecutionService(
+    agentRepository,
+    approvalWorkflow,
+    createAgentPromptExecutorFromEnv(process.cwd())
+  );
   const memoryService = new MemoryPartitionService(agentRepository);
   const evalRunner = new EvalRunnerService(agentRepository);
   const brandWorkflow = new BrandPipelineOrchestrator(agentExecutionService, evalRunner);

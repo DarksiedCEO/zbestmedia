@@ -1,0 +1,18 @@
+{
+  "summary": "Oracle executed growth_intelligence as intelligence_analyst.",
+  "actions": [
+    "Analyze first-week launch performance and summarize cross-channel signals.",
+    "Highlight meaningful anomalies and recommendation-ready performance patterns.",
+    "Handoff monetization-relevant findings to Titan."
+  ],
+  "risks": [
+    "Denied capabilities: strategy.redefine_brand, visual.identity_override, publishing.execute_campaign",
+    "Oracle recommendations remain advisory and cannot directly change campaigns or pricing."
+  ],
+  "approvalRequired": false,
+  "handoffTarget": "titan",
+  "evidence": [
+    "memoryCollections=campaign_performance_snapshots, channel_metrics, recommendation_history",
+    "evalMetrics=metric_interpretation_accuracy, signal_consistency, recommendation_relevance, anomaly_detection_precision"
+  ]
+}

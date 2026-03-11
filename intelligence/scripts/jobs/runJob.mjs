@@ -32,7 +32,9 @@ export async function runJob({
   const inputSchema = readJson(prompt.inputSchema);
   const outputSchema = readJson(prompt.outputSchema);
 
-  const validateIn = ajv.compile(inputSchema);
+  const validateIn =
+    (inputSchema.$id && ajv.getSchema(inputSchema.$id)) ||
+    ajv.compile(inputSchema);
   if (!validateIn(fixture)) {
     fail(`[${prompt.id}] input invalid: ${ajv.errorsText(validateIn.errors)}`);
   }
@@ -56,7 +58,9 @@ export async function runJob({
   const orca = await callOrca({ promptEntry: prompt, promptText, inputJson: inputForModel });
   const output = parseStrictJson(orca.raw);
 
-  const validateOut = ajv.compile(outputSchema);
+  const validateOut =
+    (outputSchema.$id && ajv.getSchema(outputSchema.$id)) ||
+    ajv.compile(outputSchema);
   if (!validateOut(output)) {
     fail(`[${prompt.id}] output invalid: ${ajv.errorsText(validateOut.errors)}`);
   }

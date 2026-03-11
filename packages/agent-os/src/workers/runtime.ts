@@ -1,7 +1,7 @@
 import type { AgentId } from "../agents/registry.js";
 import { AGENT_EVAL_PROFILES } from "../evals/specs.js";
 import { evaluateObservations, type EvalObservation } from "../evals/runner.js";
-import { buildDeterministicExecutionOutput } from "../execution/service.js";
+import { buildDeterministicExecutionOutput } from "../execution/promptExecutor.js";
 import type { EvalRunRecord, ExecutionRecord } from "../persistence/contracts.js";
 import type { AgentOsRepository } from "../persistence/repository.js";
 

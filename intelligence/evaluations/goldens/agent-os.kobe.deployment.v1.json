@@ -1,0 +1,18 @@
+{
+  "summary": "Kobe executed social_campaign_deployment as distribution_operator.",
+  "actions": [
+    "Package and schedule the approved launch copy across LinkedIn and Instagram.",
+    "Adapt approved content for channel formatting without changing brand or visual law.",
+    "Handoff rollout results to Oracle for performance analysis."
+  ],
+  "risks": [
+    "Denied capabilities: messaging.rewrite_strategy, visual.identity_override, approval.override",
+    "Live deployment must stay inside approved content packages and scheduling windows."
+  ],
+  "approvalRequired": false,
+  "handoffTarget": "oracle",
+  "evidence": [
+    "memoryCollections=posting_schedules, channel_mappings, post_history",
+    "evalMetrics=schedule_adherence, platform_format_correctness, publishing_success_rate, approval_bypass_rate"
+  ]
+}

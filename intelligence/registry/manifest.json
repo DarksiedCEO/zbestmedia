@@ -93,7 +93,8 @@
       },
       "owner": "Agent OS",
       "status": "approved",
-      "sha256": "365910f7fd853403fd93b9daf3a9ee9f6f763b9d0c29e5022c73dfa38b5cf601"
+      "sha256": "365910f7fd853403fd93b9daf3a9ee9f6f763b9d0c29e5022c73dfa38b5cf601",
+      "golden": "intelligence/evaluations/goldens/agent-os.brandyn.governance.v1.json"
     },
     {
       "id": "agent-os.jordyn.visual",
@@ -107,7 +108,8 @@
       },
       "owner": "Agent OS",
       "status": "approved",
-      "sha256": "8fac351e880cf7a75e4a592b4f2bc3a44a02be9bb418ca46eff3a8a1b01ae77b"
+      "sha256": "8fac351e880cf7a75e4a592b4f2bc3a44a02be9bb418ca46eff3a8a1b01ae77b",
+      "golden": "intelligence/evaluations/goldens/agent-os.jordyn.visual.v1.json"
     },
     {
       "id": "agent-os.kobe.deployment",
@@ -121,7 +123,8 @@
       },
       "owner": "Agent OS",
       "status": "approved",
-      "sha256": "0814fde5f75bdfb33fe677c92f70a940a4fee75225e63818114effddf2aa4ba9"
+      "sha256": "0814fde5f75bdfb33fe677c92f70a940a4fee75225e63818114effddf2aa4ba9",
+      "golden": "intelligence/evaluations/goldens/agent-os.kobe.deployment.v1.json"
     },
     {
       "id": "agent-os.oracle.intelligence",
@@ -135,7 +138,8 @@
       },
       "owner": "Agent OS",
       "status": "approved",
-      "sha256": "18b8b422044bc50fa182c70c3aa608bd96d02292dafedb765aea2df94c78f77e"
+      "sha256": "18b8b422044bc50fa182c70c3aa608bd96d02292dafedb765aea2df94c78f77e",
+      "golden": "intelligence/evaluations/goldens/agent-os.oracle.intelligence.v1.json"
     },
     {
       "id": "agent-os.titan.revenue",
@@ -149,7 +153,8 @@
       },
       "owner": "Agent OS",
       "status": "approved",
-      "sha256": "6c0adda1b7f72c96418e01e51a5c9f64d46e92ac28627287646d4b6576f7d538"
+      "sha256": "6c0adda1b7f72c96418e01e51a5c9f64d46e92ac28627287646d4b6576f7d538",
+      "golden": "intelligence/evaluations/goldens/agent-os.titan.revenue.v1.json"
     },
     {
       "id": "agent-os.maestro.orchestration",
@@ -163,7 +168,8 @@
       },
       "owner": "Agent OS",
       "status": "approved",
-      "sha256": "128fbf605a1cd998519a29d4f89aa742aa48dd64f43fd7561e168b0bde6a964a"
+      "sha256": "128fbf605a1cd998519a29d4f89aa742aa48dd64f43fd7561e168b0bde6a964a",
+      "golden": "intelligence/evaluations/goldens/agent-os.maestro.orchestration.v1.json"
     }
   ]
 }

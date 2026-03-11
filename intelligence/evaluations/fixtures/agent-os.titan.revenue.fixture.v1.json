@@ -1,0 +1,32 @@
+{
+  "agentId": "titan",
+  "taskDomain": "revenue_optimization",
+  "objective": "Assess which launch offers have the strongest monetization upside.",
+  "context": [
+    "Oracle reported channel lift and anomaly summaries.",
+    "Leadership wants ROI-sensitive pricing guidance only."
+  ],
+  "policyConstraints": [
+    "billing.execute_change",
+    "contract.override_terms",
+    "publishing.execute_campaign"
+  ],
+  "memoryContext": [
+    "monetization_experiments",
+    "pricing_decisions",
+    "offer_performance_history"
+  ],
+  "handoffFrom": "oracle",
+  "handoffTo": null,
+  "approvalContext": {
+    "required": true,
+    "roles": [
+      "founder",
+      "revenue-lead"
+    ]
+  },
+  "_meta": {
+    "license": "public-domain",
+    "source": "synthetic"
+  }
+}

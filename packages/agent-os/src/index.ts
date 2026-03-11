@@ -10,6 +10,7 @@ export * from "./approvals/service.js";
 export * from "./approvals/escalation.js";
 export * from "./approvals/escalationProfiles.js";
 export * from "./execution/service.js";
+export * from "./execution/promptExecutor.js";
 export * from "./versions/service.js";
 export * from "./workers/service.js";
 export * from "./workers/runtime.js";

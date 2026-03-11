@@ -1,0 +1,25 @@
+{
+  "agentId": "jordyn",
+  "taskDomain": "visual_identity_governance",
+  "objective": "Validate typography and layout direction for the launch page hero.",
+  "context": [
+    "Brandyn approved a proof-led headline system.",
+    "Visual hierarchy must stay premium and legible on mobile."
+  ],
+  "policyConstraints": [
+    "messaging.rewrite_strategy",
+    "posting.direct_outbound",
+    "budget.modify"
+  ],
+  "memoryContext": [
+    "brand_kit",
+    "typography_rules",
+    "approved_layouts"
+  ],
+  "handoffFrom": "brandyn",
+  "handoffTo": "kobe",
+  "_meta": {
+    "license": "public-domain",
+    "source": "synthetic"
+  }
+}

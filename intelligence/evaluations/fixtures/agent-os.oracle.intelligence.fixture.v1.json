@@ -1,0 +1,25 @@
+{
+  "agentId": "oracle",
+  "taskDomain": "growth_intelligence",
+  "objective": "Analyze first-week launch performance and summarize cross-channel signals.",
+  "context": [
+    "Kobe completed the rollout.",
+    "Leadership wants the top anomalies and next recommendations."
+  ],
+  "policyConstraints": [
+    "strategy.redefine_brand",
+    "visual.identity_override",
+    "publishing.execute_campaign"
+  ],
+  "memoryContext": [
+    "campaign_performance_snapshots",
+    "channel_metrics",
+    "recommendation_history"
+  ],
+  "handoffFrom": "kobe",
+  "handoffTo": "titan",
+  "_meta": {
+    "license": "public-domain",
+    "source": "synthetic"
+  }
+}

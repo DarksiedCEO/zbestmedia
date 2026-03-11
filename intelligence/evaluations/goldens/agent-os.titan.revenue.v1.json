@@ -1,0 +1,18 @@
+{
+  "summary": "Titan executed revenue_optimization as revenue_strategist.",
+  "actions": [
+    "Assess which launch offers have the strongest monetization upside.",
+    "Score pricing and ROI sensitivity without executing billing or contract changes.",
+    "Document any revenue-sensitive recommendations for dual approval review."
+  ],
+  "risks": [
+    "Denied capabilities: billing.execute_change, contract.override_terms, publishing.execute_campaign",
+    "Revenue-sensitive output requires founder and revenue-lead review before action."
+  ],
+  "approvalRequired": false,
+  "handoffTarget": null,
+  "evidence": [
+    "memoryCollections=monetization_experiments, pricing_decisions, offer_performance_history",
+    "evalMetrics=monetization_lift_precision, pricing_sensitivity_accuracy, recommendation_roi_confidence, pricing_risk_recall"
+  ]
+}

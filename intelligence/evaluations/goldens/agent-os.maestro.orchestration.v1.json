@@ -1,0 +1,18 @@
+{
+  "summary": "Maestro executed orchestration as orchestrator.",
+  "actions": [
+    "Route the full brand pipeline for the spring launch campaign.",
+    "Delegate the chain Brandyn -> Jordyn -> Kobe -> Oracle -> Titan without skipping policy boundaries.",
+    "Maintain approval and handoff coordination across the full workflow."
+  ],
+  "risks": [
+    "Denied capabilities: orchestration.override_policy, orchestration.modify_outputs, publishing.execute_campaign",
+    "Maestro may route work but cannot replace specialist execution or self-approve restricted actions."
+  ],
+  "approvalRequired": false,
+  "handoffTarget": "brandyn",
+  "evidence": [
+    "memoryCollections=workflow_routing_rules, handoff_decisions, execution_routing_audit",
+    "evalMetrics=routing_accuracy, handoff_integrity, approval_coordination_accuracy, delegation_policy_compliance"
+  ]
+}
