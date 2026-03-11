@@ -22,3 +22,4 @@ export const JORDYN_TASK_DOMAIN: AgentTaskDomain = "visual_identity_governance";
 export const KOBE_TASK_DOMAIN: AgentTaskDomain = "social_campaign_deployment";
 export const ORACLE_TASK_DOMAIN: AgentTaskDomain = "growth_intelligence";
 export const TITAN_TASK_DOMAIN: AgentTaskDomain = "revenue_optimization";
+export const MAESTRO_TASK_DOMAIN: AgentTaskDomain = "orchestration";

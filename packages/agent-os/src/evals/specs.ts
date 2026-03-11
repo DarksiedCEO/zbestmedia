@@ -64,5 +64,15 @@ export const AGENT_EVAL_PROFILES: Record<AgentId, EvalProfile> = {
       { metric: "recommendation_roi_confidence", minScore: 0.9, targetDirection: "higher_is_better" },
       { metric: "pricing_risk_recall", minScore: 0.9, targetDirection: "higher_is_better" }
     ]
+  },
+  maestro: {
+    profileId: "maestro-evals-v1",
+    agentId: "maestro",
+    metrics: [
+      { metric: "routing_accuracy", minScore: 0.96, targetDirection: "higher_is_better" },
+      { metric: "handoff_integrity", minScore: 0.97, targetDirection: "higher_is_better" },
+      { metric: "approval_coordination_accuracy", minScore: 0.95, targetDirection: "higher_is_better" },
+      { metric: "delegation_policy_compliance", minScore: 1, targetDirection: "higher_is_better" }
+    ]
   }
 };

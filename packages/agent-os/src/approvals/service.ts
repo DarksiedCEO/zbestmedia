@@ -79,6 +79,12 @@ export function resolveApprovalPolicy(input: ApprovalWorkflowInput): ApprovalPol
         requiredApprovers: [],
         reason: "revenue optimization recommendation remains advisory"
       };
+    case "maestro":
+      return {
+        required: false,
+        requiredApprovers: [],
+        reason: "orchestration remains policy-bound and cannot self-approve restricted actions"
+      };
   }
 }
 

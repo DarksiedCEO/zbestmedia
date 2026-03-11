@@ -11,7 +11,10 @@ import {
   KOBE_TASK_DOMAIN,
   ORACLE_TASK_DOMAIN,
   TITAN_TASK_DOMAIN,
+  MAESTRO_TASK_DOMAIN,
   canAgentAccessPartition,
+  canDelegateTo,
+  canHandOffTo,
   canAgentPerform,
   isAgentDenied,
   isLifecycleTransitionAllowed,
@@ -19,13 +22,14 @@ import {
 } from "../src/index.js";
 
 describe("agent-os foundation", () => {
-  it("locks Brandyn, Jordyn, Kobe, Oracle, and Titan to non-overlapping task domains", () => {
+  it("locks Brandyn, Jordyn, Kobe, Oracle, Titan, and Maestro to non-overlapping task domains", () => {
     expect(AGENT_DEFINITIONS.brandyn.taskDomain).toBe(BRANDYN_TASK_DOMAIN);
     expect(AGENT_DEFINITIONS.jordyn.taskDomain).toBe(JORDYN_TASK_DOMAIN);
     expect(AGENT_DEFINITIONS.kobe.taskDomain).toBe(KOBE_TASK_DOMAIN);
     expect(AGENT_DEFINITIONS.oracle.taskDomain).toBe(ORACLE_TASK_DOMAIN);
     expect(AGENT_DEFINITIONS.titan.taskDomain).toBe(TITAN_TASK_DOMAIN);
-    expect(new Set(Object.values(AGENT_DEFINITIONS).map((agent) => agent.taskDomain)).size).toBe(5);
+    expect(AGENT_DEFINITIONS.maestro.taskDomain).toBe(MAESTRO_TASK_DOMAIN);
+    expect(new Set(Object.values(AGENT_DEFINITIONS).map((agent) => agent.taskDomain)).size).toBe(6);
   });
 
   it("enforces policy boundaries", () => {
@@ -43,6 +47,9 @@ describe("agent-os foundation", () => {
 
     expect(canAgentPerform("titan", "revenue.recommend_pricing")).toBe(true);
     expect(isAgentDenied("titan", "billing.execute_change")).toBe(true);
+
+    expect(canAgentPerform("maestro", "orchestration.route_workflows")).toBe(true);
+    expect(isAgentDenied("maestro", "orchestration.override_policy")).toBe(true);
   });
 
   it("isolates memory partitions by agent", () => {
@@ -53,6 +60,8 @@ describe("agent-os foundation", () => {
     expect(canAgentAccessPartition("oracle", AGENT_MEMORY_PARTITIONS.kobe.partitionId)).toBe(false);
     expect(canAgentAccessPartition("titan", AGENT_MEMORY_PARTITIONS.titan.partitionId)).toBe(true);
     expect(canAgentAccessPartition("titan", AGENT_MEMORY_PARTITIONS.oracle.partitionId)).toBe(false);
+    expect(canAgentAccessPartition("maestro", AGENT_MEMORY_PARTITIONS.maestro.partitionId)).toBe(true);
+    expect(canAgentAccessPartition("maestro", AGENT_MEMORY_PARTITIONS.titan.partitionId)).toBe(false);
   });
 
   it("guards lifecycle transitions", () => {
@@ -68,6 +77,7 @@ describe("agent-os foundation", () => {
     expect(AGENT_LIFECYCLE_PROFILES.kobe.requiredValidationMetrics).toContain("schedule_adherence");
     expect(AGENT_LIFECYCLE_PROFILES.oracle.requiredValidationMetrics).toContain("metric_interpretation_accuracy");
     expect(AGENT_LIFECYCLE_PROFILES.titan.requiredValidationMetrics).toContain("monetization_lift_precision");
+    expect(AGENT_LIFECYCLE_PROFILES.maestro.requiredValidationMetrics).toContain("routing_accuracy");
   });
 
   it("defines measurable eval profiles for each agent", () => {
@@ -76,6 +86,7 @@ describe("agent-os foundation", () => {
     expect(AGENT_EVAL_PROFILES.kobe.metrics.some((metric) => metric.metric === "approval_bypass_rate")).toBe(true);
     expect(AGENT_EVAL_PROFILES.oracle.metrics.some((metric) => metric.metric === "recommendation_relevance")).toBe(true);
     expect(AGENT_EVAL_PROFILES.titan.metrics.some((metric) => metric.metric === "pricing_sensitivity_accuracy")).toBe(true);
+    expect(AGENT_EVAL_PROFILES.maestro.metrics.some((metric) => metric.metric === "delegation_policy_compliance")).toBe(true);
   });
 
   it("locks the brand workflow order", () => {
@@ -107,5 +118,14 @@ describe("agent-os foundation", () => {
     expect(AGENT_DEFINITIONS.kobe.evalProfileId).toBe(AGENT_EVAL_PROFILES.kobe.profileId);
     expect(AGENT_DEFINITIONS.oracle.memoryPartitionId).toBe(AGENT_MEMORY_PARTITIONS.oracle.partitionId);
     expect(AGENT_DEFINITIONS.titan.policyProfileId).toBe(AGENT_POLICY_PROFILES.titan.profileId);
+    expect(AGENT_DEFINITIONS.maestro.evalProfileId).toBe(AGENT_EVAL_PROFILES.maestro.profileId);
+  });
+
+  it("locks delegation and handoff rules", () => {
+    expect(canDelegateTo("maestro", "brandyn")).toBe(true);
+    expect(canDelegateTo("brandyn", "jordyn")).toBe(false);
+    expect(canHandOffTo("brandyn", "jordyn")).toBe(true);
+    expect(canHandOffTo("oracle", "titan")).toBe(true);
+    expect(canHandOffTo("titan", "brandyn")).toBe(false);
   });
 });

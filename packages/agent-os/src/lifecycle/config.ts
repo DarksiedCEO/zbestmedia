@@ -96,6 +96,17 @@ export const AGENT_LIFECYCLE_PROFILES: Record<AgentId, AgentLifecycleProfile> = 
       "recommendation_roi_confidence",
       "pricing_risk_recall"
     ]
+  },
+  maestro: {
+    profileId: "orchestration-v1",
+    agentId: "maestro",
+    allowedTransitions: COMMON_ALLOWED_TRANSITIONS,
+    requiredValidationMetrics: [
+      "routing_accuracy",
+      "handoff_integrity",
+      "approval_coordination_accuracy",
+      "delegation_policy_compliance"
+    ]
   }
 };
 

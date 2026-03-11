@@ -78,6 +78,18 @@ export const AGENT_MEMORY_PARTITIONS: Record<AgentId, MemoryPartition> = {
       "offer_performance_history"
     ],
     sharedAccess: ["company_policy_read"]
+  },
+  maestro: {
+    partitionId: "maestro-orchestration-v1",
+    agentId: "maestro",
+    namespace: "agent.maestro",
+    ownedCollections: [
+      "workflow_routing_rules",
+      "handoff_decisions",
+      "approval_coordination_history",
+      "execution_routing_audit"
+    ],
+    sharedAccess: ["company_policy_read"]
   }
 };
 

@@ -53,6 +53,13 @@ export function buildDeterministicExecutionOutput(agentId: AgentId, payload: Rec
         pricingRecommendations: payload.pricingRecommendations ?? [],
         roiAssessment: payload.roiAssessment ?? null
       };
+    case "maestro":
+      return {
+        kind: "orchestration_output",
+        routedWorkflow: payload.routedWorkflow ?? null,
+        delegatedAgents: payload.delegatedAgents ?? [],
+        handoffPlan: payload.handoffPlan ?? []
+      };
   }
 }
 

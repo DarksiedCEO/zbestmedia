@@ -30,7 +30,7 @@ export const AgentRecordSchema = z.object({
   agentId: z.custom<AgentId>(),
   displayName: z.string().min(1),
   taskDomain: AgentTaskDomainSchema,
-  workflowRole: z.enum(["brand_brain", "visual_law", "distribution_operator", "intelligence_analyst", "revenue_strategist"]),
+  workflowRole: z.enum(["brand_brain", "visual_law", "distribution_operator", "intelligence_analyst", "revenue_strategist", "orchestrator"]),
   policyProfileId: z.string().min(1),
   memoryPartitionId: z.string().min(1),
   lifecycleProfileId: z.string().min(1),

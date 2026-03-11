@@ -20,7 +20,11 @@ export type PolicyCapability =
   | "revenue.evaluate_monetization"
   | "revenue.score_offers"
   | "revenue.recommend_pricing"
-  | "revenue.assess_roi";
+  | "revenue.assess_roi"
+  | "orchestration.route_workflows"
+  | "orchestration.delegate_agents"
+  | "orchestration.coordinate_approvals"
+  | "orchestration.manage_handoffs";
 
 export type PolicyRestriction =
   | "posting.direct_outbound"
@@ -35,7 +39,9 @@ export type PolicyRestriction =
   | "strategy.redefine_brand"
   | "publishing.execute_campaign"
   | "billing.execute_change"
-  | "contract.override_terms";
+  | "contract.override_terms"
+  | "orchestration.override_policy"
+  | "orchestration.modify_outputs";
 
 export type AgentPolicyProfile = {
   profileId: string;
@@ -123,6 +129,22 @@ export const AGENT_POLICY_PROFILES: Record<AgentId, AgentPolicyProfile> = {
       "contract.override_terms",
       "publishing.execute_campaign",
       "strategy.redefine_brand"
+    ]
+  },
+  maestro: {
+    profileId: "maestro-orchestration-v1",
+    agentId: "maestro",
+    allowed: [
+      "orchestration.route_workflows",
+      "orchestration.delegate_agents",
+      "orchestration.coordinate_approvals",
+      "orchestration.manage_handoffs"
+    ],
+    denied: [
+      "orchestration.override_policy",
+      "orchestration.modify_outputs",
+      "billing.execute_change",
+      "publishing.execute_campaign"
     ]
   }
 };

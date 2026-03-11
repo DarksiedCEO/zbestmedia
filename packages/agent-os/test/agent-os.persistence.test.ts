@@ -35,7 +35,7 @@ function createFakeClient(responses: Array<{ rows?: unknown[] }>) {
 }
 
 describe("agent-os persistence foundation", () => {
-  it("builds a deterministic foundation bundle for Brandyn, Jordyn, Kobe, Oracle, and Titan", () => {
+  it("builds a deterministic foundation bundle for Brandyn, Jordyn, Kobe, Oracle, Titan, and Maestro", () => {
     const bundle = buildAgentOsFoundationBundle({
       tenantId: TENANT_ID,
       createdBy: "founder",
@@ -43,20 +43,21 @@ describe("agent-os persistence foundation", () => {
       createdAt: NOW
     });
 
-    expect(bundle.agents).toHaveLength(5);
-    expect(bundle.versions).toHaveLength(5);
-    expect(bundle.policyProfiles).toHaveLength(5);
-    expect(bundle.memoryPartitions).toHaveLength(5);
-    expect(bundle.agents.map((agent) => agent.agentId)).toEqual(["brandyn", "jordyn", "kobe", "oracle", "titan"]);
+    expect(bundle.agents).toHaveLength(6);
+    expect(bundle.versions).toHaveLength(6);
+    expect(bundle.policyProfiles).toHaveLength(6);
+    expect(bundle.memoryPartitions).toHaveLength(6);
+    expect(bundle.agents.map((agent) => agent.agentId)).toEqual(["brandyn", "jordyn", "kobe", "oracle", "titan", "maestro"]);
     expect(bundle.versions[0]?.agentVersionId).toBe("brandyn:foundation-v1");
     expect(bundle.policyProfiles[1]?.policyProfileId).toBe("jordyn-visual-v1");
     expect(bundle.memoryPartitions[2]?.partitionId).toBe("kobe-social-deployment-v1");
     expect(bundle.memoryPartitions[3]?.partitionId).toBe("oracle-growth-intelligence-v1");
     expect(bundle.memoryPartitions[4]?.partitionId).toBe("titan-revenue-optimization-v1");
+    expect(bundle.memoryPartitions[5]?.partitionId).toBe("maestro-orchestration-v1");
   });
 
   it("provisions the foundation rows through the repository", async () => {
-    const fake = createFakeClient(new Array(20).fill({ rows: [] }));
+    const fake = createFakeClient(new Array(24).fill({ rows: [] }));
     const runWithTenant = vi.fn(async (_pool, _tenantId, fn) => fn(fake.client as never));
     const repository = new AgentOsRepository({} as never, runWithTenant);
 
@@ -68,12 +69,12 @@ describe("agent-os persistence foundation", () => {
     });
 
     expect(runWithTenant).toHaveBeenCalledOnce();
-    expect(result.agents).toHaveLength(5);
-    expect(fake.queryCalls).toHaveLength(20);
+    expect(result.agents).toHaveLength(6);
+    expect(fake.queryCalls).toHaveLength(24);
     expect(fake.queryCalls[0]?.sql).toContain("INSERT INTO agents");
-    expect(fake.queryCalls[5]?.sql).toContain("INSERT INTO agent_versions");
-    expect(fake.queryCalls[10]?.sql).toContain("INSERT INTO agent_policy_profiles");
-    expect(fake.queryCalls[15]?.sql).toContain("INSERT INTO agent_memory_partitions");
+    expect(fake.queryCalls[6]?.sql).toContain("INSERT INTO agent_versions");
+    expect(fake.queryCalls[12]?.sql).toContain("INSERT INTO agent_policy_profiles");
+    expect(fake.queryCalls[18]?.sql).toContain("INSERT INTO agent_memory_partitions");
   });
 
   it("guards illegal lifecycle transitions at the repository boundary", async () => {
