@@ -146,6 +146,8 @@ export const OrchestrationApprovalSlaQuerySchema = z.object({
   agentId: AgentIdSchema.optional()
 });
 
+export const OrchestrationRequeueBodySchema = z.object({});
+
 export const OrchestrationWorkerProcessBodySchema = z.object({
   limit: z.number().int().positive().max(50).default(10),
   retryDelayMs: z.number().int().positive().max(3_600_000).optional()

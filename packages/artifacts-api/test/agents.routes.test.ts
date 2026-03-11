@@ -95,6 +95,12 @@ describe("agent routes", () => {
       execution: { executionId: "execution:maestro:campaign-2", agentId: "maestro", status: "COMPLETED" },
       steps: [{ stepName: "handoff_planned:brandyn->jordyn" }]
     })),
+    buildReplayBundle: vi.fn(async () => ({
+      execution: { executionId: "execution:maestro:campaign-2", agentId: "maestro", status: "COMPLETED" },
+      replay: { workflow: "brand_pipeline", delegatedAgents: ["brandyn", "jordyn", "kobe", "oracle", "titan"] },
+      handoffs: [{ stepName: "handoff_planned:brandyn->jordyn" }],
+      auditTrail: [{ stepName: "handoff_planned:brandyn->jordyn" }]
+    })),
     getHandoffAudit: vi.fn(async () => ({
       execution: { executionId: "execution:maestro:campaign-2", status: "COMPLETED" },
       handoffs: [{ stepName: "handoff_planned:brandyn->jordyn" }]
@@ -104,7 +110,13 @@ describe("agent routes", () => {
       totals: { pending: 1, stale: 0, escalated: 0 },
       byAgent: { maestro: { pending: 1, stale: 0, escalated: 0 } }
     })),
-    escalateApprovals: vi.fn(async () => [{ approvalRequestId: "approval:escalated", status: "PENDING" }])
+    escalateApprovals: vi.fn(async () => [{ approvalRequestId: "approval:escalated", status: "PENDING" }]),
+    requeueDeadLetteredExecution: vi.fn(async () => ({
+      executionId: "execution:maestro:campaign-2",
+      agentId: "maestro",
+      status: "QUEUED",
+      deadLetteredAt: null
+    }))
   } as never;
   const approvalEscalationService = {
     escalateStaleRequests: vi.fn(async () => [{ approvalRequestId: "approval:escalated", status: "PENDING" }])
@@ -232,6 +244,10 @@ describe("agent routes", () => {
       method: "GET",
       url: "/v1/orchestration/executions/execution:maestro:campaign-2"
     });
+    const replayBundleRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/executions/execution:maestro:campaign-2/replay-bundle"
+    });
     const handoffRes = await app.inject({
       method: "GET",
       url: "/v1/orchestration/executions/execution:maestro:campaign-2/handoffs"
@@ -253,6 +269,11 @@ describe("agent routes", () => {
       url: "/v1/internal/workers/orchestration/process",
       payload: { limit: 2 }
     });
+    const requeueRes = await app.inject({
+      method: "POST",
+      url: "/v1/orchestration/executions/execution:maestro:campaign-2/requeue",
+      payload: {}
+    });
 
     expect(planRes.statusCode).toBe(201);
     expect(planRes.json()).toMatchObject({
@@ -261,6 +282,8 @@ describe("agent routes", () => {
     });
     expect(orchestrationListRes.statusCode).toBe(200);
     expect(orchestrationDetailRes.statusCode).toBe(200);
+    expect(replayBundleRes.statusCode).toBe(200);
+    expect(replayBundleRes.json().replay.workflow).toBe("brand_pipeline");
     expect(handoffRes.statusCode).toBe(200);
     expect(handoffRes.json().handoffs[0].stepName).toBe("handoff_planned:brandyn->jordyn");
     expect(slaRes.statusCode).toBe(200);
@@ -269,6 +292,8 @@ describe("agent routes", () => {
     expect(escalateRes.json().items[0].approvalRequestId).toBe("approval:escalated");
     expect(processRes.statusCode).toBe(200);
     expect(processRes.json().completed[0].executionId).toBe("execution:maestro:queued");
+    expect(requeueRes.statusCode).toBe(200);
+    expect(requeueRes.json().status).toBe("QUEUED");
   });
 
   it("exposes versions, approvals, executions, and worker hooks", async () => {

@@ -26,6 +26,7 @@ import {
   OrchestrationEscalateBodySchema,
   OrchestrationExecutionListQuerySchema,
   OrchestrationPlanBodySchema,
+  OrchestrationRequeueBodySchema,
   OrchestrationWorkerProcessBodySchema,
   BrandPipelineAdvanceBodySchema,
   ExecutionIdParamSchema,
@@ -496,6 +497,22 @@ export function agentRoutes(opts: {
       return reply.send(result);
     });
 
+    app.get("/v1/orchestration/executions/:executionId/replay-bundle", async (req, reply) => {
+      const path = ExecutionIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      const result = await opts.orchestrationService.buildReplayBundle({
+        tenantId: req.auth.tenantId,
+        executionId: path.data.executionId
+      });
+      if (!result) {
+        return reply.code(404).send({ error: "execution_not_found" });
+      }
+      return reply.send(result);
+    });
+
     app.get("/v1/orchestration/executions/:executionId/handoffs", async (req, reply) => {
       const path = ExecutionIdParamSchema.safeParse(req.params);
       if (!path.success) {
@@ -524,6 +541,34 @@ export function agentRoutes(opts: {
         agentId: body.data.agentId
       });
       return reply.send({ items });
+    });
+
+    app.post("/v1/orchestration/executions/:executionId/requeue", async (req, reply) => {
+      const path = ExecutionIdParamSchema.safeParse(req.params);
+      const body = OrchestrationRequeueBodySchema.safeParse(req.body ?? {});
+      if (!path.success || !body.success) {
+        return reply.code(400).send({
+          error: "invalid_request",
+          details: {
+            params: path.success ? null : path.error.flatten(),
+            body: body.success ? null : body.error.flatten()
+          }
+        });
+      }
+
+      try {
+        const result = await opts.orchestrationService.requeueDeadLetteredExecution({
+          tenantId: req.auth.tenantId,
+          executionId: path.data.executionId,
+          actorId: req.auth.actorId
+        });
+        if (!result) {
+          return reply.code(404).send({ error: "execution_not_found" });
+        }
+        return reply.send(result);
+      } catch (error) {
+        return handleAgentError(reply, error);
+      }
     });
 
     app.get("/v1/orchestration/approvals/sla", async (req, reply) => {

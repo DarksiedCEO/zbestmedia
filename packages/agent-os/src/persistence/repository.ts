@@ -1372,6 +1372,42 @@ export class AgentOsRepository {
     return mapExecutionRow(res.rows[0]);
   }
 
+  async requeueExecution(args: {
+    tenantId: string;
+    executionId: string;
+    updatedAt?: string;
+  }): Promise<ExecutionRecord> {
+    const updatedAt = args.updatedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<ExecutionRow>(
+        `
+        UPDATE executions
+        SET status = 'QUEUED',
+            failure_class = NULL,
+            failure_message = NULL,
+            next_retry_at = NULL,
+            dead_lettered_at = NULL,
+            started_at = NULL,
+            completed_at = NULL,
+            updated_at = $3
+        WHERE tenant_id = $1 AND execution_id = $2
+        RETURNING tenant_id, execution_id, agent_id, agent_version_id, correlation_id,
+                  request_source, requested_by, subject_type, subject_id, status,
+                  input_payload, output_payload, failure_class, failure_message, approval_request_id,
+                  retry_count, max_retries, next_retry_at, dead_lettered_at,
+                  started_at, completed_at, created_at, updated_at
+        `,
+        [args.tenantId, args.executionId, updatedAt]
+      )
+    );
+
+    if (!res.rows[0]) {
+      throw new Error("execution_not_found");
+    }
+
+    return mapExecutionRow(res.rows[0]);
+  }
+
   async failExecution(args: {
     tenantId: string;
     executionId: string;

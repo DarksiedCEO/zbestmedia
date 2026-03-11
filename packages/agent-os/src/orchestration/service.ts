@@ -1,5 +1,6 @@
 import type { AgentExecutionService } from "../execution/service.js";
 import type { ApprovalEscalationService } from "../approvals/escalation.js";
+import { getApprovalEscalationPolicy } from "../approvals/escalationProfiles.js";
 import type { AgentId } from "../agents/registry.js";
 import { canDelegateTo, canHandOffTo } from "../workflows/routing.js";
 import type { AgentOsRepository } from "../persistence/repository.js";
@@ -195,7 +196,78 @@ export class MaestroOrchestrationService {
         stale: stale.length,
         escalated: pending.filter((item) => item.escalatedAt).length
       },
-      byAgent
+      byAgent,
+      policies: Object.fromEntries(
+        Object.keys(byAgent).map((agentId) => [agentId, getApprovalEscalationPolicy(agentId as AgentId)])
+      )
     };
+  }
+
+  async buildReplayBundle(args: {
+    tenantId: string;
+    executionId: string;
+  }) {
+    const execution = await this.getWorkflowExecution(args);
+    if (!execution) {
+      return null;
+    }
+
+    const handoffs = execution.steps.filter(
+      (step) =>
+        step.stepName.startsWith("handoff_planned:") || step.stepName.startsWith("handoff_executed:")
+    );
+
+    return {
+      execution: execution.execution,
+      replay: {
+        workflow: execution.execution.inputPayload.routedWorkflow ?? null,
+        delegatedAgents: execution.execution.inputPayload.delegatedAgents ?? [],
+        subjectType: execution.execution.subjectType,
+        subjectId: execution.execution.subjectId,
+        inputPayload: execution.execution.inputPayload,
+        outputPayload: execution.execution.outputPayload,
+        failureClass: execution.execution.failureClass,
+        failureMessage: execution.execution.failureMessage,
+        retryCount: execution.execution.retryCount,
+        deadLetteredAt: execution.execution.deadLetteredAt
+      },
+      handoffs,
+      auditTrail: execution.steps
+    };
+  }
+
+  async requeueDeadLetteredExecution(args: {
+    tenantId: string;
+    executionId: string;
+    actorId: string;
+    createdAt?: string;
+  }) {
+    const execution = await this.getWorkflowExecution({
+      tenantId: args.tenantId,
+      executionId: args.executionId
+    });
+    if (!execution) {
+      return null;
+    }
+    if (!execution.execution.deadLetteredAt) {
+      throw new MaestroOrchestrationError("execution_not_dead_lettered");
+    }
+
+    const requeued = await this.repository.requeueExecution({
+      tenantId: args.tenantId,
+      executionId: args.executionId,
+      updatedAt: args.createdAt
+    });
+    await this.repository.appendExecutionStep({
+      tenantId: args.tenantId,
+      executionId: args.executionId,
+      stepName: "execution_requeued",
+      stepOrder: 100,
+      status: "COMPLETED",
+      payload: { requeuedBy: args.actorId },
+      createdAt: args.createdAt
+    });
+
+    return requeued;
   }
 }

@@ -136,4 +136,59 @@ describe("MaestroOrchestrationService", () => {
     expect(report.totals).toEqual({ pending: 2, stale: 1, escalated: 1 });
     expect(report.byAgent.kobe).toEqual({ pending: 1, stale: 1, escalated: 1 });
   });
+
+  it("builds a replay bundle and can requeue dead-lettered maestro executions", async () => {
+    const repositoryWithReplay = {
+      ...repository,
+      getExecution: vi.fn(async () => ({
+        execution: {
+          executionId: "execution:maestro:campaign-3",
+          agentId: "maestro",
+          subjectType: "orchestration_workflow",
+          subjectId: "campaign-3",
+          inputPayload: { routedWorkflow: "brand_pipeline", delegatedAgents: ["brandyn", "jordyn"] },
+          outputPayload: { kind: "orchestration_output" },
+          failureClass: null,
+          failureMessage: null,
+          retryCount: 1,
+          deadLetteredAt: "2026-03-11T00:00:00.000Z"
+        },
+        steps: [
+          { stepName: "handoff_planned:brandyn->jordyn" },
+          { stepName: "handoff_executed:brandyn->jordyn" }
+        ]
+      })),
+      requeueExecution: vi.fn(async () => ({
+        executionId: "execution:maestro:campaign-3",
+        agentId: "maestro",
+        status: "QUEUED",
+        deadLetteredAt: null
+      })),
+      appendExecutionStep: vi.fn(async () => undefined)
+    } as any;
+    const serviceWithReplay = new MaestroOrchestrationService(
+      repositoryWithReplay,
+      executionService,
+      approvalEscalation
+    );
+
+    const bundle = await serviceWithReplay.buildReplayBundle({
+      tenantId: "tenant-1",
+      executionId: "execution:maestro:campaign-3"
+    });
+    const requeued = await serviceWithReplay.requeueDeadLetteredExecution({
+      tenantId: "tenant-1",
+      executionId: "execution:maestro:campaign-3",
+      actorId: "ops-1"
+    });
+
+    expect(bundle?.handoffs).toHaveLength(2);
+    expect(bundle?.replay.workflow).toBe("brand_pipeline");
+    expect(requeued).toEqual({
+      executionId: "execution:maestro:campaign-3",
+      agentId: "maestro",
+      status: "QUEUED",
+      deadLetteredAt: null
+    });
+  });
 });
