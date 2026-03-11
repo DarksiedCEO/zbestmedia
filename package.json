@@ -8,6 +8,7 @@
     "app:build": "pnpm --filter @zbest/app build",
     "app:preview": "pnpm --filter @zbest/app preview --host 0.0.0.0 --port $PORT",
     "agent-os:worker:run-once": "tsx scripts/agent-os/worker-runner.ts",
+    "agent-os:worker:loop": "tsx scripts/agent-os/worker-loop.ts",
     "lint": "eslint \"packages/**/src/**/*.ts\" \"packages/**/test/**/*.ts\" \"scripts/**/*.ts\"",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",

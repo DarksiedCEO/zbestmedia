@@ -146,7 +146,15 @@ export const OrchestrationApprovalSlaQuerySchema = z.object({
   agentId: AgentIdSchema.optional()
 });
 
-export const OrchestrationRequeueBodySchema = z.object({});
+export const OrchestrationReplayRequestBodySchema = z.object({});
+
+export const OrchestrationRequeueBodySchema = z.object({
+  approvalRequestId: z.string().min(1)
+});
+
+export const OrchestrationDiagnosticsQuerySchema = z.object({
+  olderThanMinutes: z.coerce.number().int().positive().max(10_080).default(60)
+});
 
 export const OrchestrationWorkerProcessBodySchema = z.object({
   limit: z.number().int().positive().max(50).default(10),

@@ -236,7 +236,7 @@ export class MaestroOrchestrationService {
     };
   }
 
-  async requeueDeadLetteredExecution(args: {
+  async requestDeadLetterReplayApproval(args: {
     tenantId: string;
     executionId: string;
     actorId: string;
@@ -251,6 +251,54 @@ export class MaestroOrchestrationService {
     }
     if (!execution.execution.deadLetteredAt) {
       throw new MaestroOrchestrationError("execution_not_dead_lettered");
+    }
+
+    return this.repository.createApprovalRequest({
+      tenantId: args.tenantId,
+      agentId: "maestro",
+      subjectType: "orchestration_dead_letter_replay",
+      subjectId: args.executionId,
+      requestedBy: args.actorId,
+      requiredApprovers: ["ops_lead", "platform_owner"],
+      payload: {
+        executionId: args.executionId,
+        retryCount: execution.execution.retryCount,
+        failureClass: execution.execution.failureClass,
+        failureMessage: execution.execution.failureMessage
+      },
+      createdAt: args.createdAt
+    });
+  }
+
+  async requeueDeadLetteredExecution(args: {
+    tenantId: string;
+    executionId: string;
+    actorId: string;
+    approvalRequestId: string;
+    createdAt?: string;
+  }) {
+    const execution = await this.getWorkflowExecution({
+      tenantId: args.tenantId,
+      executionId: args.executionId
+    });
+    if (!execution) {
+      return null;
+    }
+    if (!execution.execution.deadLetteredAt) {
+      throw new MaestroOrchestrationError("execution_not_dead_lettered");
+    }
+
+    const approval = await this.repository.getApprovalRequest({
+      tenantId: args.tenantId,
+      approvalRequestId: args.approvalRequestId
+    });
+    if (
+      !approval ||
+      approval.request.status !== "APPROVED" ||
+      approval.request.subjectType !== "orchestration_dead_letter_replay" ||
+      approval.request.subjectId !== args.executionId
+    ) {
+      throw new MaestroOrchestrationError("replay_approval_required");
     }
 
     const requeued = await this.repository.requeueExecution({
@@ -269,5 +317,32 @@ export class MaestroOrchestrationService {
     });
 
     return requeued;
+  }
+
+  async getDiagnostics(args: {
+    tenantId: string;
+    olderThanMinutes: number;
+  }) {
+    const executions = await this.listWorkflowExecutions({
+      tenantId: args.tenantId
+    });
+    const approvalSla = await this.buildApprovalSlaReport({
+      tenantId: args.tenantId,
+      olderThanMinutes: args.olderThanMinutes
+    });
+
+    const executionStatusCounts = executions.reduce<Record<string, number>>((acc, item) => {
+      acc[item.status] = (acc[item.status] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    return {
+      executions: {
+        total: executions.length,
+        deadLettered: executions.filter((item) => item.deadLetteredAt).length,
+        byStatus: executionStatusCounts
+      },
+      approvalSla
+    };
   }
 }

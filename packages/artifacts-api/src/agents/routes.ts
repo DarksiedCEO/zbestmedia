@@ -22,10 +22,12 @@ import {
   ApprovalDecisionBodySchema,
   ApprovalListQuerySchema,
   OrchestrationApprovalSlaQuerySchema,
+  OrchestrationDiagnosticsQuerySchema,
   ApprovalRequestIdParamSchema,
   OrchestrationEscalateBodySchema,
   OrchestrationExecutionListQuerySchema,
   OrchestrationPlanBodySchema,
+  OrchestrationReplayRequestBodySchema,
   OrchestrationRequeueBodySchema,
   OrchestrationWorkerProcessBodySchema,
   BrandPipelineAdvanceBodySchema,
@@ -56,6 +58,11 @@ export function agentRoutes(opts: {
   orchestrationService: MaestroOrchestrationService;
   approvalEscalationService: ApprovalEscalationService;
   runtimeService: AgentRuntimeService;
+  signOrchestrationBundle: (bundle: unknown, executionId: string) => {
+    sealedAt: string;
+    payloadHash: string;
+    signature: string;
+  };
 }): FastifyPluginAsync {
   return async (app) => {
     function handleAgentError(reply: { code: (statusCode: number) => { send: (body: unknown) => unknown } }, error: unknown) {
@@ -510,7 +517,10 @@ export function agentRoutes(opts: {
       if (!result) {
         return reply.code(404).send({ error: "execution_not_found" });
       }
-      return reply.send(result);
+      return reply.send({
+        bundle: result,
+        signature: opts.signOrchestrationBundle(result, path.data.executionId)
+      });
     });
 
     app.get("/v1/orchestration/executions/:executionId/handoffs", async (req, reply) => {
@@ -560,12 +570,41 @@ export function agentRoutes(opts: {
         const result = await opts.orchestrationService.requeueDeadLetteredExecution({
           tenantId: req.auth.tenantId,
           executionId: path.data.executionId,
-          actorId: req.auth.actorId
+          actorId: req.auth.actorId,
+          approvalRequestId: body.data.approvalRequestId
         });
         if (!result) {
           return reply.code(404).send({ error: "execution_not_found" });
         }
         return reply.send(result);
+      } catch (error) {
+        return handleAgentError(reply, error);
+      }
+    });
+
+    app.post("/v1/orchestration/executions/:executionId/replay-request", async (req, reply) => {
+      const path = ExecutionIdParamSchema.safeParse(req.params);
+      const body = OrchestrationReplayRequestBodySchema.safeParse(req.body ?? {});
+      if (!path.success || !body.success) {
+        return reply.code(400).send({
+          error: "invalid_request",
+          details: {
+            params: path.success ? null : path.error.flatten(),
+            body: body.success ? null : body.error.flatten()
+          }
+        });
+      }
+
+      try {
+        const result = await opts.orchestrationService.requestDeadLetterReplayApproval({
+          tenantId: req.auth.tenantId,
+          executionId: path.data.executionId,
+          actorId: req.auth.actorId
+        });
+        if (!result) {
+          return reply.code(404).send({ error: "execution_not_found" });
+        }
+        return reply.code(202).send(result);
       } catch (error) {
         return handleAgentError(reply, error);
       }
@@ -583,6 +622,30 @@ export function agentRoutes(opts: {
         agentId: query.data.agentId
       });
       return reply.send(report);
+    });
+
+    app.get("/v1/orchestration/ops/diagnostics", async (req, reply) => {
+      const query = OrchestrationDiagnosticsQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.orchestrationService.getDiagnostics({
+        tenantId: req.auth.tenantId,
+        olderThanMinutes: query.data.olderThanMinutes
+      });
+      return reply.send(result);
+    });
+
+    app.get("/v1/orchestration/ops/runbook", async (_req, reply) => {
+      return reply.send({
+        commands: {
+          runOnce: "pnpm agent-os:worker:run-once",
+          runLoop: "pnpm agent-os:worker:loop"
+        },
+        requiredEnv: ["DATABASE_URL", "AGENT_OS_TENANT_ID"],
+        optionalEnv: ["AGENT_OS_AGENT_ID", "AGENT_OS_WORKER_LIMIT", "AGENT_OS_RETRY_DELAY_MS", "AGENT_OS_LOOP_INTERVAL_MS", "AGENT_OS_MAX_ITERATIONS"]
+      });
     });
 
     app.post("/v1/internal/workers/executions/claim", async (req, reply) => {

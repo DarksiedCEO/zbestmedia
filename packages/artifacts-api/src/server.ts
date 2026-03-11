@@ -16,6 +16,7 @@ import {
 
 import { agentRoutes } from "./agents/routes";
 import { artifactRoutes } from "./artifacts/routes";
+import { canonicalJson, sha256Hex, signArtifact } from "./crypto";
 import { ArtifactGenerationOrchestrator } from "./artifacts/generationOrchestrator";
 import { createOrcaGenerationClient } from "./artifacts/orcaClient";
 import { ArtifactService } from "./artifacts/service";
@@ -110,7 +111,17 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       workerService,
       orchestrationService,
       approvalEscalationService,
-      runtimeService
+      runtimeService,
+      signOrchestrationBundle: (bundle, executionId) => {
+        const sealedAt = new Date().toISOString();
+        const payloadHash = sha256Hex(canonicalJson(bundle));
+        const signature = signArtifact({
+          signingKey: env.ARTIFACT_SIGNING_KEY,
+          artifactId: executionId,
+          sealedAtIso: sealedAt
+        });
+        return { sealedAt, payloadHash, signature };
+      }
     })
   );
   await app.register(leadModule, {

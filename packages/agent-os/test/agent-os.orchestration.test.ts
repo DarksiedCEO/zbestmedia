@@ -140,6 +140,13 @@ describe("MaestroOrchestrationService", () => {
   it("builds a replay bundle and can requeue dead-lettered maestro executions", async () => {
     const repositoryWithReplay = {
       ...repository,
+      getApprovalRequest: vi.fn(async () => ({
+        request: {
+          status: "APPROVED",
+          subjectType: "orchestration_dead_letter_replay",
+          subjectId: "execution:maestro:campaign-3"
+        }
+      })),
       getExecution: vi.fn(async () => ({
         execution: {
           executionId: "execution:maestro:campaign-3",
@@ -179,7 +186,8 @@ describe("MaestroOrchestrationService", () => {
     const requeued = await serviceWithReplay.requeueDeadLetteredExecution({
       tenantId: "tenant-1",
       executionId: "execution:maestro:campaign-3",
-      actorId: "ops-1"
+      actorId: "ops-1",
+      approvalRequestId: "approval:replay:1"
     });
 
     expect(bundle?.handoffs).toHaveLength(2);
@@ -190,5 +198,43 @@ describe("MaestroOrchestrationService", () => {
       status: "QUEUED",
       deadLetteredAt: null
     });
+  });
+
+  it("creates replay approvals for dead-lettered executions", async () => {
+    const repositoryWithReplayApproval = {
+      ...repository,
+      getExecution: vi.fn(async () => ({
+        execution: {
+          executionId: "execution:maestro:campaign-4",
+          agentId: "maestro",
+          deadLetteredAt: "2026-03-11T00:00:00.000Z",
+          retryCount: 2,
+          failureClass: "TRANSIENT_RUNTIME_ERROR",
+          failureMessage: "forced_runtime_failure"
+        },
+        steps: []
+      })),
+      createApprovalRequest: vi.fn(async () => ({
+        approvalRequestId: "approval:replay:1",
+        status: "PENDING"
+      }))
+    } as any;
+    const serviceWithReplayApproval = new MaestroOrchestrationService(
+      repositoryWithReplayApproval,
+      executionService,
+      approvalEscalation
+    );
+
+    const approval = await serviceWithReplayApproval.requestDeadLetterReplayApproval({
+      tenantId: "tenant-1",
+      executionId: "execution:maestro:campaign-4",
+      actorId: "ops-1"
+    });
+
+    expect(approval).toEqual({
+      approvalRequestId: "approval:replay:1",
+      status: "PENDING"
+    });
+    expect(repositoryWithReplayApproval.createApprovalRequest).toHaveBeenCalledOnce();
   });
 });

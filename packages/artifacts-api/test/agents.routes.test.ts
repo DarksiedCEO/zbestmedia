@@ -108,9 +108,27 @@ describe("agent routes", () => {
     buildApprovalSlaReport: vi.fn(async () => ({
       olderThanMinutes: 30,
       totals: { pending: 1, stale: 0, escalated: 0 },
-      byAgent: { maestro: { pending: 1, stale: 0, escalated: 0 } }
+      byAgent: { maestro: { pending: 1, stale: 0, escalated: 0 } },
+      policies: { maestro: { staleAfterMinutes: 45, maxEscalations: 3 } }
+    })),
+    getDiagnostics: vi.fn(async () => ({
+      executions: {
+        total: 1,
+        deadLettered: 0,
+        byStatus: { COMPLETED: 1 }
+      },
+      approvalSla: {
+        olderThanMinutes: 30,
+        totals: { pending: 1, stale: 0, escalated: 0 },
+        byAgent: { maestro: { pending: 1, stale: 0, escalated: 0 } },
+        policies: { maestro: { staleAfterMinutes: 45, maxEscalations: 3 } }
+      }
     })),
     escalateApprovals: vi.fn(async () => [{ approvalRequestId: "approval:escalated", status: "PENDING" }]),
+    requestDeadLetterReplayApproval: vi.fn(async () => ({
+      approvalRequestId: "approval:replay:1",
+      status: "PENDING"
+    })),
     requeueDeadLetteredExecution: vi.fn(async () => ({
       executionId: "execution:maestro:campaign-2",
       agentId: "maestro",
@@ -128,6 +146,11 @@ describe("agent routes", () => {
       deadLettered: []
     }))
   } as never;
+  const signOrchestrationBundle = vi.fn(() => ({
+    sealedAt: "2026-03-11T00:00:00.000Z",
+    payloadHash: "abc123",
+    signature: "sig456"
+  }));
 
   beforeAll(async () => {
     app = Fastify();
@@ -150,7 +173,8 @@ describe("agent routes", () => {
         workerService,
         orchestrationService,
         approvalEscalationService,
-        runtimeService
+        runtimeService,
+        signOrchestrationBundle
       })
     );
     await app.ready();
@@ -248,6 +272,11 @@ describe("agent routes", () => {
       method: "GET",
       url: "/v1/orchestration/executions/execution:maestro:campaign-2/replay-bundle"
     });
+    const replayRequestRes = await app.inject({
+      method: "POST",
+      url: "/v1/orchestration/executions/execution:maestro:campaign-2/replay-request",
+      payload: {}
+    });
     const handoffRes = await app.inject({
       method: "GET",
       url: "/v1/orchestration/executions/execution:maestro:campaign-2/handoffs"
@@ -255,6 +284,14 @@ describe("agent routes", () => {
     const slaRes = await app.inject({
       method: "GET",
       url: "/v1/orchestration/approvals/sla?olderThanMinutes=30"
+    });
+    const diagnosticsRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/ops/diagnostics?olderThanMinutes=30"
+    });
+    const runbookRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/ops/runbook"
     });
     const escalateRes = await app.inject({
       method: "POST",
@@ -272,7 +309,7 @@ describe("agent routes", () => {
     const requeueRes = await app.inject({
       method: "POST",
       url: "/v1/orchestration/executions/execution:maestro:campaign-2/requeue",
-      payload: {}
+      payload: { approvalRequestId: "approval:replay:1" }
     });
 
     expect(planRes.statusCode).toBe(201);
@@ -283,11 +320,17 @@ describe("agent routes", () => {
     expect(orchestrationListRes.statusCode).toBe(200);
     expect(orchestrationDetailRes.statusCode).toBe(200);
     expect(replayBundleRes.statusCode).toBe(200);
-    expect(replayBundleRes.json().replay.workflow).toBe("brand_pipeline");
+    expect(replayBundleRes.json().bundle.replay.workflow).toBe("brand_pipeline");
+    expect(replayBundleRes.json().signature.signature).toBe("sig456");
+    expect(replayRequestRes.statusCode).toBe(202);
     expect(handoffRes.statusCode).toBe(200);
     expect(handoffRes.json().handoffs[0].stepName).toBe("handoff_planned:brandyn->jordyn");
     expect(slaRes.statusCode).toBe(200);
     expect(slaRes.json().totals).toEqual({ pending: 1, stale: 0, escalated: 0 });
+    expect(diagnosticsRes.statusCode).toBe(200);
+    expect(diagnosticsRes.json().approvalSla.policies.maestro.maxEscalations).toBe(3);
+    expect(runbookRes.statusCode).toBe(200);
+    expect(runbookRes.json().commands.runLoop).toBe("pnpm agent-os:worker:loop");
     expect(escalateRes.statusCode).toBe(200);
     expect(escalateRes.json().items[0].approvalRequestId).toBe("approval:escalated");
     expect(processRes.statusCode).toBe(200);

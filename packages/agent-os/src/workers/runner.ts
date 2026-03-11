@@ -23,4 +23,39 @@ export class AgentWorkerRunner {
       evals
     };
   }
+
+  async runLoop(args: {
+    tenantId: string;
+    agentId?: AgentId;
+    limit: number;
+    retryDelayMs?: number;
+    intervalMs: number;
+    maxIterations?: number;
+  }) {
+    const iterations: Array<Awaited<ReturnType<AgentWorkerRunner["runOnce"]>>> = [];
+    let count = 0;
+
+    while (args.maxIterations === undefined || count < args.maxIterations) {
+      iterations.push(
+        await this.runOnce({
+          tenantId: args.tenantId,
+          agentId: args.agentId,
+          limit: args.limit,
+          retryDelayMs: args.retryDelayMs
+        })
+      );
+      count += 1;
+
+      if (args.maxIterations !== undefined && count >= args.maxIterations) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, args.intervalMs));
+    }
+
+    return {
+      iterations: count,
+      last: iterations.length > 0 ? iterations[iterations.length - 1]! : null
+    };
+  }
 }
