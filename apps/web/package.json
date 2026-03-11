@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro check && astro build",
-    "preview": "astro preview",
+    "preview": "node ./scripts/preview.mjs",
     "typecheck": "astro check",
     "lint": "eslint ."
   },
