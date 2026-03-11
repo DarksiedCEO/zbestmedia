@@ -16,7 +16,7 @@ export type AgentExecutionInput = {
   createdAt?: string;
 };
 
-function buildDeterministicOutput(agentId: AgentId, payload: Record<string, unknown>) {
+export function buildDeterministicExecutionOutput(agentId: AgentId, payload: Record<string, unknown>) {
   switch (agentId) {
     case "brandyn":
       return {
@@ -164,7 +164,7 @@ export class AgentExecutionService {
       createdAt: args.createdAt
     });
 
-    const output = buildDeterministicOutput(args.agentId, args.payload);
+    const output = buildDeterministicExecutionOutput(args.agentId, args.payload);
 
     await this.repository.appendExecutionStep({
       tenantId: args.tenantId,

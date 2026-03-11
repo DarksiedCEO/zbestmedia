@@ -104,7 +104,9 @@ export const ApprovalRequestRecordSchema = z.object({
   status: ApprovalStatusSchema,
   payload: z.record(z.string(), z.unknown()),
   createdAt: z.string().datetime(),
-  resolvedAt: z.string().datetime().nullable().optional()
+  resolvedAt: z.string().datetime().nullable().optional(),
+  escalatedAt: z.string().datetime().nullable().optional(),
+  escalationCount: z.number().int().nonnegative()
 });
 export type ApprovalRequestRecord = z.infer<typeof ApprovalRequestRecordSchema>;
 
@@ -128,6 +130,10 @@ export const EvalRunRecordSchema = z.object({
   suiteName: z.string().min(1),
   status: EvalRunStatusSchema,
   scoreSummary: z.record(z.string(), z.unknown()),
+  retryCount: z.number().int().nonnegative(),
+  maxRetries: z.number().int().nonnegative(),
+  nextRetryAt: z.string().datetime().nullable().optional(),
+  deadLetteredAt: z.string().datetime().nullable().optional(),
   createdBy: z.string().min(1),
   createdAt: z.string().datetime(),
   completedAt: z.string().datetime().nullable().optional()
@@ -164,6 +170,10 @@ export const ExecutionRecordSchema = z.object({
   failureClass: z.string().nullable().optional(),
   failureMessage: z.string().nullable().optional(),
   approvalRequestId: z.string().nullable().optional(),
+  retryCount: z.number().int().nonnegative(),
+  maxRetries: z.number().int().nonnegative(),
+  nextRetryAt: z.string().datetime().nullable().optional(),
+  deadLetteredAt: z.string().datetime().nullable().optional(),
   startedAt: z.string().datetime().nullable().optional(),
   completedAt: z.string().datetime().nullable().optional(),
   createdAt: z.string().datetime(),

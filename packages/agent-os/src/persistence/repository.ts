@@ -75,6 +75,8 @@ type ApprovalRequestRow = {
   payload: Record<string, unknown>;
   created_at: string | Date;
   resolved_at: string | Date | null;
+  escalated_at: string | Date | null;
+  escalation_count: number;
 };
 
 type ApprovalDecisionRow = {
@@ -104,10 +106,31 @@ type ExecutionRow = {
   failure_class: string | null;
   failure_message: string | null;
   approval_request_id: string | null;
+  retry_count: number;
+  max_retries: number;
+  next_retry_at: string | Date | null;
+  dead_lettered_at: string | Date | null;
   started_at: string | Date | null;
   completed_at: string | Date | null;
   created_at: string | Date;
   updated_at: string | Date;
+};
+
+type EvalRunRow = {
+  tenant_id: string;
+  eval_run_id: string;
+  agent_id: AgentId;
+  agent_version_id: string;
+  suite_name: string;
+  status: EvalRunRecord["status"];
+  score_summary: Record<string, unknown>;
+  retry_count: number;
+  max_retries: number;
+  next_retry_at: string | Date | null;
+  dead_lettered_at: string | Date | null;
+  created_by: string;
+  created_at: string | Date;
+  completed_at: string | Date | null;
 };
 
 type ExecutionStepRow = {
@@ -174,7 +197,9 @@ function mapApprovalRequestRow(row: ApprovalRequestRow): ApprovalRequestRecord {
     status: row.status,
     payload: row.payload,
     createdAt: toIsoString(row.created_at),
-    resolvedAt: row.resolved_at ? toIsoString(row.resolved_at) : null
+    resolvedAt: row.resolved_at ? toIsoString(row.resolved_at) : null,
+    escalatedAt: row.escalated_at ? toIsoString(row.escalated_at) : null,
+    escalationCount: row.escalation_count
   };
 }
 
@@ -208,10 +233,33 @@ function mapExecutionRow(row: ExecutionRow): ExecutionRecord {
     failureClass: row.failure_class,
     failureMessage: row.failure_message,
     approvalRequestId: row.approval_request_id,
+    retryCount: row.retry_count,
+    maxRetries: row.max_retries,
+    nextRetryAt: row.next_retry_at ? toIsoString(row.next_retry_at) : null,
+    deadLetteredAt: row.dead_lettered_at ? toIsoString(row.dead_lettered_at) : null,
     startedAt: row.started_at ? toIsoString(row.started_at) : null,
     completedAt: row.completed_at ? toIsoString(row.completed_at) : null,
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at)
+  };
+}
+
+function mapEvalRunRow(row: EvalRunRow): EvalRunRecord {
+  return {
+    tenantId: row.tenant_id,
+    evalRunId: row.eval_run_id,
+    agentId: row.agent_id,
+    agentVersionId: row.agent_version_id,
+    suiteName: row.suite_name,
+    status: row.status,
+    scoreSummary: row.score_summary,
+    retryCount: row.retry_count,
+    maxRetries: row.max_retries,
+    nextRetryAt: row.next_retry_at ? toIsoString(row.next_retry_at) : null,
+    deadLetteredAt: row.dead_lettered_at ? toIsoString(row.dead_lettered_at) : null,
+    createdBy: row.created_by,
+    createdAt: toIsoString(row.created_at),
+    completedAt: row.completed_at ? toIsoString(row.completed_at) : null
   };
 }
 
@@ -639,8 +687,8 @@ export class AgentOsRepository {
         `
         INSERT INTO approval_requests (
           tenant_id, approval_request_id, agent_id, subject_type, subject_id,
-          requested_by, required_approvers, status, payload, created_at, resolved_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7::text[], 'PENDING', $8::jsonb, $9, NULL)
+          requested_by, required_approvers, status, payload, created_at, resolved_at, escalated_at, escalation_count
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7::text[], 'PENDING', $8::jsonb, $9, NULL, NULL, 0)
         `,
         [
           args.tenantId,
@@ -667,7 +715,9 @@ export class AgentOsRepository {
       status: "PENDING",
       payload: args.payload ?? {},
       createdAt,
-      resolvedAt: null
+      resolvedAt: null,
+      escalatedAt: null,
+      escalationCount: 0
     };
   }
 
@@ -735,7 +785,7 @@ export class AgentOsRepository {
       client.query<ApprovalRequestRow>(
         `
         SELECT tenant_id, approval_request_id, agent_id, subject_type, subject_id,
-               requested_by, required_approvers, status, payload, created_at, resolved_at
+               requested_by, required_approvers, status, payload, created_at, resolved_at, escalated_at, escalation_count
         FROM approval_requests
         WHERE tenant_id = $1
           AND ($2::text IS NULL OR agent_id = $2)
@@ -757,7 +807,7 @@ export class AgentOsRepository {
       const requestRes = await client.query<ApprovalRequestRow>(
         `
         SELECT tenant_id, approval_request_id, agent_id, subject_type, subject_id,
-               requested_by, required_approvers, status, payload, created_at, resolved_at
+               requested_by, required_approvers, status, payload, created_at, resolved_at, escalated_at, escalation_count
         FROM approval_requests
         WHERE tenant_id = $1 AND approval_request_id = $2
         `,
@@ -782,6 +832,61 @@ export class AgentOsRepository {
         decisions: decisionsRes.rows.map(mapApprovalDecisionRow)
       };
     });
+  }
+
+  async listStaleApprovalRequests(args: {
+    tenantId: string;
+    olderThanIso: string;
+    agentId?: AgentId;
+    limit?: number;
+  }): Promise<ApprovalRequestRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<ApprovalRequestRow>(
+        `
+        SELECT tenant_id, approval_request_id, agent_id, subject_type, subject_id,
+               requested_by, required_approvers, status, payload, created_at, resolved_at, escalated_at, escalation_count
+        FROM approval_requests
+        WHERE tenant_id = $1
+          AND status = 'PENDING'
+          AND escalated_at IS NULL
+          AND created_at <= $2
+          AND ($3::text IS NULL OR agent_id = $3)
+        ORDER BY created_at ASC
+        LIMIT $4
+        `,
+        [args.tenantId, args.olderThanIso, args.agentId ?? null, args.limit ?? 100]
+      )
+    );
+
+    return res.rows.map(mapApprovalRequestRow);
+  }
+
+  async markApprovalEscalated(args: {
+    tenantId: string;
+    approvalRequestId: string;
+    escalatedAt?: string;
+  }): Promise<ApprovalRequestRecord> {
+    const escalatedAt = args.escalatedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<ApprovalRequestRow>(
+        `
+        UPDATE approval_requests
+        SET escalated_at = $3,
+            escalation_count = escalation_count + 1
+        WHERE tenant_id = $1
+          AND approval_request_id = $2
+        RETURNING tenant_id, approval_request_id, agent_id, subject_type, subject_id,
+                  requested_by, required_approvers, status, payload, created_at, resolved_at, escalated_at, escalation_count
+        `,
+        [args.tenantId, args.approvalRequestId, escalatedAt]
+      )
+    );
+
+    if (!res.rows[0]) {
+      throw new Error("approval_request_not_found");
+    }
+
+    return mapApprovalRequestRow(res.rows[0]);
   }
 
   async createEvalRun(args: {
@@ -841,8 +946,8 @@ export class AgentOsRepository {
         `
         INSERT INTO eval_runs (
           tenant_id, eval_run_id, agent_id, agent_version_id, suite_name,
-          status, score_summary, created_by, created_at, completed_at
-        ) VALUES ($1, $2, $3, $4, $5, 'COMPLETED', $6::jsonb, $7, $8, $9)
+          status, score_summary, retry_count, max_retries, next_retry_at, dead_lettered_at, created_by, created_at, completed_at
+        ) VALUES ($1, $2, $3, $4, $5, 'COMPLETED', $6::jsonb, 0, 2, NULL, NULL, $7, $8, $9)
         `,
         [
           args.tenantId,
@@ -892,12 +997,41 @@ export class AgentOsRepository {
         suiteName: args.suiteName,
         status: "COMPLETED",
         scoreSummary,
+        retryCount: 0,
+        maxRetries: 2,
+        nextRetryAt: null,
+        deadLetteredAt: null,
         createdBy: args.createdBy,
         createdAt,
         completedAt: createdAt
       },
       scores: scoreRows
     };
+  }
+
+  async getLatestEvalRunForVersion(args: {
+    tenantId: string;
+    agentId: AgentId;
+    agentVersionId: string;
+  }): Promise<EvalRunRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EvalRunRow>(
+        `
+        SELECT tenant_id, eval_run_id, agent_id, agent_version_id, suite_name,
+               status, score_summary, retry_count, max_retries, next_retry_at, dead_lettered_at,
+               created_by, created_at, completed_at
+        FROM eval_runs
+        WHERE tenant_id = $1
+          AND agent_id = $2
+          AND agent_version_id = $3
+        ORDER BY created_at DESC
+        LIMIT 1
+        `,
+        [args.tenantId, args.agentId, args.agentVersionId]
+      )
+    );
+
+    return res.rows[0] ? mapEvalRunRow(res.rows[0]) : null;
   }
 
   async createExecution(args: {
@@ -935,11 +1069,13 @@ export class AgentOsRepository {
           tenant_id, execution_id, agent_id, agent_version_id, correlation_id,
           request_source, requested_by, subject_type, subject_id, status,
           input_payload, output_payload, failure_class, failure_message, approval_request_id,
+          retry_count, max_retries, next_retry_at, dead_lettered_at,
           started_at, completed_at, created_at, updated_at
         ) VALUES (
           $1, $2, $3, $4, $5,
           $6, $7, $8, $9, $10,
           $11::jsonb, NULL, NULL, NULL, $12,
+          0, 2, NULL, NULL,
           $13, NULL, $14, $15
         )
         `,
@@ -978,6 +1114,10 @@ export class AgentOsRepository {
         failureClass: null,
         failureMessage: null,
         approvalRequestId: args.approvalRequestId ?? null,
+        retryCount: 0,
+        maxRetries: 2,
+        nextRetryAt: null,
+        deadLetteredAt: null,
         startedAt,
         completedAt: null,
         createdAt,
@@ -1065,6 +1205,7 @@ export class AgentOsRepository {
         SELECT tenant_id, execution_id, agent_id, agent_version_id, correlation_id,
                request_source, requested_by, subject_type, subject_id, status,
                input_payload, output_payload, failure_class, failure_message, approval_request_id,
+               retry_count, max_retries, next_retry_at, dead_lettered_at,
                started_at, completed_at, created_at, updated_at
         FROM executions
         WHERE tenant_id = $1 AND execution_id = $2
@@ -1102,6 +1243,7 @@ export class AgentOsRepository {
         SELECT tenant_id, execution_id, agent_id, agent_version_id, correlation_id,
                request_source, requested_by, subject_type, subject_id, status,
                input_payload, output_payload, failure_class, failure_message, approval_request_id,
+               retry_count, max_retries, next_retry_at, dead_lettered_at,
                started_at, completed_at, created_at, updated_at
         FROM executions
         WHERE tenant_id = $1
@@ -1131,6 +1273,7 @@ export class AgentOsRepository {
           FROM executions
           WHERE tenant_id = $1
             AND status = 'QUEUED'
+            AND (next_retry_at IS NULL OR next_retry_at <= $4)
             AND ($2::text IS NULL OR agent_id = $2)
           ORDER BY created_at ASC
           LIMIT $3
@@ -1146,13 +1289,87 @@ export class AgentOsRepository {
         RETURNING e.tenant_id, e.execution_id, e.agent_id, e.agent_version_id, e.correlation_id,
                   e.request_source, e.requested_by, e.subject_type, e.subject_id, e.status,
                   e.input_payload, e.output_payload, e.failure_class, e.failure_message, e.approval_request_id,
+                  e.retry_count, e.max_retries, e.next_retry_at, e.dead_lettered_at,
                   e.started_at, e.completed_at, e.created_at, e.updated_at
         `,
-        [args.tenantId, args.agentId ?? null, args.limit, startedAt]
+        [args.tenantId, args.agentId ?? null, args.limit]
       )
     );
 
     return res.rows.map(mapExecutionRow);
+  }
+
+  async scheduleExecutionRetry(args: {
+    tenantId: string;
+    executionId: string;
+    failureClass: string;
+    failureMessage: string;
+    nextRetryAt: string;
+    updatedAt?: string;
+  }): Promise<ExecutionRecord> {
+    const updatedAt = args.updatedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<ExecutionRow>(
+        `
+        UPDATE executions
+        SET status = 'QUEUED',
+            failure_class = $3,
+            failure_message = $4,
+            retry_count = retry_count + 1,
+            next_retry_at = $5,
+            updated_at = $6
+        WHERE tenant_id = $1 AND execution_id = $2
+        RETURNING tenant_id, execution_id, agent_id, agent_version_id, correlation_id,
+                  request_source, requested_by, subject_type, subject_id, status,
+                  input_payload, output_payload, failure_class, failure_message, approval_request_id,
+                  retry_count, max_retries, next_retry_at, dead_lettered_at,
+                  started_at, completed_at, created_at, updated_at
+        `,
+        [args.tenantId, args.executionId, args.failureClass, args.failureMessage, args.nextRetryAt, updatedAt]
+      )
+    );
+
+    if (!res.rows[0]) {
+      throw new Error("execution_not_found");
+    }
+
+    return mapExecutionRow(res.rows[0]);
+  }
+
+  async deadLetterExecution(args: {
+    tenantId: string;
+    executionId: string;
+    failureClass: string;
+    failureMessage: string;
+    deadLetteredAt?: string;
+  }): Promise<ExecutionRecord> {
+    const deadLetteredAt = args.deadLetteredAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<ExecutionRow>(
+        `
+        UPDATE executions
+        SET status = 'FAILED',
+            failure_class = $3,
+            failure_message = $4,
+            dead_lettered_at = $5,
+            completed_at = $5,
+            updated_at = $5
+        WHERE tenant_id = $1 AND execution_id = $2
+        RETURNING tenant_id, execution_id, agent_id, agent_version_id, correlation_id,
+                  request_source, requested_by, subject_type, subject_id, status,
+                  input_payload, output_payload, failure_class, failure_message, approval_request_id,
+                  retry_count, max_retries, next_retry_at, dead_lettered_at,
+                  started_at, completed_at, created_at, updated_at
+        `,
+        [args.tenantId, args.executionId, args.failureClass, args.failureMessage, deadLetteredAt]
+      )
+    );
+
+    if (!res.rows[0]) {
+      throw new Error("execution_not_found");
+    }
+
+    return mapExecutionRow(res.rows[0]);
   }
 
   async failExecution(args: {
@@ -1308,8 +1525,8 @@ export class AgentOsRepository {
         `
         INSERT INTO eval_runs (
           tenant_id, eval_run_id, agent_id, agent_version_id, suite_name,
-          status, score_summary, created_by, created_at, completed_at
-        ) VALUES ($1, $2, $3, $4, $5, 'PENDING', '{}'::jsonb, $6, $7, NULL)
+          status, score_summary, retry_count, max_retries, next_retry_at, dead_lettered_at, created_by, created_at, completed_at
+        ) VALUES ($1, $2, $3, $4, $5, 'PENDING', '{}'::jsonb, 0, 2, NULL, NULL, $6, $7, NULL)
         `,
         [args.tenantId, evalRunId, args.agentId, current.current_version_id, args.suiteName, args.createdBy, createdAt]
       );
@@ -1322,9 +1539,100 @@ export class AgentOsRepository {
         suiteName: args.suiteName,
         status: "PENDING",
         scoreSummary: {},
+        retryCount: 0,
+        maxRetries: 2,
+        nextRetryAt: null,
+        deadLetteredAt: null,
         createdBy: args.createdBy,
         createdAt,
         completedAt: null
+      };
+    });
+  }
+
+  async completeEvalRun(args: {
+    tenantId: string;
+    evalRunId: string;
+    scoreSummary: Record<string, unknown>;
+    scores: Array<{
+      metric: string;
+      score: number;
+      thresholdMin?: number | null;
+      thresholdMax?: number | null;
+      passed: boolean;
+      metadata?: Record<string, unknown>;
+    }>;
+    completedAt?: string;
+  }): Promise<{ evalRun: EvalRunRecord; scores: EvalScoreRecord[] }> {
+    const completedAt = args.completedAt ?? new Date().toISOString();
+
+    return this.runWithTenant(this.pool, args.tenantId, async (client) => {
+      const runRes = await client.query<EvalRunRow>(
+        `
+        UPDATE eval_runs
+        SET status = 'COMPLETED',
+            score_summary = $3::jsonb,
+            completed_at = $4
+        WHERE tenant_id = $1
+          AND eval_run_id = $2
+        RETURNING tenant_id, eval_run_id, agent_id, agent_version_id, suite_name,
+                  status, score_summary, retry_count, max_retries, next_retry_at, dead_lettered_at,
+                  created_by, created_at, completed_at
+        `,
+        [args.tenantId, args.evalRunId, JSON.stringify(args.scoreSummary), completedAt]
+      );
+
+      const run = runRes.rows[0];
+      if (!run) {
+        throw new Error("eval_run_not_found");
+      }
+
+      const scoreRows: EvalScoreRecord[] = [];
+      for (const score of args.scores) {
+        const evalScoreId = buildScopedId("eval-score", [args.evalRunId, score.metric]);
+        await client.query(
+          `
+          INSERT INTO eval_scores (
+            tenant_id, eval_score_id, eval_run_id, metric, score,
+            threshold_min, threshold_max, passed, metadata, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
+          ON CONFLICT (tenant_id, eval_score_id) DO UPDATE SET
+            score = EXCLUDED.score,
+            threshold_min = EXCLUDED.threshold_min,
+            threshold_max = EXCLUDED.threshold_max,
+            passed = EXCLUDED.passed,
+            metadata = EXCLUDED.metadata
+          `,
+          [
+            args.tenantId,
+            evalScoreId,
+            args.evalRunId,
+            score.metric,
+            score.score,
+            score.thresholdMin ?? null,
+            score.thresholdMax ?? null,
+            score.passed,
+            JSON.stringify(score.metadata ?? {}),
+            completedAt
+          ]
+        );
+        scoreRows.push({
+          tenantId: args.tenantId,
+          evalScoreId,
+          evalRunId: args.evalRunId,
+          metric: score.metric,
+          score: score.score,
+          thresholdMin: score.thresholdMin ?? null,
+          thresholdMax: score.thresholdMax ?? null,
+          passed: score.passed,
+          metadata: score.metadata ?? {},
+          createdAt: completedAt
+        });
+      }
+
+      return {
+        evalRun: mapEvalRunRow(run),
+        scores: scoreRows
       };
     });
   }
@@ -1334,26 +1642,15 @@ export class AgentOsRepository {
     agentId?: AgentId;
     limit: number;
   }): Promise<EvalRunRecord[]> {
-    const startedAt = new Date().toISOString();
     const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
-      client.query<{
-        tenant_id: string;
-        eval_run_id: string;
-        agent_id: AgentId;
-        agent_version_id: string;
-        suite_name: string;
-        status: EvalRunRecord["status"];
-        score_summary: Record<string, unknown>;
-        created_by: string;
-        created_at: string | Date;
-        completed_at: string | Date | null;
-      }>(
+      client.query<EvalRunRow>(
         `
         WITH queued AS (
           SELECT eval_run_id
           FROM eval_runs
           WHERE tenant_id = $1
             AND status = 'PENDING'
+            AND (next_retry_at IS NULL OR next_retry_at <= now())
             AND ($2::text IS NULL OR agent_id = $2)
           ORDER BY created_at ASC
           LIMIT $3
@@ -1365,23 +1662,70 @@ export class AgentOsRepository {
         WHERE e.tenant_id = $1
           AND e.eval_run_id = queued.eval_run_id
         RETURNING e.tenant_id, e.eval_run_id, e.agent_id, e.agent_version_id, e.suite_name,
-                  e.status, e.score_summary, e.created_by, e.created_at, e.completed_at
+                  e.status, e.score_summary, e.retry_count, e.max_retries, e.next_retry_at, e.dead_lettered_at,
+                  e.created_by, e.created_at, e.completed_at
         `,
-        [args.tenantId, args.agentId ?? null, args.limit, startedAt]
+        [args.tenantId, args.agentId ?? null, args.limit]
       )
     );
 
-    return res.rows.map((row) => ({
-      tenantId: row.tenant_id,
-      evalRunId: row.eval_run_id,
-      agentId: row.agent_id,
-      agentVersionId: row.agent_version_id,
-      suiteName: row.suite_name,
-      status: row.status,
-      scoreSummary: row.score_summary,
-      createdBy: row.created_by,
-      createdAt: toIsoString(row.created_at),
-      completedAt: row.completed_at ? toIsoString(row.completed_at) : null
-    }));
+    return res.rows.map(mapEvalRunRow);
+  }
+
+  async scheduleEvalRetry(args: {
+    tenantId: string;
+    evalRunId: string;
+    nextRetryAt: string;
+  }): Promise<EvalRunRecord> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EvalRunRow>(
+        `
+        UPDATE eval_runs
+        SET status = 'PENDING',
+            retry_count = retry_count + 1,
+            next_retry_at = $3
+        WHERE tenant_id = $1 AND eval_run_id = $2
+        RETURNING tenant_id, eval_run_id, agent_id, agent_version_id, suite_name,
+                  status, score_summary, retry_count, max_retries, next_retry_at, dead_lettered_at,
+                  created_by, created_at, completed_at
+        `,
+        [args.tenantId, args.evalRunId, args.nextRetryAt]
+      )
+    );
+
+    if (!res.rows[0]) {
+      throw new Error("eval_run_not_found");
+    }
+
+    return mapEvalRunRow(res.rows[0]);
+  }
+
+  async deadLetterEvalRun(args: {
+    tenantId: string;
+    evalRunId: string;
+    deadLetteredAt?: string;
+  }): Promise<EvalRunRecord> {
+    const deadLetteredAt = args.deadLetteredAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EvalRunRow>(
+        `
+        UPDATE eval_runs
+        SET status = 'FAILED',
+            dead_lettered_at = $3,
+            completed_at = $3
+        WHERE tenant_id = $1 AND eval_run_id = $2
+        RETURNING tenant_id, eval_run_id, agent_id, agent_version_id, suite_name,
+                  status, score_summary, retry_count, max_retries, next_retry_at, dead_lettered_at,
+                  created_by, created_at, completed_at
+        `,
+        [args.tenantId, args.evalRunId, deadLetteredAt]
+      )
+    );
+
+    if (!res.rows[0]) {
+      throw new Error("eval_run_not_found");
+    }
+
+    return mapEvalRunRow(res.rows[0]);
   }
 }

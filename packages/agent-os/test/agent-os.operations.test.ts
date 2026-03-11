@@ -5,6 +5,10 @@ import { AgentVersionService, AgentWorkerService } from "../src/index.js";
 describe("agent-os operations", () => {
   it("promotes a prepared version through the version service", async () => {
     const repository = {
+      getLatestEvalRunForVersion: vi.fn(async () => ({
+        status: "COMPLETED",
+        scoreSummary: { failed: 0, total: 5 }
+      })),
       promoteAgentVersion: vi.fn(async () => ({
         promotedVersion: { agentVersionId: "brandyn:foundation-v2" },
         previousVersionId: "brandyn:foundation-v1"
