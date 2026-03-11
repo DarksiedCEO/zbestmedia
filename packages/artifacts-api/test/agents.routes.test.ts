@@ -220,6 +220,24 @@ describe("agent routes", () => {
         }
       ]
     })),
+    exportWorkerFreshnessSnapshot: vi.fn(async () => ({
+      exportRecord: {
+        exportId: "ops-export:worker-freshness:1",
+        snapshotType: "worker_freshness",
+        exportedBy: "actor-1"
+      },
+      snapshot: {
+        staleAfterMinutes: 15,
+        totalWorkers: 1,
+        staleWorkers: 0,
+        items: []
+      },
+      signature: {
+        sealedAt: "2026-03-11T00:00:00.000Z",
+        payloadHash: "abc123",
+        signature: "sig456"
+      }
+    })),
     getAlerts: vi.fn(async () => ({
       alerts: [
         {
@@ -239,6 +257,69 @@ describe("agent routes", () => {
           byFailureClass: { TRANSIENT_RUNTIME_ERROR: 1 }
         }
       }
+    })),
+    exportAlertsSnapshot: vi.fn(async () => ({
+      exportRecord: {
+        exportId: "ops-export:alerts:1",
+        snapshotType: "alerts",
+        exportedBy: "actor-1"
+      },
+      snapshot: {
+        alerts: [
+          {
+            code: "dead_letter_backlog",
+            severity: "warning"
+          }
+        ]
+      },
+      signature: {
+        sealedAt: "2026-03-11T00:00:00.000Z",
+        payloadHash: "abc123",
+        signature: "sig456"
+      }
+    })),
+    listOpsSnapshotExports: vi.fn(async ({ snapshotType }: { snapshotType: string }) =>
+      snapshotType === "worker_freshness"
+        ? [
+            {
+              exportId: "ops-export:worker-freshness:1",
+              snapshotType: "worker_freshness",
+              exportedBy: "actor-1",
+              payloadHash: "abc123",
+              signature: "sig456",
+              sealedAt: "2026-03-11T00:00:00.000Z"
+            }
+          ]
+        : [
+            {
+              exportId: "ops-export:alerts:1",
+              snapshotType: "alerts",
+              exportedBy: "actor-1",
+              payloadHash: "abc123",
+              signature: "sig456",
+              sealedAt: "2026-03-11T00:00:00.000Z"
+            }
+          ]
+    ),
+    verifyOpsSnapshotHistory: vi.fn(async () => ({
+      verified: true,
+      matchedExport: {
+        exportId: "ops-export:1"
+      },
+      verification: {
+        verified: true,
+        payloadHashMatches: true,
+        signatureMatches: true,
+        expectedPayloadHash: "abc123",
+        expectedSignature: "sig456",
+        trustChain: {
+          algorithm: "hmac-sha256",
+          artifactId: "ops:worker-freshness",
+          sealedAt: "2026-03-11T00:00:00.000Z",
+          payloadHash: "abc123"
+        }
+      },
+      exportCount: 1
     })),
     acknowledgeAlert: vi.fn(async () => ({
       alertAckId: "alert-ack:1",
@@ -506,9 +587,43 @@ describe("agent routes", () => {
       method: "GET",
       url: "/v1/orchestration/ops/workers/freshness/export?staleAfterMinutes=15"
     });
+    const workerFreshnessPersistRes = await app.inject({
+      method: "POST",
+      url: "/v1/orchestration/ops/workers/freshness/export?staleAfterMinutes=15"
+    });
+    const workerFreshnessExportsRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/ops/workers/freshness/exports"
+    });
+    const workerFreshnessVerifyHistoryRes = await app.inject({
+      method: "POST",
+      url: "/v1/orchestration/ops/workers/freshness/exports/verify-history",
+      payload: {
+        sealedAt: "2026-03-11T00:00:00.000Z",
+        payloadHash: "abc123",
+        signature: "sig456"
+      }
+    });
     const alertsRes = await app.inject({
       method: "GET",
       url: "/v1/orchestration/ops/alerts?olderThanMinutes=30&heartbeatStaleMinutes=15"
+    });
+    const alertsExportRes = await app.inject({
+      method: "POST",
+      url: "/v1/orchestration/ops/alerts/export?olderThanMinutes=30&heartbeatStaleMinutes=15"
+    });
+    const alertsExportsRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/ops/alerts/exports"
+    });
+    const alertsVerifyHistoryRes = await app.inject({
+      method: "POST",
+      url: "/v1/orchestration/ops/alerts/exports/verify-history",
+      payload: {
+        sealedAt: "2026-03-11T00:00:00.000Z",
+        payloadHash: "abc123",
+        signature: "sig456"
+      }
     });
     const alertAcksRes = await app.inject({
       method: "GET",
@@ -587,8 +702,20 @@ describe("agent routes", () => {
     expect(workerFreshnessExportRes.statusCode).toBe(200);
     expect(workerFreshnessExportRes.json().snapshot.staleWorkers).toBe(0);
     expect(workerFreshnessExportRes.json().signature.signature).toBe("sig456");
+    expect(workerFreshnessPersistRes.statusCode).toBe(201);
+    expect(workerFreshnessPersistRes.json().exportRecord.snapshotType).toBe("worker_freshness");
+    expect(workerFreshnessExportsRes.statusCode).toBe(200);
+    expect(workerFreshnessExportsRes.json().items[0].snapshotType).toBe("worker_freshness");
+    expect(workerFreshnessVerifyHistoryRes.statusCode).toBe(200);
+    expect(workerFreshnessVerifyHistoryRes.json().verified).toBe(true);
     expect(alertsRes.statusCode).toBe(200);
     expect(alertsRes.json().alerts[0].code).toBe("dead_letter_backlog");
+    expect(alertsExportRes.statusCode).toBe(201);
+    expect(alertsExportRes.json().exportRecord.snapshotType).toBe("alerts");
+    expect(alertsExportsRes.statusCode).toBe(200);
+    expect(alertsExportsRes.json().items[0].snapshotType).toBe("alerts");
+    expect(alertsVerifyHistoryRes.statusCode).toBe(200);
+    expect(alertsVerifyHistoryRes.json().verified).toBe(true);
     expect(alertAcksRes.statusCode).toBe(200);
     expect(alertAcksRes.json().items[0].alertAckId).toBe("alert-ack:1");
     expect(alertAckStatusRes.statusCode).toBe(200);

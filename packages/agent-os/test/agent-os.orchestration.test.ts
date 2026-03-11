@@ -313,6 +313,31 @@ describe("MaestroOrchestrationService", () => {
           createdAt: "2026-03-11T00:10:00.000Z"
         }
       ]),
+      createOrchestrationOpsSnapshotExport: vi.fn(async ({ snapshotType }: { snapshotType: string }) => ({
+        exportId: `ops-export:${snapshotType}:1`,
+        snapshotType,
+        exportedBy: "ops-1",
+        payloadHash: "hash-1",
+        signature: "sig-1",
+        sealedAt: "2026-03-11T00:10:00.000Z",
+        snapshot: { ok: true },
+        createdAt: "2026-03-11T00:10:00.000Z"
+      })),
+      listOrchestrationOpsSnapshotExports: vi.fn(async ({ snapshotType }: { snapshotType: string }) => [
+        {
+          exportId: `ops-export:${snapshotType}:1`,
+          snapshotType,
+          exportedBy: "ops-1",
+          payloadHash: "hash-1",
+          signature: "sig-1",
+          sealedAt: "2026-03-11T00:10:00.000Z",
+          snapshot:
+            snapshotType === "worker_freshness"
+              ? { staleAfterMinutes: 15, totalWorkers: 1, staleWorkers: 1, items: [] }
+              : { alerts: [{ code: "dead_letter_backlog", severity: "warning" }] },
+          createdAt: "2026-03-11T00:10:00.000Z"
+        }
+      ]),
       getExecution: vi.fn(async () => ({
         execution: {
           executionId: "execution:maestro:campaign-6",
@@ -473,6 +498,51 @@ describe("MaestroOrchestrationService", () => {
       reason: "backlog persists",
       createdAt: "2026-03-11T00:45:00.000Z"
     });
+    const workerExport = await opsService.exportWorkerFreshnessSnapshot({
+      tenantId: "tenant-1",
+      actorId: "ops-1",
+      staleAfterMinutes: 15,
+      signSnapshot: () => ({
+        sealedAt: "2026-03-11T00:10:00.000Z",
+        payloadHash: "hash-1",
+        signature: "sig-1"
+      })
+    });
+    const alertsExport = await opsService.exportAlertsSnapshot({
+      tenantId: "tenant-1",
+      actorId: "ops-1",
+      olderThanMinutes: 60,
+      heartbeatStaleMinutes: 15,
+      signSnapshot: () => ({
+        sealedAt: "2026-03-11T00:10:00.000Z",
+        payloadHash: "hash-1",
+        signature: "sig-1"
+      })
+    });
+    const workerOpsExports = await opsService.listOpsSnapshotExports({
+      tenantId: "tenant-1",
+      snapshotType: "worker_freshness"
+    });
+    const workerOpsVerify = await opsService.verifyOpsSnapshotHistory({
+      tenantId: "tenant-1",
+      snapshotType: "worker_freshness",
+      sealedAt: "2026-03-11T00:10:00.000Z",
+      payloadHash: "hash-1",
+      signature: "sig-1",
+      verifySnapshot: () => ({
+        verified: true,
+        payloadHashMatches: true,
+        signatureMatches: true,
+        expectedPayloadHash: "hash-1",
+        expectedSignature: "sig-1",
+        trustChain: {
+          algorithm: "hmac-sha256",
+          artifactId: "ops:worker_freshness",
+          sealedAt: "2026-03-11T00:10:00.000Z",
+          payloadHash: "hash-1"
+        }
+      })
+    });
 
     expect(exported?.exportRecord.exportId).toBe("bundle-export:1");
     expect(exports).toHaveLength(1);
@@ -488,6 +558,10 @@ describe("MaestroOrchestrationService", () => {
     expect(ackStatus.acknowledged).toBe(true);
     expect(expiredAckStatus.expired).toBe(true);
     expect(reopened.reopenedBy).toBe("ops-2");
+    expect(workerExport.exportRecord.snapshotType).toBe("worker_freshness");
+    expect(alertsExport.exportRecord.snapshotType).toBe("alerts");
+    expect(workerOpsExports).toHaveLength(1);
+    expect(workerOpsVerify.verified).toBe(true);
   });
 
   it("creates replay approvals for dead-lettered executions", async () => {

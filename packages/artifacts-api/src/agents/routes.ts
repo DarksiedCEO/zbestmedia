@@ -29,6 +29,8 @@ import {
   OrchestrationAlertReopenBodySchema,
   OrchestrationBundleVerifyBodySchema,
   OrchestrationDiagnosticsQuerySchema,
+  OrchestrationOpsExportQuerySchema,
+  OrchestrationOpsHistoryVerifyBodySchema,
   ApprovalRequestIdParamSchema,
   OrchestrationEscalateBodySchema,
   OrchestrationExecutionListQuerySchema,
@@ -789,8 +791,48 @@ export function agentRoutes(opts: {
       });
       return reply.send({
         snapshot,
-        signature: opts.signOrchestrationBundle(snapshot, "ops:worker-freshness")
+        signature: opts.signOrchestrationBundle(snapshot, "ops:worker_freshness")
       });
+    });
+
+    app.post("/v1/orchestration/ops/workers/freshness/export", async (req, reply) => {
+      const query = WorkerFreshnessQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.orchestrationService.exportWorkerFreshnessSnapshot({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        staleAfterMinutes: query.data.staleAfterMinutes,
+        signSnapshot: opts.signOrchestrationBundle
+      });
+      return reply.code(201).send(result);
+    });
+
+    app.get("/v1/orchestration/ops/workers/freshness/exports", async (req, reply) => {
+      const items = await opts.orchestrationService.listOpsSnapshotExports({
+        tenantId: req.auth.tenantId,
+        snapshotType: "worker_freshness"
+      });
+      return reply.send({ items });
+    });
+
+    app.post("/v1/orchestration/ops/workers/freshness/exports/verify-history", async (req, reply) => {
+      const body = OrchestrationOpsHistoryVerifyBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.orchestrationService.verifyOpsSnapshotHistory({
+        tenantId: req.auth.tenantId,
+        snapshotType: "worker_freshness",
+        sealedAt: body.data.sealedAt,
+        payloadHash: body.data.payloadHash,
+        signature: body.data.signature,
+        verifySnapshot: opts.verifyOrchestrationBundle
+      });
+      return reply.send(result);
     });
 
     app.get("/v1/orchestration/ops/alerts", async (req, reply) => {
@@ -803,6 +845,47 @@ export function agentRoutes(opts: {
         tenantId: req.auth.tenantId,
         olderThanMinutes: query.data.olderThanMinutes,
         heartbeatStaleMinutes: query.data.heartbeatStaleMinutes
+      });
+      return reply.send(result);
+    });
+
+    app.post("/v1/orchestration/ops/alerts/export", async (req, reply) => {
+      const query = OrchestrationOpsExportQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.orchestrationService.exportAlertsSnapshot({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        olderThanMinutes: query.data.olderThanMinutes,
+        heartbeatStaleMinutes: query.data.heartbeatStaleMinutes,
+        signSnapshot: opts.signOrchestrationBundle
+      });
+      return reply.code(201).send(result);
+    });
+
+    app.get("/v1/orchestration/ops/alerts/exports", async (req, reply) => {
+      const items = await opts.orchestrationService.listOpsSnapshotExports({
+        tenantId: req.auth.tenantId,
+        snapshotType: "alerts"
+      });
+      return reply.send({ items });
+    });
+
+    app.post("/v1/orchestration/ops/alerts/exports/verify-history", async (req, reply) => {
+      const body = OrchestrationOpsHistoryVerifyBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.orchestrationService.verifyOpsSnapshotHistory({
+        tenantId: req.auth.tenantId,
+        snapshotType: "alerts",
+        sealedAt: body.data.sealedAt,
+        payloadHash: body.data.payloadHash,
+        signature: body.data.signature,
+        verifySnapshot: opts.verifyOrchestrationBundle
       });
       return reply.send(result);
     });

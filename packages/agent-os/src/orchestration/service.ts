@@ -547,6 +547,130 @@ export class MaestroOrchestrationService {
     };
   }
 
+  async exportWorkerFreshnessSnapshot(args: {
+    tenantId: string;
+    actorId: string;
+    staleAfterMinutes: number;
+    signSnapshot: (bundle: unknown, executionId: string) => {
+      sealedAt: string;
+      payloadHash: string;
+      signature: string;
+    };
+    createdAt?: string;
+  }) {
+    const snapshot = await this.getWorkerFreshnessReport({
+      tenantId: args.tenantId,
+      staleAfterMinutes: args.staleAfterMinutes
+    });
+    const signature = args.signSnapshot(snapshot, "ops:worker_freshness");
+    const exportRecord = await this.repository.createOrchestrationOpsSnapshotExport({
+      tenantId: args.tenantId,
+      snapshotType: "worker_freshness",
+      exportedBy: args.actorId,
+      payloadHash: signature.payloadHash,
+      signature: signature.signature,
+      sealedAt: signature.sealedAt,
+      snapshot: snapshot as Record<string, unknown>,
+      createdAt: args.createdAt
+    });
+
+    return { exportRecord, snapshot, signature };
+  }
+
+  async exportAlertsSnapshot(args: {
+    tenantId: string;
+    actorId: string;
+    olderThanMinutes: number;
+    heartbeatStaleMinutes: number;
+    signSnapshot: (bundle: unknown, executionId: string) => {
+      sealedAt: string;
+      payloadHash: string;
+      signature: string;
+    };
+    createdAt?: string;
+  }) {
+    const snapshot = await this.getAlerts({
+      tenantId: args.tenantId,
+      olderThanMinutes: args.olderThanMinutes,
+      heartbeatStaleMinutes: args.heartbeatStaleMinutes
+    });
+    const signature = args.signSnapshot(snapshot, "ops:alerts");
+    const exportRecord = await this.repository.createOrchestrationOpsSnapshotExport({
+      tenantId: args.tenantId,
+      snapshotType: "alerts",
+      exportedBy: args.actorId,
+      payloadHash: signature.payloadHash,
+      signature: signature.signature,
+      sealedAt: signature.sealedAt,
+      snapshot: snapshot as Record<string, unknown>,
+      createdAt: args.createdAt
+    });
+
+    return { exportRecord, snapshot, signature };
+  }
+
+  async listOpsSnapshotExports(args: {
+    tenantId: string;
+    snapshotType: "worker_freshness" | "alerts";
+  }) {
+    return this.repository.listOrchestrationOpsSnapshotExports(args);
+  }
+
+  async verifyOpsSnapshotHistory(args: {
+    tenantId: string;
+    snapshotType: "worker_freshness" | "alerts";
+    sealedAt: string;
+    payloadHash: string;
+    signature: string;
+    verifySnapshot: (args: {
+      bundle: unknown;
+      executionId: string;
+      sealedAt: string;
+      payloadHash: string;
+      signature: string;
+    }) => {
+      verified: boolean;
+      payloadHashMatches: boolean;
+      signatureMatches: boolean;
+      expectedPayloadHash: string;
+      expectedSignature: string;
+      trustChain: {
+        algorithm: string;
+        artifactId: string;
+        sealedAt: string;
+        payloadHash: string;
+      };
+    };
+  }) {
+    const exports = await this.listOpsSnapshotExports({
+      tenantId: args.tenantId,
+      snapshotType: args.snapshotType
+    });
+    const matched = exports.find(
+      (item) =>
+        item.sealedAt === args.sealedAt &&
+        item.payloadHash === args.payloadHash &&
+        item.signature === args.signature
+    );
+
+    const verification = matched
+      ? args.verifySnapshot({
+          bundle: matched.snapshot,
+          executionId: `ops:${args.snapshotType}`,
+          sealedAt: args.sealedAt,
+          payloadHash: args.payloadHash,
+          signature: args.signature
+        })
+      : null;
+
+    return {
+      verified: Boolean(matched) && Boolean(verification?.verified),
+      matchedExport: matched ?? null,
+      verification,
+      exportCount: exports.length
+    };
+  }
+
   async getAlerts(args: {
     tenantId: string;
     olderThanMinutes: number;

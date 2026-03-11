@@ -221,6 +221,22 @@ export const OrchestrationBundleExportRecordSchema = z.object({
 });
 export type OrchestrationBundleExportRecord = z.infer<typeof OrchestrationBundleExportRecordSchema>;
 
+export const OrchestrationOpsSnapshotTypeSchema = z.enum(["worker_freshness", "alerts"]);
+export type OrchestrationOpsSnapshotType = z.infer<typeof OrchestrationOpsSnapshotTypeSchema>;
+
+export const OrchestrationOpsSnapshotExportRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  exportId: z.string().min(1),
+  snapshotType: OrchestrationOpsSnapshotTypeSchema,
+  exportedBy: z.string().min(1),
+  payloadHash: z.string().min(1),
+  signature: z.string().min(1),
+  sealedAt: z.string().datetime(),
+  snapshot: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime()
+});
+export type OrchestrationOpsSnapshotExportRecord = z.infer<typeof OrchestrationOpsSnapshotExportRecordSchema>;
+
 export const WorkerHeartbeatRecordSchema = z.object({
   tenantId: z.string().uuid(),
   workerHeartbeatId: z.string().min(1),

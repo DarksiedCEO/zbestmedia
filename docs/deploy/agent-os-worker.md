@@ -60,8 +60,14 @@ Use a dedicated worker service/process profile. Do not colocate long-running wor
   - `GET /v1/orchestration/ops/workers/freshness`
 - Worker freshness export:
   - `GET /v1/orchestration/ops/workers/freshness/export`
+  - `POST /v1/orchestration/ops/workers/freshness/export`
+  - `GET /v1/orchestration/ops/workers/freshness/exports`
+  - `POST /v1/orchestration/ops/workers/freshness/exports/verify-history`
 - Ops alerts:
   - `GET /v1/orchestration/ops/alerts`
+  - `POST /v1/orchestration/ops/alerts/export`
+  - `GET /v1/orchestration/ops/alerts/exports`
+  - `POST /v1/orchestration/ops/alerts/exports/verify-history`
 - Alert acknowledgements:
   - `GET /v1/orchestration/ops/alerts/acks`
   - `GET /v1/orchestration/ops/alerts/:alertCode/ack-status`

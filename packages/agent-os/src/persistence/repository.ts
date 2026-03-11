@@ -24,6 +24,7 @@ import type {
   EvalRunRecord,
   EvalScoreRecord,
   MemoryEntryRecord,
+  OrchestrationOpsSnapshotExportRecord,
   OrchestrationAlertAckRecord,
   OrchestrationBundleExportRecord,
   WorkerHeartbeatRecord
@@ -156,6 +157,18 @@ type OrchestrationBundleExportRow = {
   signature: string;
   sealed_at: string | Date;
   bundle_snapshot: Record<string, unknown>;
+  created_at: string | Date;
+};
+
+type OrchestrationOpsSnapshotExportRow = {
+  tenant_id: string;
+  export_id: string;
+  snapshot_type: "worker_freshness" | "alerts";
+  exported_by: string;
+  payload_hash: string;
+  signature: string;
+  sealed_at: string | Date;
+  snapshot: Record<string, unknown>;
   created_at: string | Date;
 };
 
@@ -312,6 +325,22 @@ function mapOrchestrationBundleExportRow(row: OrchestrationBundleExportRow): Orc
     signature: row.signature,
     sealedAt: toIsoString(row.sealed_at),
     bundleSnapshot: row.bundle_snapshot,
+    createdAt: toIsoString(row.created_at)
+  };
+}
+
+function mapOrchestrationOpsSnapshotExportRow(
+  row: OrchestrationOpsSnapshotExportRow
+): OrchestrationOpsSnapshotExportRecord {
+  return {
+    tenantId: row.tenant_id,
+    exportId: row.export_id,
+    snapshotType: row.snapshot_type,
+    exportedBy: row.exported_by,
+    payloadHash: row.payload_hash,
+    signature: row.signature,
+    sealedAt: toIsoString(row.sealed_at),
+    snapshot: row.snapshot,
     createdAt: toIsoString(row.created_at)
   };
 }
@@ -1370,6 +1399,65 @@ export class AgentOsRepository {
     );
 
     return res.rows.map(mapOrchestrationBundleExportRow);
+  }
+
+  async createOrchestrationOpsSnapshotExport(args: {
+    tenantId: string;
+    snapshotType: "worker_freshness" | "alerts";
+    exportedBy: string;
+    payloadHash: string;
+    signature: string;
+    sealedAt: string;
+    snapshot: Record<string, unknown>;
+    createdAt?: string;
+  }): Promise<OrchestrationOpsSnapshotExportRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const exportId = buildScopedId("ops-export", [args.snapshotType, createdAt]);
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OrchestrationOpsSnapshotExportRow>(
+        `
+        INSERT INTO orchestration_ops_snapshot_exports (
+          tenant_id, export_id, snapshot_type, exported_by,
+          payload_hash, signature, sealed_at, snapshot, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
+        RETURNING tenant_id, export_id, snapshot_type, exported_by,
+                  payload_hash, signature, sealed_at, snapshot, created_at
+        `,
+        [
+          args.tenantId,
+          exportId,
+          args.snapshotType,
+          args.exportedBy,
+          args.payloadHash,
+          args.signature,
+          args.sealedAt,
+          JSON.stringify(args.snapshot),
+          createdAt
+        ]
+      )
+    );
+
+    return mapOrchestrationOpsSnapshotExportRow(res.rows[0]!);
+  }
+
+  async listOrchestrationOpsSnapshotExports(args: {
+    tenantId: string;
+    snapshotType: "worker_freshness" | "alerts";
+  }): Promise<OrchestrationOpsSnapshotExportRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OrchestrationOpsSnapshotExportRow>(
+        `
+        SELECT tenant_id, export_id, snapshot_type, exported_by,
+               payload_hash, signature, sealed_at, snapshot, created_at
+        FROM orchestration_ops_snapshot_exports
+        WHERE tenant_id = $1 AND snapshot_type = $2
+        ORDER BY created_at DESC
+        `,
+        [args.tenantId, args.snapshotType]
+      )
+    );
+
+    return res.rows.map(mapOrchestrationOpsSnapshotExportRow);
   }
 
   async listExecutions(args: {

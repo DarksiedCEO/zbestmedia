@@ -188,6 +188,18 @@ export const WorkerFreshnessQuerySchema = z.object({
   staleAfterMinutes: z.coerce.number().int().positive().max(10_080).default(15)
 });
 
+export const OrchestrationOpsExportQuerySchema = z.object({
+  olderThanMinutes: z.coerce.number().int().positive().max(10_080).default(60),
+  heartbeatStaleMinutes: z.coerce.number().int().positive().max(10_080).default(15),
+  staleAfterMinutes: z.coerce.number().int().positive().max(10_080).default(15)
+});
+
+export const OrchestrationOpsHistoryVerifyBodySchema = z.object({
+  sealedAt: z.string().datetime(),
+  payloadHash: z.string().min(1),
+  signature: z.string().min(1)
+});
+
 export const OrchestrationWorkerProcessBodySchema = z.object({
   limit: z.number().int().positive().max(50).default(10),
   retryDelayMs: z.number().int().positive().max(3_600_000).optional()
