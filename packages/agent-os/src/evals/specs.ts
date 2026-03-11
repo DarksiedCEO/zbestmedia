@@ -44,5 +44,15 @@ export const AGENT_EVAL_PROFILES: Record<AgentId, EvalProfile> = {
       { metric: "publishing_success_rate", minScore: 0.99, targetDirection: "higher_is_better" },
       { metric: "approval_bypass_rate", maxScore: 0, targetDirection: "lower_is_better" }
     ]
+  },
+  oracle: {
+    profileId: "oracle-evals-v1",
+    agentId: "oracle",
+    metrics: [
+      { metric: "metric_interpretation_accuracy", minScore: 0.94, targetDirection: "higher_is_better" },
+      { metric: "signal_consistency", minScore: 0.93, targetDirection: "higher_is_better" },
+      { metric: "recommendation_relevance", minScore: 0.91, targetDirection: "higher_is_better" },
+      { metric: "anomaly_detection_precision", minScore: 0.9, targetDirection: "higher_is_better" }
+    ]
   }
 };

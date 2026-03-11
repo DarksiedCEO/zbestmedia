@@ -5,7 +5,8 @@ import { BRAND_PIPELINE_SEQUENCE, isValidBrandPipelineProgression, type BrandPip
 const STEP_TO_AGENT = {
   brandyn_direction_approved: "brandyn",
   jordyn_visual_alignment_approved: "jordyn",
-  kobe_distribution_queued: "kobe"
+  kobe_distribution_queued: "kobe",
+  oracle_performance_evaluated: "oracle"
 } as const;
 
 export class BrandPipelineWorkflowError extends Error {

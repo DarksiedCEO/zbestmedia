@@ -20,3 +20,4 @@ export type AgentTaskDomain = z.infer<typeof AgentTaskDomainSchema>;
 export const BRANDYN_TASK_DOMAIN: AgentTaskDomain = "brand_identity_governance";
 export const JORDYN_TASK_DOMAIN: AgentTaskDomain = "visual_identity_governance";
 export const KOBE_TASK_DOMAIN: AgentTaskDomain = "social_campaign_deployment";
+export const ORACLE_TASK_DOMAIN: AgentTaskDomain = "growth_intelligence";

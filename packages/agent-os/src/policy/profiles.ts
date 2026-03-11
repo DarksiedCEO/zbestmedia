@@ -12,7 +12,11 @@ export type PolicyCapability =
   | "publishing.package_content"
   | "publishing.schedule"
   | "publishing.adapt_channels"
-  | "publishing.maintain_cadence";
+  | "publishing.maintain_cadence"
+  | "intelligence.analyze_performance"
+  | "intelligence.aggregate_signals"
+  | "intelligence.summarize_channels"
+  | "intelligence.draft_recommendations";
 
 export type PolicyRestriction =
   | "posting.direct_outbound"
@@ -22,7 +26,10 @@ export type PolicyRestriction =
   | "budget.modify"
   | "lead.sales_activity"
   | "approval.override"
-  | "compliance.alter_sensitive_copy";
+  | "compliance.alter_sensitive_copy"
+  | "pricing.modify"
+  | "strategy.redefine_brand"
+  | "publishing.execute_campaign";
 
 export type AgentPolicyProfile = {
   profileId: string;
@@ -78,6 +85,22 @@ export const AGENT_POLICY_PROFILES: Record<AgentId, AgentPolicyProfile> = {
       "visual.identity_override",
       "approval.override",
       "compliance.alter_sensitive_copy"
+    ]
+  },
+  oracle: {
+    profileId: "oracle-growth-v1",
+    agentId: "oracle",
+    allowed: [
+      "intelligence.analyze_performance",
+      "intelligence.aggregate_signals",
+      "intelligence.summarize_channels",
+      "intelligence.draft_recommendations"
+    ],
+    denied: [
+      "strategy.redefine_brand",
+      "visual.identity_override",
+      "publishing.execute_campaign",
+      "pricing.modify"
     ]
   }
 };

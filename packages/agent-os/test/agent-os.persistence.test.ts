@@ -35,7 +35,7 @@ function createFakeClient(responses: Array<{ rows?: unknown[] }>) {
 }
 
 describe("agent-os persistence foundation", () => {
-  it("builds a deterministic foundation bundle for Brandyn, Jordyn, and Kobe", () => {
+  it("builds a deterministic foundation bundle for Brandyn, Jordyn, Kobe, and Oracle", () => {
     const bundle = buildAgentOsFoundationBundle({
       tenantId: TENANT_ID,
       createdBy: "founder",
@@ -43,18 +43,19 @@ describe("agent-os persistence foundation", () => {
       createdAt: NOW
     });
 
-    expect(bundle.agents).toHaveLength(3);
-    expect(bundle.versions).toHaveLength(3);
-    expect(bundle.policyProfiles).toHaveLength(3);
-    expect(bundle.memoryPartitions).toHaveLength(3);
-    expect(bundle.agents.map((agent) => agent.agentId)).toEqual(["brandyn", "jordyn", "kobe"]);
+    expect(bundle.agents).toHaveLength(4);
+    expect(bundle.versions).toHaveLength(4);
+    expect(bundle.policyProfiles).toHaveLength(4);
+    expect(bundle.memoryPartitions).toHaveLength(4);
+    expect(bundle.agents.map((agent) => agent.agentId)).toEqual(["brandyn", "jordyn", "kobe", "oracle"]);
     expect(bundle.versions[0]?.agentVersionId).toBe("brandyn:foundation-v1");
     expect(bundle.policyProfiles[1]?.policyProfileId).toBe("jordyn-visual-v1");
     expect(bundle.memoryPartitions[2]?.partitionId).toBe("kobe-social-deployment-v1");
+    expect(bundle.memoryPartitions[3]?.partitionId).toBe("oracle-growth-intelligence-v1");
   });
 
   it("provisions the foundation rows through the repository", async () => {
-    const fake = createFakeClient(new Array(12).fill({ rows: [] }));
+    const fake = createFakeClient(new Array(16).fill({ rows: [] }));
     const runWithTenant = vi.fn(async (_pool, _tenantId, fn) => fn(fake.client as never));
     const repository = new AgentOsRepository({} as never, runWithTenant);
 
@@ -66,12 +67,12 @@ describe("agent-os persistence foundation", () => {
     });
 
     expect(runWithTenant).toHaveBeenCalledOnce();
-    expect(result.agents).toHaveLength(3);
-    expect(fake.queryCalls).toHaveLength(12);
+    expect(result.agents).toHaveLength(4);
+    expect(fake.queryCalls).toHaveLength(16);
     expect(fake.queryCalls[0]?.sql).toContain("INSERT INTO agents");
-    expect(fake.queryCalls[3]?.sql).toContain("INSERT INTO agent_versions");
-    expect(fake.queryCalls[6]?.sql).toContain("INSERT INTO agent_policy_profiles");
-    expect(fake.queryCalls[9]?.sql).toContain("INSERT INTO agent_memory_partitions");
+    expect(fake.queryCalls[4]?.sql).toContain("INSERT INTO agent_versions");
+    expect(fake.queryCalls[8]?.sql).toContain("INSERT INTO agent_policy_profiles");
+    expect(fake.queryCalls[12]?.sql).toContain("INSERT INTO agent_memory_partitions");
   });
 
   it("guards illegal lifecycle transitions at the repository boundary", async () => {

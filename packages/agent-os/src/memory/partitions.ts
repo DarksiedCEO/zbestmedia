@@ -54,6 +54,18 @@ export const AGENT_MEMORY_PARTITIONS: Record<AgentId, MemoryPartition> = {
       "publishing_decisions"
     ],
     sharedAccess: ["company_policy_read"]
+  },
+  oracle: {
+    partitionId: "oracle-growth-intelligence-v1",
+    agentId: "oracle",
+    namespace: "agent.oracle",
+    ownedCollections: [
+      "campaign_performance_snapshots",
+      "channel_metrics",
+      "experiment_outcomes",
+      "recommendation_history"
+    ],
+    sharedAccess: ["company_policy_read"]
   }
 };
 

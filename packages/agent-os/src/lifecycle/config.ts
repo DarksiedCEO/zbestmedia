@@ -74,6 +74,17 @@ export const AGENT_LIFECYCLE_PROFILES: Record<AgentId, AgentLifecycleProfile> = 
       "publishing_success_rate",
       "approval_bypass_rate"
     ]
+  },
+  oracle: {
+    profileId: "growth-intelligence-v1",
+    agentId: "oracle",
+    allowedTransitions: COMMON_ALLOWED_TRANSITIONS,
+    requiredValidationMetrics: [
+      "metric_interpretation_accuracy",
+      "signal_consistency",
+      "recommendation_relevance",
+      "anomaly_detection_precision"
+    ]
   }
 };
 

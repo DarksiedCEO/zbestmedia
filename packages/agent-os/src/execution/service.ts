@@ -39,6 +39,13 @@ export function buildDeterministicExecutionOutput(agentId: AgentId, payload: Rec
         cadence: payload.cadence ?? null,
         packagingChecklist: payload.packagingChecklist ?? []
       };
+    case "oracle":
+      return {
+        kind: "growth_intelligence_output",
+        campaignPerformanceSummary: payload.campaignPerformanceSummary ?? null,
+        channelSignals: payload.channelSignals ?? [],
+        recommendedActions: payload.recommendedActions ?? []
+      };
   }
 }
 

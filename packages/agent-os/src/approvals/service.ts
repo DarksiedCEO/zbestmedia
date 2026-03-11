@@ -60,6 +60,12 @@ export function resolveApprovalPolicy(input: ApprovalWorkflowInput): ApprovalPol
         requiredApprovers: [],
         reason: "scheduled deployment from approved content package"
       };
+    case "oracle":
+      return {
+        required: false,
+        requiredApprovers: [],
+        reason: "growth intelligence analysis remains advisory"
+      };
   }
 }
 

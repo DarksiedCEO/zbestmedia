@@ -2,10 +2,11 @@ import {
   BRANDYN_TASK_DOMAIN,
   JORDYN_TASK_DOMAIN,
   KOBE_TASK_DOMAIN,
+  ORACLE_TASK_DOMAIN,
   type AgentTaskDomain
 } from "./domains.js";
 
-export type AgentId = "brandyn" | "jordyn" | "kobe";
+export type AgentId = "brandyn" | "jordyn" | "kobe" | "oracle";
 
 export type AgentDefinition = {
   agentId: AgentId;
@@ -15,7 +16,7 @@ export type AgentDefinition = {
   memoryPartitionId: string;
   lifecycleProfileId: string;
   evalProfileId: string;
-  workflowRole: "brand_brain" | "visual_law" | "distribution_operator";
+  workflowRole: "brand_brain" | "visual_law" | "distribution_operator" | "intelligence_analyst";
   prohibitedDomains: AgentTaskDomain[];
 };
 
@@ -51,7 +52,18 @@ export const AGENT_DEFINITIONS: Record<AgentId, AgentDefinition> = {
     lifecycleProfileId: "social-deployment-v1",
     evalProfileId: "kobe-evals-v1",
     workflowRole: "distribution_operator",
-    prohibitedDomains: [BRANDYN_TASK_DOMAIN, JORDYN_TASK_DOMAIN]
+    prohibitedDomains: [BRANDYN_TASK_DOMAIN, JORDYN_TASK_DOMAIN, ORACLE_TASK_DOMAIN]
+  },
+  oracle: {
+    agentId: "oracle",
+    displayName: "Oracle",
+    taskDomain: ORACLE_TASK_DOMAIN,
+    policyProfileId: "oracle-growth-v1",
+    memoryPartitionId: "oracle-growth-intelligence-v1",
+    lifecycleProfileId: "growth-intelligence-v1",
+    evalProfileId: "oracle-evals-v1",
+    workflowRole: "intelligence_analyst",
+    prohibitedDomains: [BRANDYN_TASK_DOMAIN, JORDYN_TASK_DOMAIN, KOBE_TASK_DOMAIN]
   }
 };
 
