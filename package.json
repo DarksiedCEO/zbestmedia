@@ -17,8 +17,8 @@
     "agent-os:worker:release:check": "pnpm agent-os:deployment:check && pnpm agent-os:worker:smoke",
     "agent-os:ops:smoke": "tsx scripts/agent-os/ops-smoke.ts",
     "agent-os:ops:smoke:deployed": "AGENT_OS_SMOKE_MODE=deployed tsx scripts/agent-os/ops-smoke.ts",
-    "agent-os:release:check": "pnpm agent-os:verify:migrations && pnpm agent-os:worker:release:check",
-    "agent-os:release:check:deployed": "pnpm agent-os:env:preflight && AGENT_OS_VERIFY_DB=true pnpm agent-os:verify:migrations && pnpm agent-os:ops:smoke:deployed",
+    "agent-os:release:check": "pnpm agent-os:verify:migrations && pnpm agent-os:worker:release:check && pnpm agent-os:execution:smoke && pnpm agent-os:ops:smoke",
+    "agent-os:release:check:deployed": "pnpm agent-os:env:preflight && AGENT_OS_VERIFY_DB=true pnpm agent-os:verify:migrations && pnpm agent-os:execution:smoke:deployed && pnpm agent-os:ops:smoke:deployed",
     "lint": "eslint \"packages/**/src/**/*.ts\" \"packages/**/test/**/*.ts\" \"scripts/**/*.ts\"",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -87,7 +87,9 @@
     "schemas:gen": "tsx scripts/generate-json-schemas.ts",
     "schemas:check": "tsx scripts/generate-json-schemas.ts --check && git diff --exit-code -- packages/brand-trinity-schemas/schemas packages/eval-gates-schemas/schemas packages/brand-events-contracts/schemas",
     "schemas:compat": "tsx scripts/check-schema-compat.ts",
-    "agent-os:prompt-pack:export": "tsx scripts/agent-os/export-prompt-pack.ts"
+    "agent-os:prompt-pack:export": "tsx scripts/agent-os/export-prompt-pack.ts",
+    "agent-os:execution:smoke": "tsx scripts/agent-os/execution-smoke.ts",
+    "agent-os:execution:smoke:deployed": "AGENT_OS_SMOKE_MODE=deployed tsx scripts/agent-os/execution-smoke.ts"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

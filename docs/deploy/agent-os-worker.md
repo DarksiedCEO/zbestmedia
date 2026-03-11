@@ -36,8 +36,12 @@ Deploy the Agent OS worker as a separate process from the API.
   - `pnpm agent-os:worker:smoke`
 - Run the worker release check:
   - `pnpm agent-os:worker:release:check`
+- Smoke deployed Agent OS execution surfaces:
+  - `pnpm agent-os:execution:smoke:deployed`
 - Smoke deployed Agent OS ops surfaces:
   - `pnpm agent-os:ops:smoke:deployed`
+- Smoke Agent OS execution routes:
+  - `pnpm agent-os:execution:smoke`
 - Run the full local release check:
   - `pnpm agent-os:release:check`
 - Run the full deployed release check:
