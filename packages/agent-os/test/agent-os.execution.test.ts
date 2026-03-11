@@ -65,7 +65,14 @@ describe("agent-os execution and workflow services", () => {
       execute: vi.fn(async () => ({
         execution: { executionId: "execution:brandyn:campaign-1", status: "COMPLETED" },
         approvalRequired: false,
-        output: { kind: "brand_governance_output" }
+        output: {
+          summary: "Brandyn executed brand_identity_governance as brand_brain.",
+          actions: ["Execute brand_identity_governance objective: define proof-led positioning"],
+          risks: ["Denied capabilities: posting.direct_outbound"],
+          approvalRequired: false,
+          handoffTarget: "jordyn",
+          evidence: ["allowedCapabilities=brand_rules.generate"]
+        }
       }))
     } as never;
 

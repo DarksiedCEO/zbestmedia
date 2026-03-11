@@ -19,7 +19,14 @@ describe("MaestroOrchestrationService", () => {
     execute: vi.fn(async () => ({
       execution: { executionId: "execution:maestro:campaign-1", status: "COMPLETED" },
       approvalRequired: false,
-      output: { kind: "orchestration_output" }
+      output: {
+        summary: "Maestro executed orchestration as orchestrator.",
+        actions: ["Route workflow brand_pipeline across delegated agents: brandyn -> jordyn -> kobe -> oracle -> titan"],
+        risks: ["Denied capabilities: orchestration.override_policy"],
+        approvalRequired: false,
+        handoffTarget: "brandyn",
+        evidence: ["delegationTargets=brandyn, jordyn, kobe, oracle, titan"]
+      }
     }))
   } as unknown as AgentExecutionService;
   const approvalEscalation = {
@@ -156,7 +163,7 @@ describe("MaestroOrchestrationService", () => {
           subjectType: "orchestration_workflow",
           subjectId: "campaign-3",
           inputPayload: { routedWorkflow: "brand_pipeline", delegatedAgents: ["brandyn", "jordyn"] },
-          outputPayload: { kind: "orchestration_output" },
+          outputPayload: { summary: "Maestro executed orchestration as orchestrator." },
           failureClass: null,
           failureMessage: null,
           retryCount: 1,
@@ -222,7 +229,7 @@ describe("MaestroOrchestrationService", () => {
           subjectType: "orchestration_workflow",
           subjectId: "campaign-5",
           inputPayload: { routedWorkflow: "brand_pipeline", delegatedAgents: ["brandyn", "jordyn"] },
-          outputPayload: { kind: "orchestration_output" },
+          outputPayload: { summary: "Maestro executed orchestration as orchestrator." },
           failureClass: "TRANSIENT_RUNTIME_ERROR",
           failureMessage: "forced_runtime_failure",
           retryCount: 3,
@@ -345,7 +352,7 @@ describe("MaestroOrchestrationService", () => {
           subjectType: "orchestration_workflow",
           subjectId: "campaign-6",
           inputPayload: { routedWorkflow: "brand_pipeline", delegatedAgents: ["brandyn", "jordyn"] },
-          outputPayload: { kind: "orchestration_output" },
+          outputPayload: { summary: "Maestro executed orchestration as orchestrator." },
           failureClass: null,
           failureMessage: null,
           retryCount: 1,

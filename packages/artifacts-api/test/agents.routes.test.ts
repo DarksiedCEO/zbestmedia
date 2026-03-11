@@ -37,7 +37,14 @@ describe("agent routes", () => {
     execute: vi.fn(async () => ({
       execution: { executionId: "execution:brandyn:subject-1", status: "COMPLETED" },
       approvalRequired: false,
-      output: { kind: "brand_governance_output" }
+      output: {
+        summary: "Brandyn executed brand_identity_governance as brand_brain.",
+        actions: ["Execute brand_identity_governance objective: define proof-led positioning"],
+        risks: ["Denied capabilities: posting.direct_outbound"],
+        approvalRequired: false,
+        handoffTarget: "jordyn",
+        evidence: ["allowedCapabilities=brand_rules.generate"]
+      }
     }))
   } as never;
   const memoryService = {
@@ -55,7 +62,14 @@ describe("agent routes", () => {
       execution: {
         execution: { executionId: "execution:brandyn:campaign-1", status: "COMPLETED" },
         approvalRequired: false,
-        output: { kind: "brand_governance_output" }
+        output: {
+          summary: "Brandyn executed brand_identity_governance as brand_brain.",
+          actions: ["Execute brand_identity_governance objective: define proof-led positioning"],
+          risks: [],
+          approvalRequired: false,
+          handoffTarget: "jordyn",
+          evidence: ["allowedCapabilities=brand_rules.generate"]
+        }
       },
       evalResult: null
     }))
@@ -85,7 +99,14 @@ describe("agent routes", () => {
       execution: {
         execution: { executionId: "execution:maestro:campaign-2", status: "COMPLETED" },
         approvalRequired: false,
-        output: { kind: "orchestration_output" }
+        output: {
+          summary: "Maestro executed orchestration as orchestrator.",
+          actions: ["Route workflow brand_pipeline across delegated agents: brandyn -> jordyn -> kobe -> oracle -> titan"],
+          risks: [],
+          approvalRequired: false,
+          handoffTarget: "brandyn",
+          evidence: ["delegationTargets=brandyn, jordyn, kobe, oracle, titan"]
+        }
       }
     })),
     listWorkflowExecutions: vi.fn(async () => [
@@ -492,7 +513,10 @@ describe("agent routes", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
       approvalRequired: false,
-      output: { kind: "brand_governance_output" }
+      output: {
+        summary: "Brandyn executed brand_identity_governance as brand_brain.",
+        handoffTarget: "jordyn"
+      }
     });
   });
 

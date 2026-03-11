@@ -95,7 +95,7 @@ export class AgentRuntimeService {
       }
 
       const output = buildDeterministicExecutionOutput(execution.agentId, execution.inputPayload);
-      const handoffPlan = Array.isArray(output.handoffPlan) ? output.handoffPlan : [];
+      const handoffPlan = Array.isArray(execution.inputPayload.handoffPlan) ? execution.inputPayload.handoffPlan : [];
       for (const [index, step] of handoffPlan.entries()) {
         if (
           step &&
