@@ -1,0 +1,144 @@
+import { z } from "zod";
+
+import { AgentTaskDomainSchema } from "../agents/domains.js";
+import type { AgentId } from "../agents/registry.js";
+import { AgentLifecycleStatusSchema } from "../lifecycle/config.js";
+
+export const ApprovalStatusSchema = z.enum(["PENDING", "APPROVED", "REJECTED"]);
+export type ApprovalStatus = z.infer<typeof ApprovalStatusSchema>;
+
+export const EvalRunStatusSchema = z.enum(["PENDING", "RUNNING", "COMPLETED", "FAILED"]);
+export type EvalRunStatus = z.infer<typeof EvalRunStatusSchema>;
+
+export const ApprovalDecisionSchema = z.enum(["APPROVE", "REJECT"]);
+export type ApprovalDecision = z.infer<typeof ApprovalDecisionSchema>;
+
+export const AgentRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  agentId: z.custom<AgentId>(),
+  displayName: z.string().min(1),
+  taskDomain: AgentTaskDomainSchema,
+  workflowRole: z.enum(["brand_brain", "visual_law", "distribution_operator"]),
+  policyProfileId: z.string().min(1),
+  memoryPartitionId: z.string().min(1),
+  lifecycleProfileId: z.string().min(1),
+  evalProfileId: z.string().min(1),
+  currentVersionId: z.string().min(1),
+  currentStatus: AgentLifecycleStatusSchema,
+  prohibitedDomains: z.array(AgentTaskDomainSchema),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  retiredAt: z.string().datetime().nullable().optional()
+});
+export type AgentRecord = z.infer<typeof AgentRecordSchema>;
+
+export const AgentVersionRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  agentVersionId: z.string().min(1),
+  agentId: z.custom<AgentId>(),
+  versionLabel: z.string().min(1),
+  definitionSnapshot: z.record(z.string(), z.unknown()),
+  createdBy: z.string().min(1),
+  createdAt: z.string().datetime(),
+  replacedByVersionId: z.string().nullable().optional()
+});
+export type AgentVersionRecord = z.infer<typeof AgentVersionRecordSchema>;
+
+export const AgentPolicyProfileRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  policyProfileId: z.string().min(1),
+  agentId: z.custom<AgentId>(),
+  allowedCapabilities: z.array(z.string().min(1)),
+  deniedCapabilities: z.array(z.string().min(1)),
+  profileSnapshot: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime()
+});
+export type AgentPolicyProfileRecord = z.infer<typeof AgentPolicyProfileRecordSchema>;
+
+export const AgentMemoryPartitionRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  partitionId: z.string().min(1),
+  agentId: z.custom<AgentId>(),
+  namespace: z.string().min(1),
+  ownedCollections: z.array(z.string().min(1)),
+  sharedAccess: z.array(z.string().min(1)),
+  partitionSnapshot: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime()
+});
+export type AgentMemoryPartitionRecord = z.infer<typeof AgentMemoryPartitionRecordSchema>;
+
+export const AgentLifecycleEventRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  lifecycleEventId: z.string().min(1),
+  agentId: z.custom<AgentId>(),
+  fromStatus: AgentLifecycleStatusSchema.nullable(),
+  toStatus: AgentLifecycleStatusSchema,
+  actorId: z.string().min(1),
+  reason: z.string().min(1),
+  metricsSnapshot: z.record(z.string(), z.unknown()),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime()
+});
+export type AgentLifecycleEventRecord = z.infer<typeof AgentLifecycleEventRecordSchema>;
+
+export const ApprovalRequestRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  approvalRequestId: z.string().min(1),
+  agentId: z.custom<AgentId>(),
+  subjectType: z.string().min(1),
+  subjectId: z.string().min(1),
+  requestedBy: z.string().min(1),
+  requiredApprovers: z.array(z.string().min(1)).min(1),
+  status: ApprovalStatusSchema,
+  payload: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime(),
+  resolvedAt: z.string().datetime().nullable().optional()
+});
+export type ApprovalRequestRecord = z.infer<typeof ApprovalRequestRecordSchema>;
+
+export const ApprovalDecisionRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  approvalDecisionId: z.string().min(1),
+  approvalRequestId: z.string().min(1),
+  approverId: z.string().min(1),
+  decision: ApprovalDecisionSchema,
+  rationale: z.string().min(1),
+  payload: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime()
+});
+export type ApprovalDecisionRecord = z.infer<typeof ApprovalDecisionRecordSchema>;
+
+export const EvalRunRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  evalRunId: z.string().min(1),
+  agentId: z.custom<AgentId>(),
+  agentVersionId: z.string().min(1),
+  suiteName: z.string().min(1),
+  status: EvalRunStatusSchema,
+  scoreSummary: z.record(z.string(), z.unknown()),
+  createdBy: z.string().min(1),
+  createdAt: z.string().datetime(),
+  completedAt: z.string().datetime().nullable().optional()
+});
+export type EvalRunRecord = z.infer<typeof EvalRunRecordSchema>;
+
+export const EvalScoreRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  evalScoreId: z.string().min(1),
+  evalRunId: z.string().min(1),
+  metric: z.string().min(1),
+  score: z.number(),
+  thresholdMin: z.number().nullable().optional(),
+  thresholdMax: z.number().nullable().optional(),
+  passed: z.boolean(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime()
+});
+export type EvalScoreRecord = z.infer<typeof EvalScoreRecordSchema>;
+
+export type AgentOsFoundationBundle = {
+  agents: AgentRecord[];
+  versions: AgentVersionRecord[];
+  policyProfiles: AgentPolicyProfileRecord[];
+  memoryPartitions: AgentMemoryPartitionRecord[];
+};
