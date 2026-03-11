@@ -354,6 +354,24 @@ describe("MaestroOrchestrationService", () => {
           details: { mode: "daemon" },
           observedAt: "2026-03-11T00:00:00.000Z"
         }
+      ]),
+      acknowledgeOrchestrationAlert: vi.fn(async () => ({
+        alertAckId: "alert-ack:1",
+        alertCode: "dead_letter_backlog",
+        acknowledgedBy: "ops-1",
+        reason: "triaged",
+        details: {},
+        createdAt: "2026-03-11T00:30:00.000Z"
+      })),
+      listOrchestrationAlertAcks: vi.fn(async () => [
+        {
+          alertAckId: "alert-ack:1",
+          alertCode: "dead_letter_backlog",
+          acknowledgedBy: "ops-1",
+          reason: "triaged",
+          details: {},
+          createdAt: "2026-03-11T00:30:00.000Z"
+        }
       ])
     } as any;
     const opsService = new MaestroOrchestrationService(
@@ -379,18 +397,44 @@ describe("MaestroOrchestrationService", () => {
     const workers = await opsService.getWorkerHealth({
       tenantId: "tenant-1"
     });
+    const freshness = await opsService.getWorkerFreshnessReport({
+      tenantId: "tenant-1",
+      staleAfterMinutes: 15,
+      nowIso: "2026-03-11T00:30:00.000Z"
+    });
     const alerts = await opsService.getAlerts({
       tenantId: "tenant-1",
       olderThanMinutes: 60,
       heartbeatStaleMinutes: 15
     });
+    const ack = await opsService.acknowledgeAlert({
+      tenantId: "tenant-1",
+      alertCode: "dead_letter_backlog",
+      actorId: "ops-1",
+      reason: "triaged"
+    });
+    const acks = await opsService.listAlertAcknowledgements({
+      tenantId: "tenant-1",
+      alertCode: "dead_letter_backlog"
+    });
+    const historyVerify = await opsService.verifyReplayBundleHistory({
+      tenantId: "tenant-1",
+      executionId: "execution:maestro:campaign-6",
+      sealedAt: "2026-03-11T00:10:00.000Z",
+      payloadHash: "hash-1",
+      signature: "sig-1"
+    });
 
     expect(exported?.exportRecord.exportId).toBe("bundle-export:1");
     expect(exports).toHaveLength(1);
     expect(workers.totalWorkers).toBe(1);
+    expect(freshness.staleWorkers).toBe(1);
     expect(alerts.alerts.map((item) => item.code)).toContain("dead_letter_backlog");
     expect(alerts.alerts.map((item) => item.code)).toContain("stale_replay_approvals");
     expect(alerts.alerts.map((item) => item.code)).toContain("worker_heartbeat_stale");
+    expect(ack.alertAckId).toBe("alert-ack:1");
+    expect(acks).toHaveLength(1);
+    expect(historyVerify.verified).toBe(true);
   });
 
   it("creates replay approvals for dead-lettered executions", async () => {

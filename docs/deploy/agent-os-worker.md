@@ -25,6 +25,8 @@ Deploy the Agent OS worker as a separate process from the API.
   - `pnpm agent-os:worker:daemon`
 - Validate worker deployment profile:
   - `pnpm agent-os:deployment:check`
+- Smoke the dedicated worker profile:
+  - `pnpm agent-os:worker:smoke`
 
 ## Deployment note
 
@@ -50,7 +52,12 @@ Use a dedicated worker service/process profile. Do not colocate long-running wor
   - `GET /v1/orchestration/ops/inventory`
 - Worker health:
   - `GET /v1/orchestration/ops/workers`
+- Worker freshness:
+  - `GET /v1/orchestration/ops/workers/freshness`
 - Ops alerts:
   - `GET /v1/orchestration/ops/alerts`
+- Alert acknowledgements:
+  - `GET /v1/orchestration/ops/alerts/acks`
+  - `POST /v1/orchestration/ops/alerts/:alertCode/ack`
 - Runbook:
   - `GET /v1/orchestration/ops/runbook`

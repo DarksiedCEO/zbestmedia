@@ -126,6 +126,14 @@ describe("agent routes", () => {
         sealedAt: "2026-03-11T00:00:00.000Z"
       }
     ]),
+    verifyReplayBundleHistory: vi.fn(async () => ({
+      verified: true,
+      matchedExport: {
+        exportId: "bundle-export:1",
+        executionId: "execution:maestro:campaign-2"
+      },
+      exportCount: 1
+    })),
     getHandoffAudit: vi.fn(async () => ({
       execution: { executionId: "execution:maestro:campaign-2", status: "COMPLETED" },
       handoffs: [{ stepName: "handoff_planned:brandyn->jordyn" }]
@@ -183,6 +191,22 @@ describe("agent routes", () => {
         }
       ]
     })),
+    getWorkerFreshnessReport: vi.fn(async () => ({
+      staleAfterMinutes: 15,
+      totalWorkers: 1,
+      staleWorkers: 0,
+      items: [
+        {
+          workerId: "worker-daemon:1",
+          workerKind: "agent-os",
+          agentId: "maestro",
+          status: "idle",
+          observedAt: "2026-03-11T00:00:00.000Z",
+          ageMinutes: 5,
+          stale: false
+        }
+      ]
+    })),
     getAlerts: vi.fn(async () => ({
       alerts: [
         {
@@ -203,6 +227,22 @@ describe("agent routes", () => {
         }
       }
     })),
+    acknowledgeAlert: vi.fn(async () => ({
+      alertAckId: "alert-ack:1",
+      alertCode: "dead_letter_backlog",
+      acknowledgedBy: "actor-1",
+      reason: "triaged",
+      createdAt: "2026-03-11T00:20:00.000Z"
+    })),
+    listAlertAcknowledgements: vi.fn(async () => [
+      {
+        alertAckId: "alert-ack:1",
+        alertCode: "dead_letter_backlog",
+        acknowledgedBy: "actor-1",
+        reason: "triaged",
+        createdAt: "2026-03-11T00:20:00.000Z"
+      }
+    ]),
     escalateApprovals: vi.fn(async () => [{ approvalRequestId: "approval:escalated", status: "PENDING" }]),
     requestDeadLetterReplayApproval: vi.fn(async () => ({
       approvalRequestId: "approval:replay:1",
@@ -379,6 +419,15 @@ describe("agent routes", () => {
         signature: "sig456"
       }
     });
+    const replayHistoryVerifyRes = await app.inject({
+      method: "POST",
+      url: "/v1/orchestration/executions/execution:maestro:campaign-2/exports/verify-history",
+      payload: {
+        sealedAt: "2026-03-11T00:00:00.000Z",
+        payloadHash: "abc123",
+        signature: "sig456"
+      }
+    });
     const exportBundleRes = await app.inject({
       method: "POST",
       url: "/v1/orchestration/executions/execution:maestro:campaign-2/export-bundle"
@@ -407,9 +456,22 @@ describe("agent routes", () => {
       method: "GET",
       url: "/v1/orchestration/ops/workers"
     });
+    const workerFreshnessRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/ops/workers/freshness?staleAfterMinutes=15"
+    });
     const alertsRes = await app.inject({
       method: "GET",
       url: "/v1/orchestration/ops/alerts?olderThanMinutes=30&heartbeatStaleMinutes=15"
+    });
+    const alertAcksRes = await app.inject({
+      method: "GET",
+      url: "/v1/orchestration/ops/alerts/acks?alertCode=dead_letter_backlog"
+    });
+    const alertAckCreateRes = await app.inject({
+      method: "POST",
+      url: "/v1/orchestration/ops/alerts/dead_letter_backlog/ack",
+      payload: { reason: "triaged" }
     });
     const runbookRes = await app.inject({
       method: "GET",
@@ -448,6 +510,8 @@ describe("agent routes", () => {
     expect(replayVerifyRes.statusCode).toBe(200);
     expect(replayVerifyRes.json().verified).toBe(true);
     expect(verifyOrchestrationBundle).toHaveBeenCalledOnce();
+    expect(replayHistoryVerifyRes.statusCode).toBe(200);
+    expect(replayHistoryVerifyRes.json().verified).toBe(true);
     expect(exportBundleRes.statusCode).toBe(201);
     expect(exportBundleRes.json().exportRecord.exportId).toBe("bundle-export:1");
     expect(exportHistoryRes.statusCode).toBe(200);
@@ -463,11 +527,18 @@ describe("agent routes", () => {
     expect(inventoryRes.json().deadLettered[0].executionId).toBe("execution:maestro:dead-1");
     expect(workerHealthRes.statusCode).toBe(200);
     expect(workerHealthRes.json().totalWorkers).toBe(1);
+    expect(workerFreshnessRes.statusCode).toBe(200);
+    expect(workerFreshnessRes.json().staleWorkers).toBe(0);
     expect(alertsRes.statusCode).toBe(200);
     expect(alertsRes.json().alerts[0].code).toBe("dead_letter_backlog");
+    expect(alertAcksRes.statusCode).toBe(200);
+    expect(alertAcksRes.json().items[0].alertAckId).toBe("alert-ack:1");
+    expect(alertAckCreateRes.statusCode).toBe(201);
+    expect(alertAckCreateRes.json().alertCode).toBe("dead_letter_backlog");
     expect(runbookRes.statusCode).toBe(200);
     expect(runbookRes.json().commands.runLoop).toBe("pnpm agent-os:worker:loop");
     expect(runbookRes.json().commands.daemon).toBe("pnpm agent-os:worker:daemon");
+    expect(runbookRes.json().commands.smoke).toBe("pnpm agent-os:worker:smoke");
     expect(runbookRes.json().validation.deploymentProfileCheck).toBe("pnpm agent-os:deployment:check");
     expect(escalateRes.statusCode).toBe(200);
     expect(escalateRes.json().items[0].approvalRequestId).toBe("approval:escalated");

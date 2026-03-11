@@ -233,6 +233,17 @@ export const WorkerHeartbeatRecordSchema = z.object({
 });
 export type WorkerHeartbeatRecord = z.infer<typeof WorkerHeartbeatRecordSchema>;
 
+export const OrchestrationAlertAckRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  alertAckId: z.string().min(1),
+  alertCode: z.string().min(1),
+  acknowledgedBy: z.string().min(1),
+  reason: z.string().min(1),
+  details: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime()
+});
+export type OrchestrationAlertAckRecord = z.infer<typeof OrchestrationAlertAckRecordSchema>;
+
 export type AgentOsFoundationBundle = {
   agents: AgentRecord[];
   versions: AgentVersionRecord[];

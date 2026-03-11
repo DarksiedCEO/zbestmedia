@@ -24,6 +24,7 @@ import type {
   EvalRunRecord,
   EvalScoreRecord,
   MemoryEntryRecord,
+  OrchestrationAlertAckRecord,
   OrchestrationBundleExportRecord,
   WorkerHeartbeatRecord
 } from "./contracts.js";
@@ -169,6 +170,16 @@ type WorkerHeartbeatRow = {
   observed_at: string | Date;
 };
 
+type OrchestrationAlertAckRow = {
+  tenant_id: string;
+  alert_ack_id: string;
+  alert_code: string;
+  acknowledged_by: string;
+  reason: string;
+  details: Record<string, unknown>;
+  created_at: string | Date;
+};
+
 function toIsoString(value: string | Date): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
@@ -312,6 +323,18 @@ function mapWorkerHeartbeatRow(row: WorkerHeartbeatRow): WorkerHeartbeatRecord {
     status: row.status,
     details: row.details,
     observedAt: toIsoString(row.observed_at)
+  };
+}
+
+function mapOrchestrationAlertAckRow(row: OrchestrationAlertAckRow): OrchestrationAlertAckRecord {
+  return {
+    tenantId: row.tenant_id,
+    alertAckId: row.alert_ack_id,
+    alertCode: row.alert_code,
+    acknowledgedBy: row.acknowledged_by,
+    reason: row.reason,
+    details: row.details,
+    createdAt: toIsoString(row.created_at)
   };
 }
 
@@ -1427,6 +1450,60 @@ export class AgentOsRepository {
     );
 
     return res.rows.map(mapWorkerHeartbeatRow);
+  }
+
+  async acknowledgeOrchestrationAlert(args: {
+    tenantId: string;
+    alertCode: string;
+    acknowledgedBy: string;
+    reason: string;
+    details?: Record<string, unknown>;
+    createdAt?: string;
+  }): Promise<OrchestrationAlertAckRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const alertAckId = buildScopedId("alert-ack", [args.alertCode, createdAt]);
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OrchestrationAlertAckRow>(
+        `
+        INSERT INTO orchestration_alert_acks (
+          tenant_id, alert_ack_id, alert_code, acknowledged_by,
+          reason, details, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+        RETURNING tenant_id, alert_ack_id, alert_code, acknowledged_by, reason, details, created_at
+        `,
+        [
+          args.tenantId,
+          alertAckId,
+          args.alertCode,
+          args.acknowledgedBy,
+          args.reason,
+          JSON.stringify(args.details ?? {}),
+          createdAt
+        ]
+      )
+    );
+
+    return mapOrchestrationAlertAckRow(res.rows[0]!);
+  }
+
+  async listOrchestrationAlertAcks(args: {
+    tenantId: string;
+    alertCode?: string;
+  }): Promise<OrchestrationAlertAckRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OrchestrationAlertAckRow>(
+        `
+        SELECT tenant_id, alert_ack_id, alert_code, acknowledged_by, reason, details, created_at
+        FROM orchestration_alert_acks
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR alert_code = $2)
+        ORDER BY created_at DESC
+        `,
+        [args.tenantId, args.alertCode ?? null]
+      )
+    );
+
+    return res.rows.map(mapOrchestrationAlertAckRow);
   }
 
   async claimQueuedExecutions(args: {

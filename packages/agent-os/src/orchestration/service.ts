@@ -281,6 +281,31 @@ export class MaestroOrchestrationService {
     return this.repository.listOrchestrationBundleExports(args);
   }
 
+  async verifyReplayBundleHistory(args: {
+    tenantId: string;
+    executionId: string;
+    sealedAt: string;
+    payloadHash: string;
+    signature: string;
+  }) {
+    const exports = await this.listReplayBundleExports({
+      tenantId: args.tenantId,
+      executionId: args.executionId
+    });
+    const matched = exports.find(
+      (item) =>
+        item.sealedAt === args.sealedAt &&
+        item.payloadHash === args.payloadHash &&
+        item.signature === args.signature
+    );
+
+    return {
+      verified: Boolean(matched),
+      matchedExport: matched ?? null,
+      exportCount: exports.length
+    };
+  }
+
   async requestDeadLetterReplayApproval(args: {
     tenantId: string;
     executionId: string;
@@ -464,6 +489,34 @@ export class MaestroOrchestrationService {
     };
   }
 
+  async getWorkerFreshnessReport(args: {
+    tenantId: string;
+    staleAfterMinutes: number;
+    nowIso?: string;
+  }) {
+    const workerHealth = await this.getWorkerHealth({
+      tenantId: args.tenantId
+    });
+    const nowMs = Date.parse(args.nowIso ?? new Date().toISOString());
+    const staleAfterMs = args.staleAfterMinutes * 60_000;
+
+    const items = workerHealth.items.map((item) => {
+      const ageMs = Math.max(0, nowMs - Date.parse(item.observedAt));
+      return {
+        ...item,
+        ageMinutes: Math.floor(ageMs / 60_000),
+        stale: ageMs > staleAfterMs
+      };
+    });
+
+    return {
+      staleAfterMinutes: args.staleAfterMinutes,
+      totalWorkers: workerHealth.totalWorkers,
+      staleWorkers: items.filter((item) => item.stale).length,
+      items
+    };
+  }
+
   async getAlerts(args: {
     tenantId: string;
     olderThanMinutes: number;
@@ -533,5 +586,30 @@ export class MaestroOrchestrationService {
       inventory,
       workerHealth
     };
+  }
+
+  async acknowledgeAlert(args: {
+    tenantId: string;
+    alertCode: string;
+    actorId: string;
+    reason: string;
+    details?: Record<string, unknown>;
+    createdAt?: string;
+  }) {
+    return this.repository.acknowledgeOrchestrationAlert({
+      tenantId: args.tenantId,
+      alertCode: args.alertCode,
+      acknowledgedBy: args.actorId,
+      reason: args.reason,
+      details: args.details,
+      createdAt: args.createdAt
+    });
+  }
+
+  async listAlertAcknowledgements(args: {
+    tenantId: string;
+    alertCode?: string;
+  }) {
+    return this.repository.listOrchestrationAlertAcks(args);
   }
 }

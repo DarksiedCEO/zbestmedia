@@ -154,6 +154,11 @@ export const OrchestrationBundleVerifyBodySchema = z.object({
   signature: z.string().min(1)
 });
 
+export const OrchestrationAlertAckBodySchema = z.object({
+  reason: z.string().min(1),
+  details: z.record(z.string(), z.unknown()).optional()
+});
+
 export const OrchestrationRequeueBodySchema = z.object({
   approvalRequestId: z.string().min(1)
 });
@@ -165,6 +170,14 @@ export const OrchestrationDiagnosticsQuerySchema = z.object({
 export const OrchestrationAlertsQuerySchema = z.object({
   olderThanMinutes: z.coerce.number().int().positive().max(10_080).default(60),
   heartbeatStaleMinutes: z.coerce.number().int().positive().max(10_080).default(15)
+});
+
+export const OrchestrationAlertAckListQuerySchema = z.object({
+  alertCode: z.string().min(1).optional()
+});
+
+export const WorkerFreshnessQuerySchema = z.object({
+  staleAfterMinutes: z.coerce.number().int().positive().max(10_080).default(15)
 });
 
 export const OrchestrationWorkerProcessBodySchema = z.object({

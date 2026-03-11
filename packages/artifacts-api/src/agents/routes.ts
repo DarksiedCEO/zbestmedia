@@ -23,6 +23,8 @@ import {
   ApprovalListQuerySchema,
   OrchestrationApprovalSlaQuerySchema,
   OrchestrationAlertsQuerySchema,
+  OrchestrationAlertAckBodySchema,
+  OrchestrationAlertAckListQuerySchema,
   OrchestrationBundleVerifyBodySchema,
   OrchestrationDiagnosticsQuerySchema,
   ApprovalRequestIdParamSchema,
@@ -46,6 +48,7 @@ import {
   ProvisionFoundationBodySchema,
   WorkerClaimEvalsBodySchema,
   WorkerClaimExecutionsBodySchema,
+  WorkerFreshnessQuerySchema,
   WorkerQueueEvalBodySchema
 } from "./schemas";
 
@@ -607,6 +610,29 @@ export function agentRoutes(opts: {
       );
     });
 
+    app.post("/v1/orchestration/executions/:executionId/exports/verify-history", async (req, reply) => {
+      const path = ExecutionIdParamSchema.safeParse(req.params);
+      const body = OrchestrationBundleVerifyBodySchema.safeParse(req.body ?? {});
+      if (!path.success || !body.success) {
+        return reply.code(400).send({
+          error: "invalid_request",
+          details: {
+            params: path.success ? null : path.error.flatten(),
+            body: body.success ? null : body.error.flatten()
+          }
+        });
+      }
+
+      const result = await opts.orchestrationService.verifyReplayBundleHistory({
+        tenantId: req.auth.tenantId,
+        executionId: path.data.executionId,
+        sealedAt: body.data.sealedAt,
+        payloadHash: body.data.payloadHash,
+        signature: body.data.signature
+      });
+      return reply.send(result);
+    });
+
     app.get("/v1/orchestration/executions/:executionId/handoffs", async (req, reply) => {
       const path = ExecutionIdParamSchema.safeParse(req.params);
       if (!path.success) {
@@ -735,6 +761,19 @@ export function agentRoutes(opts: {
       return reply.send(result);
     });
 
+    app.get("/v1/orchestration/ops/workers/freshness", async (req, reply) => {
+      const query = WorkerFreshnessQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.orchestrationService.getWorkerFreshnessReport({
+        tenantId: req.auth.tenantId,
+        staleAfterMinutes: query.data.staleAfterMinutes
+      });
+      return reply.send(result);
+    });
+
     app.get("/v1/orchestration/ops/alerts", async (req, reply) => {
       const query = OrchestrationAlertsQuerySchema.safeParse(req.query ?? {});
       if (!query.success) {
@@ -749,12 +788,49 @@ export function agentRoutes(opts: {
       return reply.send(result);
     });
 
+    app.get("/v1/orchestration/ops/alerts/acks", async (req, reply) => {
+      const query = OrchestrationAlertAckListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const items = await opts.orchestrationService.listAlertAcknowledgements({
+        tenantId: req.auth.tenantId,
+        alertCode: query.data.alertCode
+      });
+      return reply.send({ items });
+    });
+
+    app.post("/v1/orchestration/ops/alerts/:alertCode/ack", async (req, reply) => {
+      const path = req.params as { alertCode?: string };
+      const body = OrchestrationAlertAckBodySchema.safeParse(req.body ?? {});
+      if (!path.alertCode || !body.success) {
+        return reply.code(400).send({
+          error: "invalid_request",
+          details: {
+            params: path.alertCode ? null : { fieldErrors: { alertCode: ["Required"] } },
+            body: body.success ? null : body.error.flatten()
+          }
+        });
+      }
+
+      const ack = await opts.orchestrationService.acknowledgeAlert({
+        tenantId: req.auth.tenantId,
+        alertCode: path.alertCode,
+        actorId: req.auth.actorId,
+        reason: body.data.reason,
+        details: body.data.details
+      });
+      return reply.code(201).send(ack);
+    });
+
     app.get("/v1/orchestration/ops/runbook", async (_req, reply) => {
       return reply.send({
         commands: {
           runOnce: "pnpm agent-os:worker:run-once",
           runLoop: "pnpm agent-os:worker:loop",
-          daemon: "pnpm agent-os:worker:daemon"
+          daemon: "pnpm agent-os:worker:daemon",
+          smoke: "pnpm agent-os:worker:smoke"
         },
         validation: {
           deploymentProfileCheck: "pnpm agent-os:deployment:check"
