@@ -1063,17 +1063,26 @@ export function agentRoutes(opts: {
     app.get("/v1/orchestration/ops/runbook", async (_req, reply) => {
       return reply.send({
         commands: {
+          envPreflight: "pnpm agent-os:env:preflight",
           runOnce: "pnpm agent-os:worker:run-once",
           runLoop: "pnpm agent-os:worker:loop",
           daemon: "pnpm agent-os:worker:daemon",
           smoke: "pnpm agent-os:worker:smoke",
-          releaseCheck: "pnpm agent-os:worker:release:check"
+          opsSmoke: "pnpm agent-os:ops:smoke",
+          opsSmokeDeployed: "pnpm agent-os:ops:smoke:deployed",
+          releaseCheck: "pnpm agent-os:worker:release:check",
+          fullReleaseCheck: "pnpm agent-os:release:check",
+          deployedReleaseCheck: "pnpm agent-os:release:check:deployed"
         },
         validation: {
-          deploymentProfileCheck: "pnpm agent-os:deployment:check"
+          deploymentProfileCheck: "pnpm agent-os:deployment:check",
+          migrationCheck: "pnpm agent-os:verify:migrations"
         },
         requiredEnv: ["DATABASE_URL", "AGENT_OS_TENANT_ID"],
         optionalEnv: [
+          "AGENT_OS_BASE_URL",
+          "AGENT_OS_AUTH_TOKEN",
+          "AGENT_OS_AUTH_JWT_SECRET",
           "AGENT_OS_AGENT_ID",
           "AGENT_OS_WORKER_LIMIT",
           "AGENT_OS_RETRY_DELAY_MS",

@@ -9,6 +9,9 @@ Deploy the Agent OS worker as a separate process from the API.
 
 ## Optional env
 
+- `AGENT_OS_BASE_URL`
+- `AGENT_OS_AUTH_TOKEN`
+- `AGENT_OS_AUTH_JWT_SECRET`
 - `AGENT_OS_AGENT_ID`
 - `AGENT_OS_WORKER_LIMIT`
 - `AGENT_OS_RETRY_DELAY_MS`
@@ -25,14 +28,33 @@ Deploy the Agent OS worker as a separate process from the API.
   - `pnpm agent-os:worker:daemon`
 - Validate worker deployment profile:
   - `pnpm agent-os:deployment:check`
+- Print resolved runtime env:
+  - `pnpm agent-os:env:preflight`
+- Verify Agent OS migrations:
+  - `pnpm agent-os:verify:migrations`
 - Smoke the dedicated worker profile:
   - `pnpm agent-os:worker:smoke`
 - Run the worker release check:
   - `pnpm agent-os:worker:release:check`
+- Smoke deployed Agent OS ops surfaces:
+  - `pnpm agent-os:ops:smoke:deployed`
+- Run the full local release check:
+  - `pnpm agent-os:release:check`
+- Run the full deployed release check:
+  - `pnpm agent-os:release:check:deployed`
 
 ## Deployment note
 
 Use a dedicated worker service/process profile. Do not colocate long-running worker loops with the public web runtime.
+
+## Deployed verification contract
+
+For deployed checks, provide:
+
+- `AGENT_OS_BASE_URL`
+- `AGENT_OS_TENANT_ID`
+- either `AGENT_OS_AUTH_TOKEN` or `AGENT_OS_AUTH_JWT_SECRET`
+- `AGENT_OS_DATABASE_URL` or `DATABASE_URL` when `AGENT_OS_VERIFY_DB=true`
 
 ## Operational surfaces
 

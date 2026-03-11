@@ -804,11 +804,17 @@ describe("agent routes", () => {
     expect(alertAckReopenRes.statusCode).toBe(200);
     expect(alertAckReopenRes.json().reopenedAt).toBe("2026-03-11T00:40:00.000Z");
     expect(runbookRes.statusCode).toBe(200);
+    expect(runbookRes.json().commands.envPreflight).toBe("pnpm agent-os:env:preflight");
     expect(runbookRes.json().commands.runLoop).toBe("pnpm agent-os:worker:loop");
     expect(runbookRes.json().commands.daemon).toBe("pnpm agent-os:worker:daemon");
     expect(runbookRes.json().commands.smoke).toBe("pnpm agent-os:worker:smoke");
+    expect(runbookRes.json().commands.opsSmoke).toBe("pnpm agent-os:ops:smoke");
+    expect(runbookRes.json().commands.opsSmokeDeployed).toBe("pnpm agent-os:ops:smoke:deployed");
     expect(runbookRes.json().commands.releaseCheck).toBe("pnpm agent-os:worker:release:check");
+    expect(runbookRes.json().commands.fullReleaseCheck).toBe("pnpm agent-os:release:check");
+    expect(runbookRes.json().commands.deployedReleaseCheck).toBe("pnpm agent-os:release:check:deployed");
     expect(runbookRes.json().validation.deploymentProfileCheck).toBe("pnpm agent-os:deployment:check");
+    expect(runbookRes.json().validation.migrationCheck).toBe("pnpm agent-os:verify:migrations");
     expect(escalateRes.statusCode).toBe(200);
     expect(escalateRes.json().items[0].approvalRequestId).toBe("approval:escalated");
     expect(processRes.statusCode).toBe(200);
