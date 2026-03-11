@@ -301,6 +301,20 @@ export class MaestroOrchestrationService {
       throw new MaestroOrchestrationError("replay_approval_required");
     }
 
+    const policy = getApprovalEscalationPolicy("maestro");
+    if (approval.request.escalationCount > policy.maxEscalations) {
+      throw new MaestroOrchestrationError("replay_approval_escalation_exhausted");
+    }
+    if (!approval.request.resolvedAt) {
+      throw new MaestroOrchestrationError("replay_approval_unresolved");
+    }
+
+    const resolvedAtMs = Date.parse(approval.request.resolvedAt);
+    const nowMs = Date.parse(args.createdAt ?? new Date().toISOString());
+    if (!Number.isFinite(resolvedAtMs) || nowMs - resolvedAtMs > policy.staleAfterMinutes * 60_000) {
+      throw new MaestroOrchestrationError("replay_approval_expired");
+    }
+
     const requeued = await this.repository.requeueExecution({
       tenantId: args.tenantId,
       executionId: args.executionId,
@@ -336,13 +350,52 @@ export class MaestroOrchestrationService {
       return acc;
     }, {});
 
+    const failureCounts = executions.reduce<Record<string, number>>((acc, item) => {
+      if (item.failureClass) {
+        acc[item.failureClass] = (acc[item.failureClass] ?? 0) + 1;
+      }
+      return acc;
+    }, {});
+
     return {
       executions: {
         total: executions.length,
         deadLettered: executions.filter((item) => item.deadLetteredAt).length,
-        byStatus: executionStatusCounts
+        queuedRetries: executions.filter((item) => item.status === "QUEUED" && item.retryCount > 0).length,
+        pendingApproval: executions.filter((item) => item.status === "PENDING_APPROVAL").length,
+        byStatus: executionStatusCounts,
+        byFailureClass: failureCounts
       },
       approvalSla
+    };
+  }
+
+  async getOperationsInventory(args: {
+    tenantId: string;
+  }) {
+    const executions = await this.listWorkflowExecutions({
+      tenantId: args.tenantId
+    });
+
+    return {
+      deadLettered: executions
+        .filter((item) => item.deadLetteredAt)
+        .map((item) => ({
+          executionId: item.executionId,
+          status: item.status,
+          failureClass: item.failureClass,
+          retryCount: item.retryCount,
+          deadLetteredAt: item.deadLetteredAt
+        })),
+      retryQueue: executions
+        .filter((item) => item.status === "QUEUED" && (item.retryCount > 0 || item.nextRetryAt))
+        .map((item) => ({
+          executionId: item.executionId,
+          status: item.status,
+          retryCount: item.retryCount,
+          nextRetryAt: item.nextRetryAt,
+          maxRetries: item.maxRetries
+        }))
     };
   }
 }

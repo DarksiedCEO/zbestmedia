@@ -144,7 +144,9 @@ describe("MaestroOrchestrationService", () => {
         request: {
           status: "APPROVED",
           subjectType: "orchestration_dead_letter_replay",
-          subjectId: "execution:maestro:campaign-3"
+          subjectId: "execution:maestro:campaign-3",
+          resolvedAt: "2026-03-11T00:20:00.000Z",
+          escalationCount: 1
         }
       })),
       getExecution: vi.fn(async () => ({
@@ -187,7 +189,8 @@ describe("MaestroOrchestrationService", () => {
       tenantId: "tenant-1",
       executionId: "execution:maestro:campaign-3",
       actorId: "ops-1",
-      approvalRequestId: "approval:replay:1"
+      approvalRequestId: "approval:replay:1",
+      createdAt: "2026-03-11T00:40:00.000Z"
     });
 
     expect(bundle?.handoffs).toHaveLength(2);
@@ -198,6 +201,91 @@ describe("MaestroOrchestrationService", () => {
       status: "QUEUED",
       deadLetteredAt: null
     });
+  });
+
+  it("rejects replay requeue when approved replay authorization is stale", async () => {
+    const staleReplayRepository = {
+      ...repository,
+      getApprovalRequest: vi.fn(async () => ({
+        request: {
+          status: "APPROVED",
+          subjectType: "orchestration_dead_letter_replay",
+          subjectId: "execution:maestro:campaign-5",
+          resolvedAt: "2026-03-11T00:00:00.000Z",
+          escalationCount: 0
+        }
+      })),
+      getExecution: vi.fn(async () => ({
+        execution: {
+          executionId: "execution:maestro:campaign-5",
+          agentId: "maestro",
+          subjectType: "orchestration_workflow",
+          subjectId: "campaign-5",
+          inputPayload: { routedWorkflow: "brand_pipeline", delegatedAgents: ["brandyn", "jordyn"] },
+          outputPayload: { kind: "orchestration_output" },
+          failureClass: "TRANSIENT_RUNTIME_ERROR",
+          failureMessage: "forced_runtime_failure",
+          retryCount: 3,
+          deadLetteredAt: "2026-03-11T00:05:00.000Z"
+        },
+        steps: []
+      }))
+    } as any;
+    const staleReplayService = new MaestroOrchestrationService(
+      staleReplayRepository,
+      executionService,
+      approvalEscalation
+    );
+
+    await expect(
+      staleReplayService.requeueDeadLetteredExecution({
+        tenantId: "tenant-1",
+        executionId: "execution:maestro:campaign-5",
+        actorId: "ops-1",
+        approvalRequestId: "approval:replay:2",
+        createdAt: "2026-03-11T01:00:00.000Z"
+      })
+    ).rejects.toThrow("replay_approval_expired");
+  });
+
+  it("builds operations inventory for dead letters and retry queue", async () => {
+    const repositoryWithInventory = {
+      ...repository,
+      listExecutions: vi.fn(async () => [
+        {
+          executionId: "execution:maestro:retry-1",
+          agentId: "maestro",
+          status: "QUEUED",
+          retryCount: 2,
+          maxRetries: 3,
+          nextRetryAt: "2026-03-11T00:15:00.000Z",
+          deadLetteredAt: null
+        },
+        {
+          executionId: "execution:maestro:dead-1",
+          agentId: "maestro",
+          status: "FAILED",
+          retryCount: 3,
+          maxRetries: 3,
+          nextRetryAt: null,
+          failureClass: "TRANSIENT_RUNTIME_ERROR",
+          deadLetteredAt: "2026-03-11T00:20:00.000Z"
+        }
+      ])
+    } as any;
+    const inventoryService = new MaestroOrchestrationService(
+      repositoryWithInventory,
+      executionService,
+      approvalEscalation
+    );
+
+    const inventory = await inventoryService.getOperationsInventory({
+      tenantId: "tenant-1"
+    });
+
+    expect(inventory.retryQueue).toHaveLength(1);
+    expect(inventory.deadLettered).toHaveLength(1);
+    expect(inventory.deadLettered[0]?.failureClass).toBe("TRANSIENT_RUNTIME_ERROR");
   });
 
   it("creates replay approvals for dead-lettered executions", async () => {

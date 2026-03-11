@@ -26,3 +26,16 @@ export function signArtifact(args: {
 }): string {
   return hmacSha256Hex(args.signingKey, `${args.artifactId}:${args.sealedAtIso}`);
 }
+
+export function verifyArtifactSignature(args: {
+  signingKey: string;
+  artifactId: string;
+  sealedAtIso: string;
+  signature: string;
+}): boolean {
+  return signArtifact({
+    signingKey: args.signingKey,
+    artifactId: args.artifactId,
+    sealedAtIso: args.sealedAtIso
+  }) === args.signature;
+}

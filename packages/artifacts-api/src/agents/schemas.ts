@@ -148,6 +148,12 @@ export const OrchestrationApprovalSlaQuerySchema = z.object({
 
 export const OrchestrationReplayRequestBodySchema = z.object({});
 
+export const OrchestrationBundleVerifyBodySchema = z.object({
+  sealedAt: z.string().datetime(),
+  payloadHash: z.string().min(1),
+  signature: z.string().min(1)
+});
+
 export const OrchestrationRequeueBodySchema = z.object({
   approvalRequestId: z.string().min(1)
 });

@@ -22,6 +22,7 @@ import {
   ApprovalDecisionBodySchema,
   ApprovalListQuerySchema,
   OrchestrationApprovalSlaQuerySchema,
+  OrchestrationBundleVerifyBodySchema,
   OrchestrationDiagnosticsQuerySchema,
   ApprovalRequestIdParamSchema,
   OrchestrationEscalateBodySchema,
@@ -62,6 +63,25 @@ export function agentRoutes(opts: {
     sealedAt: string;
     payloadHash: string;
     signature: string;
+  };
+  verifyOrchestrationBundle: (args: {
+    bundle: unknown;
+    executionId: string;
+    sealedAt: string;
+    payloadHash: string;
+    signature: string;
+  }) => {
+    verified: boolean;
+    payloadHashMatches: boolean;
+    signatureMatches: boolean;
+    expectedPayloadHash: string;
+    expectedSignature: string;
+    trustChain: {
+      algorithm: string;
+      artifactId: string;
+      sealedAt: string;
+      payloadHash: string;
+    };
   };
 }): FastifyPluginAsync {
   return async (app) => {
@@ -523,6 +543,38 @@ export function agentRoutes(opts: {
       });
     });
 
+    app.post("/v1/orchestration/executions/:executionId/replay-bundle/verify", async (req, reply) => {
+      const path = ExecutionIdParamSchema.safeParse(req.params);
+      const body = OrchestrationBundleVerifyBodySchema.safeParse(req.body ?? {});
+      if (!path.success || !body.success) {
+        return reply.code(400).send({
+          error: "invalid_request",
+          details: {
+            params: path.success ? null : path.error.flatten(),
+            body: body.success ? null : body.error.flatten()
+          }
+        });
+      }
+
+      const bundle = await opts.orchestrationService.buildReplayBundle({
+        tenantId: req.auth.tenantId,
+        executionId: path.data.executionId
+      });
+      if (!bundle) {
+        return reply.code(404).send({ error: "execution_not_found" });
+      }
+
+      return reply.send(
+        opts.verifyOrchestrationBundle({
+          bundle,
+          executionId: path.data.executionId,
+          sealedAt: body.data.sealedAt,
+          payloadHash: body.data.payloadHash,
+          signature: body.data.signature
+        })
+      );
+    });
+
     app.get("/v1/orchestration/executions/:executionId/handoffs", async (req, reply) => {
       const path = ExecutionIdParamSchema.safeParse(req.params);
       if (!path.success) {
@@ -637,11 +689,19 @@ export function agentRoutes(opts: {
       return reply.send(result);
     });
 
+    app.get("/v1/orchestration/ops/inventory", async (req, reply) => {
+      const result = await opts.orchestrationService.getOperationsInventory({
+        tenantId: req.auth.tenantId
+      });
+      return reply.send(result);
+    });
+
     app.get("/v1/orchestration/ops/runbook", async (_req, reply) => {
       return reply.send({
         commands: {
           runOnce: "pnpm agent-os:worker:run-once",
-          runLoop: "pnpm agent-os:worker:loop"
+          runLoop: "pnpm agent-os:worker:loop",
+          daemon: "pnpm agent-os:worker:daemon"
         },
         requiredEnv: ["DATABASE_URL", "AGENT_OS_TENANT_ID"],
         optionalEnv: ["AGENT_OS_AGENT_ID", "AGENT_OS_WORKER_LIMIT", "AGENT_OS_RETRY_DELAY_MS", "AGENT_OS_LOOP_INTERVAL_MS", "AGENT_OS_MAX_ITERATIONS"]

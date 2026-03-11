@@ -16,7 +16,7 @@ import {
 
 import { agentRoutes } from "./agents/routes";
 import { artifactRoutes } from "./artifacts/routes";
-import { canonicalJson, sha256Hex, signArtifact } from "./crypto";
+import { canonicalJson, sha256Hex, signArtifact, verifyArtifactSignature } from "./crypto";
 import { ArtifactGenerationOrchestrator } from "./artifacts/generationOrchestrator";
 import { createOrcaGenerationClient } from "./artifacts/orcaClient";
 import { ArtifactService } from "./artifacts/service";
@@ -121,6 +121,35 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
           sealedAtIso: sealedAt
         });
         return { sealedAt, payloadHash, signature };
+      },
+      verifyOrchestrationBundle: ({ bundle, executionId, sealedAt, payloadHash, signature }) => {
+        const expectedPayloadHash = sha256Hex(canonicalJson(bundle));
+        const expectedSignature = signArtifact({
+          signingKey: env.ARTIFACT_SIGNING_KEY,
+          artifactId: executionId,
+          sealedAtIso: sealedAt
+        });
+        const payloadHashMatches = payloadHash === expectedPayloadHash;
+        const signatureMatches = verifyArtifactSignature({
+          signingKey: env.ARTIFACT_SIGNING_KEY,
+          artifactId: executionId,
+          sealedAtIso: sealedAt,
+          signature
+        });
+
+        return {
+          verified: payloadHashMatches && signatureMatches,
+          payloadHashMatches,
+          signatureMatches,
+          expectedPayloadHash,
+          expectedSignature,
+          trustChain: {
+            algorithm: "hmac-sha256",
+            artifactId: executionId,
+            sealedAt,
+            payloadHash: expectedPayloadHash
+          }
+        };
       }
     })
   );

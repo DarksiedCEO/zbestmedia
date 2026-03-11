@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeArtifactId, signArtifact, type ArtifactDeterminismInput } from "../src/crypto";
+import { computeArtifactId, signArtifact, verifyArtifactSignature, type ArtifactDeterminismInput } from "../src/crypto";
 
 describe("crypto: artifacts determinism + sealing", () => {
   const base: ArtifactDeterminismInput = {
@@ -40,5 +40,27 @@ describe("crypto: artifacts determinism + sealing", () => {
     const sigA = signArtifact({ signingKey: "a".repeat(64), artifactId, sealedAtIso: base.sealedAt });
     const sigB = signArtifact({ signingKey: "b".repeat(64), artifactId, sealedAtIso: base.sealedAt });
     expect(sigA).not.toBe(sigB);
+  });
+
+  it("verifies a valid signature and rejects a mismatched one", () => {
+    const { artifactId } = computeArtifactId(base);
+    const signature = signArtifact({ signingKey: "k".repeat(64), artifactId, sealedAtIso: base.sealedAt });
+
+    expect(
+      verifyArtifactSignature({
+        signingKey: "k".repeat(64),
+        artifactId,
+        sealedAtIso: base.sealedAt,
+        signature
+      })
+    ).toBe(true);
+    expect(
+      verifyArtifactSignature({
+        signingKey: "k".repeat(64),
+        artifactId,
+        sealedAtIso: "2026-02-23T12:00:01.000Z",
+        signature
+      })
+    ).toBe(false);
   });
 });
