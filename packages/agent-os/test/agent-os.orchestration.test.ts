@@ -361,7 +361,10 @@ describe("MaestroOrchestrationService", () => {
         acknowledgedBy: "ops-1",
         reason: "triaged",
         details: {},
-        createdAt: "2026-03-11T00:30:00.000Z"
+        createdAt: "2026-03-11T00:30:00.000Z",
+        reopenedAt: null,
+        reopenedBy: null,
+        reopenReason: null
       })),
       listOrchestrationAlertAcks: vi.fn(async () => [
         {
@@ -370,9 +373,23 @@ describe("MaestroOrchestrationService", () => {
           acknowledgedBy: "ops-1",
           reason: "triaged",
           details: {},
-          createdAt: "2026-03-11T00:30:00.000Z"
+          createdAt: "2026-03-11T00:30:00.000Z",
+          reopenedAt: null,
+          reopenedBy: null,
+          reopenReason: null
         }
-      ])
+      ]),
+      reopenOrchestrationAlertAck: vi.fn(async () => ({
+        alertAckId: "alert-ack:1",
+        alertCode: "dead_letter_backlog",
+        acknowledgedBy: "ops-1",
+        reason: "triaged",
+        details: {},
+        createdAt: "2026-03-11T00:30:00.000Z",
+        reopenedAt: "2026-03-11T00:45:00.000Z",
+        reopenedBy: "ops-2",
+        reopenReason: "backlog persists"
+      }))
     } as any;
     const opsService = new MaestroOrchestrationService(
       repositoryWithOps,
@@ -422,7 +439,39 @@ describe("MaestroOrchestrationService", () => {
       executionId: "execution:maestro:campaign-6",
       sealedAt: "2026-03-11T00:10:00.000Z",
       payloadHash: "hash-1",
-      signature: "sig-1"
+      signature: "sig-1",
+      verifyBundle: () => ({
+        verified: true,
+        payloadHashMatches: true,
+        signatureMatches: true,
+        expectedPayloadHash: "hash-1",
+        expectedSignature: "sig-1",
+        trustChain: {
+          algorithm: "hmac-sha256",
+          artifactId: "execution:maestro:campaign-6",
+          sealedAt: "2026-03-11T00:10:00.000Z",
+          payloadHash: "hash-1"
+        }
+      })
+    });
+    const ackStatus = await opsService.getAlertAcknowledgementStatus({
+      tenantId: "tenant-1",
+      alertCode: "dead_letter_backlog",
+      expiresAfterMinutes: 60,
+      nowIso: "2026-03-11T00:40:00.000Z"
+    });
+    const expiredAckStatus = await opsService.getAlertAcknowledgementStatus({
+      tenantId: "tenant-1",
+      alertCode: "dead_letter_backlog",
+      expiresAfterMinutes: 5,
+      nowIso: "2026-03-11T00:40:00.000Z"
+    });
+    const reopened = await opsService.reopenAlert({
+      tenantId: "tenant-1",
+      alertCode: "dead_letter_backlog",
+      actorId: "ops-2",
+      reason: "backlog persists",
+      createdAt: "2026-03-11T00:45:00.000Z"
     });
 
     expect(exported?.exportRecord.exportId).toBe("bundle-export:1");
@@ -435,6 +484,10 @@ describe("MaestroOrchestrationService", () => {
     expect(ack.alertAckId).toBe("alert-ack:1");
     expect(acks).toHaveLength(1);
     expect(historyVerify.verified).toBe(true);
+    expect(historyVerify.verification?.verified).toBe(true);
+    expect(ackStatus.acknowledged).toBe(true);
+    expect(expiredAckStatus.expired).toBe(true);
+    expect(reopened.reopenedBy).toBe("ops-2");
   });
 
   it("creates replay approvals for dead-lettered executions", async () => {

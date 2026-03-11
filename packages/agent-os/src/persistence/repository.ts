@@ -178,6 +178,9 @@ type OrchestrationAlertAckRow = {
   reason: string;
   details: Record<string, unknown>;
   created_at: string | Date;
+  reopened_at: string | Date | null;
+  reopened_by: string | null;
+  reopen_reason: string | null;
 };
 
 function toIsoString(value: string | Date): string {
@@ -334,7 +337,10 @@ function mapOrchestrationAlertAckRow(row: OrchestrationAlertAckRow): Orchestrati
     acknowledgedBy: row.acknowledged_by,
     reason: row.reason,
     details: row.details,
-    createdAt: toIsoString(row.created_at)
+    createdAt: toIsoString(row.created_at),
+    reopenedAt: row.reopened_at ? toIsoString(row.reopened_at) : null,
+    reopenedBy: row.reopened_by,
+    reopenReason: row.reopen_reason
   };
 }
 
@@ -1467,9 +1473,10 @@ export class AgentOsRepository {
         `
         INSERT INTO orchestration_alert_acks (
           tenant_id, alert_ack_id, alert_code, acknowledged_by,
-          reason, details, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
-        RETURNING tenant_id, alert_ack_id, alert_code, acknowledged_by, reason, details, created_at
+          reason, details, created_at, reopened_at, reopened_by, reopen_reason
+        ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, NULL, NULL, NULL)
+        RETURNING tenant_id, alert_ack_id, alert_code, acknowledged_by, reason, details, created_at,
+                  reopened_at, reopened_by, reopen_reason
         `,
         [
           args.tenantId,
@@ -1493,7 +1500,8 @@ export class AgentOsRepository {
     const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
       client.query<OrchestrationAlertAckRow>(
         `
-        SELECT tenant_id, alert_ack_id, alert_code, acknowledged_by, reason, details, created_at
+        SELECT tenant_id, alert_ack_id, alert_code, acknowledged_by, reason, details, created_at,
+               reopened_at, reopened_by, reopen_reason
         FROM orchestration_alert_acks
         WHERE tenant_id = $1
           AND ($2::text IS NULL OR alert_code = $2)
@@ -1504,6 +1512,36 @@ export class AgentOsRepository {
     );
 
     return res.rows.map(mapOrchestrationAlertAckRow);
+  }
+
+  async reopenOrchestrationAlertAck(args: {
+    tenantId: string;
+    alertAckId: string;
+    reopenedBy: string;
+    reopenReason: string;
+    reopenedAt?: string;
+  }): Promise<OrchestrationAlertAckRecord> {
+    const reopenedAt = args.reopenedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OrchestrationAlertAckRow>(
+        `
+        UPDATE orchestration_alert_acks
+        SET reopened_at = $3,
+            reopened_by = $4,
+            reopen_reason = $5
+        WHERE tenant_id = $1 AND alert_ack_id = $2
+        RETURNING tenant_id, alert_ack_id, alert_code, acknowledged_by, reason, details, created_at,
+                  reopened_at, reopened_by, reopen_reason
+        `,
+        [args.tenantId, args.alertAckId, reopenedAt, args.reopenedBy, args.reopenReason]
+      )
+    );
+
+    if (!res.rows[0]) {
+      throw new Error("alert_ack_not_found");
+    }
+
+    return mapOrchestrationAlertAckRow(res.rows[0]);
   }
 
   async claimQueuedExecutions(args: {

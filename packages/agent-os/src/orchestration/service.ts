@@ -287,6 +287,25 @@ export class MaestroOrchestrationService {
     sealedAt: string;
     payloadHash: string;
     signature: string;
+    verifyBundle: (args: {
+      bundle: unknown;
+      executionId: string;
+      sealedAt: string;
+      payloadHash: string;
+      signature: string;
+    }) => {
+      verified: boolean;
+      payloadHashMatches: boolean;
+      signatureMatches: boolean;
+      expectedPayloadHash: string;
+      expectedSignature: string;
+      trustChain: {
+        algorithm: string;
+        artifactId: string;
+        sealedAt: string;
+        payloadHash: string;
+      };
+    };
   }) {
     const exports = await this.listReplayBundleExports({
       tenantId: args.tenantId,
@@ -299,9 +318,20 @@ export class MaestroOrchestrationService {
         item.signature === args.signature
     );
 
+    const verification = matched
+      ? args.verifyBundle({
+          bundle: matched.bundleSnapshot,
+          executionId: args.executionId,
+          sealedAt: args.sealedAt,
+          payloadHash: args.payloadHash,
+          signature: args.signature
+        })
+      : null;
+
     return {
-      verified: Boolean(matched),
+      verified: Boolean(matched) && Boolean(verification?.verified),
       matchedExport: matched ?? null,
+      verification,
       exportCount: exports.length
     };
   }
@@ -611,5 +641,64 @@ export class MaestroOrchestrationService {
     alertCode?: string;
   }) {
     return this.repository.listOrchestrationAlertAcks(args);
+  }
+
+  async getAlertAcknowledgementStatus(args: {
+    tenantId: string;
+    alertCode: string;
+    expiresAfterMinutes: number;
+    nowIso?: string;
+  }) {
+    const items = await this.listAlertAcknowledgements({
+      tenantId: args.tenantId,
+      alertCode: args.alertCode
+    });
+    const latest = items[0] ?? null;
+    if (!latest) {
+      return {
+        alertCode: args.alertCode,
+        acknowledged: false,
+        expired: false,
+        reopened: false,
+        latestAck: null
+      };
+    }
+
+    const nowMs = Date.parse(args.nowIso ?? new Date().toISOString());
+    const ackMs = Date.parse(latest.createdAt);
+    const expired = nowMs - ackMs > args.expiresAfterMinutes * 60_000;
+    const reopened = Boolean(latest.reopenedAt);
+
+    return {
+      alertCode: args.alertCode,
+      acknowledged: !expired && !reopened,
+      expired,
+      reopened,
+      latestAck: latest
+    };
+  }
+
+  async reopenAlert(args: {
+    tenantId: string;
+    alertCode: string;
+    actorId: string;
+    reason: string;
+    createdAt?: string;
+  }) {
+    const items = await this.listAlertAcknowledgements({
+      tenantId: args.tenantId,
+      alertCode: args.alertCode
+    });
+    const latest = items[0];
+    if (!latest) {
+      throw new MaestroOrchestrationError("alert_ack_not_found");
+    }
+    return this.repository.reopenOrchestrationAlertAck({
+      tenantId: args.tenantId,
+      alertAckId: latest.alertAckId,
+      reopenedBy: args.actorId,
+      reopenReason: args.reason,
+      reopenedAt: args.createdAt
+    });
   }
 }

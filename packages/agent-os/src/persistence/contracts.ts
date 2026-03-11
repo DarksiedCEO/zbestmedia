@@ -240,7 +240,10 @@ export const OrchestrationAlertAckRecordSchema = z.object({
   acknowledgedBy: z.string().min(1),
   reason: z.string().min(1),
   details: z.record(z.string(), z.unknown()),
-  createdAt: z.string().datetime()
+  createdAt: z.string().datetime(),
+  reopenedAt: z.string().datetime().nullable().optional(),
+  reopenedBy: z.string().nullable().optional(),
+  reopenReason: z.string().nullable().optional()
 });
 export type OrchestrationAlertAckRecord = z.infer<typeof OrchestrationAlertAckRecordSchema>;
 

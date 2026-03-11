@@ -27,6 +27,8 @@ Deploy the Agent OS worker as a separate process from the API.
   - `pnpm agent-os:deployment:check`
 - Smoke the dedicated worker profile:
   - `pnpm agent-os:worker:smoke`
+- Run the worker release check:
+  - `pnpm agent-os:worker:release:check`
 
 ## Deployment note
 
@@ -44,6 +46,8 @@ Use a dedicated worker service/process profile. Do not colocate long-running wor
   - `POST /v1/orchestration/executions/:executionId/requeue`
 - Replay export history:
   - `GET /v1/orchestration/executions/:executionId/exports`
+- Replay export history verification:
+  - `POST /v1/orchestration/executions/:executionId/exports/verify-history`
 - Replay export persistence:
   - `POST /v1/orchestration/executions/:executionId/export-bundle`
 - Diagnostics:
@@ -54,10 +58,14 @@ Use a dedicated worker service/process profile. Do not colocate long-running wor
   - `GET /v1/orchestration/ops/workers`
 - Worker freshness:
   - `GET /v1/orchestration/ops/workers/freshness`
+- Worker freshness export:
+  - `GET /v1/orchestration/ops/workers/freshness/export`
 - Ops alerts:
   - `GET /v1/orchestration/ops/alerts`
 - Alert acknowledgements:
   - `GET /v1/orchestration/ops/alerts/acks`
+  - `GET /v1/orchestration/ops/alerts/:alertCode/ack-status`
   - `POST /v1/orchestration/ops/alerts/:alertCode/ack`
+  - `POST /v1/orchestration/ops/alerts/:alertCode/reopen`
 - Runbook:
   - `GET /v1/orchestration/ops/runbook`

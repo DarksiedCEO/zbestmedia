@@ -176,6 +176,14 @@ export const OrchestrationAlertAckListQuerySchema = z.object({
   alertCode: z.string().min(1).optional()
 });
 
+export const OrchestrationAlertAckStatusQuerySchema = z.object({
+  expiresAfterMinutes: z.coerce.number().int().positive().max(10_080).default(60)
+});
+
+export const OrchestrationAlertReopenBodySchema = z.object({
+  reason: z.string().min(1)
+});
+
 export const WorkerFreshnessQuerySchema = z.object({
   staleAfterMinutes: z.coerce.number().int().positive().max(10_080).default(15)
 });

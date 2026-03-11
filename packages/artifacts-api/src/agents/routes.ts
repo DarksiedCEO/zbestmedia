@@ -24,7 +24,9 @@ import {
   OrchestrationApprovalSlaQuerySchema,
   OrchestrationAlertsQuerySchema,
   OrchestrationAlertAckBodySchema,
+  OrchestrationAlertAckStatusQuerySchema,
   OrchestrationAlertAckListQuerySchema,
+  OrchestrationAlertReopenBodySchema,
   OrchestrationBundleVerifyBodySchema,
   OrchestrationDiagnosticsQuerySchema,
   ApprovalRequestIdParamSchema,
@@ -628,7 +630,8 @@ export function agentRoutes(opts: {
         executionId: path.data.executionId,
         sealedAt: body.data.sealedAt,
         payloadHash: body.data.payloadHash,
-        signature: body.data.signature
+        signature: body.data.signature,
+        verifyBundle: opts.verifyOrchestrationBundle
       });
       return reply.send(result);
     });
@@ -774,6 +777,22 @@ export function agentRoutes(opts: {
       return reply.send(result);
     });
 
+    app.get("/v1/orchestration/ops/workers/freshness/export", async (req, reply) => {
+      const query = WorkerFreshnessQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const snapshot = await opts.orchestrationService.getWorkerFreshnessReport({
+        tenantId: req.auth.tenantId,
+        staleAfterMinutes: query.data.staleAfterMinutes
+      });
+      return reply.send({
+        snapshot,
+        signature: opts.signOrchestrationBundle(snapshot, "ops:worker-freshness")
+      });
+    });
+
     app.get("/v1/orchestration/ops/alerts", async (req, reply) => {
       const query = OrchestrationAlertsQuerySchema.safeParse(req.query ?? {});
       if (!query.success) {
@@ -801,6 +820,27 @@ export function agentRoutes(opts: {
       return reply.send({ items });
     });
 
+    app.get("/v1/orchestration/ops/alerts/:alertCode/ack-status", async (req, reply) => {
+      const path = req.params as { alertCode?: string };
+      const query = OrchestrationAlertAckStatusQuerySchema.safeParse(req.query ?? {});
+      if (!path.alertCode || !query.success) {
+        return reply.code(400).send({
+          error: "invalid_request",
+          details: {
+            params: path.alertCode ? null : { fieldErrors: { alertCode: ["Required"] } },
+            query: query.success ? null : query.error.flatten()
+          }
+        });
+      }
+
+      const result = await opts.orchestrationService.getAlertAcknowledgementStatus({
+        tenantId: req.auth.tenantId,
+        alertCode: path.alertCode,
+        expiresAfterMinutes: query.data.expiresAfterMinutes
+      });
+      return reply.send(result);
+    });
+
     app.post("/v1/orchestration/ops/alerts/:alertCode/ack", async (req, reply) => {
       const path = req.params as { alertCode?: string };
       const body = OrchestrationAlertAckBodySchema.safeParse(req.body ?? {});
@@ -824,13 +864,40 @@ export function agentRoutes(opts: {
       return reply.code(201).send(ack);
     });
 
+    app.post("/v1/orchestration/ops/alerts/:alertCode/reopen", async (req, reply) => {
+      const path = req.params as { alertCode?: string };
+      const body = OrchestrationAlertReopenBodySchema.safeParse(req.body ?? {});
+      if (!path.alertCode || !body.success) {
+        return reply.code(400).send({
+          error: "invalid_request",
+          details: {
+            params: path.alertCode ? null : { fieldErrors: { alertCode: ["Required"] } },
+            body: body.success ? null : body.error.flatten()
+          }
+        });
+      }
+
+      try {
+        const reopened = await opts.orchestrationService.reopenAlert({
+          tenantId: req.auth.tenantId,
+          alertCode: path.alertCode,
+          actorId: req.auth.actorId,
+          reason: body.data.reason
+        });
+        return reply.send(reopened);
+      } catch (error) {
+        return handleAgentError(reply, error);
+      }
+    });
+
     app.get("/v1/orchestration/ops/runbook", async (_req, reply) => {
       return reply.send({
         commands: {
           runOnce: "pnpm agent-os:worker:run-once",
           runLoop: "pnpm agent-os:worker:loop",
           daemon: "pnpm agent-os:worker:daemon",
-          smoke: "pnpm agent-os:worker:smoke"
+          smoke: "pnpm agent-os:worker:smoke",
+          releaseCheck: "pnpm agent-os:worker:release:check"
         },
         validation: {
           deploymentProfileCheck: "pnpm agent-os:deployment:check"
