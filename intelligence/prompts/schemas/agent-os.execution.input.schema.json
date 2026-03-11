@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "zbestmedia.agent-os.execution.input.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agentId", "taskDomain", "objective", "context", "policyConstraints", "memoryContext"],
+  "properties": {
+    "agentId": {
+      "type": "string",
+      "enum": ["brandyn", "jordyn", "kobe", "oracle", "titan", "maestro"]
+    },
+    "taskDomain": {
+      "type": "string",
+      "enum": [
+        "brand_identity_governance",
+        "visual_identity_governance",
+        "social_campaign_deployment",
+        "growth_intelligence",
+        "revenue_optimization",
+        "orchestration"
+      ]
+    },
+    "objective": { "type": "string", "minLength": 10, "maxLength": 4000 },
+    "context": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1000 }
+    },
+    "policyConstraints": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+    },
+    "memoryContext": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+    },
+    "handoffFrom": {
+      "type": ["string", "null"],
+      "enum": ["brandyn", "jordyn", "kobe", "oracle", "titan", "maestro", null]
+    },
+    "handoffTo": {
+      "type": ["string", "null"],
+      "enum": ["brandyn", "jordyn", "kobe", "oracle", "titan", "maestro", null]
+    },
+    "approvalContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": { "type": "boolean" },
+        "roles": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "type": "string", "minLength": 1, "maxLength": 80 }
+        }
+      }
+    }
+  }
+}

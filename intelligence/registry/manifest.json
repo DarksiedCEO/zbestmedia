@@ -80,6 +80,90 @@
       "owner": "Brand Trinity",
       "status": "approved",
       "sha256": "5a4821e0854bd58945c9acc682d762954ddfeb4be89ed90df0af4875b5f60133"
+    },
+    {
+      "id": "agent-os.brandyn.governance",
+      "name": "Brandyn Governance",
+      "promptVersion": 1,
+      "path": "intelligence/prompts/agent-os/brandyn.governance.v1.md",
+      "inputSchema": "intelligence/prompts/schemas/agent-os.execution.input.schema.json",
+      "outputSchema": "intelligence/prompts/schemas/agent-os.execution.output.schema.json",
+      "driftPolicy": {
+        "mode": "structure"
+      },
+      "owner": "Agent OS",
+      "status": "approved",
+      "sha256": "365910f7fd853403fd93b9daf3a9ee9f6f763b9d0c29e5022c73dfa38b5cf601"
+    },
+    {
+      "id": "agent-os.jordyn.visual",
+      "name": "Jordyn Visual Governance",
+      "promptVersion": 1,
+      "path": "intelligence/prompts/agent-os/jordyn.visual.v1.md",
+      "inputSchema": "intelligence/prompts/schemas/agent-os.execution.input.schema.json",
+      "outputSchema": "intelligence/prompts/schemas/agent-os.execution.output.schema.json",
+      "driftPolicy": {
+        "mode": "structure"
+      },
+      "owner": "Agent OS",
+      "status": "approved",
+      "sha256": "8fac351e880cf7a75e4a592b4f2bc3a44a02be9bb418ca46eff3a8a1b01ae77b"
+    },
+    {
+      "id": "agent-os.kobe.deployment",
+      "name": "Kobe Social Deployment",
+      "promptVersion": 1,
+      "path": "intelligence/prompts/agent-os/kobe.deployment.v1.md",
+      "inputSchema": "intelligence/prompts/schemas/agent-os.execution.input.schema.json",
+      "outputSchema": "intelligence/prompts/schemas/agent-os.execution.output.schema.json",
+      "driftPolicy": {
+        "mode": "structure"
+      },
+      "owner": "Agent OS",
+      "status": "approved",
+      "sha256": "0814fde5f75bdfb33fe677c92f70a940a4fee75225e63818114effddf2aa4ba9"
+    },
+    {
+      "id": "agent-os.oracle.intelligence",
+      "name": "Oracle Growth Intelligence",
+      "promptVersion": 1,
+      "path": "intelligence/prompts/agent-os/oracle.intelligence.v1.md",
+      "inputSchema": "intelligence/prompts/schemas/agent-os.execution.input.schema.json",
+      "outputSchema": "intelligence/prompts/schemas/agent-os.execution.output.schema.json",
+      "driftPolicy": {
+        "mode": "structure"
+      },
+      "owner": "Agent OS",
+      "status": "approved",
+      "sha256": "18b8b422044bc50fa182c70c3aa608bd96d02292dafedb765aea2df94c78f77e"
+    },
+    {
+      "id": "agent-os.titan.revenue",
+      "name": "Titan Revenue Optimization",
+      "promptVersion": 1,
+      "path": "intelligence/prompts/agent-os/titan.revenue.v1.md",
+      "inputSchema": "intelligence/prompts/schemas/agent-os.execution.input.schema.json",
+      "outputSchema": "intelligence/prompts/schemas/agent-os.execution.output.schema.json",
+      "driftPolicy": {
+        "mode": "structure"
+      },
+      "owner": "Agent OS",
+      "status": "approved",
+      "sha256": "6c0adda1b7f72c96418e01e51a5c9f64d46e92ac28627287646d4b6576f7d538"
+    },
+    {
+      "id": "agent-os.maestro.orchestration",
+      "name": "Maestro Orchestration",
+      "promptVersion": 1,
+      "path": "intelligence/prompts/agent-os/maestro.orchestration.v1.md",
+      "inputSchema": "intelligence/prompts/schemas/agent-os.execution.input.schema.json",
+      "outputSchema": "intelligence/prompts/schemas/agent-os.execution.output.schema.json",
+      "driftPolicy": {
+        "mode": "structure"
+      },
+      "owner": "Agent OS",
+      "status": "approved",
+      "sha256": "128fbf605a1cd998519a29d4f89aa742aa48dd64f43fd7561e168b0bde6a964a"
     }
   ]
 }
