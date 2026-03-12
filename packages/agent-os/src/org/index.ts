@@ -10,3 +10,4 @@ export * from "./policy.js";
 export * from "./code-sentinel.js";
 export * from "./routing-types.js";
 export * from "./routing.js";
+export * from "./guards.js";

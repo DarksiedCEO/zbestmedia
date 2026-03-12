@@ -15,7 +15,21 @@ export type RoutingTaskCategory =
   | "route_contract_monitoring"
   | "slo_integrity_monitoring";
 
+export const ROUTING_TASK_CATEGORIES = [
+  "brand_identity",
+  "campaign_growth",
+  "visual_design",
+  "jingle_music",
+  "build_integrity_monitoring",
+  "dependency_integrity_monitoring",
+  "runtime_health_monitoring",
+  "migration_integrity_monitoring",
+  "route_contract_monitoring",
+  "slo_integrity_monitoring"
+] as const;
+
 export type JingleRoutingMode = "composition" | "packaging";
+export const JINGLE_ROUTING_MODES = ["composition", "packaging"] as const;
 
 export type RoutingRequest = {
   category: RoutingTaskCategory;

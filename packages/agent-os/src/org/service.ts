@@ -22,6 +22,7 @@ import {
   type CodeSentinelSignalPayload,
   type CodeSentinelSignalStatus
 } from "./code-sentinel.js";
+import { ensureOrgSystemIntegrity } from "./guards.js";
 import {
   getLeadAgentAllowedScope,
   getLeadAgentForbiddenScope,
@@ -36,6 +37,10 @@ const LEAD_AGENT_ID_SET = new Set(AGENT_ORG_REGISTRY.leadAgents.map((agent) => a
 const SUB_AGENT_ID_SET = new Set(AGENT_ORG_REGISTRY.subAgents.map((agent) => agent.subAgentId));
 
 export class AgentOrgService {
+  constructor() {
+    ensureOrgSystemIntegrity();
+  }
+
   isLeadAgentId(agentId: string): agentId is LeadAgentId {
     return LEAD_AGENT_ID_SET.has(agentId as LeadAgentId);
   }

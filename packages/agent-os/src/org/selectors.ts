@@ -20,6 +20,23 @@ export type ResponsibilityKey =
   | "revenue_optimization"
   | "orchestration_workflow";
 
+export const RESPONSIBILITY_KEYS = [
+  "brand_identity_governance",
+  "visual_identity_governance",
+  "social_campaign_deployment",
+  "sonic_brand_composition",
+  "sonic_campaign_packaging",
+  "build_breakage_detection",
+  "dependency_drift_detection",
+  "runtime_health_monitoring",
+  "migration_integrity_monitoring",
+  "route_contract_monitoring",
+  "slo_release_gate_monitoring",
+  "growth_intelligence",
+  "revenue_optimization",
+  "orchestration_workflow"
+] as const;
+
 export type OperationalSignalType =
   | "build_breakage"
   | "dependency_drift"
@@ -50,6 +67,15 @@ export const EXECUTION_AGENT_TO_LEAD_AGENT: Partial<Record<AgentId, LeadAgentId>
   jordyn: "jordyn",
   kobe: "kobe"
 };
+
+export const OPERATIONAL_SIGNAL_TYPES = [
+  "build_breakage",
+  "dependency_drift",
+  "runtime_health",
+  "migration_integrity",
+  "route_contract",
+  "slo_release_gate"
+] as const;
 
 export const CODE_SENTINEL_SIGNAL_OWNERS: Record<OperationalSignalType, SubAgentId> = {
   build_breakage: "build-monitor",

@@ -4,7 +4,7 @@ import type { ResponsibilityKey, OperationalSignalType } from "./selectors.js";
 import type { LeadAgentId, SubAgentId } from "./types.js";
 import type { JingleRoutingMode, RoutingDecision, RoutingRequest, RoutingTaskCategory } from "./routing-types.js";
 
-const CATEGORY_TO_RESPONSIBILITY: Record<RoutingTaskCategory, ResponsibilityKey | null> = {
+export const ROUTING_CATEGORY_TO_RESPONSIBILITY: Record<RoutingTaskCategory, ResponsibilityKey | null> = {
   brand_identity: "brand_identity_governance",
   campaign_growth: "social_campaign_deployment",
   visual_design: "visual_identity_governance",
@@ -17,7 +17,7 @@ const CATEGORY_TO_RESPONSIBILITY: Record<RoutingTaskCategory, ResponsibilityKey 
   slo_integrity_monitoring: "slo_release_gate_monitoring"
 };
 
-const CATEGORY_TO_SIGNAL: Partial<Record<RoutingTaskCategory, OperationalSignalType>> = {
+export const ROUTING_CATEGORY_TO_SIGNAL: Partial<Record<RoutingTaskCategory, OperationalSignalType>> = {
   build_integrity_monitoring: "build_breakage",
   dependency_integrity_monitoring: "dependency_drift",
   runtime_health_monitoring: "runtime_health",
@@ -26,7 +26,7 @@ const CATEGORY_TO_SIGNAL: Partial<Record<RoutingTaskCategory, OperationalSignalT
   slo_integrity_monitoring: "slo_release_gate"
 };
 
-const JINGLE_MODE_TO_RESPONSIBILITY: Record<JingleRoutingMode, ResponsibilityKey> = {
+export const JINGLE_MODE_TO_RESPONSIBILITY: Record<JingleRoutingMode, ResponsibilityKey> = {
   composition: "sonic_brand_composition",
   packaging: "sonic_campaign_packaging"
 };
@@ -68,7 +68,7 @@ export class AgentOrgRoutingService {
     });
     trace.push(`policy_validated:${responsibilityKey}`);
 
-    const signalType = CATEGORY_TO_SIGNAL[args.category] ?? null;
+    const signalType = ROUTING_CATEGORY_TO_SIGNAL[args.category] ?? null;
     let subAgentId: SubAgentId | null = null;
     if (signalType) {
       const ownership = this.org.resolveOperationalSignalOwner(signalType);
@@ -106,7 +106,7 @@ export class AgentOrgRoutingService {
       return JINGLE_MODE_TO_RESPONSIBILITY[args.jingleMode];
     }
 
-    const responsibilityKey = CATEGORY_TO_RESPONSIBILITY[args.category];
+    const responsibilityKey = ROUTING_CATEGORY_TO_RESPONSIBILITY[args.category];
     if (!responsibilityKey) {
       throw new AgentOrgRoutingError(`unsupported_route:${args.category}`);
     }

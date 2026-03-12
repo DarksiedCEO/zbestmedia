@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import {
   AgentExecutionService,
+  ensureOrgSystemIntegrity,
   AgentOrgRoutingService,
   AgentOrgService,
   AgentOsRepository,
@@ -37,6 +38,7 @@ import { policyRoutes } from "./agency/policy/http/routes";
 
 export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const env = envInput ?? loadEnv();
+  ensureOrgSystemIntegrity();
   const app = Fastify({
     logger: {
       level: env.NODE_ENV === "production" ? "info" : "debug",
