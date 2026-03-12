@@ -6,6 +6,7 @@ import {
   AgentExecutionService,
   AgentExecutionLedgerService,
   AgentIncidentService,
+  AgentTelemetryService,
   AgentMemoryAccessError,
   AgentRuntimeService,
   ApprovalEscalationService,
@@ -81,6 +82,7 @@ export function agentRoutes(opts: {
   orgRoutingService: AgentOrgRoutingService;
   executionService: AgentExecutionService;
   incidentService: AgentIncidentService;
+  telemetryService: AgentTelemetryService;
   ledgerService: AgentExecutionLedgerService;
   memoryService: MemoryPartitionService;
   evalRunner: EvalRunnerService;
@@ -820,6 +822,54 @@ export function agentRoutes(opts: {
       } catch (error) {
         return handleIncidentError(reply, error);
       }
+    });
+
+    app.get("/v1/agent-os/ops/status", async (req, reply) => {
+      const summary = await opts.telemetryService.getOpsStatusSummary({
+        tenantId: req.auth.tenantId
+      });
+
+      return reply.send({
+        manifestVersion: summary.manifestVersion,
+        resourceType: "ops_status_summary",
+        summary
+      });
+    });
+
+    app.get("/v1/agent-os/ops/incidents/summary", async (req, reply) => {
+      const summary = await opts.telemetryService.getIncidentSummary({
+        tenantId: req.auth.tenantId
+      });
+
+      return reply.send({
+        manifestVersion: summary.manifestVersion,
+        resourceType: "ops_incident_summary",
+        summary
+      });
+    });
+
+    app.get("/v1/agent-os/ops/execution/summary", async (req, reply) => {
+      const summary = await opts.telemetryService.getExecutionSummary({
+        tenantId: req.auth.tenantId
+      });
+
+      return reply.send({
+        manifestVersion: summary.manifestVersion,
+        resourceType: "ops_execution_summary",
+        summary
+      });
+    });
+
+    app.get("/v1/agent-os/ops/code-sentinel/summary", async (req, reply) => {
+      const summary = await opts.telemetryService.getCodeSentinelSummary({
+        tenantId: req.auth.tenantId
+      });
+
+      return reply.send({
+        manifestVersion: summary.manifestVersion,
+        resourceType: "ops_code_sentinel_summary",
+        summary
+      });
     });
 
     app.post("/v1/workflows/brand-pipeline/advance", async (req, reply) => {

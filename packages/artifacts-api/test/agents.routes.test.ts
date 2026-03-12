@@ -9,6 +9,10 @@ import {
   CodeSentinelSignalListResponseSchema,
   DepartmentDetailResponseSchema,
   ExecutiveDetailResponseSchema,
+  OpsCodeSentinelSummaryResponseSchema,
+  OpsExecutionSummaryResponseSchema,
+  OpsIncidentSummaryResponseSchema,
+  OpsStatusSummaryResponseSchema,
   OperationalSignalOwnershipResponseSchema,
   OrgAgentDetailResponseSchema,
   OrgManifestResponseSchema,
@@ -216,6 +220,124 @@ describe("agent routes", () => {
       resolvedAt: "2026-03-12T00:02:00.000Z",
       resolvedBy: "actor-1",
       resolutionNote: "fixed"
+    }))
+  } as never;
+  const telemetryService = {
+    getOpsStatusSummary: vi.fn(async () => ({
+      status: "critical",
+      manifestVersion: "2026-03-12.v1",
+      generatedAt: "2026-03-12T00:00:00.000Z",
+      incidents: {
+        manifestVersion: "2026-03-12.v1",
+        generatedAt: "2026-03-12T00:00:00.000Z",
+        openBySeverity: { info: 0, warning: 1, critical: 1 },
+        openByType: {
+          build_integrity_failure: 0,
+          dependency_integrity_failure: 0,
+          runtime_health_failure: 0,
+          migration_integrity_failure: 0,
+          route_contract_failure: 1,
+          slo_integrity_failure: 1,
+          execution_policy_failure: 0,
+          execution_runtime_failure: 0
+        },
+        releaseBlockingOpenCount: 1,
+        degradedSurfaces: ["route_contracts", "slo"]
+      },
+      executions: {
+        manifestVersion: "2026-03-12.v1",
+        generatedAt: "2026-03-12T00:00:00.000Z",
+        recentByState: {
+          requested: 0,
+          validated: 0,
+          routed: 0,
+          blocked: 0,
+          executing: 0,
+          retriable: 0,
+          succeeded: 1,
+          failed: 1
+        },
+        recentFailuresByCategory: { routing_failure: 1 },
+        routingFailureCount: 1,
+        policyRejectionCount: 0
+      },
+      codeSentinel: {
+        manifestVersion: "2026-03-12.v1",
+        generatedAt: "2026-03-12T00:00:00.000Z",
+        openIncidentCountBySubAgent: {
+          "build-monitor": 0,
+          "dependency-watcher": 0,
+          "runtime-health-monitor": 0,
+          "migration-guardian": 0,
+          "route-contract-watcher": 1,
+          "slo-enforcer": 1
+        },
+        openIncidentCountBySignal: {
+          build_breakage: 0,
+          dependency_drift: 0,
+          runtime_health: 0,
+          migration_integrity: 0,
+          route_contract: 1,
+          slo_release_gate: 1
+        },
+        mostImpactedSubAgent: "route-contract-watcher"
+      },
+      degradedSurfaces: ["route_contracts", "slo", "policy_routing"]
+    })),
+    getIncidentSummary: vi.fn(async () => ({
+      manifestVersion: "2026-03-12.v1",
+      generatedAt: "2026-03-12T00:00:00.000Z",
+      openBySeverity: { info: 0, warning: 1, critical: 1 },
+      openByType: {
+        build_integrity_failure: 0,
+        dependency_integrity_failure: 0,
+        runtime_health_failure: 0,
+        migration_integrity_failure: 0,
+        route_contract_failure: 1,
+        slo_integrity_failure: 1,
+        execution_policy_failure: 0,
+        execution_runtime_failure: 0
+      },
+      releaseBlockingOpenCount: 1,
+      degradedSurfaces: ["route_contracts", "slo"]
+    })),
+    getExecutionSummary: vi.fn(async () => ({
+      manifestVersion: "2026-03-12.v1",
+      generatedAt: "2026-03-12T00:00:00.000Z",
+      recentByState: {
+        requested: 0,
+        validated: 0,
+        routed: 0,
+        blocked: 0,
+        executing: 0,
+        retriable: 0,
+        succeeded: 1,
+        failed: 1
+      },
+      recentFailuresByCategory: { routing_failure: 1 },
+      routingFailureCount: 1,
+      policyRejectionCount: 0
+    })),
+    getCodeSentinelSummary: vi.fn(async () => ({
+      manifestVersion: "2026-03-12.v1",
+      generatedAt: "2026-03-12T00:00:00.000Z",
+      openIncidentCountBySubAgent: {
+        "build-monitor": 0,
+        "dependency-watcher": 0,
+        "runtime-health-monitor": 0,
+        "migration-guardian": 0,
+        "route-contract-watcher": 1,
+        "slo-enforcer": 1
+      },
+      openIncidentCountBySignal: {
+        build_breakage: 0,
+        dependency_drift: 0,
+        runtime_health: 0,
+        migration_integrity: 0,
+        route_contract: 1,
+        slo_release_gate: 1
+      },
+      mostImpactedSubAgent: "route-contract-watcher"
     }))
   } as never;
   const memoryService = {
@@ -808,6 +930,7 @@ describe("agent routes", () => {
         orgRoutingService: orgRoutingService as never,
         executionService,
         incidentService,
+        telemetryService,
         ledgerService,
         memoryService,
         evalRunner,
@@ -998,6 +1121,30 @@ describe("agent routes", () => {
     });
     expect(resolveRes.statusCode).toBe(200);
     expect(IncidentDetailResponseSchema.parse(resolveRes.json()).incident.status).toBe("resolved");
+  });
+
+  it("exposes telemetry summaries", async () => {
+    const statusRes = await app.inject({ method: "GET", url: "/v1/agent-os/ops/status" });
+    const incidentsRes = await app.inject({ method: "GET", url: "/v1/agent-os/ops/incidents/summary" });
+    const executionRes = await app.inject({ method: "GET", url: "/v1/agent-os/ops/execution/summary" });
+    const codeSentinelRes = await app.inject({ method: "GET", url: "/v1/agent-os/ops/code-sentinel/summary" });
+
+    expect(statusRes.statusCode).toBe(200);
+    const status = OpsStatusSummaryResponseSchema.parse(statusRes.json());
+    expect(status.summary.status).toBe("critical");
+    expect(status.summary.codeSentinel.openIncidentCountBySubAgent["slo-enforcer"]).toBe(1);
+
+    expect(incidentsRes.statusCode).toBe(200);
+    const incidents = OpsIncidentSummaryResponseSchema.parse(incidentsRes.json());
+    expect(incidents.summary.releaseBlockingOpenCount).toBe(1);
+
+    expect(executionRes.statusCode).toBe(200);
+    const execution = OpsExecutionSummaryResponseSchema.parse(executionRes.json());
+    expect(execution.summary.routingFailureCount).toBe(1);
+
+    expect(codeSentinelRes.statusCode).toBe(200);
+    const codeSentinel = OpsCodeSentinelSummaryResponseSchema.parse(codeSentinelRes.json());
+    expect(codeSentinel.summary.mostImpactedSubAgent).toBe("route-contract-watcher");
   });
 
   it("records eval runs and exposes memory reads", async () => {

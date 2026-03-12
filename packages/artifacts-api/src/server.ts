@@ -4,6 +4,7 @@ import {
   AgentExecutionService,
   AgentExecutionLedgerService,
   AgentIncidentService,
+  AgentTelemetryService,
   ensureOrgSystemIntegrity,
   AgentOrgRoutingService,
   AgentOrgService,
@@ -75,6 +76,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const approvalWorkflow = new ApprovalWorkflowService(agentRepository);
   const ledgerService = new AgentExecutionLedgerService(agentRepository, agentOrgService);
   const incidentService = new AgentIncidentService(agentRepository, agentOrgService);
+  const telemetryService = new AgentTelemetryService(ledgerService, incidentService, agentOrgService);
   const agentExecutionService = new AgentExecutionService(
     agentRepository,
     approvalWorkflow,
@@ -126,6 +128,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       orgRoutingService: agentOrgRoutingService,
       executionService: agentExecutionService,
       incidentService,
+      telemetryService,
       ledgerService,
       memoryService,
       evalRunner,

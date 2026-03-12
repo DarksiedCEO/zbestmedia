@@ -16,6 +16,8 @@ export * from "./execution/records.js";
 export * from "./execution/promptExecutor.js";
 export * from "./incidents/types.js";
 export * from "./incidents/service.js";
+export * from "./telemetry/types.js";
+export * from "./telemetry/service.js";
 export * from "./versions/service.js";
 export * from "./workers/service.js";
 export * from "./workers/runtime.js";

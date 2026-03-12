@@ -545,6 +545,111 @@ export const IncidentDetailResponseSchema = z.object({
   incident: IncidentRecordSchema
 });
 
+const OpsStatusLevelSchema = z.enum(["healthy", "warning", "critical"]);
+const TelemetrySurfaceSchema = z.enum([
+  "build",
+  "dependency",
+  "runtime",
+  "migrations",
+  "route_contracts",
+  "slo",
+  "policy_routing",
+  "execution_runtime"
+]);
+const IncidentCountBySeveritySchema = z.object({
+  info: z.number().int().nonnegative(),
+  warning: z.number().int().nonnegative(),
+  critical: z.number().int().nonnegative()
+});
+const IncidentCountByTypeSchema = z.object({
+  build_integrity_failure: z.number().int().nonnegative(),
+  dependency_integrity_failure: z.number().int().nonnegative(),
+  runtime_health_failure: z.number().int().nonnegative(),
+  migration_integrity_failure: z.number().int().nonnegative(),
+  route_contract_failure: z.number().int().nonnegative(),
+  slo_integrity_failure: z.number().int().nonnegative(),
+  execution_policy_failure: z.number().int().nonnegative(),
+  execution_runtime_failure: z.number().int().nonnegative()
+});
+const ExecutionCountByStateSchema = z.object({
+  requested: z.number().int().nonnegative(),
+  validated: z.number().int().nonnegative(),
+  routed: z.number().int().nonnegative(),
+  blocked: z.number().int().nonnegative(),
+  executing: z.number().int().nonnegative(),
+  retriable: z.number().int().nonnegative(),
+  succeeded: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative()
+});
+const CodeSentinelCountBySubAgentSchema = z.object({
+  "build-monitor": z.number().int().nonnegative(),
+  "dependency-watcher": z.number().int().nonnegative(),
+  "runtime-health-monitor": z.number().int().nonnegative(),
+  "migration-guardian": z.number().int().nonnegative(),
+  "route-contract-watcher": z.number().int().nonnegative(),
+  "slo-enforcer": z.number().int().nonnegative()
+});
+const CodeSentinelCountBySignalSchema = z.object({
+  build_breakage: z.number().int().nonnegative(),
+  dependency_drift: z.number().int().nonnegative(),
+  runtime_health: z.number().int().nonnegative(),
+  migration_integrity: z.number().int().nonnegative(),
+  route_contract: z.number().int().nonnegative(),
+  slo_release_gate: z.number().int().nonnegative()
+});
+
+export const OpsIncidentSummaryResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("ops_incident_summary"),
+  summary: z.object({
+    manifestVersion: ManifestVersionSchema,
+    generatedAt: z.string().datetime(),
+    openBySeverity: IncidentCountBySeveritySchema,
+    openByType: IncidentCountByTypeSchema,
+    releaseBlockingOpenCount: z.number().int().nonnegative(),
+    degradedSurfaces: z.array(TelemetrySurfaceSchema)
+  })
+});
+
+export const OpsExecutionSummaryResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("ops_execution_summary"),
+  summary: z.object({
+    manifestVersion: ManifestVersionSchema,
+    generatedAt: z.string().datetime(),
+    recentByState: ExecutionCountByStateSchema,
+    recentFailuresByCategory: z.record(z.string(), z.number().int().nonnegative()),
+    routingFailureCount: z.number().int().nonnegative(),
+    policyRejectionCount: z.number().int().nonnegative()
+  })
+});
+
+export const OpsCodeSentinelSummaryResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("ops_code_sentinel_summary"),
+  summary: z.object({
+    manifestVersion: ManifestVersionSchema,
+    generatedAt: z.string().datetime(),
+    openIncidentCountBySubAgent: CodeSentinelCountBySubAgentSchema,
+    openIncidentCountBySignal: CodeSentinelCountBySignalSchema,
+    mostImpactedSubAgent: SubAgentOrgIdSchema.nullable()
+  })
+});
+
+export const OpsStatusSummaryResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("ops_status_summary"),
+  summary: z.object({
+    status: OpsStatusLevelSchema,
+    manifestVersion: ManifestVersionSchema,
+    generatedAt: z.string().datetime(),
+    incidents: OpsIncidentSummaryResponseSchema.shape.summary,
+    executions: OpsExecutionSummaryResponseSchema.shape.summary,
+    codeSentinel: OpsCodeSentinelSummaryResponseSchema.shape.summary,
+    degradedSurfaces: z.array(TelemetrySurfaceSchema)
+  })
+});
+
 export const ExecutiveIdParamSchema = z.object({
   executiveId: ExecutiveIdSchema
 });
