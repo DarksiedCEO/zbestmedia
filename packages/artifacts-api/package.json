@@ -19,7 +19,7 @@
     "db:migrate:check": "node db/scripts/resolve-db-url.js",
     "db:migrate": "node db/scripts/migrate.js",
     "db:migrate:local": "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/zbestmedia_artifacts pnpm db:migrate",
-    "start": "tsx src/main.ts"
+    "start": "node --import tsx src/main.ts"
   },
   "dependencies": {
     "@zbest/agent-os": "workspace:*",

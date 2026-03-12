@@ -38,6 +38,8 @@ Start command:
 pnpm api:start
 ```
 
+`api:build` is a package-level typecheck, not a standalone emit step. The API runtime uses `node --import tsx` from repo root so workspace source imports resolve correctly in production without relying on a package-isolated `tsc` emit.
+
 Healthcheck path:
 
 ```text
