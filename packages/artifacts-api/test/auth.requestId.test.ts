@@ -59,26 +59,26 @@ describe("auth and requestId middleware", () => {
     await app.close();
   });
 
-  it("returns 401 missing_bearer_token when Authorization header is absent", async () => {
+  it("allows /healthz without Authorization", async () => {
     const res = await app.inject({
       method: "GET",
       url: "/healthz"
     });
-    expect(res.statusCode).toBe(401);
-    expect(res.json()).toEqual({ error: "missing_bearer_token" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
   });
 
-  it("returns 401 invalid_token for malformed token", async () => {
+  it("ignores malformed token on /healthz", async () => {
     const res = await app.inject({
       method: "GET",
       url: "/healthz",
       headers: { authorization: "Bearer not-a-token" }
     });
-    expect(res.statusCode).toBe(401);
-    expect(res.json()).toEqual({ error: "invalid_token" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
   });
 
-  it("returns 401 invalid_token_claims for missing tenantId or sub", async () => {
+  it("ignores invalid claims on /healthz", async () => {
     const token = await signToken({
       actorId: "actor-1",
       roles: ["admin"]
@@ -89,8 +89,8 @@ describe("auth and requestId middleware", () => {
       url: "/healthz",
       headers: { authorization: `Bearer ${token}` }
     });
-    expect(res.statusCode).toBe(401);
-    expect(res.json()).toEqual({ error: "invalid_token_claims" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
   });
 
   it("echoes x-request-id when provided", async () => {

@@ -25,8 +25,14 @@ type AuthPluginOptions = { jwtSecret: string };
 
 const authPluginImpl: FastifyPluginAsync<AuthPluginOptions> = async (app, opts) => {
   const key = new TextEncoder().encode(opts.jwtSecret);
+  const publicPaths = new Set(["/healthz"]);
 
   app.addHook("preHandler", async (req, reply) => {
+    const requestPath = req.url.split("?", 1)[0] ?? req.url;
+    if (publicPaths.has(requestPath)) {
+      return;
+    }
+
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) {
       return reply.code(401).send({ error: "missing_bearer_token" });

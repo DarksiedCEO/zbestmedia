@@ -100,8 +100,8 @@ async function main(): Promise<void> {
   const verifyDb = firstDefined(process.env.AGENT_OS_VERIFY_DB, process.env.ARTIFACTS_VERIFY_DB)?.toLowerCase() === 'true';
   const dbUrl = optionalEnvValue([
     'AGENT_OS_DATABASE_URL',
-    'ARTIFACTS_DATABASE_URL',
     'DATABASE_URL',
+    'ARTIFACTS_DATABASE_URL',
     'POSTGRES_URL',
     'PGDATABASE_URL'
   ]);
