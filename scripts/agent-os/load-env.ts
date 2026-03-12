@@ -8,6 +8,7 @@ type EnvValue = string | undefined;
 export type ResolvedAgentOsEnv = {
   baseUrl?: string;
   tenantId: string;
+  authTenantId: string;
   authToken?: string;
   authJwtSecret?: string;
   databaseUrl?: string;
@@ -52,6 +53,10 @@ export function redact(value: string | undefined): string {
   return `${value.slice(0, 4)}...${value.slice(-4)}`;
 }
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 export function resolveAgentOsEnv(mode: AgentOsEnvMode = "local"): ResolvedAgentOsEnv {
   loadAgentOsEnv();
 
@@ -61,6 +66,11 @@ export function resolveAgentOsEnv(mode: AgentOsEnvMode = "local"): ResolvedAgent
     'TENANT_ID',
     'DEFAULT_TENANT_ID'
   ]);
+
+  const authTenantId =
+    isUuid(tenantId)
+      ? tenantId
+      : firstDefined(process.env.AGENT_OS_AUTH_TENANT_ID, mode === "deployed" ? '11111111-1111-4111-8111-111111111111' : undefined) ?? tenantId;
 
   const baseUrl =
     mode === "deployed"
@@ -102,6 +112,7 @@ export function resolveAgentOsEnv(mode: AgentOsEnvMode = "local"): ResolvedAgent
   return {
     baseUrl,
     tenantId,
+    authTenantId,
     authToken,
     authJwtSecret,
     databaseUrl,
@@ -114,6 +125,7 @@ export function printResolvedAgentOsEnvSummary(mode: AgentOsEnvMode = "local"): 
   console.log(`[agent-os:env] resolved env summary mode=${mode}`);
   console.log(`  baseUrl: ${env.baseUrl ?? '<missing>'}`);
   console.log(`  tenantId: ${env.tenantId}`);
+  console.log(`  authTenantId: ${env.authTenantId}`);
   console.log(`  authToken: ${redact(env.authToken)}`);
   console.log(`  authJwtSecret: ${redact(env.authJwtSecret)}`);
   console.log(`  databaseUrl: ${redact(env.databaseUrl)}`);

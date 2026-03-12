@@ -33,6 +33,15 @@ async function mintToken(args: {
 }
 
 async function authToken(tenantId: string, actorId: string, secret?: string, explicitToken?: string): Promise<string> {
+  const deployedMode = mode() === 'deployed';
+  if (deployedMode && secret) {
+    return mintToken({
+      secret,
+      tenantId,
+      actorId,
+      roles: ['admin', 'agents:read', 'agents:write', 'artifacts:read']
+    });
+  }
   if (explicitToken && explicitToken.trim()) {
     return explicitToken.trim();
   }
@@ -97,7 +106,7 @@ async function main(): Promise<void> {
   }
 
   const token = await authToken(
-    env.tenantId,
+    env.authTenantId,
     process.env.AGENT_OS_ACTOR_ID ?? 'agent-os-smoke',
     env.authJwtSecret,
     env.authToken
@@ -108,7 +117,7 @@ async function main(): Promise<void> {
     method: 'GET',
     path: '/v1/orchestration/ops/runbook',
     token,
-    tenantId: env.tenantId
+    tenantId: env.authTenantId
   });
   if (runbook.status !== 200) {
     fail(`runbook expected 200, got ${runbook.status}`);
@@ -124,7 +133,7 @@ async function main(): Promise<void> {
     method: 'GET',
     path: '/v1/orchestration/ops/workers/slo?staleAfterMinutes=15',
     token,
-    tenantId: env.tenantId
+    tenantId: env.authTenantId
   });
   if (slo.status !== 200) {
     fail(`worker SLO expected 200, got ${slo.status}`);
@@ -139,7 +148,7 @@ async function main(): Promise<void> {
     method: 'GET',
     path: '/v1/orchestration/ops/diagnostics?olderThanMinutes=60',
     token,
-    tenantId: env.tenantId
+    tenantId: env.authTenantId
   });
   if (diagnostics.status !== 200) {
     fail(`diagnostics expected 200, got ${diagnostics.status}`);
@@ -154,7 +163,7 @@ async function main(): Promise<void> {
     method: 'GET',
     path: '/v1/orchestration/ops/inventory',
     token,
-    tenantId: env.tenantId
+    tenantId: env.authTenantId
   });
   if (inventory.status !== 200) {
     fail(`inventory expected 200, got ${inventory.status}`);
@@ -169,7 +178,7 @@ async function main(): Promise<void> {
     method: 'GET',
     path: '/v1/orchestration/ops/alerts?olderThanMinutes=60&heartbeatStaleMinutes=15',
     token,
-    tenantId: env.tenantId
+    tenantId: env.authTenantId
   });
   if (alerts.status !== 200) {
     fail(`alerts expected 200, got ${alerts.status}`);
@@ -184,7 +193,7 @@ async function main(): Promise<void> {
     method: 'GET',
     path: '/v1/orchestration/ops/workers/freshness/export?staleAfterMinutes=15',
     token,
-    tenantId: env.tenantId
+    tenantId: env.authTenantId
   });
   if (freshnessExport.status !== 200) {
     fail(`freshness export expected 200, got ${freshnessExport.status}`);
@@ -195,7 +204,7 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    `[agent-os:ops:smoke] OK mode=${smokeMode} base=${baseUrl} tenant=${env.tenantId} workerSloStatus=${String(sloJson.status)}`
+    `[agent-os:ops:smoke] OK mode=${smokeMode} base=${baseUrl} tenant=${env.authTenantId} workerSloStatus=${String(sloJson.status)}`
   );
 }
 

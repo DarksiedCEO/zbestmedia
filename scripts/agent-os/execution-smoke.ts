@@ -33,6 +33,15 @@ async function mintToken(args: {
 }
 
 async function authToken(tenantId: string, actorId: string, secret?: string, explicitToken?: string): Promise<string> {
+  const deployedMode = mode() === 'deployed';
+  if (deployedMode && secret) {
+    return mintToken({
+      secret,
+      tenantId,
+      actorId,
+      roles: ['admin', 'agents:read', 'agents:write', 'artifacts:read']
+    });
+  }
   if (explicitToken && explicitToken.trim()) {
     return explicitToken.trim();
   }
@@ -107,11 +116,25 @@ async function main(): Promise<void> {
   }
 
   const token = await authToken(
-    env.tenantId,
+    env.authTenantId,
     process.env.AGENT_OS_ACTOR_ID ?? 'agent-os-execution-smoke',
     env.authJwtSecret,
     env.authToken
   );
+
+  const foundation = await requestJson({
+    baseUrl,
+    method: 'POST',
+    path: '/v1/agents/provision-foundation',
+    token,
+    tenantId: env.authTenantId,
+    body: {
+      versionLabel: 'foundation-v1'
+    }
+  });
+  if (foundation.status !== 201) {
+    fail(`foundation provision expected 201, got ${foundation.status}`);
+  }
 
   const suffix = Date.now();
   const brandyn = await requestJson({
@@ -119,7 +142,7 @@ async function main(): Promise<void> {
     method: 'POST',
     path: '/v1/agents/brandyn/execute',
     token,
-    tenantId: env.tenantId,
+    tenantId: env.authTenantId,
     body: {
       subjectType: 'brand_smoke',
       subjectId: `brandyn-smoke-${suffix}`,
@@ -148,7 +171,7 @@ async function main(): Promise<void> {
     method: 'POST',
     path: '/v1/orchestration/plans',
     token,
-    tenantId: env.tenantId,
+    tenantId: env.authTenantId,
     body: {
       workflow: 'brand_pipeline',
       subjectId: `maestro-smoke-${suffix}`,
@@ -181,7 +204,7 @@ async function main(): Promise<void> {
     method: 'GET',
     path: `/v1/orchestration/executions/${executionId}/replay-bundle`,
     token,
-    tenantId: env.tenantId
+    tenantId: env.authTenantId
   });
 
   if (replayBundle.status !== 200) {
@@ -198,7 +221,7 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    `[agent-os:execution:smoke] OK mode=${smokeMode} base=${baseUrl} tenant=${env.tenantId} executionId=${executionId}`
+    `[agent-os:execution:smoke] OK mode=${smokeMode} base=${baseUrl} tenant=${env.authTenantId} executionId=${executionId}`
   );
 }
 
