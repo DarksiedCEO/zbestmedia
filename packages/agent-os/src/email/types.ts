@@ -123,12 +123,22 @@ export type EmailIncidentIntegrationRequest = {
   metadata?: Record<string, unknown>;
 };
 
+export type EmailThreadClassification = {
+  intentCategory: EmailIntentCategory;
+  priority: EmailPriority;
+  riskLevel: EmailRiskLevel;
+  approvalRequirement: EmailApprovalRequirement;
+  escalationRequired: boolean;
+  rationale: string[];
+};
+
 export type EmailProcessingResult = {
   status: "drafted" | "escalated" | "suppressed" | "failed";
   threadId: string;
   intentCategory: EmailIntentCategory;
   priority: EmailPriority;
   riskLevel: EmailRiskLevel;
+  classification: EmailThreadClassification;
   routing: EmailRoutingResolution;
   draft: EmailDraftSuggestion | null;
   assignmentIntegration: EmailAssignmentIntegrationRequest | null;
