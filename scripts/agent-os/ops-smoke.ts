@@ -1,5 +1,6 @@
 import { SignJWT } from 'jose';
 
+import { assertWorkerSloReleaseStatus } from './ops-gate';
 import { resolveAgentOsEnv } from './load-env';
 
 type SmokeMode = 'local' | 'deployed';
@@ -142,6 +143,7 @@ async function main(): Promise<void> {
   for (const field of ['totalWorkers', 'healthyWorkers', 'staleWorkers', 'freshnessCoverage', 'status']) {
     if (!(field in sloJson)) fail(`worker-slo: missing field '${field}'`);
   }
+  const workerSloStatus = assertWorkerSloReleaseStatus(sloJson.status);
 
   const diagnostics = await requestJson({
     baseUrl,
@@ -204,7 +206,7 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    `[agent-os:ops:smoke] OK mode=${smokeMode} base=${baseUrl} tenant=${env.authTenantId} workerSloStatus=${String(sloJson.status)}`
+    `[agent-os:ops:smoke] OK mode=${smokeMode} base=${baseUrl} tenant=${env.authTenantId} workerSloStatus=${workerSloStatus}`
   );
 }
 
