@@ -1,6 +1,7 @@
 import type { AgentId } from "../agents/registry.js";
 import type { ApprovalWorkflowService } from "../approvals/service.js";
 import { AgentExecutionLedgerService, buildAssignmentRequestMetadata } from "./ledger.js";
+import { AgentIncidentService } from "../incidents/service.js";
 import type { AgentOsRepository } from "../persistence/repository.js";
 import type { ExecutionRecord } from "../persistence/contracts.js";
 import { AgentOrgPolicyService } from "../org/policy.js";
@@ -31,7 +32,8 @@ export class AgentExecutionService {
     private readonly promptExecutor: AgentPromptExecutor = new DeterministicAgentPromptExecutor(),
     private readonly orgPolicy: AgentOrgPolicyService = new AgentOrgPolicyService(),
     private readonly orgRouting: AgentOrgRoutingService = new AgentOrgRoutingService(),
-    private readonly ledger: AgentExecutionLedgerService = new AgentExecutionLedgerService(repository)
+    private readonly ledger: AgentExecutionLedgerService = new AgentExecutionLedgerService(repository),
+    private readonly incidents: AgentIncidentService = new AgentIncidentService(repository)
   ) {}
 
   async execute(args: AgentExecutionInput): Promise<
@@ -105,6 +107,24 @@ export class AgentExecutionService {
         metadata: { requestedAgentId: args.agentId },
         transitionedAt: createdAt
       });
+      await this.incidents.createFromExecutionFailure({
+        tenantId: args.tenantId,
+        actorId: args.actorId,
+        failure: {
+          incidentType: "execution_policy_failure",
+          sourceSystem: "agent-execution-service",
+          message: policyDecisionReason,
+          details: {
+            requestedAgentId: args.agentId,
+            subjectType: args.subjectType,
+            subjectId: args.subjectId
+          },
+          relatedAssignmentRecordId: assignment.assignmentRecordId,
+          relatedRunRecordId: run.runRecordId,
+          releaseBlocking: true
+        },
+        createdAt
+      });
       throw error;
     }
 
@@ -165,6 +185,24 @@ export class AgentExecutionService {
         failureMessage,
         retryable: false,
         transitionedAt: createdAt
+      });
+      await this.incidents.createFromExecutionFailure({
+        tenantId: args.tenantId,
+        actorId: args.actorId,
+        failure: {
+          incidentType: "execution_runtime_failure",
+          sourceSystem: "agent-execution-service",
+          message: failureMessage,
+          details: {
+            stage: "approval_resolution",
+            agentId: args.agentId,
+            subjectType: args.subjectType
+          },
+          relatedAssignmentRecordId: assignment.assignmentRecordId,
+          relatedRunRecordId: run.runRecordId,
+          releaseBlocking: false
+        },
+        createdAt
       });
       throw error;
     }
@@ -375,6 +413,24 @@ export class AgentExecutionService {
         failureMessage,
         retryable: false,
         transitionedAt: createdAt
+      });
+      await this.incidents.createFromExecutionFailure({
+        tenantId: args.tenantId,
+        actorId: args.actorId,
+        failure: {
+          incidentType: "execution_runtime_failure",
+          sourceSystem: "agent-execution-service",
+          message: failureMessage,
+          details: {
+            agentId: args.agentId,
+            subjectType: args.subjectType,
+            subjectId: args.subjectId
+          },
+          relatedAssignmentRecordId: assignment.assignmentRecordId,
+          relatedRunRecordId: run.runRecordId,
+          releaseBlocking: false
+        },
+        createdAt
       });
       throw error;
     }

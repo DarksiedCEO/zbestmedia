@@ -3,6 +3,7 @@ import rateLimit from "@fastify/rate-limit";
 import {
   AgentExecutionService,
   AgentExecutionLedgerService,
+  AgentIncidentService,
   ensureOrgSystemIntegrity,
   AgentOrgRoutingService,
   AgentOrgService,
@@ -73,13 +74,15 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const agentOrgRoutingService = new AgentOrgRoutingService(agentOrgService);
   const approvalWorkflow = new ApprovalWorkflowService(agentRepository);
   const ledgerService = new AgentExecutionLedgerService(agentRepository, agentOrgService);
+  const incidentService = new AgentIncidentService(agentRepository, agentOrgService);
   const agentExecutionService = new AgentExecutionService(
     agentRepository,
     approvalWorkflow,
     createAgentPromptExecutorFromEnv(process.cwd()),
     undefined,
     undefined,
-    ledgerService
+    ledgerService,
+    incidentService
   );
   const memoryService = new MemoryPartitionService(agentRepository);
   const evalRunner = new EvalRunnerService(agentRepository);
@@ -122,6 +125,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       orgService: agentOrgService,
       orgRoutingService: agentOrgRoutingService,
       executionService: agentExecutionService,
+      incidentService,
       ledgerService,
       memoryService,
       evalRunner,

@@ -3,6 +3,7 @@ import { AGENT_EVAL_PROFILES } from "../evals/specs.js";
 import { evaluateObservations, type EvalObservation } from "../evals/runner.js";
 import { AgentExecutionLedgerService } from "../execution/ledger.js";
 import { buildDeterministicExecutionOutput } from "../execution/promptExecutor.js";
+import { AgentIncidentService } from "../incidents/service.js";
 import type { EvalRunRecord, ExecutionRecord } from "../persistence/contracts.js";
 import type { AgentOsRepository } from "../persistence/repository.js";
 
@@ -17,7 +18,8 @@ function buildDefaultEvalObservations(agentId: AgentId): EvalObservation[] {
 export class AgentRuntimeService {
   constructor(
     private readonly repository: AgentOsRepository,
-    private readonly ledger: AgentExecutionLedgerService = new AgentExecutionLedgerService(repository)
+    private readonly ledger: AgentExecutionLedgerService = new AgentExecutionLedgerService(repository),
+    private readonly incidents: AgentIncidentService = new AgentIncidentService(repository)
   ) {}
 
   async processExecutionJobs(args: {
@@ -98,6 +100,23 @@ export class AgentRuntimeService {
               retryable: false,
               transitionedAt: now
             });
+            await this.incidents.createFromExecutionFailure({
+              tenantId: args.tenantId,
+              actorId: "agent-os-runtime",
+              failure: {
+                incidentType: "execution_runtime_failure",
+                sourceSystem: "agent-runtime-service",
+                message: failureMessage,
+                details: {
+                  executionId: execution.executionId,
+                  deadLettered: true,
+                  failureClass: forcedFailureClass
+                },
+                relatedRunRecordId: activeRun.runRecordId,
+                releaseBlocking: false
+              },
+              createdAt: now
+            });
           }
         } else {
           const nextRetryAt = new Date(new Date(now).getTime() + retryDelayMs).toISOString();
@@ -131,6 +150,24 @@ export class AgentRuntimeService {
               retryable: true,
               metadata: { nextRetryAt },
               transitionedAt: now
+            });
+            await this.incidents.createFromExecutionFailure({
+              tenantId: args.tenantId,
+              actorId: "agent-os-runtime",
+              failure: {
+                incidentType: "execution_runtime_failure",
+                sourceSystem: "agent-runtime-service",
+                message: failureMessage,
+                details: {
+                  executionId: execution.executionId,
+                  deadLettered: false,
+                  failureClass: forcedFailureClass,
+                  nextRetryAt
+                },
+                relatedRunRecordId: activeRun.runRecordId,
+                releaseBlocking: false
+              },
+              createdAt: now
             });
           }
         }

@@ -1,6 +1,7 @@
 import { SignJWT } from 'jose';
 
 import { buildCodeSentinelSignal } from '../../packages/agent-os/src/org/code-sentinel.js';
+import { postOperationalIncidentBestEffort } from './incident-client';
 import { assertWorkerSloReleaseStatus } from './ops-gate';
 import { resolveAgentOsEnv } from './load-env';
 
@@ -11,18 +12,29 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-function failOpsSignal(args: {
+async function failOpsSignal(args: {
   signalType: 'runtime_health' | 'route_contract';
   source: string;
   message: string;
   metadata?: Record<string, unknown>;
-}): never {
+}): Promise<never> {
   const signal = buildCodeSentinelSignal({
     signalType: args.signalType,
     status: 'critical',
     source: args.source,
     message: args.message,
     metadata: args.metadata
+  });
+  await postOperationalIncidentBestEffort({
+    mode: mode(),
+    actorId: 'agent-os-ops-smoke',
+    signal: {
+      signalType: signal.signalType,
+      status: signal.status,
+      sourceSystem: signal.source,
+      message: signal.message,
+      details: signal.metadata
+    }
   });
   fail(`${args.message} [owner=${signal.owningSubAgentId}]`);
 }
@@ -138,7 +150,7 @@ async function main(): Promise<void> {
     tenantId: env.authTenantId
   });
   if (runbook.status !== 200) {
-    failOpsSignal({
+    await failOpsSignal({
       signalType: 'route_contract',
       source: 'scripts/agent-os/ops-smoke.ts',
       message: `runbook expected 200, got ${runbook.status}`,
@@ -159,7 +171,7 @@ async function main(): Promise<void> {
     tenantId: env.authTenantId
   });
   if (slo.status !== 200) {
-    failOpsSignal({
+    await failOpsSignal({
       signalType: 'runtime_health',
       source: 'scripts/agent-os/ops-smoke.ts',
       message: `worker SLO expected 200, got ${slo.status}`,
@@ -180,7 +192,7 @@ async function main(): Promise<void> {
     tenantId: env.authTenantId
   });
   if (diagnostics.status !== 200) {
-    failOpsSignal({
+    await failOpsSignal({
       signalType: 'route_contract',
       source: 'scripts/agent-os/ops-smoke.ts',
       message: `diagnostics expected 200, got ${diagnostics.status}`,
@@ -200,7 +212,7 @@ async function main(): Promise<void> {
     tenantId: env.authTenantId
   });
   if (inventory.status !== 200) {
-    failOpsSignal({
+    await failOpsSignal({
       signalType: 'route_contract',
       source: 'scripts/agent-os/ops-smoke.ts',
       message: `inventory expected 200, got ${inventory.status}`,
@@ -220,7 +232,7 @@ async function main(): Promise<void> {
     tenantId: env.authTenantId
   });
   if (alerts.status !== 200) {
-    failOpsSignal({
+    await failOpsSignal({
       signalType: 'route_contract',
       source: 'scripts/agent-os/ops-smoke.ts',
       message: `alerts expected 200, got ${alerts.status}`,
@@ -240,7 +252,7 @@ async function main(): Promise<void> {
     tenantId: env.authTenantId
   });
   if (freshnessExport.status !== 200) {
-    failOpsSignal({
+    await failOpsSignal({
       signalType: 'route_contract',
       source: 'scripts/agent-os/ops-smoke.ts',
       message: `freshness export expected 200, got ${freshnessExport.status}`,

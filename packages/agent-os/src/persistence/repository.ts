@@ -26,6 +26,10 @@ import type {
   ExecutionStepStatus,
   EvalRunRecord,
   EvalScoreRecord,
+  IncidentRecord,
+  IncidentSeverity,
+  IncidentStatus,
+  IncidentType,
   MemoryEntryRecord,
   OrchestrationOpsSnapshotExportRecord,
   OrchestrationAlertAckRecord,
@@ -166,6 +170,34 @@ type ExecutionRunRecordRow = {
   metadata: Record<string, unknown>;
   created_at: string | Date;
   updated_at: string | Date;
+};
+
+type IncidentRow = {
+  tenant_id: string;
+  incident_id: string;
+  incident_type: IncidentType;
+  severity: IncidentSeverity;
+  status: IncidentStatus;
+  owning_executive_id: IncidentRecord["owningExecutiveId"];
+  owning_department_id: IncidentRecord["owningDepartmentId"];
+  owning_lead_agent_id: IncidentRecord["owningLeadAgentId"];
+  owning_sub_agent_id: IncidentRecord["owningSubAgentId"];
+  source_system: string;
+  related_signal_type: string | null;
+  related_assignment_record_id: string | null;
+  related_run_record_id: string | null;
+  title: string;
+  summary: string;
+  details: Record<string, unknown>;
+  recommended_action: string;
+  release_blocking: boolean;
+  created_at: string | Date;
+  updated_at: string | Date;
+  acknowledged_at: string | Date | null;
+  acknowledged_by: string | null;
+  resolved_at: string | Date | null;
+  resolved_by: string | null;
+  resolution_note: string | null;
 };
 
 type EvalRunRow = {
@@ -390,6 +422,36 @@ function mapExecutionRunRecordRow(row: ExecutionRunRecordRow): ExecutionRunRecor
     metadata: row.metadata,
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at)
+  };
+}
+
+function mapIncidentRow(row: IncidentRow): IncidentRecord {
+  return {
+    tenantId: row.tenant_id,
+    incidentId: row.incident_id,
+    incidentType: row.incident_type,
+    severity: row.severity,
+    status: row.status,
+    owningExecutiveId: row.owning_executive_id,
+    owningDepartmentId: row.owning_department_id,
+    owningLeadAgentId: row.owning_lead_agent_id,
+    owningSubAgentId: row.owning_sub_agent_id,
+    sourceSystem: row.source_system,
+    relatedSignalType: row.related_signal_type,
+    relatedAssignmentRecordId: row.related_assignment_record_id,
+    relatedRunRecordId: row.related_run_record_id,
+    title: row.title,
+    summary: row.summary,
+    details: row.details,
+    recommendedAction: row.recommended_action,
+    releaseBlocking: row.release_blocking,
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at),
+    acknowledgedAt: row.acknowledged_at ? toIsoString(row.acknowledged_at) : null,
+    acknowledgedBy: row.acknowledged_by,
+    resolvedAt: row.resolved_at ? toIsoString(row.resolved_at) : null,
+    resolvedBy: row.resolved_by,
+    resolutionNote: row.resolution_note
   };
 }
 
@@ -1622,6 +1684,199 @@ export class AgentOsRepository {
     );
 
     return res.rows.map(mapExecutionRunRecordRow);
+  }
+
+  async createIncidentRecord(args: {
+    tenantId: string;
+    incidentType: IncidentType;
+    severity: IncidentSeverity;
+    status?: IncidentStatus;
+    owningExecutiveId: IncidentRecord["owningExecutiveId"];
+    owningDepartmentId: IncidentRecord["owningDepartmentId"];
+    owningLeadAgentId: IncidentRecord["owningLeadAgentId"];
+    owningSubAgentId: IncidentRecord["owningSubAgentId"];
+    sourceSystem: string;
+    relatedSignalType?: string | null;
+    relatedAssignmentRecordId?: string | null;
+    relatedRunRecordId?: string | null;
+    title: string;
+    summary: string;
+    details?: Record<string, unknown>;
+    recommendedAction: string;
+    releaseBlocking: boolean;
+    createdAt?: string;
+  }): Promise<IncidentRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const incidentId = buildScopedId("incident", [args.incidentType, createdAt]);
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<IncidentRow>(
+        `
+        INSERT INTO incidents (
+          tenant_id, incident_id, incident_type, severity, status,
+          owning_executive_id, owning_department_id, owning_lead_agent_id, owning_sub_agent_id,
+          source_system, related_signal_type, related_assignment_record_id, related_run_record_id,
+          title, summary, details, recommended_action, release_blocking,
+          created_at, updated_at, acknowledged_at, acknowledged_by, resolved_at, resolved_by, resolution_note
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9,
+          $10, $11, $12, $13,
+          $14, $15, $16::jsonb, $17, $18,
+          $19, $19, NULL, NULL, NULL, NULL, NULL
+        )
+        RETURNING tenant_id, incident_id, incident_type, severity, status,
+                  owning_executive_id, owning_department_id, owning_lead_agent_id, owning_sub_agent_id,
+                  source_system, related_signal_type, related_assignment_record_id, related_run_record_id,
+                  title, summary, details, recommended_action, release_blocking,
+                  created_at, updated_at, acknowledged_at, acknowledged_by, resolved_at, resolved_by, resolution_note
+        `,
+        [
+          args.tenantId,
+          incidentId,
+          args.incidentType,
+          args.severity,
+          args.status ?? "open",
+          args.owningExecutiveId,
+          args.owningDepartmentId,
+          args.owningLeadAgentId,
+          args.owningSubAgentId,
+          args.sourceSystem,
+          args.relatedSignalType ?? null,
+          args.relatedAssignmentRecordId ?? null,
+          args.relatedRunRecordId ?? null,
+          args.title,
+          args.summary,
+          JSON.stringify(args.details ?? {}),
+          args.recommendedAction,
+          args.releaseBlocking,
+          createdAt
+        ]
+      )
+    );
+
+    return mapIncidentRow(res.rows[0]!);
+  }
+
+  async listIncidentRecords(args: {
+    tenantId: string;
+    status?: IncidentStatus;
+    severity?: IncidentSeverity;
+    incidentType?: IncidentType;
+    limit?: number;
+  }): Promise<IncidentRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<IncidentRow>(
+        `
+        SELECT tenant_id, incident_id, incident_type, severity, status,
+               owning_executive_id, owning_department_id, owning_lead_agent_id, owning_sub_agent_id,
+               source_system, related_signal_type, related_assignment_record_id, related_run_record_id,
+               title, summary, details, recommended_action, release_blocking,
+               created_at, updated_at, acknowledged_at, acknowledged_by, resolved_at, resolved_by, resolution_note
+        FROM incidents
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR status = $2)
+          AND ($3::text IS NULL OR severity = $3)
+          AND ($4::text IS NULL OR incident_type = $4)
+        ORDER BY created_at DESC
+        LIMIT $5
+        `,
+        [args.tenantId, args.status ?? null, args.severity ?? null, args.incidentType ?? null, args.limit ?? 50]
+      )
+    );
+
+    return res.rows.map(mapIncidentRow);
+  }
+
+  async getIncidentRecord(args: {
+    tenantId: string;
+    incidentId: string;
+  }): Promise<IncidentRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<IncidentRow>(
+        `
+        SELECT tenant_id, incident_id, incident_type, severity, status,
+               owning_executive_id, owning_department_id, owning_lead_agent_id, owning_sub_agent_id,
+               source_system, related_signal_type, related_assignment_record_id, related_run_record_id,
+               title, summary, details, recommended_action, release_blocking,
+               created_at, updated_at, acknowledged_at, acknowledged_by, resolved_at, resolved_by, resolution_note
+        FROM incidents
+        WHERE tenant_id = $1 AND incident_id = $2
+        `,
+        [args.tenantId, args.incidentId]
+      )
+    );
+
+    return res.rows[0] ? mapIncidentRow(res.rows[0]) : null;
+  }
+
+  async acknowledgeIncidentRecord(args: {
+    tenantId: string;
+    incidentId: string;
+    acknowledgedBy: string;
+    acknowledgedAt?: string;
+  }): Promise<IncidentRecord> {
+    const acknowledgedAt = args.acknowledgedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<IncidentRow>(
+        `
+        UPDATE incidents
+        SET status = 'acknowledged',
+            acknowledged_at = $3,
+            acknowledged_by = $4,
+            updated_at = $3
+        WHERE tenant_id = $1
+          AND incident_id = $2
+          AND status <> 'resolved'
+        RETURNING tenant_id, incident_id, incident_type, severity, status,
+                  owning_executive_id, owning_department_id, owning_lead_agent_id, owning_sub_agent_id,
+                  source_system, related_signal_type, related_assignment_record_id, related_run_record_id,
+                  title, summary, details, recommended_action, release_blocking,
+                  created_at, updated_at, acknowledged_at, acknowledged_by, resolved_at, resolved_by, resolution_note
+        `,
+        [args.tenantId, args.incidentId, acknowledgedAt, args.acknowledgedBy]
+      )
+    );
+
+    if (!res.rows[0]) {
+      throw new Error("incident_not_found_or_resolved");
+    }
+
+    return mapIncidentRow(res.rows[0]);
+  }
+
+  async resolveIncidentRecord(args: {
+    tenantId: string;
+    incidentId: string;
+    resolvedBy: string;
+    resolutionNote: string;
+    resolvedAt?: string;
+  }): Promise<IncidentRecord> {
+    const resolvedAt = args.resolvedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<IncidentRow>(
+        `
+        UPDATE incidents
+        SET status = 'resolved',
+            resolved_at = $3,
+            resolved_by = $4,
+            resolution_note = $5,
+            updated_at = $3
+        WHERE tenant_id = $1 AND incident_id = $2
+        RETURNING tenant_id, incident_id, incident_type, severity, status,
+                  owning_executive_id, owning_department_id, owning_lead_agent_id, owning_sub_agent_id,
+                  source_system, related_signal_type, related_assignment_record_id, related_run_record_id,
+                  title, summary, details, recommended_action, release_blocking,
+                  created_at, updated_at, acknowledged_at, acknowledged_by, resolved_at, resolved_by, resolution_note
+        `,
+        [args.tenantId, args.incidentId, resolvedAt, args.resolvedBy, args.resolutionNote]
+      )
+    );
+
+    if (!res.rows[0]) {
+      throw new Error("incident_not_found");
+    }
+
+    return mapIncidentRow(res.rows[0]);
   }
 
   async appendExecutionStep(args: {

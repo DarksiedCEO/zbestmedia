@@ -4,6 +4,7 @@ import path from 'node:path';
 import { buildCodeSentinelSignal } from '../../packages/agent-os/src/org/code-sentinel.js';
 import { Client } from 'pg';
 
+import { postOperationalIncidentBestEffort } from './incident-client';
 import { loadAgentOsEnv, optionalEnvValue, firstDefined } from './load-env';
 
 const REQUIRED_MIGRATIONS = [
@@ -14,7 +15,9 @@ const REQUIRED_MIGRATIONS = [
   '20260311_0014_agent_os_alert_acks.sql',
   '20260311_0015_agent_os_alert_ack_reopen.sql',
   '20260311_0016_agent_os_ops_snapshot_exports.sql',
-  '20260311_0017_agent_os_ops_snapshot_types.sql'
+  '20260311_0017_agent_os_ops_snapshot_types.sql',
+  '20260312_0018_agent_os_assignment_ledger.sql',
+  '20260312_0019_agent_os_incidents.sql'
 ] as const;
 
 const REQUIRED_TABLES = [
@@ -33,7 +36,10 @@ const REQUIRED_TABLES = [
   'orchestration_bundle_exports',
   'orchestration_alert_acks',
   'worker_heartbeats',
-  'orchestration_ops_snapshot_exports'
+  'orchestration_ops_snapshot_exports',
+  'assignment_records',
+  'execution_run_records',
+  'incidents'
 ] as const;
 
 const REQUIRED_ALERT_ACK_COLUMNS = ['reopened_at', 'reopened_by', 'reopen_reason'] as const;
@@ -44,13 +50,24 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-function failMigrationIntegrity(message: string, metadata?: Record<string, unknown>): never {
+async function failMigrationIntegrity(message: string, metadata?: Record<string, unknown>): Promise<never> {
   const signal = buildCodeSentinelSignal({
     signalType: 'migration_integrity',
     status: 'critical',
     source: 'scripts/agent-os/verify-migrations.ts',
     message,
     metadata
+  });
+  await postOperationalIncidentBestEffort({
+    mode: "deployed",
+    actorId: 'agent-os-migration-verify',
+    signal: {
+      signalType: signal.signalType,
+      status: signal.status,
+      sourceSystem: signal.source,
+      message: signal.message,
+      details: signal.metadata
+    }
   });
   fail(`${message} [owner=${signal.owningSubAgentId}]`);
 }
@@ -67,7 +84,7 @@ async function verifyDatabase(databaseUrl: string): Promise<void> {
     const tables = new Set(tableRows.rows.map((row) => row.table_name));
     const missingTables = REQUIRED_TABLES.filter((table) => !tables.has(table));
     if (missingTables.length > 0) {
-      failMigrationIntegrity(`missing required tables: ${missingTables.join(', ')}`, { missingTables });
+      await failMigrationIntegrity(`missing required tables: ${missingTables.join(', ')}`, { missingTables });
     }
 
     const alertAckColumns = await client.query<{ column_name: string }>(`
@@ -78,7 +95,7 @@ async function verifyDatabase(databaseUrl: string): Promise<void> {
     const alertAckColumnSet = new Set(alertAckColumns.rows.map((row) => row.column_name));
     const missingAlertAckColumns = REQUIRED_ALERT_ACK_COLUMNS.filter((column) => !alertAckColumnSet.has(column));
     if (missingAlertAckColumns.length > 0) {
-      failMigrationIntegrity(
+      await failMigrationIntegrity(
         `missing required orchestration_alert_acks columns: ${missingAlertAckColumns.join(', ')}`,
         { table: 'orchestration_alert_acks', missingColumns: missingAlertAckColumns }
       );
@@ -92,7 +109,7 @@ async function verifyDatabase(databaseUrl: string): Promise<void> {
     const opsExportColumnSet = new Set(opsExportColumns.rows.map((row) => row.column_name));
     const missingOpsExportColumns = REQUIRED_OPS_EXPORT_COLUMNS.filter((column) => !opsExportColumnSet.has(column));
     if (missingOpsExportColumns.length > 0) {
-      failMigrationIntegrity(
+      await failMigrationIntegrity(
         `missing required orchestration_ops_snapshot_exports columns: ${missingOpsExportColumns.join(', ')}`,
         { table: 'orchestration_ops_snapshot_exports', missingColumns: missingOpsExportColumns }
       );
@@ -111,7 +128,7 @@ async function main(): Promise<void> {
   for (const file of REQUIRED_MIGRATIONS) {
     const abs = path.join(migrationDir, file);
     if (!fs.existsSync(abs)) {
-      failMigrationIntegrity(`missing migration file: ${path.relative(root, abs)}`, { migrationFile: file });
+      await failMigrationIntegrity(`missing migration file: ${path.relative(root, abs)}`, { migrationFile: file });
     }
   }
 
@@ -126,11 +143,11 @@ async function main(): Promise<void> {
 
   if (verifyDb) {
     if (!dbUrl) {
-      failMigrationIntegrity(
+      await failMigrationIntegrity(
         'AGENT_OS_VERIFY_DB=true requires one of: AGENT_OS_DATABASE_URL, ARTIFACTS_DATABASE_URL, DATABASE_URL, POSTGRES_URL, PGDATABASE_URL'
       );
     }
-    await verifyDatabase(dbUrl);
+    await verifyDatabase(dbUrl!);
     console.log('[agent-os:migrations] OK (files + database schema)');
     return;
   }

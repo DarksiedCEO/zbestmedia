@@ -3,6 +3,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { agentRoutes } from "../src/agents/routes";
 import {
+  IncidentDetailResponseSchema,
+  IncidentListResponseSchema,
   CodeSentinelSignalDetailResponseSchema,
   CodeSentinelSignalListResponseSchema,
   DepartmentDetailResponseSchema,
@@ -75,6 +77,145 @@ describe("agent routes", () => {
       runRecordId: "run:1",
       currentState: "succeeded",
       assignmentRecordId: "assignment:1"
+    }))
+  } as never;
+  const incidentService = {
+    listIncidents: vi.fn(async () => [
+      {
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        incidentId: "incident:1",
+        incidentType: "route_contract_failure",
+        severity: "critical",
+        status: "open",
+        owningExecutiveId: "cto",
+        owningDepartmentId: "technology-engineering",
+        owningLeadAgentId: "code-sentinel",
+        owningSubAgentId: "route-contract-watcher",
+        sourceSystem: "execution-smoke",
+        relatedSignalType: "route_contract",
+        relatedAssignmentRecordId: "assignment:1",
+        relatedRunRecordId: "run:1",
+        title: "Route contract failure",
+        summary: "Brandyn route failed.",
+        details: {},
+        recommendedAction: "Restore expected API behavior.",
+        releaseBlocking: true,
+        createdAt: "2026-03-12T00:00:00.000Z",
+        updatedAt: "2026-03-12T00:00:00.000Z",
+        acknowledgedAt: null,
+        acknowledgedBy: null,
+        resolvedAt: null,
+        resolvedBy: null,
+        resolutionNote: null
+      }
+    ]),
+    getIncident: vi.fn(async () => ({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      incidentId: "incident:1",
+      incidentType: "route_contract_failure",
+      severity: "critical",
+      status: "open",
+      owningExecutiveId: "cto",
+      owningDepartmentId: "technology-engineering",
+      owningLeadAgentId: "code-sentinel",
+      owningSubAgentId: "route-contract-watcher",
+      sourceSystem: "execution-smoke",
+      relatedSignalType: "route_contract",
+      relatedAssignmentRecordId: "assignment:1",
+      relatedRunRecordId: "run:1",
+      title: "Route contract failure",
+      summary: "Brandyn route failed.",
+      details: {},
+      recommendedAction: "Restore expected API behavior.",
+      releaseBlocking: true,
+      createdAt: "2026-03-12T00:00:00.000Z",
+      updatedAt: "2026-03-12T00:00:00.000Z",
+      acknowledgedAt: null,
+      acknowledgedBy: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      resolutionNote: null
+    })),
+    createFromOperationalSignal: vi.fn(async () => ({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      incidentId: "incident:created",
+      incidentType: "route_contract_failure",
+      severity: "critical",
+      status: "open",
+      owningExecutiveId: "cto",
+      owningDepartmentId: "technology-engineering",
+      owningLeadAgentId: "code-sentinel",
+      owningSubAgentId: "route-contract-watcher",
+      sourceSystem: "execution-smoke",
+      relatedSignalType: "route_contract",
+      relatedAssignmentRecordId: null,
+      relatedRunRecordId: null,
+      title: "Route contract failure",
+      summary: "Route contract broken.",
+      details: {},
+      recommendedAction: "Restore expected API behavior.",
+      releaseBlocking: true,
+      createdAt: "2026-03-12T00:00:00.000Z",
+      updatedAt: "2026-03-12T00:00:00.000Z",
+      acknowledgedAt: null,
+      acknowledgedBy: null,
+      resolvedAt: null,
+      resolvedBy: null,
+      resolutionNote: null
+    })),
+    acknowledgeIncident: vi.fn(async () => ({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      incidentId: "incident:1",
+      incidentType: "route_contract_failure",
+      severity: "critical",
+      status: "acknowledged",
+      owningExecutiveId: "cto",
+      owningDepartmentId: "technology-engineering",
+      owningLeadAgentId: "code-sentinel",
+      owningSubAgentId: "route-contract-watcher",
+      sourceSystem: "execution-smoke",
+      relatedSignalType: "route_contract",
+      relatedAssignmentRecordId: "assignment:1",
+      relatedRunRecordId: "run:1",
+      title: "Route contract failure",
+      summary: "Brandyn route failed.",
+      details: {},
+      recommendedAction: "Restore expected API behavior.",
+      releaseBlocking: true,
+      createdAt: "2026-03-12T00:00:00.000Z",
+      updatedAt: "2026-03-12T00:01:00.000Z",
+      acknowledgedAt: "2026-03-12T00:01:00.000Z",
+      acknowledgedBy: "actor-1",
+      resolvedAt: null,
+      resolvedBy: null,
+      resolutionNote: null
+    })),
+    resolveIncident: vi.fn(async () => ({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      incidentId: "incident:1",
+      incidentType: "route_contract_failure",
+      severity: "critical",
+      status: "resolved",
+      owningExecutiveId: "cto",
+      owningDepartmentId: "technology-engineering",
+      owningLeadAgentId: "code-sentinel",
+      owningSubAgentId: "route-contract-watcher",
+      sourceSystem: "execution-smoke",
+      relatedSignalType: "route_contract",
+      relatedAssignmentRecordId: "assignment:1",
+      relatedRunRecordId: "run:1",
+      title: "Route contract failure",
+      summary: "Brandyn route failed.",
+      details: {},
+      recommendedAction: "Restore expected API behavior.",
+      releaseBlocking: true,
+      createdAt: "2026-03-12T00:00:00.000Z",
+      updatedAt: "2026-03-12T00:02:00.000Z",
+      acknowledgedAt: "2026-03-12T00:01:00.000Z",
+      acknowledgedBy: "actor-1",
+      resolvedAt: "2026-03-12T00:02:00.000Z",
+      resolvedBy: "actor-1",
+      resolutionNote: "fixed"
     }))
   } as never;
   const memoryService = {
@@ -666,6 +807,7 @@ describe("agent routes", () => {
         orgService,
         orgRoutingService: orgRoutingService as never,
         executionService,
+        incidentService,
         ledgerService,
         memoryService,
         evalRunner,
@@ -811,6 +953,51 @@ describe("agent routes", () => {
     expect(runsRes.json().items[0].runRecordId).toBe("run:1");
     expect(runRes.statusCode).toBe(200);
     expect(runRes.json().runRecordId).toBe("run:1");
+  });
+
+  it("exposes incident records and incident actions", async () => {
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/incidents"
+    });
+    expect(listRes.statusCode).toBe(200);
+    expect(IncidentListResponseSchema.parse(listRes.json()).items).toHaveLength(1);
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/incidents/incident:1"
+    });
+    expect(detailRes.statusCode).toBe(200);
+    expect(IncidentDetailResponseSchema.parse(detailRes.json()).incident.incidentId).toBe("incident:1");
+
+    const ingestRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/incidents/signals",
+      payload: {
+        signalType: "route_contract",
+        status: "critical",
+        sourceSystem: "execution-smoke",
+        message: "Route contract broken."
+      }
+    });
+    expect(ingestRes.statusCode).toBe(201);
+    expect(IncidentDetailResponseSchema.parse(ingestRes.json()).incident.incidentId).toBe("incident:created");
+
+    const ackRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/incidents/incident:1/acknowledge",
+      payload: {}
+    });
+    expect(ackRes.statusCode).toBe(200);
+    expect(IncidentDetailResponseSchema.parse(ackRes.json()).incident.status).toBe("acknowledged");
+
+    const resolveRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/incidents/incident:1/resolve",
+      payload: { resolutionNote: "fixed" }
+    });
+    expect(resolveRes.statusCode).toBe(200);
+    expect(IncidentDetailResponseSchema.parse(resolveRes.json()).incident.status).toBe("resolved");
   });
 
   it("records eval runs and exposes memory reads", async () => {

@@ -82,7 +82,11 @@ describe("agent-os runtime controls", () => {
       getExecution: vi.fn(async () => null)
     } as never;
 
-    const service = new AgentRuntimeService(repository);
+    const service = new AgentRuntimeService(
+      repository,
+      undefined,
+      { createFromExecutionFailure: vi.fn(async () => ({ incidentId: "incident:1" })) } as never
+    );
     const first = await service.processExecutionJobs({
       tenantId: "11111111-1111-4111-8111-111111111111",
       limit: 1,
@@ -136,7 +140,11 @@ describe("agent-os runtime controls", () => {
       }))
     } as never;
 
-    const service = new AgentRuntimeService(repository);
+    const service = new AgentRuntimeService(
+      repository,
+      undefined,
+      { createFromExecutionFailure: vi.fn(async () => ({ incidentId: "incident:2" })) } as never
+    );
     await service.processExecutionJobs({
       tenantId: "11111111-1111-4111-8111-111111111111",
       agentId: "maestro",

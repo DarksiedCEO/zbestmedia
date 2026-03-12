@@ -5,6 +5,7 @@ import {
   AgentOsRepository,
   AgentExecutionService,
   AgentExecutionLedgerService,
+  AgentIncidentService,
   AgentMemoryAccessError,
   AgentRuntimeService,
   ApprovalEscalationService,
@@ -24,6 +25,10 @@ import {
   AgentIdParamSchema,
   AssignmentRecordIdParamSchema,
   AssignmentRecordListQuerySchema,
+  AgentIncidentAcknowledgeBodySchema,
+  AgentIncidentListQuerySchema,
+  AgentIncidentResolveBodySchema,
+  AgentIncidentSignalBodySchema,
   ApprovalDecisionBodySchema,
   ApprovalListQuerySchema,
   OrchestrationApprovalSlaQuerySchema,
@@ -48,6 +53,7 @@ import {
   ExecutionIdParamSchema,
   ExecutionRunIdParamSchema,
   ExecutionRunListQuerySchema,
+  IncidentIdParamSchema,
   ExecutiveIdParamSchema,
   ExecutionListQuerySchema,
   EvalRunBodySchema,
@@ -74,6 +80,7 @@ export function agentRoutes(opts: {
   orgService: AgentOrgService;
   orgRoutingService: AgentOrgRoutingService;
   executionService: AgentExecutionService;
+  incidentService: AgentIncidentService;
   ledgerService: AgentExecutionLedgerService;
   memoryService: MemoryPartitionService;
   evalRunner: EvalRunnerService;
@@ -142,6 +149,13 @@ export function agentRoutes(opts: {
       }
       if (error instanceof Error && error.message === "agent_not_found") {
         return reply.code(404).send({ error: "agent_not_found" });
+      }
+      throw error;
+    }
+
+    function handleIncidentError(reply: { code: (statusCode: number) => { send: (body: unknown) => unknown } }, error: unknown) {
+      if (error instanceof Error && (error.message === "incident_not_found" || error.message === "incident_not_found_or_resolved")) {
+        return reply.code(404).send({ error: error.message });
       }
       throw error;
     }
@@ -701,6 +715,111 @@ export function agentRoutes(opts: {
         return reply.code(404).send({ error: "execution_run_not_found" });
       }
       return reply.send(item);
+    });
+
+    app.get("/v1/agent-os/incidents", async (req, reply) => {
+      const query = AgentIncidentListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      return reply.send({
+        resourceType: "incident_list",
+        items: await opts.incidentService.listIncidents({
+          tenantId: req.auth.tenantId,
+          ...query.data
+        })
+      });
+    });
+
+    app.get("/v1/agent-os/incidents/:incidentId", async (req, reply) => {
+      const path = IncidentIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      const incident = await opts.incidentService.getIncident({
+        tenantId: req.auth.tenantId,
+        incidentId: path.data.incidentId
+      });
+      if (!incident) {
+        return reply.code(404).send({ error: "incident_not_found" });
+      }
+      return reply.send({
+        resourceType: "incident_detail",
+        incident
+      });
+    });
+
+    app.post("/v1/agent-os/incidents/signals", async (req, reply) => {
+      const body = AgentIncidentSignalBodySchema.safeParse(req.body);
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const incident = await opts.incidentService.createFromOperationalSignal({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        signal: body.data
+      });
+
+      return reply.code(201).send({
+        resourceType: "incident_detail",
+        incident
+      });
+    });
+
+    app.post("/v1/agent-os/incidents/:incidentId/acknowledge", async (req, reply) => {
+      const path = IncidentIdParamSchema.safeParse(req.params);
+      const body = AgentIncidentAcknowledgeBodySchema.safeParse(req.body ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      try {
+        const incident = await opts.incidentService.acknowledgeIncident({
+          tenantId: req.auth.tenantId,
+          incidentId: path.data.incidentId,
+          actorId: req.auth.actorId,
+          acknowledgedAt: body.data.acknowledgedAt
+        });
+        return reply.send({
+          resourceType: "incident_detail",
+          incident
+        });
+      } catch (error) {
+        return handleIncidentError(reply, error);
+      }
+    });
+
+    app.post("/v1/agent-os/incidents/:incidentId/resolve", async (req, reply) => {
+      const path = IncidentIdParamSchema.safeParse(req.params);
+      const body = AgentIncidentResolveBodySchema.safeParse(req.body);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      try {
+        const incident = await opts.incidentService.resolveIncident({
+          tenantId: req.auth.tenantId,
+          incidentId: path.data.incidentId,
+          actorId: req.auth.actorId,
+          resolutionNote: body.data.resolutionNote,
+          resolvedAt: body.data.resolvedAt
+        });
+        return reply.send({
+          resourceType: "incident_detail",
+          incident
+        });
+      } catch (error) {
+        return handleIncidentError(reply, error);
+      }
     });
 
     app.post("/v1/workflows/brand-pipeline/advance", async (req, reply) => {

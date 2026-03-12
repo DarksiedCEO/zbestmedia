@@ -1,6 +1,14 @@
 import { z } from "zod";
 
-import { AGENT_ORG_MANIFEST_VERSION, AgentLifecycleStatusSchema, AgentTaskDomainSchema } from "@zbest/agent-os";
+import {
+  AGENT_ORG_MANIFEST_VERSION,
+  AgentLifecycleStatusSchema,
+  AgentTaskDomainSchema,
+  IncidentRecordSchema,
+  IncidentSeveritySchema,
+  IncidentStatusSchema,
+  IncidentTypeSchema
+} from "@zbest/agent-os";
 
 const AgentIdSchema = z.enum(["brandyn", "jordyn", "kobe", "oracle", "titan", "maestro"]);
 const BrandPipelineStepSchema = z.enum([
@@ -501,6 +509,42 @@ export const RoutingResolveResponseSchema = z.object({
   })
 });
 
+export const AgentIncidentSignalBodySchema = z.object({
+  signalType: OperationalSignalTypeSchema,
+  status: z.enum(["healthy", "warning", "critical"]),
+  sourceSystem: z.string().min(1),
+  message: z.string().min(1),
+  details: z.record(z.string(), z.unknown()).optional(),
+  relatedAssignmentRecordId: z.string().min(1).optional().nullable(),
+  relatedRunRecordId: z.string().min(1).optional().nullable()
+});
+
+export const AgentIncidentListQuerySchema = z.object({
+  status: IncidentStatusSchema.optional(),
+  severity: IncidentSeveritySchema.optional(),
+  incidentType: IncidentTypeSchema.optional(),
+  limit: z.coerce.number().int().positive().max(100).default(25)
+});
+
+export const AgentIncidentAcknowledgeBodySchema = z.object({
+  acknowledgedAt: z.string().datetime().optional()
+});
+
+export const AgentIncidentResolveBodySchema = z.object({
+  resolutionNote: z.string().min(1),
+  resolvedAt: z.string().datetime().optional()
+});
+
+export const IncidentListResponseSchema = z.object({
+  resourceType: z.literal("incident_list"),
+  items: z.array(IncidentRecordSchema)
+});
+
+export const IncidentDetailResponseSchema = z.object({
+  resourceType: z.literal("incident_detail"),
+  incident: IncidentRecordSchema
+});
+
 export const ExecutiveIdParamSchema = z.object({
   executiveId: ExecutiveIdSchema
 });
@@ -519,4 +563,8 @@ export const ResponsibilityKeyParamSchema = z.object({
 
 export const OperationalSignalParamSchema = z.object({
   signalType: OperationalSignalTypeSchema
+});
+
+export const IncidentIdParamSchema = z.object({
+  incidentId: z.string().min(1)
 });

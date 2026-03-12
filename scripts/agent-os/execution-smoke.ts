@@ -1,6 +1,7 @@
 import { SignJWT } from 'jose';
 
 import { buildCodeSentinelSignal } from '../../packages/agent-os/src/org/code-sentinel.js';
+import { postOperationalIncidentBestEffort } from './incident-client';
 import { resolveAgentOsEnv } from './load-env';
 
 type SmokeMode = 'local' | 'deployed';
@@ -10,13 +11,24 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-function failRouteContract(args: { source: string; message: string; metadata?: Record<string, unknown> }): never {
+async function failRouteContract(args: { source: string; message: string; metadata?: Record<string, unknown> }): Promise<never> {
   const signal = buildCodeSentinelSignal({
     signalType: 'route_contract',
     status: 'critical',
     source: args.source,
     message: args.message,
     metadata: args.metadata
+  });
+  await postOperationalIncidentBestEffort({
+    mode: mode(),
+    actorId: 'agent-os-execution-smoke',
+    signal: {
+      signalType: signal.signalType,
+      status: signal.status,
+      sourceSystem: signal.source,
+      message: signal.message,
+      details: signal.metadata
+    }
   });
   fail(`${args.message} [owner=${signal.owningSubAgentId}]`);
 }
@@ -145,7 +157,7 @@ async function main(): Promise<void> {
     }
   });
   if (foundation.status !== 201) {
-    failRouteContract({
+    await failRouteContract({
       source: 'scripts/agent-os/execution-smoke.ts',
       message: `foundation provision expected 201, got ${foundation.status}`,
       metadata: { path: '/v1/agents/provision-foundation', status: foundation.status }
@@ -171,7 +183,7 @@ async function main(): Promise<void> {
   });
 
   if (brandyn.status !== 200) {
-    failRouteContract({
+    await failRouteContract({
       source: 'scripts/agent-os/execution-smoke.ts',
       message: `brandyn execute expected 200, got ${brandyn.status}`,
       metadata: { path: '/v1/agents/brandyn/execute', status: brandyn.status }
@@ -204,7 +216,7 @@ async function main(): Promise<void> {
   });
 
   if (maestro.status !== 201) {
-    failRouteContract({
+    await failRouteContract({
       source: 'scripts/agent-os/execution-smoke.ts',
       message: `maestro plan expected 201, got ${maestro.status}`,
       metadata: { path: '/v1/orchestration/plans', status: maestro.status }
@@ -232,7 +244,7 @@ async function main(): Promise<void> {
   });
 
   if (replayBundle.status !== 200) {
-    failRouteContract({
+    await failRouteContract({
       source: 'scripts/agent-os/execution-smoke.ts',
       message: `replay bundle expected 200, got ${replayBundle.status}`,
       metadata: { path: `/v1/orchestration/executions/${executionId}/replay-bundle`, status: replayBundle.status }

@@ -179,7 +179,10 @@ describe("agent-os execution and workflow services", () => {
       promptExecutor,
       undefined,
       undefined,
-      createLedgerStub()
+      createLedgerStub(),
+      {
+        createFromExecutionFailure: vi.fn(async () => ({ incidentId: "incident:1" }))
+      } as never
     );
     const result = await service.execute({
       tenantId: "11111111-1111-4111-8111-111111111111",
@@ -213,7 +216,10 @@ describe("agent-os execution and workflow services", () => {
       promptExecutor,
       undefined,
       undefined,
-      createLedgerStub()
+      createLedgerStub(),
+      {
+        createFromExecutionFailure: vi.fn(async () => ({ incidentId: "incident:routing" }))
+      } as never
     );
 
     await expect(
