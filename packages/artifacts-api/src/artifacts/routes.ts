@@ -11,16 +11,53 @@ import {
   incTenantBudgetViolations
 } from "../metrics/counters";
 import { PolicyFirewall } from "../policy/firewall";
+import type { ArtifactGenerationOrchestrator } from "./generationOrchestrator";
+import { mapArtifactRecordToDetail, mapArtifactRecordToSummary } from "./retrieval";
+import { buildArtifactReplayEvalSnapshot } from "./replay";
 import { ArtifactService } from "./service";
-import { ArtifactIdParamSchema, CreateArtifactBodySchema, SupersedeArtifactBodySchema } from "./schemas";
+import {
+  ArtifactIdParamSchema,
+  CreateArtifactBodySchema,
+  GenerateArtifactBodySchema,
+  ListArtifactsQuerySchema,
+  SupersedeArtifactBodySchema
+} from "./schemas";
 
 export function artifactRoutes(opts: {
   service: ArtifactService;
+  generation: ArtifactGenerationOrchestrator;
   writeBudget: TenantWriteBudget;
   policyFirewall: PolicyFirewall;
   maxProvenanceDepth: number;
 }): FastifyPluginAsync {
   return async (app) => {
+    app.post("/v1/artifacts/generate", async (req, reply) => {
+      const parsed = GenerateArtifactBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: "invalid_body", details: parsed.error.flatten() });
+      }
+
+      const response = await opts.generation.generateArtifact({
+        request: {
+          artifactType: parsed.data.artifactType,
+          templateKey: parsed.data.templateKey,
+          workflowKey: parsed.data.workflowKey,
+          input: parsed.data.input,
+          tenantId: req.auth.tenantId,
+          requestedBy: req.auth.actorId,
+          correlationId: req.requestId,
+          idempotencyKey: parsed.data.idempotencyKey,
+          generationMode: parsed.data.generationMode,
+          providerOverrides: parsed.data.providerOverrides,
+          requestSource: "artifacts-api"
+        },
+        logger: req.log
+      });
+
+      const code = response.status === "FAILED" ? 502 : 201;
+      return reply.code(code).send(response);
+    });
+
     app.post("/v1/artifacts", async (req, reply) => {
       const parsed = CreateArtifactBodySchema.safeParse(req.body);
       if (!parsed.success) {
@@ -95,6 +132,45 @@ export function artifactRoutes(opts: {
       return reply.code(201).send(out);
     });
 
+    app.get("/v1/artifacts", async (req, reply) => {
+      const query = ListArtifactsQuerySchema.safeParse(req.query);
+      if (!query.success) {
+        return reply.code(400).send({
+          error: "invalid_query",
+          details: query.error.flatten()
+        });
+      }
+
+      const rows = await opts.service.listArtifacts({
+        tenantId: req.auth.tenantId,
+        status: query.data.status,
+        artifactType: query.data.artifactType,
+        createdAfter: query.data.createdAfter,
+        createdBefore: query.data.createdBefore,
+        limit: query.data.limit,
+        offset: query.data.offset
+      });
+      const items = rows.map(mapArtifactRecordToSummary);
+
+      req.log.info({
+        event: "artifact_retrieval_list",
+        requestId: req.requestId,
+        tenantId: req.auth.tenantId,
+        status: query.data.status ?? null,
+        artifactType: query.data.artifactType ?? null,
+        resultCount: items.length
+      });
+
+      return reply.send({
+        items,
+        pagination: {
+          limit: query.data.limit,
+          offset: query.data.offset,
+          count: items.length
+        }
+      });
+    });
+
     app.get("/v1/artifacts/:id", async (req, reply) => {
       const path = ArtifactIdParamSchema.safeParse(req.params);
       if (!path.success) {
@@ -123,8 +199,16 @@ export function artifactRoutes(opts: {
         });
         return reply.code(500).send({ error: "artifact_integrity_failure" });
       }
-
-      return reply.send(artifact);
+      const detail = mapArtifactRecordToDetail(artifact);
+      req.log.info({
+        event: "artifact_retrieval_by_id",
+        requestId: req.requestId,
+        tenantId: req.auth.tenantId,
+        artifactId: artifact.artifactId,
+        status: detail.status,
+        artifactType: detail.artifactType
+      });
+      return reply.send(detail);
     });
 
     app.get("/v1/artifacts/:id/replay", async (req, reply) => {
@@ -165,6 +249,68 @@ export function artifactRoutes(opts: {
         recomputedArtifactId,
         matches
       });
+    });
+
+    app.get("/v1/artifacts/:id/replay-freeze", async (req, reply) => {
+      const path = ArtifactIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({
+          error: "invalid_path",
+          details: path.error.flatten()
+        });
+      }
+
+      const freeze = await opts.service.getReplayFreeze({
+        tenantId: req.auth.tenantId,
+        artifactId: path.data.id
+      });
+      if (!freeze) {
+        return reply.code(404).send({ error: "not_found" });
+      }
+
+      const driftDetected = !(freeze.requestHash.matches && freeze.inputHash.matches && freeze.outputHash.matches);
+      if (driftDetected) {
+        req.log.warn({
+          event: "artifact_replay_drift_detected",
+          requestId: req.requestId,
+          tenantId: req.auth.tenantId,
+          artifactId: freeze.artifactId,
+          requestHashMatches: freeze.requestHash.matches,
+          inputHashMatches: freeze.inputHash.matches,
+          outputHashMatches: freeze.outputHash.matches
+        });
+      }
+
+      return reply.send({
+        artifactId: freeze.artifactId,
+        status: freeze.status,
+        driftDetected,
+        requestHash: freeze.requestHash,
+        inputHash: freeze.inputHash,
+        outputHash: freeze.outputHash,
+        freezeHash: freeze.freezeHash,
+        freezeBundle: freeze.freezeBundle
+      });
+    });
+
+    app.get("/v1/artifacts/:id/replay-eval", async (req, reply) => {
+      const path = ArtifactIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({
+          error: "invalid_path",
+          details: path.error.flatten()
+        });
+      }
+
+      const artifact = await opts.service.getById({
+        tenantId: req.auth.tenantId,
+        artifactId: path.data.id
+      });
+      if (!artifact) {
+        return reply.code(404).send({ error: "not_found" });
+      }
+
+      return reply.send(buildArtifactReplayEvalSnapshot(artifact));
     });
 
     app.get("/v1/artifacts/:id/provenance", async (req, reply) => {
