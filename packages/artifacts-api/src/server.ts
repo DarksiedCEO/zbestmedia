@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import {
+  AgentAdminService,
   AgentExecutionService,
   AgentExecutionLedgerService,
   AgentIncidentService,
@@ -77,6 +78,13 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const ledgerService = new AgentExecutionLedgerService(agentRepository, agentOrgService);
   const incidentService = new AgentIncidentService(agentRepository, agentOrgService);
   const telemetryService = new AgentTelemetryService(ledgerService, incidentService, agentOrgService);
+  const adminService = new AgentAdminService(
+    agentOrgService,
+    agentOrgRoutingService,
+    ledgerService,
+    incidentService,
+    telemetryService
+  );
   const agentExecutionService = new AgentExecutionService(
     agentRepository,
     approvalWorkflow,
@@ -129,6 +137,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       executionService: agentExecutionService,
       incidentService,
       telemetryService,
+      adminService,
       ledgerService,
       memoryService,
       evalRunner,

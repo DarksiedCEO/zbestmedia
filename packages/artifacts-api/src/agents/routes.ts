@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import {
+  AgentAdminService,
   AgentLifecycleStateError,
   AgentOsRepository,
   AgentExecutionService,
@@ -64,6 +65,16 @@ import {
   RoutingResolveBodySchema,
   AgentVersionCreateBodySchema,
   AgentVersionPromoteBodySchema,
+  AdminIntegrityResponseSchema,
+  AdminRoutingCategoriesResponseSchema,
+  AdminRoutingPreviewResponseSchema,
+  AdminSummaryResponseSchema,
+  AdminExecutionRecordListResponseSchema,
+  AdminExecutionRecordDetailResponseSchema,
+  AdminExecutionRunListResponseSchema,
+  AdminExecutionRunDetailResponseSchema,
+  AdminIncidentListResponseSchema,
+  AdminIncidentDetailResponseSchema,
   ResponsibilityKeyParamSchema,
   LifecycleTransitionBodySchema,
   ListAgentsQuerySchema,
@@ -83,6 +94,7 @@ export function agentRoutes(opts: {
   executionService: AgentExecutionService;
   incidentService: AgentIncidentService;
   telemetryService: AgentTelemetryService;
+  adminService: AgentAdminService;
   ledgerService: AgentExecutionLedgerService;
   memoryService: MemoryPartitionService;
   evalRunner: EvalRunnerService;
@@ -869,6 +881,164 @@ export function agentRoutes(opts: {
         manifestVersion: summary.manifestVersion,
         resourceType: "ops_code_sentinel_summary",
         summary
+      });
+    });
+
+    app.get("/v1/agent-os/admin/summary", async (req, reply) => {
+      const summary = await opts.adminService.getControlPlaneSummary({
+        tenantId: req.auth.tenantId
+      });
+      return reply.send({
+        manifestVersion: summary.manifestVersion,
+        resourceType: "admin_summary",
+        summary
+      });
+    });
+
+    app.get("/v1/agent-os/admin/integrity", async (_req, reply) => {
+      const integrity = opts.adminService.getIntegrityStatus();
+      return reply.send({
+        manifestVersion: integrity.manifestVersion,
+        resourceType: "admin_integrity",
+        integrity
+      });
+    });
+
+    app.get("/v1/agent-os/admin/routing/categories", async (_req, reply) => {
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "admin_routing_categories",
+        items: opts.adminService.getSupportedRoutingCategories()
+      });
+    });
+
+    app.post("/v1/agent-os/admin/routing/preview", async (req, reply) => {
+      const body = RoutingResolveBodySchema.safeParse(req.body);
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      try {
+        const decision = opts.adminService.previewRoutingDecision(body.data);
+        return reply.send({
+          manifestVersion: orgManifestVersion,
+          resourceType: "admin_routing_preview",
+          decision
+        });
+      } catch (error) {
+        return handleAgentError(reply, error);
+      }
+    });
+
+    app.get("/v1/agent-os/admin/execution/records", async (req, reply) => {
+      const query = AssignmentRecordListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.adminService.listExecutionRecords({
+        tenantId: req.auth.tenantId,
+        limit: query.data.limit
+      });
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "admin_execution_record_list",
+        ...result
+      });
+    });
+
+    app.get("/v1/agent-os/admin/execution/records/:recordId", async (req, reply) => {
+      const path = AssignmentRecordIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      const item = await opts.adminService.getExecutionRecord({
+        tenantId: req.auth.tenantId,
+        assignmentRecordId: path.data.recordId
+      });
+      if (!item) {
+        return reply.code(404).send({ error: "assignment_record_not_found" });
+      }
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "admin_execution_record_detail",
+        item
+      });
+    });
+
+    app.get("/v1/agent-os/admin/execution/runs", async (req, reply) => {
+      const query = ExecutionRunListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.adminService.listExecutionRuns({
+        tenantId: req.auth.tenantId,
+        currentState: query.data.currentState,
+        limit: query.data.limit
+      });
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "admin_execution_run_list",
+        ...result
+      });
+    });
+
+    app.get("/v1/agent-os/admin/execution/runs/:runId", async (req, reply) => {
+      const path = ExecutionRunIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      const item = await opts.adminService.getExecutionRun({
+        tenantId: req.auth.tenantId,
+        runRecordId: path.data.runId
+      });
+      if (!item) {
+        return reply.code(404).send({ error: "execution_run_not_found" });
+      }
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "admin_execution_run_detail",
+        item
+      });
+    });
+
+    app.get("/v1/agent-os/admin/incidents", async (req, reply) => {
+      const query = AgentIncidentListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.adminService.listIncidents({
+        tenantId: req.auth.tenantId,
+        ...query.data
+      });
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "admin_incident_list",
+        ...result
+      });
+    });
+
+    app.get("/v1/agent-os/admin/incidents/:incidentId", async (req, reply) => {
+      const path = IncidentIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      const item = await opts.adminService.getIncident({
+        tenantId: req.auth.tenantId,
+        incidentId: path.data.incidentId
+      });
+      if (!item) {
+        return reply.code(404).send({ error: "incident_not_found" });
+      }
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "admin_incident_detail",
+        item
       });
     });
 

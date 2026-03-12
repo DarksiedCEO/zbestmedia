@@ -4,10 +4,13 @@ import {
   AGENT_ORG_MANIFEST_VERSION,
   AgentLifecycleStatusSchema,
   AgentTaskDomainSchema,
+  AssignmentRecordSchema,
   IncidentRecordSchema,
   IncidentSeveritySchema,
   IncidentStatusSchema,
-  IncidentTypeSchema
+  IncidentTypeSchema,
+  ExecutionRunRecordSchema,
+  RoutingDecisionSchema
 } from "@zbest/agent-os";
 
 const AgentIdSchema = z.enum(["brandyn", "jordyn", "kobe", "oracle", "titan", "maestro"]);
@@ -646,6 +649,89 @@ export const OpsStatusSummaryResponseSchema = z.object({
     incidents: OpsIncidentSummaryResponseSchema.shape.summary,
     executions: OpsExecutionSummaryResponseSchema.shape.summary,
     codeSentinel: OpsCodeSentinelSummaryResponseSchema.shape.summary,
+    degradedSurfaces: z.array(TelemetrySurfaceSchema)
+  })
+});
+
+export const AdminIntegrityResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("admin_integrity"),
+  integrity: z.object({
+    manifestVersion: ManifestVersionSchema,
+    valid: z.boolean(),
+    validatedAt: z.string().datetime(),
+    error: z.string().nullable()
+  })
+});
+
+export const AdminRoutingCategoriesResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("admin_routing_categories"),
+  items: z.array(
+    z.object({
+      category: RoutingTaskCategorySchema,
+      responsibilityKey: ResponsibilityKeySchema.nullable(),
+      operationalSignalType: OperationalSignalTypeSchema.nullable(),
+      requiresDisambiguation: z.boolean(),
+      supported: z.boolean(),
+      supportedJingleModes: z.array(JingleRoutingModeSchema).optional()
+    })
+  )
+});
+
+export const AdminRoutingPreviewResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("admin_routing_preview"),
+  decision: RoutingDecisionSchema
+});
+
+export const AdminExecutionRecordListResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("admin_execution_record_list"),
+  items: z.array(AssignmentRecordSchema)
+});
+
+export const AdminExecutionRecordDetailResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("admin_execution_record_detail"),
+  item: AssignmentRecordSchema
+});
+
+export const AdminExecutionRunListResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("admin_execution_run_list"),
+  items: z.array(ExecutionRunRecordSchema)
+});
+
+export const AdminExecutionRunDetailResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("admin_execution_run_detail"),
+  item: ExecutionRunRecordSchema
+});
+
+export const AdminIncidentListResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("admin_incident_list"),
+  items: z.array(IncidentRecordSchema)
+});
+
+export const AdminIncidentDetailResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("admin_incident_detail"),
+  item: IncidentRecordSchema
+});
+
+export const AdminSummaryResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("admin_summary"),
+  summary: z.object({
+    manifestVersion: ManifestVersionSchema,
+    generatedAt: z.string().datetime(),
+    integrity: AdminIntegrityResponseSchema.shape.integrity,
+    ops: OpsStatusSummaryResponseSchema.shape.summary,
+    releaseBlockingIncidentCount: z.number().int().nonnegative(),
+    openIncidentCount: z.number().int().nonnegative(),
+    recentExecutionFailureCount: z.number().int().nonnegative(),
     degradedSurfaces: z.array(TelemetrySurfaceSchema)
   })
 });

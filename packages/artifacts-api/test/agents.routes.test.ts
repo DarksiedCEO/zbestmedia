@@ -13,6 +13,16 @@ import {
   OpsExecutionSummaryResponseSchema,
   OpsIncidentSummaryResponseSchema,
   OpsStatusSummaryResponseSchema,
+  AdminIntegrityResponseSchema,
+  AdminRoutingCategoriesResponseSchema,
+  AdminRoutingPreviewResponseSchema,
+  AdminSummaryResponseSchema,
+  AdminExecutionRecordListResponseSchema,
+  AdminExecutionRecordDetailResponseSchema,
+  AdminExecutionRunListResponseSchema,
+  AdminExecutionRunDetailResponseSchema,
+  AdminIncidentListResponseSchema,
+  AdminIncidentDetailResponseSchema,
   OperationalSignalOwnershipResponseSchema,
   OrgAgentDetailResponseSchema,
   OrgManifestResponseSchema,
@@ -221,7 +231,7 @@ describe("agent routes", () => {
       resolvedBy: "actor-1",
       resolutionNote: "fixed"
     }))
-  } as never;
+  };
   const telemetryService = {
     getOpsStatusSummary: vi.fn(async () => ({
       status: "critical",
@@ -339,7 +349,146 @@ describe("agent routes", () => {
       },
       mostImpactedSubAgent: "route-contract-watcher"
     }))
-  } as never;
+  };
+  const adminService = {
+    getControlPlaneSummary: vi.fn(async () => ({
+      manifestVersion: "2026-03-12.v1",
+      generatedAt: "2026-03-12T00:00:00.000Z",
+      integrity: {
+        manifestVersion: "2026-03-12.v1",
+        valid: true,
+        validatedAt: "2026-03-12T00:00:00.000Z",
+        error: null
+      },
+      ops: await telemetryService.getOpsStatusSummary(),
+      releaseBlockingIncidentCount: 1,
+      openIncidentCount: 2,
+      recentExecutionFailureCount: 1,
+      degradedSurfaces: ["route_contracts", "slo", "policy_routing"]
+    })),
+    getIntegrityStatus: vi.fn(() => ({
+      manifestVersion: "2026-03-12.v1",
+      valid: true,
+      validatedAt: "2026-03-12T00:00:00.000Z",
+      error: null
+    })),
+    getSupportedRoutingCategories: vi.fn(() => [
+      {
+        category: "brand_identity",
+        responsibilityKey: "brand_identity_governance",
+        operationalSignalType: null,
+        requiresDisambiguation: false,
+        supported: true
+      },
+      {
+        category: "jingle_music",
+        responsibilityKey: null,
+        operationalSignalType: null,
+        requiresDisambiguation: true,
+        supported: true,
+        supportedJingleModes: ["composition", "packaging"]
+      }
+    ]),
+    previewRoutingDecision: vi.fn((input: unknown) => orgRoutingService.resolve(input as never)),
+    listExecutionRecords: vi.fn(async () => ({
+      items: [
+        {
+          assignmentRecordId: "assignment:1",
+          manifestVersion: "2026-03-12.v1",
+          policyDecision: "approved",
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          correlationId: "corr-1",
+          requestSource: "artifacts-api",
+          requestedBy: "actor-1",
+          requestedTaskCategory: "brand_identity",
+          requestedResponsibilityKey: "brand_identity_governance",
+          requestMetadata: {},
+          requestedExecutionTarget: "brandyn",
+          resolvedExecutiveId: "cmo",
+          resolvedDepartmentId: "marketing",
+          resolvedLeadAgentId: "brandyn",
+          resolvedSubAgentId: null,
+          executionAgentId: "brandyn",
+          policyDecisionReason: "within scope",
+          routingDecision: null,
+          routingTrace: [],
+          createdAt: "2026-03-12T00:00:00.000Z",
+          updatedAt: "2026-03-12T00:00:00.000Z"
+        }
+      ]
+    })),
+    getExecutionRecord: vi.fn(async () => ({
+      assignmentRecordId: "assignment:1",
+      manifestVersion: "2026-03-12.v1",
+      policyDecision: "approved",
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      correlationId: "corr-1",
+      requestSource: "artifacts-api",
+      requestedBy: "actor-1",
+      requestedTaskCategory: "brand_identity",
+      requestedResponsibilityKey: "brand_identity_governance",
+      requestMetadata: {},
+      requestedExecutionTarget: "brandyn",
+      resolvedExecutiveId: "cmo",
+      resolvedDepartmentId: "marketing",
+      resolvedLeadAgentId: "brandyn",
+      resolvedSubAgentId: null,
+      executionAgentId: "brandyn",
+      policyDecisionReason: "within scope",
+      routingDecision: null,
+      routingTrace: [],
+      createdAt: "2026-03-12T00:00:00.000Z",
+      updatedAt: "2026-03-12T00:00:00.000Z"
+    })),
+    listExecutionRuns: vi.fn(async () => ({
+      items: [
+        {
+          runRecordId: "run:1",
+          assignmentRecordId: "assignment:1",
+          executionId: "execution:1",
+          currentState: "succeeded",
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          requestedAt: "2026-03-12T00:00:00.000Z",
+          validatedAt: "2026-03-12T00:00:01.000Z",
+          routedAt: "2026-03-12T00:00:02.000Z",
+          blockedAt: null,
+          executionStartedAt: "2026-03-12T00:00:03.000Z",
+          retriableAt: null,
+          executionEndedAt: "2026-03-12T00:00:04.000Z",
+          failureCategory: null,
+          failureMessage: null,
+          retryable: false,
+          metadata: {},
+          createdAt: "2026-03-12T00:00:00.000Z",
+          updatedAt: "2026-03-12T00:00:04.000Z"
+        }
+      ]
+    })),
+    getExecutionRun: vi.fn(async () => ({
+      runRecordId: "run:1",
+      assignmentRecordId: "assignment:1",
+      executionId: "execution:1",
+      currentState: "succeeded",
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      requestedAt: "2026-03-12T00:00:00.000Z",
+      validatedAt: "2026-03-12T00:00:01.000Z",
+      routedAt: "2026-03-12T00:00:02.000Z",
+      blockedAt: null,
+      executionStartedAt: "2026-03-12T00:00:03.000Z",
+      retriableAt: null,
+      executionEndedAt: "2026-03-12T00:00:04.000Z",
+      failureCategory: null,
+      failureMessage: null,
+      retryable: false,
+      metadata: {},
+      createdAt: "2026-03-12T00:00:00.000Z",
+      updatedAt: "2026-03-12T00:00:04.000Z"
+    })),
+    listIncidents: vi.fn(async () => ({
+      items: await incidentService.listIncidents()
+    })),
+    getIncident: vi.fn(async () => incidentService.getIncident())
+  };
   const memoryService = {
     readPartition: vi.fn(async () => [{ memoryEntryId: "memory:1" }]),
     writeOwnedEntry: vi.fn(async () => ({ memoryEntryId: "memory:1" })),
@@ -931,6 +1080,7 @@ describe("agent routes", () => {
         executionService,
         incidentService,
         telemetryService,
+        adminService,
         ledgerService,
         memoryService,
         evalRunner,
@@ -1145,6 +1295,34 @@ describe("agent routes", () => {
     expect(codeSentinelRes.statusCode).toBe(200);
     const codeSentinel = OpsCodeSentinelSummaryResponseSchema.parse(codeSentinelRes.json());
     expect(codeSentinel.summary.mostImpactedSubAgent).toBe("route-contract-watcher");
+  });
+
+  it("exposes admin control-plane routes", async () => {
+    const summaryRes = await app.inject({ method: "GET", url: "/v1/agent-os/admin/summary" });
+    const integrityRes = await app.inject({ method: "GET", url: "/v1/agent-os/admin/integrity" });
+    const categoriesRes = await app.inject({ method: "GET", url: "/v1/agent-os/admin/routing/categories" });
+    const previewRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/admin/routing/preview",
+      payload: { category: "route_contract_monitoring" }
+    });
+    const recordsRes = await app.inject({ method: "GET", url: "/v1/agent-os/admin/execution/records?limit=10" });
+    const recordRes = await app.inject({ method: "GET", url: "/v1/agent-os/admin/execution/records/assignment:1" });
+    const runsRes = await app.inject({ method: "GET", url: "/v1/agent-os/admin/execution/runs?limit=10" });
+    const runRes = await app.inject({ method: "GET", url: "/v1/agent-os/admin/execution/runs/run:1" });
+    const incidentsRes = await app.inject({ method: "GET", url: "/v1/agent-os/admin/incidents?limit=10" });
+    const incidentRes = await app.inject({ method: "GET", url: "/v1/agent-os/admin/incidents/incident:1" });
+
+    expect(AdminSummaryResponseSchema.parse(summaryRes.json()).summary.openIncidentCount).toBe(2);
+    expect(AdminIntegrityResponseSchema.parse(integrityRes.json()).integrity.valid).toBe(true);
+    expect(AdminRoutingCategoriesResponseSchema.parse(categoriesRes.json()).items).toHaveLength(2);
+    expect(AdminRoutingPreviewResponseSchema.parse(previewRes.json()).decision.resolvedLeadAgentId).toBe("code-sentinel");
+    expect(AdminExecutionRecordListResponseSchema.parse(recordsRes.json()).items[0].assignmentRecordId).toBe("assignment:1");
+    expect(AdminExecutionRecordDetailResponseSchema.parse(recordRes.json()).item.assignmentRecordId).toBe("assignment:1");
+    expect(AdminExecutionRunListResponseSchema.parse(runsRes.json()).items[0].runRecordId).toBe("run:1");
+    expect(AdminExecutionRunDetailResponseSchema.parse(runRes.json()).item.runRecordId).toBe("run:1");
+    expect(AdminIncidentListResponseSchema.parse(incidentsRes.json()).items[0].incidentId).toBe("incident:1");
+    expect(AdminIncidentDetailResponseSchema.parse(incidentRes.json()).item.incidentId).toBe("incident:1");
   });
 
   it("records eval runs and exposes memory reads", async () => {
