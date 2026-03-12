@@ -8,6 +8,7 @@ import {
   AgentRuntimeService,
   ApprovalEscalationService,
   AgentVersionService,
+  AgentOrgRoutingService,
   AgentOrgService,
   AgentWorkerService,
   BrandPipelineWorkflowError,
@@ -48,6 +49,7 @@ import {
   ExecuteAgentBodySchema,
   OrgAgentIdParamSchema,
   OperationalSignalParamSchema,
+  RoutingResolveBodySchema,
   AgentVersionCreateBodySchema,
   AgentVersionPromoteBodySchema,
   ResponsibilityKeyParamSchema,
@@ -65,6 +67,7 @@ import {
 export function agentRoutes(opts: {
   repository: AgentOsRepository;
   orgService: AgentOrgService;
+  orgRoutingService: AgentOrgRoutingService;
   executionService: AgentExecutionService;
   memoryService: MemoryPartitionService;
   evalRunner: EvalRunnerService;
@@ -285,6 +288,27 @@ export function agentRoutes(opts: {
           subAgent: ownership.subAgent
         }
       });
+    });
+
+    app.post("/v1/agent-os/org/routing/resolve", async (req, reply) => {
+      const body = RoutingResolveBodySchema.safeParse(req.body);
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      try {
+        const decision = opts.orgRoutingService.resolve(body.data);
+        return reply.send({
+          manifestVersion: orgManifestVersion,
+          resourceType: "routing_decision",
+          decision
+        });
+      } catch (error) {
+        if (error instanceof Error) {
+          return reply.code(400).send({ error: error.message });
+        }
+        throw error;
+      }
     });
 
     app.get("/v1/agents/:agentId", async (req, reply) => {

@@ -10,6 +10,7 @@ import {
   OperationalSignalOwnershipResponseSchema,
   OrgAgentDetailResponseSchema,
   OrgManifestResponseSchema,
+  RoutingResolveResponseSchema,
   ReportingChainResponseSchema,
   ResponsibilityOwnershipResponseSchema
 } from "../src/agents/schemas";
@@ -465,6 +466,25 @@ describe("agent routes", () => {
       payloadHash: "abc123"
     }
   }));
+  const orgRoutingService = {
+    resolve: vi.fn((input: { category: string; requestedAgentId?: string; jingleMode?: string }) => ({
+      requestedCategory: input.category,
+      resolvedDepartment: input.category === "route_contract_monitoring" ? "technology-engineering" : "marketing",
+      resolvedExecutive: input.category === "route_contract_monitoring" ? "cto" : "cmo",
+      resolvedLeadAgentId: input.category === "route_contract_monitoring" ? "code-sentinel" : "brandyn",
+      resolvedSubAgentId: input.category === "route_contract_monitoring" ? "route-contract-watcher" : null,
+      executionAgentId: input.category === "route_contract_monitoring" ? null : "brandyn",
+      responsibilityKey:
+        input.category === "route_contract_monitoring" ? "route_contract_monitoring" : "brand_identity_governance",
+      operationalSignalType: input.category === "route_contract_monitoring" ? "route_contract" : null,
+      policyValidated: true,
+      trace: [
+        `requested_category:${input.category}`,
+        input.requestedAgentId ? `requested_agent:${input.requestedAgentId}` : "requested_agent:none"
+      ]
+    }))
+  };
+
   const orgService = {
     getManifestVersion: vi.fn(() => "2026-03-12.v1"),
     getManifest: vi.fn(() => ({
@@ -626,6 +646,7 @@ describe("agent routes", () => {
       agentRoutes({
         repository,
         orgService,
+        orgRoutingService: orgRoutingService as never,
         executionService,
         memoryService,
         evalRunner,
@@ -718,6 +739,22 @@ describe("agent routes", () => {
 
     expect(invalidSignalRes.statusCode).toBe(400);
     expect(invalidDepartmentRes.statusCode).toBe(400);
+  });
+
+  it("resolves deterministic org routing decisions", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/org/routing/resolve",
+      payload: {
+        category: "route_contract_monitoring"
+      }
+    });
+
+    expect(res.statusCode).toBe(200);
+    const decision = RoutingResolveResponseSchema.parse(res.json());
+    expect(decision.decision.resolvedLeadAgentId).toBe("code-sentinel");
+    expect(decision.decision.resolvedSubAgentId).toBe("route-contract-watcher");
+    expect(orgRoutingService.resolve).toHaveBeenCalledWith({ category: "route_contract_monitoring" });
   });
 
   it("executes an agent request with normalized response", async () => {

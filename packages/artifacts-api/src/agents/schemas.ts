@@ -276,6 +276,22 @@ const OperationalSignalTypeSchema = z.enum([
   "slo_release_gate"
 ]);
 
+const RoutingTaskCategorySchema = z.enum([
+  "brand_identity",
+  "campaign_growth",
+  "visual_design",
+  "jingle_music",
+  "build_integrity_monitoring",
+  "dependency_integrity_monitoring",
+  "runtime_health_monitoring",
+  "migration_integrity_monitoring",
+  "route_contract_monitoring",
+  "slo_integrity_monitoring"
+]);
+
+const JingleRoutingModeSchema = z.enum(["composition", "packaging"]);
+const RoutingRequestedAgentIdSchema = z.union([AgentIdSchema, LeadAgentOrgIdSchema, SubAgentOrgIdSchema]);
+
 const ManifestVersionSchema = z.literal(AGENT_ORG_MANIFEST_VERSION);
 const ResourceTypeSchema = z.enum([
   "org_manifest",
@@ -286,7 +302,8 @@ const ResourceTypeSchema = z.enum([
   "responsibility_ownership",
   "operational_signal_ownership",
   "code_sentinel_signal_list",
-  "code_sentinel_signal_detail"
+  "code_sentinel_signal_detail",
+  "routing_decision"
 ]);
 
 const ExecutiveResourceSchema = z.object({
@@ -440,6 +457,29 @@ export const CodeSentinelSignalDetailResponseSchema = z.object({
   supported: z.literal(true),
   signal: CodeSentinelSignalDefinitionSchema,
   ownership: OperationalSignalOwnershipSchema
+});
+
+export const RoutingResolveBodySchema = z.object({
+  category: RoutingTaskCategorySchema,
+  requestedAgentId: RoutingRequestedAgentIdSchema.optional(),
+  jingleMode: JingleRoutingModeSchema.optional()
+});
+
+export const RoutingResolveResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("routing_decision"),
+  decision: z.object({
+    requestedCategory: RoutingTaskCategorySchema,
+    resolvedDepartment: DepartmentIdSchema,
+    resolvedExecutive: ExecutiveIdSchema,
+    resolvedLeadAgentId: LeadAgentOrgIdSchema,
+    resolvedSubAgentId: SubAgentOrgIdSchema.nullable(),
+    executionAgentId: AgentIdSchema.nullable(),
+    responsibilityKey: ResponsibilityKeySchema,
+    operationalSignalType: OperationalSignalTypeSchema.nullable(),
+    policyValidated: z.literal(true),
+    trace: z.array(z.string())
+  })
 });
 
 export const ExecutiveIdParamSchema = z.object({

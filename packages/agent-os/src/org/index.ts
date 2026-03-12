@@ -8,3 +8,5 @@ export * from "./selectors.js";
 export * from "./service.js";
 export * from "./policy.js";
 export * from "./code-sentinel.js";
+export * from "./routing-types.js";
+export * from "./routing.js";

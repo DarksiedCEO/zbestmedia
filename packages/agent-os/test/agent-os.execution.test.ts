@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   AgentExecutionService,
   AgentMemoryAccessError,
+  AgentOrgRoutingError,
   ApprovalWorkflowService,
   BrandPipelineOrchestrator,
   OrcaAgentPromptExecutor,
@@ -149,6 +150,31 @@ describe("agent-os execution and workflow services", () => {
     if (!result.approvalRequired) {
       expect(result.output.handoffTarget).toBe("titan");
     }
+  });
+
+  it("fails fast when execution requests are routed outside the owned lane", async () => {
+    const repository = {} as never;
+    const approvals = {
+      ensureApproval: vi.fn(async () => ({ approvalRequired: false, reason: "advisory" }))
+    } as never;
+    const promptExecutor = {
+      execute: vi.fn(async () => ({ summary: "should not execute" }))
+    } as never;
+
+    const service = new AgentExecutionService(repository, approvals, promptExecutor);
+
+    await expect(
+      service.execute({
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        agentId: "brandyn",
+        actorId: "actor-1",
+        correlationId: "req-3",
+        requestSource: "test-suite",
+        subjectType: "migration_integrity_monitoring",
+        subjectId: "migration-1",
+        payload: { responsibilityKey: "migration_integrity_monitoring" }
+      })
+    ).rejects.toBeInstanceOf(AgentOrgRoutingError);
   });
 
   it("parses ORCA-backed prompt execution output", async () => {

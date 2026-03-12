@@ -3,8 +3,9 @@ import type { ApprovalWorkflowService } from "../approvals/service.js";
 import type { AgentOsRepository } from "../persistence/repository.js";
 import type { ExecutionRecord } from "../persistence/contracts.js";
 import { AgentOrgPolicyService } from "../org/policy.js";
+import { AgentOrgRoutingService } from "../org/routing.js";
+import type { JingleRoutingMode, RoutingTaskCategory } from "../org/routing-types.js";
 import {
-  buildDeterministicExecutionOutput,
   DeterministicAgentPromptExecutor,
   type AgentPromptExecutor
 } from "./promptExecutor.js";
@@ -27,7 +28,8 @@ export class AgentExecutionService {
     private readonly repository: AgentOsRepository,
     private readonly approvals: ApprovalWorkflowService,
     private readonly promptExecutor: AgentPromptExecutor = new DeterministicAgentPromptExecutor(),
-    private readonly orgPolicy: AgentOrgPolicyService = new AgentOrgPolicyService()
+    private readonly orgPolicy: AgentOrgPolicyService = new AgentOrgPolicyService(),
+    private readonly orgRouting: AgentOrgRoutingService = new AgentOrgRoutingService()
   ) {}
 
   async execute(args: AgentExecutionInput): Promise<
@@ -44,11 +46,20 @@ export class AgentExecutionService {
         output: Record<string, unknown>;
       }
   > {
-    this.orgPolicy.assertExecutionAgentResponsibility({
-      agentId: args.agentId,
-      subjectType: args.subjectType,
-      payload: args.payload
-    });
+    const requestedRoute = this.resolveRequestedRoute(args.subjectType, args.payload);
+    if (requestedRoute) {
+      this.orgRouting.resolve({
+        category: requestedRoute.category,
+        requestedAgentId: args.agentId,
+        jingleMode: requestedRoute.jingleMode
+      });
+    } else {
+      this.orgPolicy.assertExecutionAgentResponsibility({
+        agentId: args.agentId,
+        subjectType: args.subjectType,
+        payload: args.payload
+      });
+    }
 
     const approval = await this.approvals.ensureApproval({
       tenantId: args.tenantId,
@@ -186,5 +197,50 @@ export class AgentExecutionService {
       approvalRequired: false,
       output
     };
+  }
+
+  private resolveRequestedRoute(
+    subjectType: string,
+    payload: Record<string, unknown>
+  ): { category: RoutingTaskCategory; jingleMode?: JingleRoutingMode } | null {
+    const explicit = payload.responsibilityKey;
+    if (typeof explicit === "string") {
+      switch (explicit) {
+        case "brand_identity_governance":
+          return { category: "brand_identity" };
+        case "social_campaign_deployment":
+          return { category: "campaign_growth" };
+        case "visual_identity_governance":
+          return { category: "visual_design" };
+        case "sonic_brand_composition":
+          return { category: "jingle_music", jingleMode: "composition" };
+        case "sonic_campaign_packaging":
+          return { category: "jingle_music", jingleMode: "packaging" };
+        case "build_breakage_detection":
+          return { category: "build_integrity_monitoring" };
+        case "dependency_drift_detection":
+          return { category: "dependency_integrity_monitoring" };
+        case "runtime_health_monitoring":
+          return { category: "runtime_health_monitoring" };
+        case "migration_integrity_monitoring":
+          return { category: "migration_integrity_monitoring" };
+        case "route_contract_monitoring":
+          return { category: "route_contract_monitoring" };
+        case "slo_release_gate_monitoring":
+          return { category: "slo_integrity_monitoring" };
+      }
+    }
+
+    switch (subjectType) {
+      case "brand_smoke":
+      case "brand_identity_governance":
+        return { category: "brand_identity" };
+      case "visual_identity_governance":
+        return { category: "visual_design" };
+      case "social_campaign_deployment":
+        return { category: "campaign_growth" };
+      default:
+        return null;
+    }
   }
 }
