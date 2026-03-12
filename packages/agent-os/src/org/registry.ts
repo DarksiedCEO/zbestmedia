@@ -27,6 +27,8 @@ export type AgentOrgRegistry = {
   subAgents: SubAgentDefinition[];
 };
 
+export const AGENT_ORG_MANIFEST_VERSION = "2026-03-12.v1";
+
 export const AGENT_ORG_REGISTRY: AgentOrgRegistry = {
   executives: Object.values(EXECUTIVES),
   departments: Object.values(DEPARTMENTS),

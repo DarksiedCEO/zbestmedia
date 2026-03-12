@@ -100,6 +100,26 @@ export function agentRoutes(opts: {
   };
 }): FastifyPluginAsync {
   return async (app) => {
+    const orgManifestVersion = opts.orgService.getManifestVersion();
+
+    function orgOwnershipForLeadAgent(leadAgent: ReturnType<typeof opts.orgService.getLeadAgent>) {
+      return {
+        executive: opts.orgService.getExecutive(leadAgent.reportsToExecutiveId),
+        department: opts.orgService.getDepartment(leadAgent.departmentId),
+        leadAgent
+      };
+    }
+
+    function orgOwnershipForSignal(signalType: Parameters<typeof opts.orgService.resolveOperationalSignalOwner>[0]) {
+      const ownership = opts.orgService.resolveOperationalSignalOwner(signalType);
+      return {
+        executive: opts.orgService.getExecutive(ownership.leadAgent.reportsToExecutiveId),
+        department: opts.orgService.getDepartment(ownership.leadAgent.departmentId),
+        leadAgent: ownership.leadAgent,
+        subAgent: ownership.subAgent
+      };
+    }
+
     function handleAgentError(reply: { code: (statusCode: number) => { send: (body: unknown) => unknown } }, error: unknown) {
       if (error instanceof AgentLifecycleStateError) {
         return reply.code(409).send({ error: error.message });
@@ -133,7 +153,11 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/org", async (_req, reply) => {
-      return reply.send(opts.orgService.getManifest());
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "org_manifest",
+        manifest: opts.orgService.getManifest()
+      });
     });
 
     app.get("/v1/agent-os/org/executives/:executiveId", async (req, reply) => {
@@ -142,6 +166,9 @@ export function agentRoutes(opts: {
         return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
       }
       return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "executive_detail",
+        executiveId: path.data.executiveId,
         executive: opts.orgService.getExecutive(path.data.executiveId),
         agents: opts.orgService.getExecutiveAgents(path.data.executiveId)
       });
@@ -153,6 +180,9 @@ export function agentRoutes(opts: {
         return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
       }
       return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "department_detail",
+        departmentId: path.data.departmentId,
         department: opts.orgService.getDepartment(path.data.departmentId),
         executiveOwner: opts.orgService.getExecutiveOwnerForDepartment(path.data.departmentId),
         agents: opts.orgService.getDepartmentAgents(path.data.departmentId)
@@ -166,10 +196,20 @@ export function agentRoutes(opts: {
       }
       const { agentId } = path.data;
       if (opts.orgService.isSubAgentId(agentId)) {
-        return reply.send({ subAgent: opts.orgService.getSubAgent(agentId) });
+        return reply.send({
+          manifestVersion: orgManifestVersion,
+          resourceType: "agent_detail",
+          agentId,
+          agentType: "sub-agent",
+          subAgent: opts.orgService.getSubAgent(agentId)
+        });
       }
 
       return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "agent_detail",
+        agentId,
+        agentType: "lead-agent",
         leadAgent: opts.orgService.getLeadAgent(agentId),
         scope: opts.orgService.getLeadAgentScope(agentId),
         subAgents: agentId === "code-sentinel" ? opts.orgService.getSubAgentsForLead(agentId) : []
@@ -181,7 +221,12 @@ export function agentRoutes(opts: {
       if (!path.success) {
         return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
       }
-      return reply.send({ chain: opts.orgService.getReportingChain(path.data.agentId as never) });
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "reporting_chain",
+        agentId: path.data.agentId,
+        chain: opts.orgService.getReportingChain(path.data.agentId as never)
+      });
     });
 
     app.get("/v1/agent-os/org/ownership/responsibilities/:responsibilityKey", async (req, reply) => {
@@ -189,9 +234,13 @@ export function agentRoutes(opts: {
       if (!path.success) {
         return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
       }
+      const owner = opts.orgService.resolveResponsibilityOwner(path.data.responsibilityKey);
       return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "responsibility_ownership",
         responsibilityKey: path.data.responsibilityKey,
-        owner: opts.orgService.resolveResponsibilityOwner(path.data.responsibilityKey)
+        supported: owner !== null,
+        ownership: owner ? orgOwnershipForLeadAgent(owner) : null
       });
     });
 
@@ -201,13 +250,20 @@ export function agentRoutes(opts: {
         return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
       }
       return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "operational_signal_ownership",
         signalType: path.data.signalType,
-        ownership: opts.orgService.resolveOperationalSignalOwner(path.data.signalType)
+        supported: true,
+        ownership: orgOwnershipForSignal(path.data.signalType)
       });
     });
 
     app.get("/v1/agent-os/org/code-sentinel/signals", async (_req, reply) => {
-      return reply.send({ items: opts.orgService.listCodeSentinelSignals() });
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "code_sentinel_signal_list",
+        items: opts.orgService.listCodeSentinelSignals()
+      });
     });
 
     app.get("/v1/agent-os/org/code-sentinel/signals/:signalType", async (req, reply) => {
@@ -215,7 +271,20 @@ export function agentRoutes(opts: {
       if (!path.success) {
         return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
       }
-      return reply.send(opts.orgService.getCodeSentinelSignal(path.data.signalType));
+      const ownership = opts.orgService.getCodeSentinelSignal(path.data.signalType);
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "code_sentinel_signal_detail",
+        signalType: path.data.signalType,
+        supported: true,
+        signal: ownership.definition,
+        ownership: {
+          executive: opts.orgService.getExecutive(ownership.leadAgent.reportsToExecutiveId),
+          department: opts.orgService.getDepartment(ownership.leadAgent.departmentId),
+          leadAgent: ownership.leadAgent,
+          subAgent: ownership.subAgent
+        }
+      });
     });
 
     app.get("/v1/agents/:agentId", async (req, reply) => {

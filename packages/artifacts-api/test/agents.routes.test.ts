@@ -2,6 +2,17 @@ import Fastify, { type FastifyRequest } from "fastify";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { agentRoutes } from "../src/agents/routes";
+import {
+  CodeSentinelSignalDetailResponseSchema,
+  CodeSentinelSignalListResponseSchema,
+  DepartmentDetailResponseSchema,
+  ExecutiveDetailResponseSchema,
+  OperationalSignalOwnershipResponseSchema,
+  OrgAgentDetailResponseSchema,
+  OrgManifestResponseSchema,
+  ReportingChainResponseSchema,
+  ResponsibilityOwnershipResponseSchema
+} from "../src/agents/schemas";
 import { requestIdPlugin } from "../src/http/requestId";
 
 describe("agent routes", () => {
@@ -455,7 +466,9 @@ describe("agent routes", () => {
     }
   }));
   const orgService = {
+    getManifestVersion: vi.fn(() => "2026-03-12.v1"),
     getManifest: vi.fn(() => ({
+      manifestVersion: "2026-03-12.v1",
       executives: [{ executiveId: "cto", title: "Chief Technology Officer" }],
       departments: [{ departmentId: "technology-engineering", executiveOwnerId: "cto" }],
       leadAgents: [{ leadAgentId: "code-sentinel", reportsToExecutiveId: "cto", departmentId: "technology-engineering" }],
@@ -464,14 +477,38 @@ describe("agent routes", () => {
     getExecutive: vi.fn((executiveId: string) => ({ executiveId, title: "Chief Technology Officer" })),
     getExecutiveAgents: vi.fn(() => ({
       departments: [{ departmentId: "technology-engineering", executiveOwnerId: "cto" }],
-      leadAgents: [{ leadAgentId: "code-sentinel", departmentId: "technology-engineering" }],
-      subAgents: [{ subAgentId: "route-contract-watcher", departmentId: "technology-engineering" }]
+      leadAgents: [
+        {
+          leadAgentId: "code-sentinel",
+          departmentId: "technology-engineering",
+          reportsToExecutiveId: "cto"
+        }
+      ],
+      subAgents: [
+        {
+          subAgentId: "route-contract-watcher",
+          departmentId: "technology-engineering",
+          parentLeadAgentId: "code-sentinel"
+        }
+      ]
     })),
     getDepartment: vi.fn((departmentId: string) => ({ departmentId, executiveOwnerId: "cto" })),
     getExecutiveOwnerForDepartment: vi.fn(() => ({ executiveId: "cto", title: "Chief Technology Officer" })),
     getDepartmentAgents: vi.fn(() => ({
-      leadAgents: [{ leadAgentId: "code-sentinel", departmentId: "technology-engineering" }],
-      subAgents: [{ subAgentId: "route-contract-watcher", departmentId: "technology-engineering" }]
+      leadAgents: [
+        {
+          leadAgentId: "code-sentinel",
+          departmentId: "technology-engineering",
+          reportsToExecutiveId: "cto"
+        }
+      ],
+      subAgents: [
+        {
+          subAgentId: "route-contract-watcher",
+          departmentId: "technology-engineering",
+          parentLeadAgentId: "code-sentinel"
+        }
+      ]
     })),
     isSubAgentId: vi.fn((agentId: string) => agentId === "route-contract-watcher"),
     getSubAgent: vi.fn((agentId: string) => ({ subAgentId: agentId, parentLeadAgentId: "code-sentinel" })),
@@ -486,22 +523,88 @@ describe("agent routes", () => {
       { nodeType: "lead-agent", nodeId: "code-sentinel", displayName: "Code Sentinel" },
       { nodeType: "executive", nodeId: "cto", displayName: "Chief Technology Officer" }
     ]),
-    resolveResponsibilityOwner: vi.fn(() => ({ leadAgentId: "brandyn", departmentId: "marketing" })),
+    resolveResponsibilityOwner: vi.fn(() => ({
+      leadAgentId: "brandyn",
+      departmentId: "marketing",
+      reportsToExecutiveId: "cmo"
+    })),
     resolveOperationalSignalOwner: vi.fn(() => ({
-      leadAgent: { leadAgentId: "code-sentinel", departmentId: "technology-engineering" },
+      leadAgent: {
+        leadAgentId: "code-sentinel",
+        departmentId: "technology-engineering",
+        reportsToExecutiveId: "cto"
+      },
       subAgent: { subAgentId: "route-contract-watcher", parentLeadAgentId: "code-sentinel" }
     })),
     listCodeSentinelSignals: vi.fn(() => [
-      { signalType: "build_breakage", subAgentId: "build-monitor" },
-      { signalType: "dependency_drift", subAgentId: "dependency-watcher" },
-      { signalType: "runtime_health", subAgentId: "runtime-health-monitor" },
-      { signalType: "migration_integrity", subAgentId: "migration-guardian" },
-      { signalType: "route_contract", subAgentId: "route-contract-watcher" },
-      { signalType: "slo_release_gate", subAgentId: "slo-enforcer" }
+      {
+        signalType: "build_breakage",
+        responsibilityKey: "build_breakage_detection",
+        leadAgentId: "code-sentinel",
+        subAgentId: "build-monitor",
+        sourceSurface: "build-and-test-integrity",
+        description: "Build/test breakage belongs to Code Sentinel Build Monitor."
+      },
+      {
+        signalType: "dependency_drift",
+        responsibilityKey: "dependency_drift_detection",
+        leadAgentId: "code-sentinel",
+        subAgentId: "dependency-watcher",
+        sourceSurface: "dependency-integrity",
+        description: "Dependency drift belongs to Code Sentinel Dependency Watcher."
+      },
+      {
+        signalType: "runtime_health",
+        responsibilityKey: "runtime_health_monitoring",
+        leadAgentId: "code-sentinel",
+        subAgentId: "runtime-health-monitor",
+        sourceSurface: "runtime-health",
+        description: "Runtime health degradation belongs to Code Sentinel Runtime Health Monitor."
+      },
+      {
+        signalType: "migration_integrity",
+        responsibilityKey: "migration_integrity_monitoring",
+        leadAgentId: "code-sentinel",
+        subAgentId: "migration-guardian",
+        sourceSurface: "schema-migration-integrity",
+        description: "Migration and schema integrity belongs to Code Sentinel Migration Guardian."
+      },
+      {
+        signalType: "route_contract",
+        responsibilityKey: "route_contract_monitoring",
+        leadAgentId: "code-sentinel",
+        subAgentId: "route-contract-watcher",
+        sourceSurface: "route-contract-integrity",
+        description: "Route and API contract regressions belong to Code Sentinel Route Contract Watcher."
+      },
+      {
+        signalType: "slo_release_gate",
+        responsibilityKey: "slo_release_gate_monitoring",
+        leadAgentId: "code-sentinel",
+        subAgentId: "slo-enforcer",
+        sourceSurface: "release-gate-telemetry",
+        description: "Release-gate and SLO degradation belongs to Code Sentinel SLO Enforcer."
+      }
     ]),
     getCodeSentinelSignal: vi.fn((signalType: string) => ({
-      definition: { signalType },
-      leadAgent: { leadAgentId: "code-sentinel", departmentId: "technology-engineering" },
+      definition: {
+        signalType,
+        responsibilityKey:
+          signalType === "migration_integrity" ? "migration_integrity_monitoring" : "route_contract_monitoring",
+        leadAgentId: "code-sentinel",
+        subAgentId: signalType === "migration_integrity" ? "migration-guardian" : "route-contract-watcher",
+        sourceSurface:
+          signalType === "migration_integrity" ? "schema-migration-integrity" : "route-contract-integrity",
+        description:
+          signalType === "migration_integrity"
+            ? "Migration and schema integrity belongs to Code Sentinel Migration Guardian."
+            : "Route and API contract regressions belong to Code Sentinel Route Contract Watcher."
+      },
+      leadAgent: {
+        leadAgentId: "code-sentinel",
+        departmentId: "technology-engineering",
+        reportsToExecutiveId: "cto"
+      },
       subAgent: {
         subAgentId: signalType === "migration_integrity" ? "migration-guardian" : "route-contract-watcher",
         parentLeadAgentId: "code-sentinel"
@@ -577,21 +680,44 @@ describe("agent routes", () => {
     });
 
     expect(manifestRes.statusCode).toBe(200);
-    expect(manifestRes.json().leadAgents[0].leadAgentId).toBe("code-sentinel");
+    const manifest = OrgManifestResponseSchema.parse(manifestRes.json());
+    expect(manifest.manifestVersion).toBe("2026-03-12.v1");
+    expect(manifest.manifest.leadAgents[0].leadAgentId).toBe("code-sentinel");
     expect(departmentRes.statusCode).toBe(200);
-    expect(departmentRes.json().executiveOwner.executiveId).toBe("cto");
+    const department = DepartmentDetailResponseSchema.parse(departmentRes.json());
+    expect(department.executiveOwner.executiveId).toBe("cto");
     expect(agentRes.statusCode).toBe(200);
-    expect(agentRes.json().leadAgent.leadAgentId).toBe("code-sentinel");
+    const agent = OrgAgentDetailResponseSchema.parse(agentRes.json());
+    expect(agent.leadAgent?.leadAgentId).toBe("code-sentinel");
     expect(chainRes.statusCode).toBe(200);
-    expect(chainRes.json().chain[0].nodeId).toBe("route-contract-watcher");
+    const chain = ReportingChainResponseSchema.parse(chainRes.json());
+    expect(chain.chain[0].nodeId).toBe("route-contract-watcher");
     expect(responsibilityRes.statusCode).toBe(200);
-    expect(responsibilityRes.json().owner.leadAgentId).toBe("brandyn");
+    const responsibility = ResponsibilityOwnershipResponseSchema.parse(responsibilityRes.json());
+    expect(responsibility.ownership?.leadAgent.leadAgentId).toBe("brandyn");
     expect(signalRes.statusCode).toBe(200);
-    expect(signalRes.json().ownership.subAgent.subAgentId).toBe("route-contract-watcher");
+    const signal = OperationalSignalOwnershipResponseSchema.parse(signalRes.json());
+    expect(signal.ownership.subAgent.subAgentId).toBe("route-contract-watcher");
     expect(codeSentinelSignalsRes.statusCode).toBe(200);
-    expect(codeSentinelSignalsRes.json().items).toHaveLength(6);
+    const codeSentinelSignals = CodeSentinelSignalListResponseSchema.parse(codeSentinelSignalsRes.json());
+    expect(codeSentinelSignals.items).toHaveLength(6);
     expect(codeSentinelSignalRes.statusCode).toBe(200);
-    expect(codeSentinelSignalRes.json().subAgent.subAgentId).toBe("migration-guardian");
+    const codeSentinelSignal = CodeSentinelSignalDetailResponseSchema.parse(codeSentinelSignalRes.json());
+    expect(codeSentinelSignal.ownership.subAgent.subAgentId).toBe("migration-guardian");
+  });
+
+  it("fails fast on invalid org path parameters", async () => {
+    const invalidSignalRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/org/code-sentinel/signals/not-a-real-signal"
+    });
+    const invalidDepartmentRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/org/departments/not-a-real-department"
+    });
+
+    expect(invalidSignalRes.statusCode).toBe(400);
+    expect(invalidDepartmentRes.statusCode).toBe(400);
   });
 
   it("executes an agent request with normalized response", async () => {

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { AgentLifecycleStatusSchema, AgentTaskDomainSchema } from "@zbest/agent-os";
+import { AGENT_ORG_MANIFEST_VERSION, AgentLifecycleStatusSchema, AgentTaskDomainSchema } from "@zbest/agent-os";
 
 const AgentIdSchema = z.enum(["brandyn", "jordyn", "kobe", "oracle", "titan", "maestro"]);
 const BrandPipelineStepSchema = z.enum([
@@ -275,6 +275,172 @@ const OperationalSignalTypeSchema = z.enum([
   "route_contract",
   "slo_release_gate"
 ]);
+
+const ManifestVersionSchema = z.literal(AGENT_ORG_MANIFEST_VERSION);
+const ResourceTypeSchema = z.enum([
+  "org_manifest",
+  "executive_detail",
+  "department_detail",
+  "agent_detail",
+  "reporting_chain",
+  "responsibility_ownership",
+  "operational_signal_ownership",
+  "code_sentinel_signal_list",
+  "code_sentinel_signal_detail"
+]);
+
+const ExecutiveResourceSchema = z.object({
+  executiveId: ExecutiveIdSchema,
+  title: z.string(),
+  mission: z.string().optional(),
+  ownsDepartments: z.array(DepartmentIdSchema).optional(),
+  reportsTo: ExecutiveIdSchema.nullish()
+});
+
+const DepartmentResourceSchema = z.object({
+  departmentId: DepartmentIdSchema,
+  displayName: z.string().optional(),
+  mission: z.string().optional(),
+  executiveOwnerId: ExecutiveIdSchema
+});
+
+const LeadAgentResourceSchema = z.object({
+  leadAgentId: LeadAgentOrgIdSchema,
+  displayName: z.string().optional(),
+  departmentId: DepartmentIdSchema,
+  reportsToExecutiveId: ExecutiveIdSchema,
+  primaryResponsibility: z.string().optional(),
+  allowedScope: z.array(z.string()).optional(),
+  forbiddenScope: z.array(z.string()).optional(),
+  laneType: z.enum(["lead_agent", "specialized_lane_owner"]).optional()
+});
+
+const SubAgentResourceSchema = z.object({
+  subAgentId: SubAgentOrgIdSchema,
+  displayName: z.string().optional(),
+  parentLeadAgentId: LeadAgentOrgIdSchema,
+  departmentId: DepartmentIdSchema.optional(),
+  reportsToExecutiveId: ExecutiveIdSchema.optional(),
+  primaryResponsibility: z.string().optional()
+});
+
+const ReportingChainNodeSchema = z.object({
+  nodeType: z.enum(["sub-agent", "lead-agent", "executive"]),
+  nodeId: z.string(),
+  displayName: z.string()
+});
+
+const ResponsibilityOwnershipSchema = z.object({
+  executive: ExecutiveResourceSchema,
+  department: DepartmentResourceSchema,
+  leadAgent: LeadAgentResourceSchema
+});
+
+const OperationalSignalOwnershipSchema = z.object({
+  executive: ExecutiveResourceSchema,
+  department: DepartmentResourceSchema,
+  leadAgent: LeadAgentResourceSchema,
+  subAgent: SubAgentResourceSchema
+});
+
+const CodeSentinelSignalDefinitionSchema = z.object({
+  signalType: OperationalSignalTypeSchema,
+  responsibilityKey: ResponsibilityKeySchema,
+  leadAgentId: LeadAgentOrgIdSchema,
+  subAgentId: SubAgentOrgIdSchema,
+  sourceSurface: z.string(),
+  description: z.string()
+});
+
+export const OrgManifestResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("org_manifest"),
+  manifest: z.object({
+    manifestVersion: ManifestVersionSchema,
+    executives: z.array(ExecutiveResourceSchema),
+    departments: z.array(DepartmentResourceSchema),
+    leadAgents: z.array(LeadAgentResourceSchema),
+    subAgents: z.array(SubAgentResourceSchema)
+  })
+});
+
+export const ExecutiveDetailResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("executive_detail"),
+  executiveId: ExecutiveIdSchema,
+  executive: ExecutiveResourceSchema,
+  agents: z.object({
+    departments: z.array(DepartmentResourceSchema),
+    leadAgents: z.array(LeadAgentResourceSchema),
+    subAgents: z.array(SubAgentResourceSchema)
+  })
+});
+
+export const DepartmentDetailResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("department_detail"),
+  departmentId: DepartmentIdSchema,
+  department: DepartmentResourceSchema,
+  executiveOwner: ExecutiveResourceSchema,
+  agents: z.object({
+    leadAgents: z.array(LeadAgentResourceSchema),
+    subAgents: z.array(SubAgentResourceSchema)
+  })
+});
+
+export const OrgAgentDetailResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("agent_detail"),
+  agentId: OrgAgentIdSchema,
+  agentType: z.enum(["lead-agent", "sub-agent"]),
+  leadAgent: LeadAgentResourceSchema.optional(),
+  subAgent: SubAgentResourceSchema.optional(),
+  scope: z
+    .object({
+      allowedScope: z.array(z.string()),
+      forbiddenScope: z.array(z.string())
+    })
+    .optional(),
+  subAgents: z.array(SubAgentResourceSchema).optional()
+});
+
+export const ReportingChainResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("reporting_chain"),
+  agentId: OrgAgentIdSchema,
+  chain: z.array(ReportingChainNodeSchema)
+});
+
+export const ResponsibilityOwnershipResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("responsibility_ownership"),
+  responsibilityKey: ResponsibilityKeySchema,
+  supported: z.boolean(),
+  ownership: ResponsibilityOwnershipSchema.nullable()
+});
+
+export const OperationalSignalOwnershipResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("operational_signal_ownership"),
+  signalType: OperationalSignalTypeSchema,
+  supported: z.literal(true),
+  ownership: OperationalSignalOwnershipSchema
+});
+
+export const CodeSentinelSignalListResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("code_sentinel_signal_list"),
+  items: z.array(CodeSentinelSignalDefinitionSchema)
+});
+
+export const CodeSentinelSignalDetailResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("code_sentinel_signal_detail"),
+  signalType: OperationalSignalTypeSchema,
+  supported: z.literal(true),
+  signal: CodeSentinelSignalDefinitionSchema,
+  ownership: OperationalSignalOwnershipSchema
+});
 
 export const ExecutiveIdParamSchema = z.object({
   executiveId: ExecutiveIdSchema

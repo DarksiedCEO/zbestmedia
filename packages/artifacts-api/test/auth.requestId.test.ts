@@ -129,4 +129,31 @@ describe("auth and requestId middleware", () => {
     expect(typeof res.headers["x-request-id"]).toBe("string");
     expect(String(res.headers["x-request-id"])).toMatch(UUID_RE);
   });
+
+  it("protects org routes when Authorization is missing", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/org"
+    });
+
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("allows org routes with valid Authorization and returns manifest metadata", async () => {
+    const token = await signToken({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      actorId: "actor-1",
+      roles: ["admin"]
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/org",
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().manifestVersion).toBe("2026-03-12.v1");
+    expect(res.json().resourceType).toBe("org_manifest");
+  });
 });

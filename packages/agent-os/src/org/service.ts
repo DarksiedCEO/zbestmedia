@@ -1,4 +1,5 @@
 import {
+  AGENT_ORG_MANIFEST_VERSION,
   AGENT_ORG_REGISTRY,
   getAgentsByDepartment,
   getAgentsByExecutive,
@@ -44,7 +45,14 @@ export class AgentOrgService {
   }
 
   getManifest() {
-    return AGENT_ORG_REGISTRY;
+    return {
+      manifestVersion: AGENT_ORG_MANIFEST_VERSION,
+      ...AGENT_ORG_REGISTRY
+    };
+  }
+
+  getManifestVersion() {
+    return AGENT_ORG_MANIFEST_VERSION;
   }
 
   listExecutives() {
