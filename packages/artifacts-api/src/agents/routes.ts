@@ -4,6 +4,7 @@ import {
   AgentLifecycleStateError,
   AgentOsRepository,
   AgentExecutionService,
+  AgentExecutionLedgerService,
   AgentMemoryAccessError,
   AgentRuntimeService,
   ApprovalEscalationService,
@@ -21,6 +22,8 @@ import {
 
 import {
   AgentIdParamSchema,
+  AssignmentRecordIdParamSchema,
+  AssignmentRecordListQuerySchema,
   ApprovalDecisionBodySchema,
   ApprovalListQuerySchema,
   OrchestrationApprovalSlaQuerySchema,
@@ -43,6 +46,8 @@ import {
   OrchestrationWorkerProcessBodySchema,
   BrandPipelineAdvanceBodySchema,
   ExecutionIdParamSchema,
+  ExecutionRunIdParamSchema,
+  ExecutionRunListQuerySchema,
   ExecutiveIdParamSchema,
   ExecutionListQuerySchema,
   EvalRunBodySchema,
@@ -69,6 +74,7 @@ export function agentRoutes(opts: {
   orgService: AgentOrgService;
   orgRoutingService: AgentOrgRoutingService;
   executionService: AgentExecutionService;
+  ledgerService: AgentExecutionLedgerService;
   memoryService: MemoryPartitionService;
   evalRunner: EvalRunnerService;
   workflow: BrandPipelineOrchestrator;
@@ -368,7 +374,7 @@ export function agentRoutes(opts: {
           queueForWorker: body.data.queueForWorker
         });
 
-        return reply.code(result.approvalRequired ? 202 : 200).send(result);
+      return reply.code(result.approvalRequired ? 202 : 200).send(result);
       } catch (error) {
         return handleAgentError(reply, error);
       }
@@ -636,6 +642,65 @@ export function agentRoutes(opts: {
         return reply.code(404).send({ error: "execution_not_found" });
       }
       return reply.send(execution);
+    });
+
+    app.get("/v1/agent-os/execution/records", async (req, reply) => {
+      const query = AssignmentRecordListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const items = await opts.ledgerService.listAssignmentRecords({
+        tenantId: req.auth.tenantId,
+        limit: query.data.limit
+      });
+      return reply.send({ items });
+    });
+
+    app.get("/v1/agent-os/execution/records/:recordId", async (req, reply) => {
+      const path = AssignmentRecordIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      const item = await opts.ledgerService.getAssignmentRecord({
+        tenantId: req.auth.tenantId,
+        assignmentRecordId: path.data.recordId
+      });
+      if (!item) {
+        return reply.code(404).send({ error: "assignment_record_not_found" });
+      }
+      return reply.send(item);
+    });
+
+    app.get("/v1/agent-os/execution/runs", async (req, reply) => {
+      const query = ExecutionRunListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const items = await opts.ledgerService.listExecutionRunRecords({
+        tenantId: req.auth.tenantId,
+        currentState: query.data.currentState,
+        limit: query.data.limit
+      });
+      return reply.send({ items });
+    });
+
+    app.get("/v1/agent-os/execution/runs/:runId", async (req, reply) => {
+      const path = ExecutionRunIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      const item = await opts.ledgerService.getExecutionRunRecord({
+        tenantId: req.auth.tenantId,
+        runRecordId: path.data.runId
+      });
+      if (!item) {
+        return reply.code(404).send({ error: "execution_run_not_found" });
+      }
+      return reply.send(item);
     });
 
     app.post("/v1/workflows/brand-pipeline/advance", async (req, reply) => {

@@ -59,6 +59,24 @@ describe("agent routes", () => {
       }
     }))
   } as never;
+  const ledgerService = {
+    listAssignmentRecords: vi.fn(async () => [
+      { assignmentRecordId: "assignment:1", manifestVersion: "2026-03-12.v1", policyDecision: "approved" }
+    ]),
+    getAssignmentRecord: vi.fn(async () => ({
+      assignmentRecordId: "assignment:1",
+      manifestVersion: "2026-03-12.v1",
+      policyDecision: "approved"
+    })),
+    listExecutionRunRecords: vi.fn(async () => [
+      { runRecordId: "run:1", currentState: "succeeded", assignmentRecordId: "assignment:1" }
+    ]),
+    getExecutionRunRecord: vi.fn(async () => ({
+      runRecordId: "run:1",
+      currentState: "succeeded",
+      assignmentRecordId: "assignment:1"
+    }))
+  } as never;
   const memoryService = {
     readPartition: vi.fn(async () => [{ memoryEntryId: "memory:1" }]),
     writeOwnedEntry: vi.fn(async () => ({ memoryEntryId: "memory:1" })),
@@ -648,6 +666,7 @@ describe("agent routes", () => {
         orgService,
         orgRoutingService: orgRoutingService as never,
         executionService,
+        ledgerService,
         memoryService,
         evalRunner,
         workflow,
@@ -776,6 +795,22 @@ describe("agent routes", () => {
         handoffTarget: "jordyn"
       }
     });
+  });
+
+  it("exposes assignment ledger records and execution runs", async () => {
+    const recordsRes = await app.inject({ method: "GET", url: "/v1/agent-os/execution/records?limit=10" });
+    const recordRes = await app.inject({ method: "GET", url: "/v1/agent-os/execution/records/assignment:1" });
+    const runsRes = await app.inject({ method: "GET", url: "/v1/agent-os/execution/runs?limit=10" });
+    const runRes = await app.inject({ method: "GET", url: "/v1/agent-os/execution/runs/run:1" });
+
+    expect(recordsRes.statusCode).toBe(200);
+    expect(recordsRes.json().items[0].assignmentRecordId).toBe("assignment:1");
+    expect(recordRes.statusCode).toBe(200);
+    expect(recordRes.json().assignmentRecordId).toBe("assignment:1");
+    expect(runsRes.statusCode).toBe(200);
+    expect(runsRes.json().items[0].runRecordId).toBe("run:1");
+    expect(runRes.statusCode).toBe(200);
+    expect(runRes.json().runRecordId).toBe("run:1");
   });
 
   it("records eval runs and exposes memory reads", async () => {

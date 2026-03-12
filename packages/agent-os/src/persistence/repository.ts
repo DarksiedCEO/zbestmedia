@@ -14,10 +14,13 @@ import { AGENT_EVAL_PROFILES } from "../evals/specs.js";
 import type {
   AgentLifecycleEventRecord,
   AgentRecord,
+  AssignmentRecord,
   ApprovalDecision,
   ApprovalDecisionRecord,
   ApprovalRequestRecord,
   ExecutionRecord,
+  ExecutionRunRecord,
+  ExecutionRunState,
   ExecutionStatus,
   ExecutionStepRecord,
   ExecutionStepStatus,
@@ -116,6 +119,51 @@ type ExecutionRow = {
   dead_lettered_at: string | Date | null;
   started_at: string | Date | null;
   completed_at: string | Date | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+};
+
+type AssignmentRecordRow = {
+  tenant_id: string;
+  assignment_record_id: string;
+  manifest_version: string;
+  correlation_id: string;
+  request_source: string;
+  requested_by: string;
+  requested_task_category: string | null;
+  requested_responsibility_key: string | null;
+  request_metadata: Record<string, unknown>;
+  requested_execution_target: string | null;
+  resolved_executive_id: string | null;
+  resolved_department_id: string | null;
+  resolved_lead_agent_id: string | null;
+  resolved_sub_agent_id: string | null;
+  execution_agent_id: string | null;
+  policy_decision: AssignmentRecord["policyDecision"];
+  policy_decision_reason: string;
+  routing_decision: Record<string, unknown> | null;
+  routing_trace: string[];
+  created_at: string | Date;
+  updated_at: string | Date;
+};
+
+type ExecutionRunRecordRow = {
+  tenant_id: string;
+  run_record_id: string;
+  assignment_record_id: string;
+  execution_id: string | null;
+  current_state: ExecutionRunState;
+  requested_at: string | Date;
+  validated_at: string | Date | null;
+  routed_at: string | Date | null;
+  blocked_at: string | Date | null;
+  execution_started_at: string | Date | null;
+  retriable_at: string | Date | null;
+  execution_ended_at: string | Date | null;
+  failure_category: string | null;
+  failure_message: string | null;
+  retryable: boolean;
+  metadata: Record<string, unknown>;
   created_at: string | Date;
   updated_at: string | Date;
 };
@@ -291,6 +339,55 @@ function mapExecutionRow(row: ExecutionRow): ExecutionRecord {
     deadLetteredAt: row.dead_lettered_at ? toIsoString(row.dead_lettered_at) : null,
     startedAt: row.started_at ? toIsoString(row.started_at) : null,
     completedAt: row.completed_at ? toIsoString(row.completed_at) : null,
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at)
+  };
+}
+
+function mapAssignmentRecordRow(row: AssignmentRecordRow): AssignmentRecord {
+  return {
+    tenantId: row.tenant_id,
+    assignmentRecordId: row.assignment_record_id,
+    manifestVersion: row.manifest_version,
+    correlationId: row.correlation_id,
+    requestSource: row.request_source,
+    requestedBy: row.requested_by,
+    requestedTaskCategory: row.requested_task_category as AssignmentRecord["requestedTaskCategory"],
+    requestedResponsibilityKey: row.requested_responsibility_key,
+    requestMetadata: row.request_metadata,
+    requestedExecutionTarget: row.requested_execution_target,
+    resolvedExecutiveId: row.resolved_executive_id as AssignmentRecord["resolvedExecutiveId"],
+    resolvedDepartmentId: row.resolved_department_id as AssignmentRecord["resolvedDepartmentId"],
+    resolvedLeadAgentId: row.resolved_lead_agent_id as AssignmentRecord["resolvedLeadAgentId"],
+    resolvedSubAgentId: row.resolved_sub_agent_id as AssignmentRecord["resolvedSubAgentId"],
+    executionAgentId: row.execution_agent_id as AssignmentRecord["executionAgentId"],
+    policyDecision: row.policy_decision,
+    policyDecisionReason: row.policy_decision_reason,
+    routingDecision: row.routing_decision as AssignmentRecord["routingDecision"],
+    routingTrace: row.routing_trace,
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at)
+  };
+}
+
+function mapExecutionRunRecordRow(row: ExecutionRunRecordRow): ExecutionRunRecord {
+  return {
+    tenantId: row.tenant_id,
+    runRecordId: row.run_record_id,
+    assignmentRecordId: row.assignment_record_id,
+    executionId: row.execution_id,
+    currentState: row.current_state,
+    requestedAt: toIsoString(row.requested_at),
+    validatedAt: row.validated_at ? toIsoString(row.validated_at) : null,
+    routedAt: row.routed_at ? toIsoString(row.routed_at) : null,
+    blockedAt: row.blocked_at ? toIsoString(row.blocked_at) : null,
+    executionStartedAt: row.execution_started_at ? toIsoString(row.execution_started_at) : null,
+    retriableAt: row.retriable_at ? toIsoString(row.retriable_at) : null,
+    executionEndedAt: row.execution_ended_at ? toIsoString(row.execution_ended_at) : null,
+    failureCategory: row.failure_category,
+    failureMessage: row.failure_message,
+    retryable: row.retryable,
+    metadata: row.metadata,
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at)
   };
@@ -1234,6 +1331,297 @@ export class AgentOsRepository {
         updatedAt: createdAt
       };
     });
+  }
+
+  async createAssignmentRecord(args: {
+    tenantId: string;
+    manifestVersion: string;
+    correlationId: string;
+    requestSource: string;
+    requestedBy: string;
+    requestedTaskCategory: AssignmentRecord["requestedTaskCategory"];
+    requestedResponsibilityKey?: string | null;
+    requestMetadata: Record<string, unknown>;
+    requestedExecutionTarget?: string | null;
+    resolvedExecutiveId?: AssignmentRecord["resolvedExecutiveId"];
+    resolvedDepartmentId?: AssignmentRecord["resolvedDepartmentId"];
+    resolvedLeadAgentId?: AssignmentRecord["resolvedLeadAgentId"];
+    resolvedSubAgentId?: AssignmentRecord["resolvedSubAgentId"];
+    executionAgentId?: AssignmentRecord["executionAgentId"];
+    policyDecision: AssignmentRecord["policyDecision"];
+    policyDecisionReason: string;
+    routingDecision?: AssignmentRecord["routingDecision"];
+    routingTrace?: string[];
+    createdAt?: string;
+  }): Promise<AssignmentRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const assignmentRecordId = buildScopedId("assignment", [args.correlationId, createdAt]);
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AssignmentRecordRow>(
+        `
+        INSERT INTO assignment_records (
+          tenant_id, assignment_record_id, manifest_version, correlation_id, request_source,
+          requested_by, requested_task_category, requested_responsibility_key, request_metadata,
+          requested_execution_target, resolved_executive_id, resolved_department_id, resolved_lead_agent_id,
+          resolved_sub_agent_id, execution_agent_id, policy_decision, policy_decision_reason,
+          routing_decision, routing_trace, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9::jsonb,
+          $10, $11, $12, $13,
+          $14, $15, $16, $17,
+          $18::jsonb, $19::jsonb, $20, $21
+        )
+        RETURNING tenant_id, assignment_record_id, manifest_version, correlation_id, request_source,
+                  requested_by, requested_task_category, requested_responsibility_key, request_metadata,
+                  requested_execution_target, resolved_executive_id, resolved_department_id, resolved_lead_agent_id,
+                  resolved_sub_agent_id, execution_agent_id, policy_decision, policy_decision_reason,
+                  routing_decision, routing_trace, created_at, updated_at
+        `,
+        [
+          args.tenantId,
+          assignmentRecordId,
+          args.manifestVersion,
+          args.correlationId,
+          args.requestSource,
+          args.requestedBy,
+          args.requestedTaskCategory,
+          args.requestedResponsibilityKey ?? null,
+          JSON.stringify(args.requestMetadata),
+          args.requestedExecutionTarget ?? null,
+          args.resolvedExecutiveId ?? null,
+          args.resolvedDepartmentId ?? null,
+          args.resolvedLeadAgentId ?? null,
+          args.resolvedSubAgentId ?? null,
+          args.executionAgentId ?? null,
+          args.policyDecision,
+          args.policyDecisionReason,
+          JSON.stringify(args.routingDecision ?? null),
+          JSON.stringify(args.routingTrace ?? []),
+          createdAt,
+          createdAt
+        ]
+      )
+    );
+
+    return mapAssignmentRecordRow(res.rows[0]!);
+  }
+
+  async getAssignmentRecord(args: {
+    tenantId: string;
+    assignmentRecordId: string;
+  }): Promise<AssignmentRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AssignmentRecordRow>(
+        `
+        SELECT tenant_id, assignment_record_id, manifest_version, correlation_id, request_source,
+               requested_by, requested_task_category, requested_responsibility_key, request_metadata,
+               requested_execution_target, resolved_executive_id, resolved_department_id, resolved_lead_agent_id,
+               resolved_sub_agent_id, execution_agent_id, policy_decision, policy_decision_reason,
+               routing_decision, routing_trace, created_at, updated_at
+        FROM assignment_records
+        WHERE tenant_id = $1 AND assignment_record_id = $2
+        `,
+        [args.tenantId, args.assignmentRecordId]
+      )
+    );
+
+    return res.rows[0] ? mapAssignmentRecordRow(res.rows[0]) : null;
+  }
+
+  async listAssignmentRecords(args: {
+    tenantId: string;
+    limit?: number;
+  }): Promise<AssignmentRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AssignmentRecordRow>(
+        `
+        SELECT tenant_id, assignment_record_id, manifest_version, correlation_id, request_source,
+               requested_by, requested_task_category, requested_responsibility_key, request_metadata,
+               requested_execution_target, resolved_executive_id, resolved_department_id, resolved_lead_agent_id,
+               resolved_sub_agent_id, execution_agent_id, policy_decision, policy_decision_reason,
+               routing_decision, routing_trace, created_at, updated_at
+        FROM assignment_records
+        WHERE tenant_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+        `,
+        [args.tenantId, args.limit ?? 50]
+      )
+    );
+
+    return res.rows.map(mapAssignmentRecordRow);
+  }
+
+  async createExecutionRunRecord(args: {
+    tenantId: string;
+    assignmentRecordId: string;
+    executionId?: string | null;
+    currentState: ExecutionRunState;
+    metadata?: Record<string, unknown>;
+    requestedAt?: string;
+  }): Promise<ExecutionRunRecord> {
+    const requestedAt = args.requestedAt ?? new Date().toISOString();
+    const runRecordId = buildScopedId("run", [args.assignmentRecordId, requestedAt]);
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<ExecutionRunRecordRow>(
+        `
+        INSERT INTO execution_run_records (
+          tenant_id, run_record_id, assignment_record_id, execution_id, current_state,
+          requested_at, validated_at, routed_at, blocked_at, execution_started_at, retriable_at,
+          execution_ended_at, failure_category, failure_message, retryable, metadata, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, NULL, NULL, NULL, NULL, NULL,
+          NULL, NULL, NULL, false, $7::jsonb, $8, $9
+        )
+        RETURNING tenant_id, run_record_id, assignment_record_id, execution_id, current_state,
+                  requested_at, validated_at, routed_at, blocked_at, execution_started_at, retriable_at,
+                  execution_ended_at, failure_category, failure_message, retryable, metadata, created_at, updated_at
+        `,
+        [
+          args.tenantId,
+          runRecordId,
+          args.assignmentRecordId,
+          args.executionId ?? null,
+          args.currentState,
+          requestedAt,
+          JSON.stringify(args.metadata ?? {}),
+          requestedAt,
+          requestedAt
+        ]
+      )
+    );
+
+    return mapExecutionRunRecordRow(res.rows[0]!);
+  }
+
+  async transitionExecutionRunRecord(args: {
+    tenantId: string;
+    runRecordId: string;
+    fromState: ExecutionRunState;
+    toState: ExecutionRunState;
+    executionId?: string | null;
+    failureCategory?: string | null;
+    failureMessage?: string | null;
+    retryable?: boolean;
+    metadata?: Record<string, unknown>;
+    transitionedAt?: string;
+  }): Promise<ExecutionRunRecord> {
+    const transitionedAt = args.transitionedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<ExecutionRunRecordRow>(
+        `
+        UPDATE execution_run_records
+        SET current_state = $4,
+            execution_id = COALESCE($5, execution_id),
+            validated_at = CASE WHEN $4 = 'validated' THEN $6 ELSE validated_at END,
+            routed_at = CASE WHEN $4 = 'routed' THEN $6 ELSE routed_at END,
+            blocked_at = CASE WHEN $4 = 'blocked' THEN $6 ELSE blocked_at END,
+            execution_started_at = CASE WHEN $4 = 'executing' THEN $6 ELSE execution_started_at END,
+            retriable_at = CASE WHEN $4 = 'retriable' THEN $6 ELSE retriable_at END,
+            execution_ended_at = CASE WHEN $4 IN ('succeeded', 'failed') THEN $6 ELSE execution_ended_at END,
+            failure_category = $7,
+            failure_message = $8,
+            retryable = COALESCE($9, retryable),
+            metadata = CASE
+              WHEN $10::jsonb IS NULL THEN metadata
+              ELSE metadata || $10::jsonb
+            END,
+            updated_at = $6
+        WHERE tenant_id = $1
+          AND run_record_id = $2
+          AND current_state = $3
+        RETURNING tenant_id, run_record_id, assignment_record_id, execution_id, current_state,
+                  requested_at, validated_at, routed_at, blocked_at, execution_started_at, retriable_at,
+                  execution_ended_at, failure_category, failure_message, retryable, metadata, created_at, updated_at
+        `,
+        [
+          args.tenantId,
+          args.runRecordId,
+          args.fromState,
+          args.toState,
+          args.executionId ?? null,
+          transitionedAt,
+          args.failureCategory ?? null,
+          args.failureMessage ?? null,
+          args.retryable ?? null,
+          args.metadata ? JSON.stringify(args.metadata) : null
+        ]
+      )
+    );
+
+    if (!res.rows[0]) {
+      throw new Error("execution_run_state_conflict");
+    }
+
+    return mapExecutionRunRecordRow(res.rows[0]);
+  }
+
+  async getExecutionRunRecord(args: {
+    tenantId: string;
+    runRecordId: string;
+  }): Promise<ExecutionRunRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<ExecutionRunRecordRow>(
+        `
+        SELECT tenant_id, run_record_id, assignment_record_id, execution_id, current_state,
+               requested_at, validated_at, routed_at, blocked_at, execution_started_at, retriable_at,
+               execution_ended_at, failure_category, failure_message, retryable, metadata, created_at, updated_at
+        FROM execution_run_records
+        WHERE tenant_id = $1 AND run_record_id = $2
+        `,
+        [args.tenantId, args.runRecordId]
+      )
+    );
+
+    return res.rows[0] ? mapExecutionRunRecordRow(res.rows[0]) : null;
+  }
+
+  async getExecutionRunRecordByExecutionId(args: {
+    tenantId: string;
+    executionId: string;
+  }): Promise<ExecutionRunRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<ExecutionRunRecordRow>(
+        `
+        SELECT tenant_id, run_record_id, assignment_record_id, execution_id, current_state,
+               requested_at, validated_at, routed_at, blocked_at, execution_started_at, retriable_at,
+               execution_ended_at, failure_category, failure_message, retryable, metadata, created_at, updated_at
+        FROM execution_run_records
+        WHERE tenant_id = $1 AND execution_id = $2
+        ORDER BY created_at DESC
+        LIMIT 1
+        `,
+        [args.tenantId, args.executionId]
+      )
+    );
+
+    return res.rows[0] ? mapExecutionRunRecordRow(res.rows[0]) : null;
+  }
+
+  async listExecutionRunRecords(args: {
+    tenantId: string;
+    currentState?: ExecutionRunState;
+    limit?: number;
+  }): Promise<ExecutionRunRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<ExecutionRunRecordRow>(
+        `
+        SELECT tenant_id, run_record_id, assignment_record_id, execution_id, current_state,
+               requested_at, validated_at, routed_at, blocked_at, execution_started_at, retriable_at,
+               execution_ended_at, failure_category, failure_message, retryable, metadata, created_at, updated_at
+        FROM execution_run_records
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR current_state = $2)
+        ORDER BY created_at DESC
+        LIMIT $3
+        `,
+        [args.tenantId, args.currentState ?? null, args.limit ?? 50]
+      )
+    );
+
+    return res.rows.map(mapExecutionRunRecordRow);
   }
 
   async appendExecutionStep(args: {

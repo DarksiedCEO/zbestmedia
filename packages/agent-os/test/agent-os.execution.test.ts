@@ -5,6 +5,7 @@ import path from "node:path";
 
 import {
   AgentExecutionService,
+  AgentExecutionLedgerService,
   AgentMemoryAccessError,
   AgentOrgRoutingError,
   ApprovalWorkflowService,
@@ -13,6 +14,40 @@ import {
   EvalRunnerService,
   MemoryPartitionService
 } from "../src/index.js";
+
+function createLedgerStub() {
+  let state: string = "requested";
+
+  return {
+    createAssignment: vi.fn(async () => ({
+      assignmentRecordId: "assignment:req-1"
+    })),
+    createRun: vi.fn(async () => ({
+      runRecordId: "run:req-1",
+      currentState: "requested"
+    })),
+    transition: vi.fn(async ({ transition }: { transition: string }) => {
+      const nextStateMap: Record<string, string> = {
+        validate: "validated",
+        route: "routed",
+        block: "blocked",
+        start_execution: "executing",
+        succeed: "succeeded",
+        fail: "failed",
+        mark_retriable: "retriable"
+      };
+      state = nextStateMap[transition] ?? state;
+      return {
+        runRecordId: "run:req-1",
+        currentState: state
+      };
+    }),
+    attachExecution: vi.fn(async () => ({
+      runRecordId: "run:req-1",
+      currentState: state
+    }))
+  } as unknown as AgentExecutionLedgerService;
+}
 
 describe("agent-os execution and workflow services", () => {
   it("requires approval for customer-facing Brandyn executions", async () => {
@@ -30,7 +65,11 @@ describe("agent-os execution and workflow services", () => {
 
     const service = new AgentExecutionService(
       repository,
-      new ApprovalWorkflowService(repository)
+      new ApprovalWorkflowService(repository),
+      undefined,
+      undefined,
+      undefined,
+      createLedgerStub()
     );
 
     const result = await service.execute({
@@ -134,7 +173,14 @@ describe("agent-os execution and workflow services", () => {
       }))
     } as never;
 
-    const service = new AgentExecutionService(repository, approvals, promptExecutor);
+    const service = new AgentExecutionService(
+      repository,
+      approvals,
+      promptExecutor,
+      undefined,
+      undefined,
+      createLedgerStub()
+    );
     const result = await service.execute({
       tenantId: "11111111-1111-4111-8111-111111111111",
       agentId: "oracle",
@@ -161,7 +207,14 @@ describe("agent-os execution and workflow services", () => {
       execute: vi.fn(async () => ({ summary: "should not execute" }))
     } as never;
 
-    const service = new AgentExecutionService(repository, approvals, promptExecutor);
+    const service = new AgentExecutionService(
+      repository,
+      approvals,
+      promptExecutor,
+      undefined,
+      undefined,
+      createLedgerStub()
+    );
 
     await expect(
       service.execute({

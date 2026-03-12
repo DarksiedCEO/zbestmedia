@@ -79,6 +79,25 @@ export const ExecutionListQuerySchema = z.object({
   status: z.enum(["QUEUED", "PENDING_APPROVAL", "RUNNING", "COMPLETED", "FAILED"]).optional()
 });
 
+export const AssignmentRecordIdParamSchema = z.object({
+  recordId: z.string().min(1)
+});
+
+export const ExecutionRunIdParamSchema = z.object({
+  runId: z.string().min(1)
+});
+
+export const AssignmentRecordListQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).default(25)
+});
+
+export const ExecutionRunListQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).default(25),
+  currentState: z
+    .enum(["requested", "validated", "routed", "blocked", "executing", "retriable", "succeeded", "failed"])
+    .optional()
+});
+
 export const AgentVersionCreateBodySchema = z.object({
   versionLabel: z.string().min(1),
   definitionSnapshot: z.record(z.string(), z.unknown())

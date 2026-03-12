@@ -1,6 +1,7 @@
 import type { AgentId } from "../agents/registry.js";
 import { AGENT_EVAL_PROFILES } from "../evals/specs.js";
 import { evaluateObservations, type EvalObservation } from "../evals/runner.js";
+import { AgentExecutionLedgerService } from "../execution/ledger.js";
 import { buildDeterministicExecutionOutput } from "../execution/promptExecutor.js";
 import type { EvalRunRecord, ExecutionRecord } from "../persistence/contracts.js";
 import type { AgentOsRepository } from "../persistence/repository.js";
@@ -14,7 +15,10 @@ function buildDefaultEvalObservations(agentId: AgentId): EvalObservation[] {
 }
 
 export class AgentRuntimeService {
-  constructor(private readonly repository: AgentOsRepository) {}
+  constructor(
+    private readonly repository: AgentOsRepository,
+    private readonly ledger: AgentExecutionLedgerService = new AgentExecutionLedgerService(repository)
+  ) {}
 
   async processExecutionJobs(args: {
     tenantId: string;
@@ -37,6 +41,20 @@ export class AgentRuntimeService {
     const deadLettered: ExecutionRecord[] = [];
 
     for (const execution of claimed) {
+      const runRecord = await this.ledger.getExecutionRunRecordByExecutionId({
+        tenantId: args.tenantId,
+        executionId: execution.executionId
+      });
+      let activeRun = runRecord;
+      if (activeRun && activeRun.currentState !== "executing") {
+        activeRun = await this.ledger.transition({
+          tenantId: args.tenantId,
+          runRecord: activeRun,
+          transition: "start_execution",
+          executionId: execution.executionId,
+          transitionedAt: now
+        });
+      }
       const forcedFailureClass =
         typeof execution.inputPayload.forceFailureClass === "string"
           ? execution.inputPayload.forceFailureClass
@@ -69,6 +87,18 @@ export class AgentRuntimeService {
               deadLetteredAt: now
             })
           );
+          if (activeRun) {
+            await this.ledger.transition({
+              tenantId: args.tenantId,
+              runRecord: activeRun,
+              transition: "fail",
+              executionId: execution.executionId,
+              failureCategory: forcedFailureClass,
+              failureMessage,
+              retryable: false,
+              transitionedAt: now
+            });
+          }
         } else {
           const nextRetryAt = new Date(new Date(now).getTime() + retryDelayMs).toISOString();
           await this.repository.appendExecutionStep({
@@ -90,6 +120,19 @@ export class AgentRuntimeService {
               updatedAt: now
             })
           );
+          if (activeRun) {
+            await this.ledger.transition({
+              tenantId: args.tenantId,
+              runRecord: activeRun,
+              transition: "mark_retriable",
+              executionId: execution.executionId,
+              failureCategory: forcedFailureClass,
+              failureMessage,
+              retryable: true,
+              metadata: { nextRetryAt },
+              transitionedAt: now
+            });
+          }
         }
         continue;
       }
@@ -131,6 +174,15 @@ export class AgentRuntimeService {
         outputPayload: output,
         completedAt: now
       });
+      if (activeRun) {
+        await this.ledger.transition({
+          tenantId: args.tenantId,
+          runRecord: activeRun,
+          transition: "succeed",
+          executionId: execution.executionId,
+          transitionedAt: now
+        });
+      }
       const resolved = await this.repository.getExecution({
         tenantId: args.tenantId,
         executionId: execution.executionId

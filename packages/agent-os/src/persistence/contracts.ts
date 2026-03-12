@@ -1,7 +1,19 @@
 import { z } from "zod";
 
 import { AgentTaskDomainSchema } from "../agents/domains.js";
+import {
+  AssignmentPolicyDecisionSchema,
+  AssignmentRecordSchema,
+  ExecutionRunRecordSchema,
+  ExecutionRunStateSchema
+} from "../execution/records.js";
 import type { AgentId } from "../agents/registry.js";
+import type {
+  AssignmentPolicyDecision,
+  AssignmentRecord,
+  ExecutionRunRecord,
+  ExecutionRunState
+} from "../execution/record-types.js";
 import { AgentLifecycleStatusSchema } from "../lifecycle/config.js";
 
 export const ApprovalStatusSchema = z.enum(["PENDING", "APPROVED", "REJECTED"]);
@@ -24,6 +36,9 @@ export type ExecutionStatus = z.infer<typeof ExecutionStatusSchema>;
 
 export const ExecutionStepStatusSchema = z.enum(["PENDING", "COMPLETED", "FAILED", "SKIPPED"]);
 export type ExecutionStepStatus = z.infer<typeof ExecutionStepStatusSchema>;
+
+export { AssignmentPolicyDecisionSchema, AssignmentRecordSchema, ExecutionRunRecordSchema, ExecutionRunStateSchema };
+export type { AssignmentPolicyDecision, AssignmentRecord, ExecutionRunRecord, ExecutionRunState };
 
 export const AgentRecordSchema = z.object({
   tenantId: z.string().uuid(),

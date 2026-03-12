@@ -33,6 +33,7 @@ describe("agent-os runtime controls", () => {
   });
 
   it("schedules retries before dead-lettering executions", async () => {
+    let runState = "routed";
     const scheduleExecutionRetry = vi.fn(async () => ({
       executionId: "execution:kobe:campaign-1",
       status: "QUEUED",
@@ -67,6 +68,14 @@ describe("agent-os runtime controls", () => {
           }
         ]),
       appendExecutionStep: vi.fn(async () => ({})),
+      getExecutionRunRecordByExecutionId: vi.fn(async () => ({
+        runRecordId: "run:kobe:campaign-1",
+        currentState: runState
+      })),
+      transitionExecutionRunRecord: vi.fn(async ({ toState }: { toState: string }) => {
+        runState = toState;
+        return { runRecordId: "run:kobe:campaign-1", currentState: toState };
+      }),
       scheduleExecutionRetry,
       deadLetterExecution,
       completeExecution: vi.fn(async () => undefined),
@@ -92,6 +101,7 @@ describe("agent-os runtime controls", () => {
   });
 
   it("appends executed handoff steps for queued maestro orchestration jobs", async () => {
+    let runState = "routed";
     const appendExecutionStep = vi.fn(async () => ({}));
     const repository = {
       claimQueuedExecutions: vi.fn(async () => [
@@ -112,6 +122,14 @@ describe("agent-os runtime controls", () => {
         }
       ]),
       appendExecutionStep,
+      getExecutionRunRecordByExecutionId: vi.fn(async () => ({
+        runRecordId: "run:maestro:campaign-1",
+        currentState: runState
+      })),
+      transitionExecutionRunRecord: vi.fn(async ({ toState }: { toState: string }) => {
+        runState = toState;
+        return { runRecordId: "run:maestro:campaign-1", currentState: toState };
+      }),
       completeExecution: vi.fn(async () => undefined),
       getExecution: vi.fn(async () => ({
         execution: { executionId: "execution:maestro:campaign-1", status: "COMPLETED" }

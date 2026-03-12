@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { AgentId } from "../agents/registry.js";
 
 export type ExecutiveId =
@@ -81,3 +82,46 @@ export type ReportingChainNode =
   | { nodeType: "sub-agent"; nodeId: SubAgentId; displayName: string }
   | { nodeType: "lead-agent"; nodeId: LeadAgentId; displayName: string }
   | { nodeType: "executive"; nodeId: ExecutiveId; displayName: string };
+
+export const ExecutiveIdSchema = z.enum([
+  "maestro-orchestrator",
+  "cro",
+  "cmo",
+  "cio",
+  "cco",
+  "cto",
+  "cpo",
+  "coo",
+  "cgo",
+  "cso"
+]);
+
+export const DepartmentIdSchema = z.enum([
+  "revenue-sales",
+  "marketing",
+  "intelligence-research",
+  "creative-content",
+  "technology-engineering",
+  "product",
+  "operations",
+  "growth",
+  "strategy-security-risk"
+]);
+
+export const LeadAgentIdSchema = z.enum([
+  "brandyn",
+  "jordyn",
+  "kobe",
+  "jingle-jon",
+  "jingle-jane",
+  "code-sentinel"
+]);
+
+export const SubAgentIdSchema = z.enum([
+  "build-monitor",
+  "dependency-watcher",
+  "runtime-health-monitor",
+  "migration-guardian",
+  "route-contract-watcher",
+  "slo-enforcer"
+]);

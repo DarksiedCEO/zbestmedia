@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { AgentId } from "../agents/registry.js";
 
 import type { OperationalSignalType, ResponsibilityKey } from "./selectors.js";
@@ -49,3 +50,20 @@ export type RoutingDecision = {
   policyValidated: true;
   trace: string[];
 };
+
+export const RoutingTaskCategorySchema = z.enum(ROUTING_TASK_CATEGORIES);
+
+export const JingleRoutingModeSchema = z.enum(JINGLE_ROUTING_MODES);
+
+export const RoutingDecisionSchema = z.object({
+  requestedCategory: RoutingTaskCategorySchema,
+  resolvedDepartment: z.string().min(1),
+  resolvedExecutive: z.string().min(1),
+  resolvedLeadAgentId: z.string().min(1),
+  resolvedSubAgentId: z.string().nullable(),
+  executionAgentId: z.string().nullable(),
+  responsibilityKey: z.string().min(1),
+  operationalSignalType: z.string().nullable(),
+  policyValidated: z.literal(true),
+  trace: z.array(z.string().min(1))
+});

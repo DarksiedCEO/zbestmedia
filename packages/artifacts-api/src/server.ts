@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import {
   AgentExecutionService,
+  AgentExecutionLedgerService,
   ensureOrgSystemIntegrity,
   AgentOrgRoutingService,
   AgentOrgService,
@@ -71,17 +72,21 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const agentOrgService = new AgentOrgService();
   const agentOrgRoutingService = new AgentOrgRoutingService(agentOrgService);
   const approvalWorkflow = new ApprovalWorkflowService(agentRepository);
+  const ledgerService = new AgentExecutionLedgerService(agentRepository, agentOrgService);
   const agentExecutionService = new AgentExecutionService(
     agentRepository,
     approvalWorkflow,
-    createAgentPromptExecutorFromEnv(process.cwd())
+    createAgentPromptExecutorFromEnv(process.cwd()),
+    undefined,
+    undefined,
+    ledgerService
   );
   const memoryService = new MemoryPartitionService(agentRepository);
   const evalRunner = new EvalRunnerService(agentRepository);
   const brandWorkflow = new BrandPipelineOrchestrator(agentExecutionService, evalRunner);
   const versionService = new AgentVersionService(agentRepository);
   const workerService = new AgentWorkerService(agentRepository);
-  const runtimeService = new AgentRuntimeService(agentRepository);
+  const runtimeService = new AgentRuntimeService(agentRepository, ledgerService);
   const approvalEscalationService = new ApprovalEscalationService(agentRepository);
   const orchestrationService = new MaestroOrchestrationService(
     agentRepository,
@@ -117,6 +122,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       orgService: agentOrgService,
       orgRoutingService: agentOrgRoutingService,
       executionService: agentExecutionService,
+      ledgerService,
       memoryService,
       evalRunner,
       workflow: brandWorkflow,

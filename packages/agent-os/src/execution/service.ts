@@ -1,5 +1,6 @@
 import type { AgentId } from "../agents/registry.js";
 import type { ApprovalWorkflowService } from "../approvals/service.js";
+import { AgentExecutionLedgerService, buildAssignmentRequestMetadata } from "./ledger.js";
 import type { AgentOsRepository } from "../persistence/repository.js";
 import type { ExecutionRecord } from "../persistence/contracts.js";
 import { AgentOrgPolicyService } from "../org/policy.js";
@@ -29,12 +30,15 @@ export class AgentExecutionService {
     private readonly approvals: ApprovalWorkflowService,
     private readonly promptExecutor: AgentPromptExecutor = new DeterministicAgentPromptExecutor(),
     private readonly orgPolicy: AgentOrgPolicyService = new AgentOrgPolicyService(),
-    private readonly orgRouting: AgentOrgRoutingService = new AgentOrgRoutingService()
+    private readonly orgRouting: AgentOrgRoutingService = new AgentOrgRoutingService(),
+    private readonly ledger: AgentExecutionLedgerService = new AgentExecutionLedgerService(repository)
   ) {}
 
   async execute(args: AgentExecutionInput): Promise<
-    | {
+      | {
         execution: ExecutionRecord;
+        assignmentRecordId: string;
+        runRecordId: string;
         approvalRequired: true;
         approvalRequestId: string;
         requiredApprovers: string[];
@@ -42,34 +46,128 @@ export class AgentExecutionService {
       }
     | {
         execution: ExecutionRecord;
+        assignmentRecordId: string;
+        runRecordId: string;
         approvalRequired: false;
         output: Record<string, unknown>;
       }
   > {
+    const createdAt = args.createdAt ?? new Date().toISOString();
     const requestedRoute = this.resolveRequestedRoute(args.subjectType, args.payload);
-    if (requestedRoute) {
-      this.orgRouting.resolve({
-        category: requestedRoute.category,
-        requestedAgentId: args.agentId,
-        jingleMode: requestedRoute.jingleMode
+    let routingDecision = null;
+    let policyDecision: "approved" | "rejected" = "approved";
+    let policyDecisionReason = "assignment_policy_valid";
+
+    try {
+      if (requestedRoute) {
+        routingDecision = this.orgRouting.resolve({
+          category: requestedRoute.category,
+          requestedAgentId: args.agentId,
+          jingleMode: requestedRoute.jingleMode
+        });
+      } else {
+        this.orgPolicy.assertExecutionAgentResponsibility({
+          agentId: args.agentId,
+          subjectType: args.subjectType,
+          payload: args.payload
+        });
+      }
+    } catch (error) {
+      policyDecision = "rejected";
+      policyDecisionReason = error instanceof Error ? error.message : "assignment_policy_rejected";
+      const assignment = await this.ledger.createAssignment({
+        tenantId: args.tenantId,
+        correlationId: args.correlationId,
+        requestSource: args.requestSource,
+        requestedBy: args.actorId,
+        requestedTaskCategory: requestedRoute?.category ?? null,
+        requestedResponsibilityKey:
+          typeof args.payload.responsibilityKey === "string" ? args.payload.responsibilityKey : null,
+        requestMetadata: buildAssignmentRequestMetadata(args),
+        requestedExecutionTarget: args.agentId,
+        routingDecision,
+        policyDecision,
+        policyDecisionReason,
+        createdAt
       });
-    } else {
-      this.orgPolicy.assertExecutionAgentResponsibility({
-        agentId: args.agentId,
-        subjectType: args.subjectType,
-        payload: args.payload
+      const run = await this.ledger.createRun({
+        tenantId: args.tenantId,
+        assignmentRecordId: assignment.assignmentRecordId,
+        metadata: { decision: "rejected_before_execution" },
+        requestedAt: createdAt
       });
+      await this.ledger.transition({
+        tenantId: args.tenantId,
+        runRecord: run,
+        transition: "fail",
+        failureCategory: "assignment_policy_error",
+        failureMessage: policyDecisionReason,
+        metadata: { requestedAgentId: args.agentId },
+        transitionedAt: createdAt
+      });
+      throw error;
     }
 
-    const approval = await this.approvals.ensureApproval({
+    const assignment = await this.ledger.createAssignment({
       tenantId: args.tenantId,
-      agentId: args.agentId,
-      subjectType: args.subjectType,
-      subjectId: args.subjectId,
-      actorId: args.actorId,
-      payload: args.payload,
-      createdAt: args.createdAt
+      correlationId: args.correlationId,
+      requestSource: args.requestSource,
+      requestedBy: args.actorId,
+      requestedTaskCategory: requestedRoute?.category ?? null,
+      requestedResponsibilityKey:
+        typeof args.payload.responsibilityKey === "string" ? args.payload.responsibilityKey : null,
+      requestMetadata: buildAssignmentRequestMetadata(args),
+      requestedExecutionTarget: args.agentId,
+      routingDecision,
+      policyDecision,
+      policyDecisionReason,
+      createdAt
     });
+    let run = await this.ledger.createRun({
+      tenantId: args.tenantId,
+      assignmentRecordId: assignment.assignmentRecordId,
+      metadata: { requestedAgentId: args.agentId },
+      requestedAt: createdAt
+    });
+    run = await this.ledger.transition({
+      tenantId: args.tenantId,
+      runRecord: run,
+      transition: "validate",
+      metadata: { policyDecision },
+      transitionedAt: createdAt
+    });
+    run = await this.ledger.transition({
+      tenantId: args.tenantId,
+      runRecord: run,
+      transition: "route",
+      metadata: { routingDecision },
+      transitionedAt: createdAt
+    });
+
+    let approval;
+    try {
+      approval = await this.approvals.ensureApproval({
+        tenantId: args.tenantId,
+        agentId: args.agentId,
+        subjectType: args.subjectType,
+        subjectId: args.subjectId,
+        actorId: args.actorId,
+        payload: args.payload,
+        createdAt
+      });
+    } catch (error) {
+      const failureMessage = error instanceof Error ? error.message : "approval_resolution_failed";
+      await this.ledger.transition({
+        tenantId: args.tenantId,
+        runRecord: run,
+        transition: "fail",
+        failureCategory: "approval_resolution_error",
+        failureMessage,
+        retryable: false,
+        transitionedAt: createdAt
+      });
+      throw error;
+    }
 
     if (approval.approvalRequired) {
       const execution = await this.repository.createExecution({
@@ -83,7 +181,22 @@ export class AgentExecutionService {
         inputPayload: args.payload,
         status: "PENDING_APPROVAL",
         approvalRequestId: approval.approvalRequestId,
-        createdAt: args.createdAt
+        createdAt
+      });
+      run = await this.ledger.attachExecution({
+        tenantId: args.tenantId,
+        runRecordId: run.runRecordId,
+        executionId: execution.executionId,
+        currentState: run.currentState,
+        metadata: { approvalRequestId: approval.approvalRequestId },
+        transitionedAt: createdAt
+      });
+      run = await this.ledger.transition({
+        tenantId: args.tenantId,
+        runRecord: run,
+        transition: "block",
+        metadata: { approvalRequired: true, approvalRequestId: approval.approvalRequestId },
+        transitionedAt: createdAt
       });
 
       await this.repository.appendExecutionStep({
@@ -97,11 +210,13 @@ export class AgentExecutionService {
           requiredApprovers: approval.requiredApprovers,
           reason: approval.reason
         },
-        createdAt: args.createdAt
+        createdAt
       });
 
       return {
         execution,
+        assignmentRecordId: assignment.assignmentRecordId,
+        runRecordId: run.runRecordId,
         approvalRequired: true,
         approvalRequestId: approval.approvalRequestId,
         requiredApprovers: approval.requiredApprovers,
@@ -120,7 +235,15 @@ export class AgentExecutionService {
         subjectId: args.subjectId,
         inputPayload: args.payload,
         status: "QUEUED",
-        createdAt: args.createdAt
+        createdAt
+      });
+      run = await this.ledger.attachExecution({
+        tenantId: args.tenantId,
+        runRecordId: run.runRecordId,
+        executionId: execution.executionId,
+        currentState: run.currentState,
+        metadata: { queuedForWorker: true },
+        transitionedAt: createdAt
       });
 
       await this.repository.appendExecutionStep({
@@ -130,11 +253,13 @@ export class AgentExecutionService {
         stepOrder: 1,
         status: "PENDING",
         payload: { queuedForWorker: true },
-        createdAt: args.createdAt
+        createdAt
       });
 
       return {
         execution,
+        assignmentRecordId: assignment.assignmentRecordId,
+        runRecordId: run.runRecordId,
         approvalRequired: false,
         output: { queued: true }
       };
@@ -150,7 +275,22 @@ export class AgentExecutionService {
       subjectId: args.subjectId,
       inputPayload: args.payload,
       status: "RUNNING",
-      createdAt: args.createdAt
+      createdAt
+    });
+    run = await this.ledger.attachExecution({
+      tenantId: args.tenantId,
+      runRecordId: run.runRecordId,
+      executionId: execution.executionId,
+      currentState: run.currentState,
+      transitionedAt: createdAt
+    });
+    run = await this.ledger.transition({
+      tenantId: args.tenantId,
+      runRecord: run,
+      transition: "start_execution",
+      executionId: execution.executionId,
+      metadata: { executionId: execution.executionId },
+      transitionedAt: createdAt
     });
 
     await this.repository.appendExecutionStep({
@@ -160,43 +300,84 @@ export class AgentExecutionService {
       stepOrder: 1,
       status: "COMPLETED",
       payload: { agentId: args.agentId },
-      createdAt: args.createdAt
+      createdAt
     });
 
-    const output = await this.promptExecutor.execute({
-      tenantId: args.tenantId,
-      agentId: args.agentId,
-      correlationId: args.correlationId,
-      payload: args.payload
-    });
+    try {
+      const output = await this.promptExecutor.execute({
+        tenantId: args.tenantId,
+        agentId: args.agentId,
+        correlationId: args.correlationId,
+        payload: args.payload
+      });
 
-    await this.repository.appendExecutionStep({
-      tenantId: args.tenantId,
-      executionId: execution.executionId,
-      stepName: "execution_completed",
-      stepOrder: 2,
-      status: "COMPLETED",
-      payload: output,
-      createdAt: args.createdAt
-    });
-    await this.repository.completeExecution({
-      tenantId: args.tenantId,
-      executionId: execution.executionId,
-      outputPayload: output,
-      completedAt: args.createdAt
-    });
-
-    return {
-      execution: {
-        ...execution,
+      await this.repository.appendExecutionStep({
+        tenantId: args.tenantId,
+        executionId: execution.executionId,
+        stepName: "execution_completed",
+        stepOrder: 2,
         status: "COMPLETED",
+        payload: output,
+        createdAt
+      });
+      await this.repository.completeExecution({
+        tenantId: args.tenantId,
+        executionId: execution.executionId,
         outputPayload: output,
-        completedAt: args.createdAt ?? new Date().toISOString(),
-        updatedAt: args.createdAt ?? new Date().toISOString()
-      },
-      approvalRequired: false,
-      output
-    };
+        completedAt: createdAt
+      });
+      run = await this.ledger.transition({
+        tenantId: args.tenantId,
+        runRecord: run,
+        transition: "succeed",
+        executionId: execution.executionId,
+        metadata: { outputSummary: output.summary ?? null },
+        transitionedAt: createdAt
+      });
+
+      return {
+        execution: {
+          ...execution,
+          status: "COMPLETED",
+          outputPayload: output,
+          completedAt: createdAt,
+          updatedAt: createdAt
+        },
+        assignmentRecordId: assignment.assignmentRecordId,
+        runRecordId: run.runRecordId,
+        approvalRequired: false,
+        output
+      };
+    } catch (error) {
+      const failureMessage = error instanceof Error ? error.message : "execution_failed";
+      await this.repository.appendExecutionStep({
+        tenantId: args.tenantId,
+        executionId: execution.executionId,
+        stepName: "execution_failed",
+        stepOrder: 2,
+        status: "FAILED",
+        payload: { failureMessage },
+        createdAt
+      });
+      await this.repository.failExecution({
+        tenantId: args.tenantId,
+        executionId: execution.executionId,
+        failureClass: "execution_runtime_error",
+        failureMessage,
+        completedAt: createdAt
+      });
+      await this.ledger.transition({
+        tenantId: args.tenantId,
+        runRecord: run,
+        transition: "fail",
+        executionId: execution.executionId,
+        failureCategory: "execution_runtime_error",
+        failureMessage,
+        retryable: false,
+        transitionedAt: createdAt
+      });
+      throw error;
+    }
   }
 
   private resolveRequestedRoute(
