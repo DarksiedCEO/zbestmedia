@@ -2,6 +2,7 @@ import type { AgentId } from "../agents/registry.js";
 import type { ApprovalWorkflowService } from "../approvals/service.js";
 import type { AgentOsRepository } from "../persistence/repository.js";
 import type { ExecutionRecord } from "../persistence/contracts.js";
+import { AgentOrgPolicyService } from "../org/policy.js";
 import {
   buildDeterministicExecutionOutput,
   DeterministicAgentPromptExecutor,
@@ -25,7 +26,8 @@ export class AgentExecutionService {
   constructor(
     private readonly repository: AgentOsRepository,
     private readonly approvals: ApprovalWorkflowService,
-    private readonly promptExecutor: AgentPromptExecutor = new DeterministicAgentPromptExecutor()
+    private readonly promptExecutor: AgentPromptExecutor = new DeterministicAgentPromptExecutor(),
+    private readonly orgPolicy: AgentOrgPolicyService = new AgentOrgPolicyService()
   ) {}
 
   async execute(args: AgentExecutionInput): Promise<
@@ -42,6 +44,12 @@ export class AgentExecutionService {
         output: Record<string, unknown>;
       }
   > {
+    this.orgPolicy.assertExecutionAgentResponsibility({
+      agentId: args.agentId,
+      subjectType: args.subjectType,
+      payload: args.payload
+    });
+
     const approval = await this.approvals.ensureApproval({
       tenantId: args.tenantId,
       agentId: args.agentId,

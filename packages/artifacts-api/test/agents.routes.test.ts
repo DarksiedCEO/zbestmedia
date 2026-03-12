@@ -454,6 +454,44 @@ describe("agent routes", () => {
       payloadHash: "abc123"
     }
   }));
+  const orgService = {
+    getManifest: vi.fn(() => ({
+      executives: [{ executiveId: "cto", title: "Chief Technology Officer" }],
+      departments: [{ departmentId: "technology-engineering", executiveOwnerId: "cto" }],
+      leadAgents: [{ leadAgentId: "code-sentinel", reportsToExecutiveId: "cto", departmentId: "technology-engineering" }],
+      subAgents: [{ subAgentId: "route-contract-watcher", parentLeadAgentId: "code-sentinel" }]
+    })),
+    getExecutive: vi.fn((executiveId: string) => ({ executiveId, title: "Chief Technology Officer" })),
+    getExecutiveAgents: vi.fn(() => ({
+      departments: [{ departmentId: "technology-engineering", executiveOwnerId: "cto" }],
+      leadAgents: [{ leadAgentId: "code-sentinel", departmentId: "technology-engineering" }],
+      subAgents: [{ subAgentId: "route-contract-watcher", departmentId: "technology-engineering" }]
+    })),
+    getDepartment: vi.fn((departmentId: string) => ({ departmentId, executiveOwnerId: "cto" })),
+    getExecutiveOwnerForDepartment: vi.fn(() => ({ executiveId: "cto", title: "Chief Technology Officer" })),
+    getDepartmentAgents: vi.fn(() => ({
+      leadAgents: [{ leadAgentId: "code-sentinel", departmentId: "technology-engineering" }],
+      subAgents: [{ subAgentId: "route-contract-watcher", departmentId: "technology-engineering" }]
+    })),
+    isSubAgentId: vi.fn((agentId: string) => agentId === "route-contract-watcher"),
+    getSubAgent: vi.fn((agentId: string) => ({ subAgentId: agentId, parentLeadAgentId: "code-sentinel" })),
+    getLeadAgent: vi.fn((agentId: string) => ({ leadAgentId: agentId, reportsToExecutiveId: "cto", departmentId: "technology-engineering" })),
+    getLeadAgentScope: vi.fn(() => ({
+      allowedScope: ["build breakage detection"],
+      forbiddenScope: ["brand strategy"]
+    })),
+    getSubAgentsForLead: vi.fn(() => [{ subAgentId: "route-contract-watcher", parentLeadAgentId: "code-sentinel" }]),
+    getReportingChain: vi.fn(() => [
+      { nodeType: "sub-agent", nodeId: "route-contract-watcher", displayName: "Route Contract Watcher" },
+      { nodeType: "lead-agent", nodeId: "code-sentinel", displayName: "Code Sentinel" },
+      { nodeType: "executive", nodeId: "cto", displayName: "Chief Technology Officer" }
+    ]),
+    resolveResponsibilityOwner: vi.fn(() => ({ leadAgentId: "brandyn", departmentId: "marketing" })),
+    resolveOperationalSignalOwner: vi.fn(() => ({
+      leadAgent: { leadAgentId: "code-sentinel", departmentId: "technology-engineering" },
+      subAgent: { subAgentId: "route-contract-watcher", parentLeadAgentId: "code-sentinel" }
+    }))
+  } as never;
 
   beforeAll(async () => {
     app = Fastify();
@@ -468,6 +506,7 @@ describe("agent routes", () => {
     await app.register(
       agentRoutes({
         repository,
+        orgService,
         executionService,
         memoryService,
         evalRunner,
@@ -497,6 +536,34 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(201);
     expect(res.json().agents).toHaveLength(6);
+  });
+
+  it("exposes the org manifest and ownership routes", async () => {
+    const manifestRes = await app.inject({ method: "GET", url: "/v1/agent-os/org" });
+    const departmentRes = await app.inject({ method: "GET", url: "/v1/agent-os/org/departments/technology-engineering" });
+    const agentRes = await app.inject({ method: "GET", url: "/v1/agent-os/org/agents/code-sentinel" });
+    const chainRes = await app.inject({ method: "GET", url: "/v1/agent-os/org/reporting-chain/route-contract-watcher" });
+    const responsibilityRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/org/ownership/responsibilities/brand_identity_governance"
+    });
+    const signalRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/org/ownership/operational-signals/route_contract"
+    });
+
+    expect(manifestRes.statusCode).toBe(200);
+    expect(manifestRes.json().leadAgents[0].leadAgentId).toBe("code-sentinel");
+    expect(departmentRes.statusCode).toBe(200);
+    expect(departmentRes.json().executiveOwner.executiveId).toBe("cto");
+    expect(agentRes.statusCode).toBe(200);
+    expect(agentRes.json().leadAgent.leadAgentId).toBe("code-sentinel");
+    expect(chainRes.statusCode).toBe(200);
+    expect(chainRes.json().chain[0].nodeId).toBe("route-contract-watcher");
+    expect(responsibilityRes.statusCode).toBe(200);
+    expect(responsibilityRes.json().owner.leadAgentId).toBe("brandyn");
+    expect(signalRes.statusCode).toBe(200);
+    expect(signalRes.json().ownership.subAgent.subAgentId).toBe("route-contract-watcher");
   });
 
   it("executes an agent request with normalized response", async () => {

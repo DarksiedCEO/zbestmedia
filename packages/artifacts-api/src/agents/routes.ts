@@ -8,6 +8,7 @@ import {
   AgentRuntimeService,
   ApprovalEscalationService,
   AgentVersionService,
+  AgentOrgService,
   AgentWorkerService,
   BrandPipelineWorkflowError,
   BrandPipelineOrchestrator,
@@ -32,6 +33,7 @@ import {
   OrchestrationOpsExportQuerySchema,
   OrchestrationOpsHistoryVerifyBodySchema,
   ApprovalRequestIdParamSchema,
+  DepartmentIdParamSchema,
   OrchestrationEscalateBodySchema,
   OrchestrationExecutionListQuerySchema,
   OrchestrationPlanBodySchema,
@@ -40,11 +42,15 @@ import {
   OrchestrationWorkerProcessBodySchema,
   BrandPipelineAdvanceBodySchema,
   ExecutionIdParamSchema,
+  ExecutiveIdParamSchema,
   ExecutionListQuerySchema,
   EvalRunBodySchema,
   ExecuteAgentBodySchema,
+  OrgAgentIdParamSchema,
+  OperationalSignalParamSchema,
   AgentVersionCreateBodySchema,
   AgentVersionPromoteBodySchema,
+  ResponsibilityKeyParamSchema,
   LifecycleTransitionBodySchema,
   ListAgentsQuerySchema,
   MemoryQuerySchema,
@@ -58,6 +64,7 @@ import {
 
 export function agentRoutes(opts: {
   repository: AgentOsRepository;
+  orgService: AgentOrgService;
   executionService: AgentExecutionService;
   memoryService: MemoryPartitionService;
   evalRunner: EvalRunnerService;
@@ -123,6 +130,80 @@ export function agentRoutes(opts: {
       });
 
       return reply.code(201).send({ agents: result.agents });
+    });
+
+    app.get("/v1/agent-os/org", async (_req, reply) => {
+      return reply.send(opts.orgService.getManifest());
+    });
+
+    app.get("/v1/agent-os/org/executives/:executiveId", async (req, reply) => {
+      const path = ExecutiveIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      return reply.send({
+        executive: opts.orgService.getExecutive(path.data.executiveId),
+        agents: opts.orgService.getExecutiveAgents(path.data.executiveId)
+      });
+    });
+
+    app.get("/v1/agent-os/org/departments/:departmentId", async (req, reply) => {
+      const path = DepartmentIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      return reply.send({
+        department: opts.orgService.getDepartment(path.data.departmentId),
+        executiveOwner: opts.orgService.getExecutiveOwnerForDepartment(path.data.departmentId),
+        agents: opts.orgService.getDepartmentAgents(path.data.departmentId)
+      });
+    });
+
+    app.get("/v1/agent-os/org/agents/:agentId", async (req, reply) => {
+      const path = OrgAgentIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      const { agentId } = path.data;
+      if (opts.orgService.isSubAgentId(agentId)) {
+        return reply.send({ subAgent: opts.orgService.getSubAgent(agentId) });
+      }
+
+      return reply.send({
+        leadAgent: opts.orgService.getLeadAgent(agentId),
+        scope: opts.orgService.getLeadAgentScope(agentId),
+        subAgents: agentId === "code-sentinel" ? opts.orgService.getSubAgentsForLead(agentId) : []
+      });
+    });
+
+    app.get("/v1/agent-os/org/reporting-chain/:agentId", async (req, reply) => {
+      const path = OrgAgentIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      return reply.send({ chain: opts.orgService.getReportingChain(path.data.agentId as never) });
+    });
+
+    app.get("/v1/agent-os/org/ownership/responsibilities/:responsibilityKey", async (req, reply) => {
+      const path = ResponsibilityKeyParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      return reply.send({
+        responsibilityKey: path.data.responsibilityKey,
+        owner: opts.orgService.resolveResponsibilityOwner(path.data.responsibilityKey)
+      });
+    });
+
+    app.get("/v1/agent-os/org/ownership/operational-signals/:signalType", async (req, reply) => {
+      const path = OperationalSignalParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      return reply.send({
+        signalType: path.data.signalType,
+        ownership: opts.orgService.resolveOperationalSignalOwner(path.data.signalType)
+      });
     });
 
     app.get("/v1/agents/:agentId", async (req, reply) => {

@@ -4,3 +4,6 @@ export * from "./departments.js";
 export * from "./lead-agents.js";
 export * from "./sub-agents.js";
 export * from "./registry.js";
+export * from "./selectors.js";
+export * from "./service.js";
+export * from "./policy.js";

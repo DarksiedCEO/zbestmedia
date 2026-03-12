@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import {
   AgentExecutionService,
+  AgentOrgService,
   AgentOsRepository,
   createAgentPromptExecutorFromEnv,
   AgentRuntimeService,
@@ -64,6 +65,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const artifactService = new ArtifactService(pool, env.ARTIFACT_SIGNING_KEY);
   const generation = new ArtifactGenerationOrchestrator(artifactService, createOrcaGenerationClient(env));
   const agentRepository = new AgentOsRepository(pool);
+  const agentOrgService = new AgentOrgService();
   const approvalWorkflow = new ApprovalWorkflowService(agentRepository);
   const agentExecutionService = new AgentExecutionService(
     agentRepository,
@@ -108,6 +110,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   await app.register(
     agentRoutes({
       repository: agentRepository,
+      orgService: agentOrgService,
       executionService: agentExecutionService,
       memoryService,
       evalRunner,

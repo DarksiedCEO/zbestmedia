@@ -204,3 +204,94 @@ export const OrchestrationWorkerProcessBodySchema = z.object({
   limit: z.number().int().positive().max(50).default(10),
   retryDelayMs: z.number().int().positive().max(3_600_000).optional()
 });
+
+const ExecutiveIdSchema = z.enum([
+  "maestro-orchestrator",
+  "cro",
+  "cmo",
+  "cio",
+  "cco",
+  "cto",
+  "cpo",
+  "coo",
+  "cgo",
+  "cso"
+]);
+
+const DepartmentIdSchema = z.enum([
+  "revenue-sales",
+  "marketing",
+  "intelligence-research",
+  "creative-content",
+  "technology-engineering",
+  "product",
+  "operations",
+  "growth",
+  "strategy-security-risk"
+]);
+
+const LeadAgentOrgIdSchema = z.enum([
+  "brandyn",
+  "jordyn",
+  "kobe",
+  "jingle-jon",
+  "jingle-jane",
+  "code-sentinel"
+]);
+
+const SubAgentOrgIdSchema = z.enum([
+  "build-monitor",
+  "dependency-watcher",
+  "runtime-health-monitor",
+  "migration-guardian",
+  "route-contract-watcher",
+  "slo-enforcer"
+]);
+
+const OrgAgentIdSchema = z.union([LeadAgentOrgIdSchema, SubAgentOrgIdSchema]);
+
+const ResponsibilityKeySchema = z.enum([
+  "brand_identity_governance",
+  "visual_identity_governance",
+  "social_campaign_deployment",
+  "sonic_brand_composition",
+  "sonic_campaign_packaging",
+  "build_breakage_detection",
+  "dependency_drift_detection",
+  "runtime_health_monitoring",
+  "migration_integrity_monitoring",
+  "route_contract_monitoring",
+  "slo_release_gate_monitoring",
+  "growth_intelligence",
+  "revenue_optimization",
+  "orchestration_workflow"
+]);
+
+const OperationalSignalTypeSchema = z.enum([
+  "build_breakage",
+  "dependency_drift",
+  "runtime_health",
+  "migration_integrity",
+  "route_contract",
+  "slo_release_gate"
+]);
+
+export const ExecutiveIdParamSchema = z.object({
+  executiveId: ExecutiveIdSchema
+});
+
+export const DepartmentIdParamSchema = z.object({
+  departmentId: DepartmentIdSchema
+});
+
+export const OrgAgentIdParamSchema = z.object({
+  agentId: OrgAgentIdSchema
+});
+
+export const ResponsibilityKeyParamSchema = z.object({
+  responsibilityKey: ResponsibilityKeySchema
+});
+
+export const OperationalSignalParamSchema = z.object({
+  signalType: OperationalSignalTypeSchema
+});
