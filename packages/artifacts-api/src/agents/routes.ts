@@ -206,6 +206,18 @@ export function agentRoutes(opts: {
       });
     });
 
+    app.get("/v1/agent-os/org/code-sentinel/signals", async (_req, reply) => {
+      return reply.send({ items: opts.orgService.listCodeSentinelSignals() });
+    });
+
+    app.get("/v1/agent-os/org/code-sentinel/signals/:signalType", async (req, reply) => {
+      const path = OperationalSignalParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      return reply.send(opts.orgService.getCodeSentinelSignal(path.data.signalType));
+    });
+
     app.get("/v1/agents/:agentId", async (req, reply) => {
       const path = AgentIdParamSchema.safeParse(req.params);
       if (!path.success) {

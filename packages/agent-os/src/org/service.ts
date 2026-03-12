@@ -14,6 +14,14 @@ import {
   listSubAgents
 } from "./registry.js";
 import {
+  buildCodeSentinelSignal,
+  getCodeSentinelSignalDefinition,
+  getCodeSentinelSignalOwnership,
+  listCodeSentinelSignals,
+  type CodeSentinelSignalPayload,
+  type CodeSentinelSignalStatus
+} from "./code-sentinel.js";
+import {
   getLeadAgentAllowedScope,
   getLeadAgentForbiddenScope,
   getOperationalSignalOwner,
@@ -106,5 +114,28 @@ export class AgentOrgService {
 
   resolveOperationalSignalOwner(signalType: OperationalSignalType) {
     return getOperationalSignalOwner(signalType);
+  }
+
+  listCodeSentinelSignals() {
+    return listCodeSentinelSignals();
+  }
+
+  getCodeSentinelSignal(signalType: OperationalSignalType) {
+    return getCodeSentinelSignalOwnership(signalType);
+  }
+
+  buildCodeSentinelSignal(args: {
+    signalType: OperationalSignalType;
+    status: CodeSentinelSignalStatus;
+    source: string;
+    message: string;
+    metadata?: Record<string, unknown>;
+    observedAt?: string;
+  }): CodeSentinelSignalPayload {
+    return buildCodeSentinelSignal(args);
+  }
+
+  getCodeSentinelSignalDefinition(signalType: OperationalSignalType) {
+    return getCodeSentinelSignalDefinition(signalType);
   }
 }

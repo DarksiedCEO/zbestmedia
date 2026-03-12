@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertWorkerSloReleaseStatus } from './ops-gate';
+import { assertWorkerSloReleaseStatus, buildWorkerSloSignal } from './ops-gate';
 
 describe('agent-os ops release gate', () => {
   it('allows healthy worker SLO status', () => {
@@ -13,7 +13,7 @@ describe('agent-os ops release gate', () => {
 
   it('fails release gate when worker SLO status is critical', () => {
     expect(() => assertWorkerSloReleaseStatus('critical')).toThrow(
-      '[agent-os:ops:smoke] worker SLO status is critical; failing release gate'
+      '[agent-os:ops:smoke] worker SLO status is critical; failing release gate (owner=slo-enforcer)'
     );
   });
 
@@ -21,5 +21,14 @@ describe('agent-os ops release gate', () => {
     expect(() => assertWorkerSloReleaseStatus('unknown')).toThrow(
       "[agent-os:ops:smoke] worker SLO returned invalid status 'unknown'"
     );
+  });
+
+  it('builds a Code Sentinel-owned signal payload for worker SLO', () => {
+    expect(buildWorkerSloSignal('warning')).toMatchObject({
+      signalType: 'slo_release_gate',
+      status: 'warning',
+      owningLeadAgentId: 'code-sentinel',
+      owningSubAgentId: 'slo-enforcer'
+    });
   });
 });

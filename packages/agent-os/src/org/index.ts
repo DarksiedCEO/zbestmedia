@@ -7,3 +7,4 @@ export * from "./registry.js";
 export * from "./selectors.js";
 export * from "./service.js";
 export * from "./policy.js";
+export * from "./code-sentinel.js";

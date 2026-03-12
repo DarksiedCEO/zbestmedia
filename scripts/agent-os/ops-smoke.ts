@@ -1,5 +1,6 @@
 import { SignJWT } from 'jose';
 
+import { buildCodeSentinelSignal } from '../../packages/agent-os/src/org/code-sentinel.js';
 import { assertWorkerSloReleaseStatus } from './ops-gate';
 import { resolveAgentOsEnv } from './load-env';
 
@@ -8,6 +9,22 @@ type SmokeMode = 'local' | 'deployed';
 function fail(message: string): never {
   console.error(`[agent-os:ops:smoke] ${message}`);
   process.exit(1);
+}
+
+function failOpsSignal(args: {
+  signalType: 'runtime_health' | 'route_contract';
+  source: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+}): never {
+  const signal = buildCodeSentinelSignal({
+    signalType: args.signalType,
+    status: 'critical',
+    source: args.source,
+    message: args.message,
+    metadata: args.metadata
+  });
+  fail(`${args.message} [owner=${signal.owningSubAgentId}]`);
 }
 
 function mode(): SmokeMode {
@@ -121,7 +138,12 @@ async function main(): Promise<void> {
     tenantId: env.authTenantId
   });
   if (runbook.status !== 200) {
-    fail(`runbook expected 200, got ${runbook.status}`);
+    failOpsSignal({
+      signalType: 'route_contract',
+      source: 'scripts/agent-os/ops-smoke.ts',
+      message: `runbook expected 200, got ${runbook.status}`,
+      metadata: { path: '/v1/orchestration/ops/runbook', status: runbook.status }
+    });
   }
   const runbookJson = assertObject(runbook.json, 'runbook');
   const commands = assertObject(runbookJson.commands, 'runbook.commands');
@@ -137,7 +159,12 @@ async function main(): Promise<void> {
     tenantId: env.authTenantId
   });
   if (slo.status !== 200) {
-    fail(`worker SLO expected 200, got ${slo.status}`);
+    failOpsSignal({
+      signalType: 'runtime_health',
+      source: 'scripts/agent-os/ops-smoke.ts',
+      message: `worker SLO expected 200, got ${slo.status}`,
+      metadata: { path: '/v1/orchestration/ops/workers/slo', status: slo.status }
+    });
   }
   const sloJson = assertObject(slo.json, 'worker-slo');
   for (const field of ['totalWorkers', 'healthyWorkers', 'staleWorkers', 'freshnessCoverage', 'status']) {
@@ -153,7 +180,12 @@ async function main(): Promise<void> {
     tenantId: env.authTenantId
   });
   if (diagnostics.status !== 200) {
-    fail(`diagnostics expected 200, got ${diagnostics.status}`);
+    failOpsSignal({
+      signalType: 'route_contract',
+      source: 'scripts/agent-os/ops-smoke.ts',
+      message: `diagnostics expected 200, got ${diagnostics.status}`,
+      metadata: { path: '/v1/orchestration/ops/diagnostics', status: diagnostics.status }
+    });
   }
   const diagnosticsJson = assertObject(diagnostics.json, 'diagnostics');
   if (!('executions' in diagnosticsJson) || !('approvalSla' in diagnosticsJson)) {
@@ -168,7 +200,12 @@ async function main(): Promise<void> {
     tenantId: env.authTenantId
   });
   if (inventory.status !== 200) {
-    fail(`inventory expected 200, got ${inventory.status}`);
+    failOpsSignal({
+      signalType: 'route_contract',
+      source: 'scripts/agent-os/ops-smoke.ts',
+      message: `inventory expected 200, got ${inventory.status}`,
+      metadata: { path: '/v1/orchestration/ops/inventory', status: inventory.status }
+    });
   }
   const inventoryJson = assertObject(inventory.json, 'inventory');
   if (!('deadLettered' in inventoryJson) || !('retryQueue' in inventoryJson)) {
@@ -183,7 +220,12 @@ async function main(): Promise<void> {
     tenantId: env.authTenantId
   });
   if (alerts.status !== 200) {
-    fail(`alerts expected 200, got ${alerts.status}`);
+    failOpsSignal({
+      signalType: 'route_contract',
+      source: 'scripts/agent-os/ops-smoke.ts',
+      message: `alerts expected 200, got ${alerts.status}`,
+      metadata: { path: '/v1/orchestration/ops/alerts', status: alerts.status }
+    });
   }
   const alertsJson = assertObject(alerts.json, 'alerts');
   if (!('alerts' in alertsJson)) {
@@ -198,7 +240,12 @@ async function main(): Promise<void> {
     tenantId: env.authTenantId
   });
   if (freshnessExport.status !== 200) {
-    fail(`freshness export expected 200, got ${freshnessExport.status}`);
+    failOpsSignal({
+      signalType: 'route_contract',
+      source: 'scripts/agent-os/ops-smoke.ts',
+      message: `freshness export expected 200, got ${freshnessExport.status}`,
+      metadata: { path: '/v1/orchestration/ops/workers/freshness/export', status: freshnessExport.status }
+    });
   }
   const freshnessExportJson = assertObject(freshnessExport.json, 'freshness-export');
   if (!('snapshot' in freshnessExportJson) || !('signature' in freshnessExportJson)) {

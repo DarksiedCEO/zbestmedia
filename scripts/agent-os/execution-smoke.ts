@@ -1,5 +1,6 @@
 import { SignJWT } from 'jose';
 
+import { buildCodeSentinelSignal } from '../../packages/agent-os/src/org/code-sentinel.js';
 import { resolveAgentOsEnv } from './load-env';
 
 type SmokeMode = 'local' | 'deployed';
@@ -7,6 +8,17 @@ type SmokeMode = 'local' | 'deployed';
 function fail(message: string): never {
   console.error(`[agent-os:execution:smoke] ${message}`);
   process.exit(1);
+}
+
+function failRouteContract(args: { source: string; message: string; metadata?: Record<string, unknown> }): never {
+  const signal = buildCodeSentinelSignal({
+    signalType: 'route_contract',
+    status: 'critical',
+    source: args.source,
+    message: args.message,
+    metadata: args.metadata
+  });
+  fail(`${args.message} [owner=${signal.owningSubAgentId}]`);
 }
 
 function mode(): SmokeMode {
@@ -133,7 +145,11 @@ async function main(): Promise<void> {
     }
   });
   if (foundation.status !== 201) {
-    fail(`foundation provision expected 201, got ${foundation.status}`);
+    failRouteContract({
+      source: 'scripts/agent-os/execution-smoke.ts',
+      message: `foundation provision expected 201, got ${foundation.status}`,
+      metadata: { path: '/v1/agents/provision-foundation', status: foundation.status }
+    });
   }
 
   const suffix = Date.now();
@@ -155,7 +171,11 @@ async function main(): Promise<void> {
   });
 
   if (brandyn.status !== 200) {
-    fail(`brandyn execute expected 200, got ${brandyn.status}`);
+    failRouteContract({
+      source: 'scripts/agent-os/execution-smoke.ts',
+      message: `brandyn execute expected 200, got ${brandyn.status}`,
+      metadata: { path: '/v1/agents/brandyn/execute', status: brandyn.status }
+    });
   }
   const brandynJson = assertObject(brandyn.json, 'brandyn.execute');
   if (brandynJson.approvalRequired !== false) {
@@ -184,7 +204,11 @@ async function main(): Promise<void> {
   });
 
   if (maestro.status !== 201) {
-    fail(`maestro plan expected 201, got ${maestro.status}`);
+    failRouteContract({
+      source: 'scripts/agent-os/execution-smoke.ts',
+      message: `maestro plan expected 201, got ${maestro.status}`,
+      metadata: { path: '/v1/orchestration/plans', status: maestro.status }
+    });
   }
   const maestroJson = assertObject(maestro.json, 'maestro.plan');
   const delegatedAgents = Array.isArray(maestroJson.delegatedAgents) ? maestroJson.delegatedAgents : [];
@@ -208,7 +232,11 @@ async function main(): Promise<void> {
   });
 
   if (replayBundle.status !== 200) {
-    fail(`replay bundle expected 200, got ${replayBundle.status}`);
+    failRouteContract({
+      source: 'scripts/agent-os/execution-smoke.ts',
+      message: `replay bundle expected 200, got ${replayBundle.status}`,
+      metadata: { path: `/v1/orchestration/executions/${executionId}/replay-bundle`, status: replayBundle.status }
+    });
   }
   const replayJson = assertObject(replayBundle.json, 'replay-bundle');
   if (!('bundle' in replayJson) || !('signature' in replayJson)) {

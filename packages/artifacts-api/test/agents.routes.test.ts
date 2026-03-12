@@ -490,6 +490,22 @@ describe("agent routes", () => {
     resolveOperationalSignalOwner: vi.fn(() => ({
       leadAgent: { leadAgentId: "code-sentinel", departmentId: "technology-engineering" },
       subAgent: { subAgentId: "route-contract-watcher", parentLeadAgentId: "code-sentinel" }
+    })),
+    listCodeSentinelSignals: vi.fn(() => [
+      { signalType: "build_breakage", subAgentId: "build-monitor" },
+      { signalType: "dependency_drift", subAgentId: "dependency-watcher" },
+      { signalType: "runtime_health", subAgentId: "runtime-health-monitor" },
+      { signalType: "migration_integrity", subAgentId: "migration-guardian" },
+      { signalType: "route_contract", subAgentId: "route-contract-watcher" },
+      { signalType: "slo_release_gate", subAgentId: "slo-enforcer" }
+    ]),
+    getCodeSentinelSignal: vi.fn((signalType: string) => ({
+      definition: { signalType },
+      leadAgent: { leadAgentId: "code-sentinel", departmentId: "technology-engineering" },
+      subAgent: {
+        subAgentId: signalType === "migration_integrity" ? "migration-guardian" : "route-contract-watcher",
+        parentLeadAgentId: "code-sentinel"
+      }
     }))
   } as never;
 
@@ -551,6 +567,14 @@ describe("agent routes", () => {
       method: "GET",
       url: "/v1/agent-os/org/ownership/operational-signals/route_contract"
     });
+    const codeSentinelSignalsRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/org/code-sentinel/signals"
+    });
+    const codeSentinelSignalRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/org/code-sentinel/signals/migration_integrity"
+    });
 
     expect(manifestRes.statusCode).toBe(200);
     expect(manifestRes.json().leadAgents[0].leadAgentId).toBe("code-sentinel");
@@ -564,6 +588,10 @@ describe("agent routes", () => {
     expect(responsibilityRes.json().owner.leadAgentId).toBe("brandyn");
     expect(signalRes.statusCode).toBe(200);
     expect(signalRes.json().ownership.subAgent.subAgentId).toBe("route-contract-watcher");
+    expect(codeSentinelSignalsRes.statusCode).toBe(200);
+    expect(codeSentinelSignalsRes.json().items).toHaveLength(6);
+    expect(codeSentinelSignalRes.statusCode).toBe(200);
+    expect(codeSentinelSignalRes.json().subAgent.subAgentId).toBe("migration-guardian");
   });
 
   it("executes an agent request with normalized response", async () => {
