@@ -5,6 +5,12 @@ import { agentRoutes } from "../src/agents/routes";
 import {
   IncidentDetailResponseSchema,
   IncidentListResponseSchema,
+  EmailAccountDetailResponseSchema,
+  EmailAccountListResponseSchema,
+  EmailAccountProcessBatchResponseSchema,
+  EmailAccountProcessSingleResponseSchema,
+  GmailOauthCallbackResponseSchema,
+  GmailOauthStartResponseSchema,
   CodeSentinelSignalDetailResponseSchema,
   CodeSentinelSignalListResponseSchema,
   DepartmentDetailResponseSchema,
@@ -493,6 +499,174 @@ describe("agent routes", () => {
     readPartition: vi.fn(async () => [{ memoryEntryId: "memory:1" }]),
     writeOwnedEntry: vi.fn(async () => ({ memoryEntryId: "memory:1" })),
     writeSharedPolicyEntry: vi.fn(async () => ({ memoryEntryId: "memory:policy" }))
+  } as never;
+  const emailService = {
+    listAccounts: vi.fn(async () => [
+      {
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        accountId: "email-account:1",
+        provider: "gmail",
+        principalId: "principal-1",
+        accountEmailAddress: "ops@zbestmedia.com",
+        connectionStatus: "connected",
+        grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+        tokenReference: "secret:gmail:ops",
+        externalAccountId: "gmail-user-1",
+        draftOnlyMode: true,
+        processingEnabled: true,
+        processingMode: "poll",
+        maxBatchThreads: 10,
+        allowedLabelIds: ["INBOX", "UNREAD"],
+        oauthState: null,
+        oauthStateExpiresAt: null,
+        lastProcessedAt: null,
+        lastError: null,
+        createdAt: "2026-03-12T00:00:00.000Z",
+        updatedAt: "2026-03-12T00:00:00.000Z"
+      }
+    ]),
+    getAccount: vi.fn(async () => ({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      accountId: "email-account:1",
+      provider: "gmail",
+      principalId: "principal-1",
+      accountEmailAddress: "ops@zbestmedia.com",
+      connectionStatus: "connected",
+      grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+      tokenReference: "secret:gmail:ops",
+      externalAccountId: "gmail-user-1",
+      draftOnlyMode: true,
+      processingEnabled: true,
+      processingMode: "poll",
+      maxBatchThreads: 10,
+      allowedLabelIds: ["INBOX", "UNREAD"],
+      oauthState: null,
+      oauthStateExpiresAt: null,
+      lastProcessedAt: null,
+      lastError: null,
+      createdAt: "2026-03-12T00:00:00.000Z",
+      updatedAt: "2026-03-12T00:00:00.000Z"
+    })),
+    beginGmailOAuthConnection: vi.fn(async () => ({
+      account: {
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        accountId: "email-account:oauth",
+        provider: "gmail",
+        principalId: "principal-1",
+        accountEmailAddress: "ops@zbestmedia.com",
+        connectionStatus: "oauth_pending",
+        grantedScopes: [],
+        tokenReference: null,
+        externalAccountId: null,
+        draftOnlyMode: true,
+        processingEnabled: false,
+        processingMode: "poll",
+        maxBatchThreads: 10,
+        allowedLabelIds: ["INBOX", "UNREAD"],
+        oauthState: "gmail-oauth:1",
+        oauthStateExpiresAt: "2026-03-12T00:15:00.000Z",
+        lastProcessedAt: null,
+        lastError: null,
+        createdAt: "2026-03-12T00:00:00.000Z",
+        updatedAt: "2026-03-12T00:00:00.000Z"
+      },
+      authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth?client_id=test",
+      state: "gmail-oauth:1",
+      redirectUri: "https://example.com/oauth/callback",
+      scopes: ["https://www.googleapis.com/auth/gmail.readonly"]
+    })),
+    completeGmailOAuthConnection: vi.fn(async () => ({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      accountId: "email-account:oauth",
+      provider: "gmail",
+      principalId: "principal-1",
+      accountEmailAddress: "ops@zbestmedia.com",
+      connectionStatus: "connected",
+      grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+      tokenReference: "secret:gmail:ops",
+      externalAccountId: "gmail-user-1",
+      draftOnlyMode: true,
+      processingEnabled: false,
+      processingMode: "poll",
+      maxBatchThreads: 10,
+      allowedLabelIds: ["INBOX", "UNREAD"],
+      oauthState: null,
+      oauthStateExpiresAt: null,
+      lastProcessedAt: null,
+      lastError: null,
+      createdAt: "2026-03-12T00:00:00.000Z",
+      updatedAt: "2026-03-12T00:01:00.000Z"
+    })),
+    processEligibleInboxThreads: vi.fn(async () => ({
+      account: {
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        accountId: "email-account:1",
+        provider: "gmail",
+        principalId: "principal-1",
+        accountEmailAddress: "ops@zbestmedia.com",
+        connectionStatus: "connected",
+        grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+        tokenReference: "secret:gmail:ops",
+        externalAccountId: "gmail-user-1",
+        draftOnlyMode: true,
+        processingEnabled: true,
+        processingMode: "poll",
+        maxBatchThreads: 10,
+        allowedLabelIds: ["INBOX", "UNREAD"],
+        oauthState: null,
+        oauthStateExpiresAt: null,
+        lastProcessedAt: "2026-03-12T00:05:00.000Z",
+        lastError: null,
+        createdAt: "2026-03-12T00:00:00.000Z",
+        updatedAt: "2026-03-12T00:05:00.000Z"
+      },
+      processedCount: 1,
+      nextPageToken: null,
+      outcomes: [
+        {
+          threadId: "thread-1",
+          assignmentRecordId: "assignment:email:1",
+          runRecordId: "run:email:1",
+          status: "drafted",
+          intentCategory: "lead_inquiry",
+          approvalRequired: true,
+          blockedAutoSend: true
+        }
+      ]
+    })),
+    processAccountThreadById: vi.fn(async () => ({
+      account: {
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        accountId: "email-account:1",
+        provider: "gmail",
+        principalId: "principal-1",
+        accountEmailAddress: "ops@zbestmedia.com",
+        connectionStatus: "connected",
+        grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+        tokenReference: "secret:gmail:ops",
+        externalAccountId: "gmail-user-1",
+        draftOnlyMode: true,
+        processingEnabled: true,
+        processingMode: "poll",
+        maxBatchThreads: 10,
+        allowedLabelIds: ["INBOX", "UNREAD"],
+        oauthState: null,
+        oauthStateExpiresAt: null,
+        lastProcessedAt: "2026-03-12T00:05:00.000Z",
+        lastError: null,
+        createdAt: "2026-03-12T00:00:00.000Z",
+        updatedAt: "2026-03-12T00:05:00.000Z"
+      },
+      outcome: {
+        threadId: "thread-1",
+        assignmentRecordId: "assignment:email:1",
+        runRecordId: "run:email:1",
+        status: "drafted",
+        intentCategory: "lead_inquiry",
+        approvalRequired: true,
+        blockedAutoSend: true
+      }
+    }))
   } as never;
   const evalRunner = {
     runSuite: vi.fn(async () => ({ passed: true, missingMetrics: [], evalRun: { evalRunId: "eval:1" }, scores: [] }))
@@ -1078,9 +1252,10 @@ describe("agent routes", () => {
         orgService,
         orgRoutingService: orgRoutingService as never,
         executionService,
-        incidentService,
-        telemetryService,
-        adminService,
+        incidentService: incidentService as never,
+        telemetryService: telemetryService as never,
+        adminService: adminService as never,
+        emailService,
         ledgerService,
         memoryService,
         evalRunner,
@@ -1189,6 +1364,44 @@ describe("agent routes", () => {
     expect(decision.decision.resolvedLeadAgentId).toBe("code-sentinel");
     expect(decision.decision.resolvedSubAgentId).toBe("route-contract-watcher");
     expect(orgRoutingService.resolve).toHaveBeenCalledWith({ category: "route_contract_monitoring" });
+  });
+
+  it("exposes gmail account setup and processing routes", async () => {
+    const listRes = await app.inject({ method: "GET", url: "/v1/agent-os/email/accounts?limit=10" });
+    const detailRes = await app.inject({ method: "GET", url: "/v1/agent-os/email/accounts/email-account:1" });
+    const oauthStartRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/email/accounts/gmail/oauth/start",
+      payload: {
+        principalId: "principal-1",
+        accountEmailAddress: "ops@zbestmedia.com"
+      }
+    });
+    const oauthCallbackRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/email/accounts/gmail/oauth/callback",
+      payload: {
+        state: "gmail-oauth:1",
+        code: "oauth-code"
+      }
+    });
+    const processRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/email/accounts/email-account:1/process",
+      payload: { maxThreads: 5 }
+    });
+    const threadProcessRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/email/accounts/email-account:1/threads/thread-1/process",
+      payload: {}
+    });
+
+    expect(EmailAccountListResponseSchema.parse(listRes.json()).items[0].accountId).toBe("email-account:1");
+    expect(EmailAccountDetailResponseSchema.parse(detailRes.json()).account.accountEmailAddress).toBe("ops@zbestmedia.com");
+    expect(GmailOauthStartResponseSchema.parse(oauthStartRes.json()).state).toBe("gmail-oauth:1");
+    expect(GmailOauthCallbackResponseSchema.parse(oauthCallbackRes.json()).account.connectionStatus).toBe("connected");
+    expect(EmailAccountProcessBatchResponseSchema.parse(processRes.json()).processedCount).toBe(1);
+    expect(EmailAccountProcessSingleResponseSchema.parse(threadProcessRes.json()).outcome.threadId).toBe("thread-1");
   });
 
   it("executes an agent request with normalized response", async () => {

@@ -14,7 +14,28 @@ export * from "./execution/ledger.js";
 export * from "./execution/record-types.js";
 export * from "./execution/records.js";
 export * from "./execution/promptExecutor.js";
-export * from "./email/types.js";
+export type {
+  EmailConnectionMode,
+  EmailIntentCategory,
+  EmailPriority,
+  EmailRiskLevel,
+  EmailApprovalRequirement,
+  NormalizedEmailParty,
+  NormalizedEmailMessage,
+  NormalizedEmailThread,
+  EmailRoutingTarget,
+  EmailRoutingResolution,
+  EmailDraftSuggestion,
+  EmailAssignmentIntegrationRequest,
+  EmailIncidentIntegrationRequest,
+  EmailThreadClassification,
+  EmailProcessingResult,
+  EmailEligibleThreadSummary,
+  EmailAccountOAuthStartResult,
+  EmailAccountProcessingBatchResult,
+  EmailThreadProcessingOutcomeSummary
+} from "./email/types.js";
+export * from "./email/config.js";
 export * from "./email/intent.js";
 export * from "./email/routing.js";
 export * from "./email/drafts.js";

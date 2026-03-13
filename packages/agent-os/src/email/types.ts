@@ -4,6 +4,7 @@ import type { DepartmentId, ExecutiveId, LeadAgentId, SubAgentId } from "../org/
 
 export type EmailProvider = "gmail";
 export type EmailConnectionMode = "draft_only";
+export type EmailAccountConnectionStatus = "oauth_pending" | "connected" | "disabled" | "error" | "disconnected";
 
 export type NormalizedEmailParty = {
   displayName: string | null;
@@ -41,6 +42,29 @@ export type EmailIntentCategory =
 export type EmailPriority = "low" | "normal" | "high" | "urgent";
 export type EmailRiskLevel = "low" | "medium" | "high" | "critical";
 export type EmailApprovalRequirement = "required";
+
+export type EmailAccountConnectionRecord = {
+  tenantId: string;
+  accountId: string;
+  provider: EmailProvider;
+  principalId: string;
+  accountEmailAddress: string | null;
+  connectionStatus: EmailAccountConnectionStatus;
+  grantedScopes: string[];
+  tokenReference: string | null;
+  externalAccountId: string | null;
+  draftOnlyMode: true;
+  processingEnabled: boolean;
+  processingMode: "poll" | "watch";
+  maxBatchThreads: number;
+  allowedLabelIds: string[];
+  oauthState: string | null;
+  oauthStateExpiresAt: string | null;
+  lastProcessedAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type NormalizedEmailThread = {
   provider: EmailProvider;
@@ -143,4 +167,38 @@ export type EmailProcessingResult = {
   draft: EmailDraftSuggestion | null;
   assignmentIntegration: EmailAssignmentIntegrationRequest | null;
   incidentIntegration: EmailIncidentIntegrationRequest | null;
+};
+
+export type EmailEligibleThreadSummary = {
+  accountId: string;
+  threadId: string;
+  subject: string;
+  lastMessageAt: string;
+  labels: string[];
+  messageCount: number;
+};
+
+export type EmailAccountOAuthStartResult = {
+  account: EmailAccountConnectionRecord;
+  authorizationUrl: string;
+  state: string;
+  redirectUri: string;
+  scopes: string[];
+};
+
+export type EmailAccountProcessingBatchResult = {
+  account: EmailAccountConnectionRecord;
+  processedCount: number;
+  nextPageToken: string | null;
+  outcomes: EmailThreadProcessingOutcomeSummary[];
+};
+
+export type EmailThreadProcessingOutcomeSummary = {
+  threadId: string;
+  assignmentRecordId: string;
+  runRecordId: string;
+  status: EmailProcessingResult["status"];
+  intentCategory: EmailIntentCategory;
+  approvalRequired: boolean;
+  blockedAutoSend: true;
 };

@@ -5,6 +5,7 @@ import {
   AgentLifecycleStatusSchema,
   AgentTaskDomainSchema,
   AssignmentRecordSchema,
+  EmailAccountConnectionRecordSchema,
   IncidentRecordSchema,
   IncidentSeveritySchema,
   IncidentStatusSchema,
@@ -132,6 +133,36 @@ export const WorkerQueueEvalBodySchema = z.object({
 export const WorkerClaimEvalsBodySchema = z.object({
   agentId: AgentIdSchema.optional(),
   limit: z.number().int().positive().max(50).default(10)
+});
+
+export const EmailAccountIdParamSchema = z.object({
+  accountId: z.string().min(1)
+});
+
+export const EmailAccountThreadIdParamSchema = z.object({
+  accountId: z.string().min(1),
+  threadId: z.string().min(1)
+});
+
+export const EmailAccountListQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).default(25)
+});
+
+export const GmailOauthStartBodySchema = z.object({
+  principalId: z.string().min(1),
+  accountEmailAddress: z.string().email().optional(),
+  processingEnabled: z.boolean().optional(),
+  maxBatchThreads: z.number().int().positive().max(100).optional(),
+  allowedLabelIds: z.array(z.string().min(1)).optional()
+});
+
+export const GmailOauthCallbackBodySchema = z.object({
+  state: z.string().min(1),
+  code: z.string().min(1)
+});
+
+export const EmailAccountProcessBodySchema = z.object({
+  maxThreads: z.number().int().positive().max(100).optional()
 });
 
 export const BrandPipelineAdvanceBodySchema = z.object({
@@ -333,7 +364,13 @@ const ResourceTypeSchema = z.enum([
   "operational_signal_ownership",
   "code_sentinel_signal_list",
   "code_sentinel_signal_detail",
-  "routing_decision"
+  "routing_decision",
+  "email_account_list",
+  "email_account_detail",
+  "gmail_oauth_start",
+  "gmail_oauth_callback",
+  "email_account_process_batch",
+  "email_account_process_single"
 ]);
 
 const ExecutiveResourceSchema = z.object({
@@ -719,6 +756,66 @@ export const AdminIncidentDetailResponseSchema = z.object({
   manifestVersion: ManifestVersionSchema,
   resourceType: z.literal("admin_incident_detail"),
   item: IncidentRecordSchema
+});
+
+const EmailProcessingOutcomeSummarySchema = z.object({
+  threadId: z.string().min(1),
+  assignmentRecordId: z.string().min(1),
+  runRecordId: z.string().min(1),
+  status: z.enum(["drafted", "escalated", "suppressed", "failed"]),
+  intentCategory: z.enum([
+    "lead_inquiry",
+    "client_request",
+    "billing_question",
+    "meeting_request",
+    "vendor_outreach",
+    "partnership_inquiry",
+    "technical_issue",
+    "support_request",
+    "general_inquiry",
+    "spam_or_irrelevant",
+    "legal_or_sensitive"
+  ]),
+  approvalRequired: z.literal(true),
+  blockedAutoSend: z.literal(true)
+});
+
+export const EmailAccountListResponseSchema = z.object({
+  resourceType: z.literal("email_account_list"),
+  items: z.array(EmailAccountConnectionRecordSchema)
+});
+
+export const EmailAccountDetailResponseSchema = z.object({
+  resourceType: z.literal("email_account_detail"),
+  account: EmailAccountConnectionRecordSchema
+});
+
+export const GmailOauthStartResponseSchema = z.object({
+  resourceType: z.literal("gmail_oauth_start"),
+  account: EmailAccountConnectionRecordSchema,
+  authorizationUrl: z.string().url(),
+  state: z.string().min(1),
+  redirectUri: z.string().url(),
+  scopes: z.array(z.string().min(1)).min(1)
+});
+
+export const GmailOauthCallbackResponseSchema = z.object({
+  resourceType: z.literal("gmail_oauth_callback"),
+  account: EmailAccountConnectionRecordSchema
+});
+
+export const EmailAccountProcessBatchResponseSchema = z.object({
+  resourceType: z.literal("email_account_process_batch"),
+  account: EmailAccountConnectionRecordSchema,
+  processedCount: z.number().int().nonnegative(),
+  nextPageToken: z.string().nullable(),
+  outcomes: z.array(EmailProcessingOutcomeSummarySchema)
+});
+
+export const EmailAccountProcessSingleResponseSchema = z.object({
+  resourceType: z.literal("email_account_process_single"),
+  account: EmailAccountConnectionRecordSchema,
+  outcome: EmailProcessingOutcomeSummarySchema
 });
 
 export const AdminSummaryResponseSchema = z.object({

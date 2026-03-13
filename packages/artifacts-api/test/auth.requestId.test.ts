@@ -157,6 +157,15 @@ describe("auth and requestId middleware", () => {
     expect(res.statusCode).toBe(401);
   });
 
+  it("protects email routes when Authorization is missing", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/email/accounts"
+    });
+
+    expect(res.statusCode).toBe(401);
+  });
+
   it("allows org routes with valid Authorization and returns manifest metadata", async () => {
     const token = await signToken({
       tenantId: "11111111-1111-4111-8111-111111111111",

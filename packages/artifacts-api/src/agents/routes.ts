@@ -2,6 +2,8 @@ import type { FastifyPluginAsync } from "fastify";
 
 import {
   AgentAdminService,
+  EmailAssistantService,
+  EmailAccountConfigurationError,
   AgentLifecycleStateError,
   AgentOsRepository,
   AgentExecutionService,
@@ -45,6 +47,14 @@ import {
   OrchestrationOpsHistoryVerifyBodySchema,
   ApprovalRequestIdParamSchema,
   DepartmentIdParamSchema,
+  EmailAccountDetailResponseSchema,
+  EmailAccountIdParamSchema,
+  EmailAccountListQuerySchema,
+  EmailAccountListResponseSchema,
+  EmailAccountProcessBatchResponseSchema,
+  EmailAccountProcessBodySchema,
+  EmailAccountProcessSingleResponseSchema,
+  EmailAccountThreadIdParamSchema,
   OrchestrationEscalateBodySchema,
   OrchestrationExecutionListQuerySchema,
   OrchestrationPlanBodySchema,
@@ -56,6 +66,10 @@ import {
   ExecutionRunIdParamSchema,
   ExecutionRunListQuerySchema,
   IncidentIdParamSchema,
+  GmailOauthCallbackBodySchema,
+  GmailOauthCallbackResponseSchema,
+  GmailOauthStartBodySchema,
+  GmailOauthStartResponseSchema,
   ExecutiveIdParamSchema,
   ExecutionListQuerySchema,
   EvalRunBodySchema,
@@ -95,6 +109,7 @@ export function agentRoutes(opts: {
   incidentService: AgentIncidentService;
   telemetryService: AgentTelemetryService;
   adminService: AgentAdminService;
+  emailService: EmailAssistantService;
   ledgerService: AgentExecutionLedgerService;
   memoryService: MemoryPartitionService;
   evalRunner: EvalRunnerService;
@@ -156,6 +171,7 @@ export function agentRoutes(opts: {
       }
       if (
         error instanceof AgentMemoryAccessError ||
+        error instanceof EmailAccountConfigurationError ||
         error instanceof BrandPipelineWorkflowError ||
         error instanceof MaestroOrchestrationError
       ) {
@@ -342,6 +358,137 @@ export function agentRoutes(opts: {
           return reply.code(400).send({ error: error.message });
         }
         throw error;
+      }
+    });
+
+    app.get("/v1/agent-os/email/accounts", async (req, reply) => {
+      const query = EmailAccountListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+      const items = await opts.emailService.listAccounts({
+        tenantId: req.auth.tenantId,
+        limit: query.data.limit
+      });
+      return reply.send({
+        resourceType: "email_account_list",
+        items
+      });
+    });
+
+    app.get("/v1/agent-os/email/accounts/:accountId", async (req, reply) => {
+      const path = EmailAccountIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      const account = await opts.emailService.getAccount({
+        tenantId: req.auth.tenantId,
+        accountId: path.data.accountId
+      });
+      if (!account) {
+        return reply.code(404).send({ error: "email_account_not_found" });
+      }
+      return reply.send({
+        resourceType: "email_account_detail",
+        account
+      });
+    });
+
+    app.post("/v1/agent-os/email/accounts/gmail/oauth/start", async (req, reply) => {
+      const body = GmailOauthStartBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+      try {
+        const result = await opts.emailService.beginGmailOAuthConnection({
+          tenantId: req.auth.tenantId,
+          actorId: req.auth.actorId,
+          principalId: body.data.principalId,
+          accountEmailAddress: body.data.accountEmailAddress ?? null,
+          processingEnabled: body.data.processingEnabled,
+          maxBatchThreads: body.data.maxBatchThreads,
+          allowedLabelIds: body.data.allowedLabelIds
+        });
+        return reply.code(201).send({
+          resourceType: "gmail_oauth_start",
+          ...result
+        });
+      } catch (error) {
+        return handleAgentError(reply, error);
+      }
+    });
+
+    app.post("/v1/agent-os/email/accounts/gmail/oauth/callback", async (req, reply) => {
+      const body = GmailOauthCallbackBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+      try {
+        const account = await opts.emailService.completeGmailOAuthConnection({
+          tenantId: req.auth.tenantId,
+          actorId: req.auth.actorId,
+          state: body.data.state,
+          code: body.data.code
+        });
+        return reply.send({
+          resourceType: "gmail_oauth_callback",
+          account
+        });
+      } catch (error) {
+        return handleAgentError(reply, error);
+      }
+    });
+
+    app.post("/v1/agent-os/email/accounts/:accountId/process", async (req, reply) => {
+      const path = EmailAccountIdParamSchema.safeParse(req.params);
+      const body = EmailAccountProcessBodySchema.safeParse(req.body ?? {});
+      if (!path.success || !body.success) {
+        return reply.code(400).send({
+          error: "invalid_request",
+          details: {
+            params: path.success ? null : path.error.flatten(),
+            body: body.success ? null : body.error.flatten()
+          }
+        });
+      }
+      try {
+        const result = await opts.emailService.processEligibleInboxThreads({
+          tenantId: req.auth.tenantId,
+          actorId: req.auth.actorId,
+          correlationId: req.id,
+          requestSource: "artifacts-api",
+          accountId: path.data.accountId,
+          maxThreads: body.data.maxThreads
+        });
+        return reply.send({
+          resourceType: "email_account_process_batch",
+          ...result
+        });
+      } catch (error) {
+        return handleAgentError(reply, error);
+      }
+    });
+
+    app.post("/v1/agent-os/email/accounts/:accountId/threads/:threadId/process", async (req, reply) => {
+      const path = EmailAccountThreadIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      try {
+        const result = await opts.emailService.processAccountThreadById({
+          tenantId: req.auth.tenantId,
+          actorId: req.auth.actorId,
+          correlationId: req.id,
+          requestSource: "artifacts-api",
+          accountId: path.data.accountId,
+          threadId: path.data.threadId
+        });
+        return reply.send({
+          resourceType: "email_account_process_single",
+          ...result
+        });
+      } catch (error) {
+        return handleAgentError(reply, error);
       }
     });
 

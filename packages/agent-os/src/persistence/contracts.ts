@@ -7,6 +7,11 @@ import {
   IncidentStatusSchema,
   IncidentTypeSchema
 } from "../incidents/types.js";
+import type {
+  EmailAccountConnectionRecord as EmailAccountConnectionRecordShape,
+  EmailAccountConnectionStatus,
+  EmailProvider
+} from "../email/types.js";
 import {
   AssignmentPolicyDecisionSchema,
   AssignmentRecordSchema,
@@ -216,6 +221,34 @@ export const ExecutionStepRecordSchema = z.object({
   createdAt: z.string().datetime()
 });
 export type ExecutionStepRecord = z.infer<typeof ExecutionStepRecordSchema>;
+
+export const EmailProviderSchema = z.enum(["gmail"]);
+export const EmailAccountConnectionStatusSchema = z.enum(["oauth_pending", "connected", "disabled", "error", "disconnected"]);
+export type { EmailProvider, EmailAccountConnectionStatus };
+
+export const EmailAccountConnectionRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  accountId: z.string().min(1),
+  provider: EmailProviderSchema,
+  principalId: z.string().min(1),
+  accountEmailAddress: z.string().email().nullable(),
+  connectionStatus: EmailAccountConnectionStatusSchema,
+  grantedScopes: z.array(z.string().min(1)),
+  tokenReference: z.string().nullable(),
+  externalAccountId: z.string().nullable(),
+  draftOnlyMode: z.literal(true),
+  processingEnabled: z.boolean(),
+  processingMode: z.enum(["poll", "watch"]),
+  maxBatchThreads: z.number().int().positive(),
+  allowedLabelIds: z.array(z.string().min(1)),
+  oauthState: z.string().nullable(),
+  oauthStateExpiresAt: z.string().datetime().nullable(),
+  lastProcessedAt: z.string().datetime().nullable(),
+  lastError: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+}) satisfies z.ZodType<EmailAccountConnectionRecordShape>;
+export type EmailAccountConnectionRecord = z.infer<typeof EmailAccountConnectionRecordSchema>;
 
 export const MemoryEntryRecordSchema = z.object({
   tenantId: z.string().uuid(),

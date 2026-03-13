@@ -30,6 +30,8 @@ import type {
   IncidentSeverity,
   IncidentStatus,
   IncidentType,
+  EmailAccountConnectionRecord,
+  EmailAccountConnectionStatus,
   MemoryEntryRecord,
   OrchestrationOpsSnapshotExportRecord,
   OrchestrationAlertAckRecord,
@@ -198,6 +200,29 @@ type IncidentRow = {
   resolved_at: string | Date | null;
   resolved_by: string | null;
   resolution_note: string | null;
+};
+
+type EmailAccountConnectionRow = {
+  tenant_id: string;
+  account_id: string;
+  provider: EmailAccountConnectionRecord["provider"];
+  principal_id: string;
+  account_email_address: string | null;
+  connection_status: EmailAccountConnectionStatus;
+  granted_scopes: string[];
+  token_reference: string | null;
+  external_account_id: string | null;
+  draft_only_mode: true;
+  processing_enabled: boolean;
+  processing_mode: EmailAccountConnectionRecord["processingMode"];
+  max_batch_threads: number;
+  allowed_label_ids: string[];
+  oauth_state: string | null;
+  oauth_state_expires_at: string | Date | null;
+  last_processed_at: string | Date | null;
+  last_error: string | null;
+  created_at: string | Date;
+  updated_at: string | Date;
 };
 
 type EvalRunRow = {
@@ -452,6 +477,31 @@ function mapIncidentRow(row: IncidentRow): IncidentRecord {
     resolvedAt: row.resolved_at ? toIsoString(row.resolved_at) : null,
     resolvedBy: row.resolved_by,
     resolutionNote: row.resolution_note
+  };
+}
+
+function mapEmailAccountConnectionRow(row: EmailAccountConnectionRow): EmailAccountConnectionRecord {
+  return {
+    tenantId: row.tenant_id,
+    accountId: row.account_id,
+    provider: row.provider,
+    principalId: row.principal_id,
+    accountEmailAddress: row.account_email_address,
+    connectionStatus: row.connection_status,
+    grantedScopes: row.granted_scopes,
+    tokenReference: row.token_reference,
+    externalAccountId: row.external_account_id,
+    draftOnlyMode: row.draft_only_mode,
+    processingEnabled: row.processing_enabled,
+    processingMode: row.processing_mode,
+    maxBatchThreads: row.max_batch_threads,
+    allowedLabelIds: row.allowed_label_ids,
+    oauthState: row.oauth_state,
+    oauthStateExpiresAt: row.oauth_state_expires_at ? toIsoString(row.oauth_state_expires_at) : null,
+    lastProcessedAt: row.last_processed_at ? toIsoString(row.last_processed_at) : null,
+    lastError: row.last_error,
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at)
   };
 }
 
@@ -1755,6 +1805,213 @@ export class AgentOsRepository {
     );
 
     return mapIncidentRow(res.rows[0]!);
+  }
+
+  async createEmailAccountConnection(args: {
+    tenantId: string;
+    accountId: string;
+    provider: EmailAccountConnectionRecord["provider"];
+    principalId: string;
+    accountEmailAddress?: string | null;
+    connectionStatus: EmailAccountConnectionStatus;
+    grantedScopes?: string[];
+    tokenReference?: string | null;
+    externalAccountId?: string | null;
+    draftOnlyMode: true;
+    processingEnabled: boolean;
+    processingMode: EmailAccountConnectionRecord["processingMode"];
+    maxBatchThreads: number;
+    allowedLabelIds: string[];
+    oauthState?: string | null;
+    oauthStateExpiresAt?: string | null;
+    lastProcessedAt?: string | null;
+    lastError?: string | null;
+    createdAt?: string;
+  }): Promise<EmailAccountConnectionRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EmailAccountConnectionRow>(
+        `
+        INSERT INTO email_account_connections (
+          tenant_id, account_id, provider, principal_id, account_email_address,
+          connection_status, granted_scopes, token_reference, external_account_id,
+          draft_only_mode, processing_enabled, processing_mode, max_batch_threads,
+          allowed_label_ids, oauth_state, oauth_state_expires_at, last_processed_at,
+          last_error, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7::jsonb, $8, $9,
+          $10, $11, $12, $13,
+          $14::jsonb, $15, $16, $17,
+          $18, $19, $19
+        )
+        RETURNING tenant_id, account_id, provider, principal_id, account_email_address,
+                  connection_status, granted_scopes, token_reference, external_account_id,
+                  draft_only_mode, processing_enabled, processing_mode, max_batch_threads,
+                  allowed_label_ids, oauth_state, oauth_state_expires_at, last_processed_at,
+                  last_error, created_at, updated_at
+        `,
+        [
+          args.tenantId,
+          args.accountId,
+          args.provider,
+          args.principalId,
+          args.accountEmailAddress ?? null,
+          args.connectionStatus,
+          JSON.stringify(args.grantedScopes ?? []),
+          args.tokenReference ?? null,
+          args.externalAccountId ?? null,
+          true,
+          args.processingEnabled,
+          args.processingMode,
+          args.maxBatchThreads,
+          JSON.stringify(args.allowedLabelIds),
+          args.oauthState ?? null,
+          args.oauthStateExpiresAt ?? null,
+          args.lastProcessedAt ?? null,
+          args.lastError ?? null,
+          createdAt
+        ]
+      )
+    );
+
+    return mapEmailAccountConnectionRow(res.rows[0]!);
+  }
+
+  async updateEmailAccountConnection(args: {
+    tenantId: string;
+    accountId: string;
+    connectionStatus?: EmailAccountConnectionStatus;
+    accountEmailAddress?: string | null;
+    grantedScopes?: string[];
+    tokenReference?: string | null;
+    externalAccountId?: string | null;
+    processingEnabled?: boolean;
+    maxBatchThreads?: number;
+    allowedLabelIds?: string[];
+    oauthState?: string | null;
+    oauthStateExpiresAt?: string | null;
+    lastProcessedAt?: string | null;
+    lastError?: string | null;
+    updatedAt?: string;
+  }): Promise<EmailAccountConnectionRecord> {
+    const updatedAt = args.updatedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EmailAccountConnectionRow>(
+        `
+        UPDATE email_account_connections
+        SET connection_status = COALESCE($3, connection_status),
+            account_email_address = COALESCE($4, account_email_address),
+            granted_scopes = CASE WHEN $5::jsonb IS NULL THEN granted_scopes ELSE $5::jsonb END,
+            token_reference = COALESCE($6, token_reference),
+            external_account_id = COALESCE($7, external_account_id),
+            processing_enabled = COALESCE($8, processing_enabled),
+            max_batch_threads = COALESCE($9, max_batch_threads),
+            allowed_label_ids = CASE WHEN $10::jsonb IS NULL THEN allowed_label_ids ELSE $10::jsonb END,
+            oauth_state = $11,
+            oauth_state_expires_at = $12,
+            last_processed_at = COALESCE($13, last_processed_at),
+            last_error = $14,
+            updated_at = $15
+        WHERE tenant_id = $1 AND account_id = $2
+        RETURNING tenant_id, account_id, provider, principal_id, account_email_address,
+                  connection_status, granted_scopes, token_reference, external_account_id,
+                  draft_only_mode, processing_enabled, processing_mode, max_batch_threads,
+                  allowed_label_ids, oauth_state, oauth_state_expires_at, last_processed_at,
+                  last_error, created_at, updated_at
+        `,
+        [
+          args.tenantId,
+          args.accountId,
+          args.connectionStatus ?? null,
+          args.accountEmailAddress ?? null,
+          args.grantedScopes ? JSON.stringify(args.grantedScopes) : null,
+          args.tokenReference ?? null,
+          args.externalAccountId ?? null,
+          args.processingEnabled ?? null,
+          args.maxBatchThreads ?? null,
+          args.allowedLabelIds ? JSON.stringify(args.allowedLabelIds) : null,
+          args.oauthState ?? null,
+          args.oauthStateExpiresAt ?? null,
+          args.lastProcessedAt ?? null,
+          args.lastError ?? null,
+          updatedAt
+        ]
+      )
+    );
+
+    if (!res.rows[0]) {
+      throw new Error("email_account_not_found");
+    }
+
+    return mapEmailAccountConnectionRow(res.rows[0]);
+  }
+
+  async getEmailAccountConnection(args: {
+    tenantId: string;
+    accountId: string;
+  }): Promise<EmailAccountConnectionRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EmailAccountConnectionRow>(
+        `
+        SELECT tenant_id, account_id, provider, principal_id, account_email_address,
+               connection_status, granted_scopes, token_reference, external_account_id,
+               draft_only_mode, processing_enabled, processing_mode, max_batch_threads,
+               allowed_label_ids, oauth_state, oauth_state_expires_at, last_processed_at,
+               last_error, created_at, updated_at
+        FROM email_account_connections
+        WHERE tenant_id = $1 AND account_id = $2
+        `,
+        [args.tenantId, args.accountId]
+      )
+    );
+    return res.rows[0] ? mapEmailAccountConnectionRow(res.rows[0]) : null;
+  }
+
+  async getEmailAccountConnectionByOauthState(args: {
+    tenantId: string;
+    oauthState: string;
+  }): Promise<EmailAccountConnectionRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EmailAccountConnectionRow>(
+        `
+        SELECT tenant_id, account_id, provider, principal_id, account_email_address,
+               connection_status, granted_scopes, token_reference, external_account_id,
+               draft_only_mode, processing_enabled, processing_mode, max_batch_threads,
+               allowed_label_ids, oauth_state, oauth_state_expires_at, last_processed_at,
+               last_error, created_at, updated_at
+        FROM email_account_connections
+        WHERE tenant_id = $1 AND oauth_state = $2
+        ORDER BY created_at DESC
+        LIMIT 1
+        `,
+        [args.tenantId, args.oauthState]
+      )
+    );
+    return res.rows[0] ? mapEmailAccountConnectionRow(res.rows[0]) : null;
+  }
+
+  async listEmailAccountConnections(args: {
+    tenantId: string;
+    limit?: number;
+  }): Promise<EmailAccountConnectionRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EmailAccountConnectionRow>(
+        `
+        SELECT tenant_id, account_id, provider, principal_id, account_email_address,
+               connection_status, granted_scopes, token_reference, external_account_id,
+               draft_only_mode, processing_enabled, processing_mode, max_batch_threads,
+               allowed_label_ids, oauth_state, oauth_state_expires_at, last_processed_at,
+               last_error, created_at, updated_at
+        FROM email_account_connections
+        WHERE tenant_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+        `,
+        [args.tenantId, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapEmailAccountConnectionRow);
   }
 
   async listIncidentRecords(args: {
