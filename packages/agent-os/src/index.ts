@@ -66,3 +66,4 @@ export * from "./persistence/foundation.js";
 export * from "./persistence/repository.js";
 export * from "./persistence/withTenant.js";
 export * from "./org/index.js";
+export * from "./aaliyah/index.js";
