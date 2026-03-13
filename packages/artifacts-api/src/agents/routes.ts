@@ -54,6 +54,8 @@ import {
   EmailAccountProcessBatchResponseSchema,
   EmailAccountProcessBodySchema,
   EmailReviewActionBodySchema,
+  EmailDispatchRequestBodySchema,
+  EmailDispatchIdParamSchema,
   EmailReviewItemIdParamSchema,
   EmailReviewListQuerySchema,
   EmailAccountProcessSingleResponseSchema,
@@ -1138,6 +1140,48 @@ export function agentRoutes(opts: {
         }
         throw error;
       }
+    });
+
+    app.post("/v1/agent-os/email/review/:reviewItemId/dispatch", async (req, reply) => {
+      const path = EmailReviewItemIdParamSchema.safeParse(req.params);
+      const body = EmailDispatchRequestBodySchema.safeParse(req.body ?? {});
+      if (!path.success || !body.success) {
+        return reply.code(400).send({
+          error: "invalid_request",
+          details: {
+            params: path.success ? null : path.error.flatten(),
+            body: body.success ? null : body.error.flatten()
+          }
+        });
+      }
+      try {
+        const result = await opts.emailService.dispatchApprovedReviewItem({
+          tenantId: req.auth.tenantId,
+          actorId: req.auth.actorId,
+          reviewItemId: path.data.reviewItemId
+        });
+        return reply.send({ resourceType: "email_dispatch_result", ...result });
+      } catch (error) {
+        if (error instanceof Error && ["email_dispatch_review_item_not_found", "email_dispatch_account_not_found"].includes(error.message)) {
+          return reply.code(404).send({ error: error.message });
+        }
+        throw error;
+      }
+    });
+
+    app.get("/v1/agent-os/email/dispatch/:dispatchId", async (req, reply) => {
+      const path = EmailDispatchIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      const dispatch = await opts.emailService.getDispatchRecord({
+        tenantId: req.auth.tenantId,
+        dispatchId: path.data.dispatchId
+      });
+      if (!dispatch) {
+        return reply.code(404).send({ error: "email_dispatch_not_found" });
+      }
+      return reply.send({ resourceType: "email_dispatch_detail", dispatch });
     });
 
     app.get("/v1/agent-os/admin/summary", async (req, reply) => {

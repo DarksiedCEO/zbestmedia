@@ -12,6 +12,8 @@ import {
   EmailReviewActionResponseSchema,
   EmailReviewDetailResponseSchema,
   EmailReviewListResponseSchema,
+  EmailDispatchDetailResponseSchema,
+  EmailDispatchResultResponseSchema,
   GmailOauthCallbackResponseSchema,
   GmailOauthStartResponseSchema,
   CodeSentinelSignalDetailResponseSchema,
@@ -833,6 +835,59 @@ describe("agent routes", () => {
       reviewedAt: "2026-03-12T00:01:00.000Z",
       reviewedBy: "actor-1",
       reviewNote: "needs revision"
+    })),
+    dispatchApprovedReviewItem: vi.fn(async () => ({
+      sent: true,
+      dispatch: {
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        dispatchId: "email-dispatch:1",
+        reviewItemId: "email-review:1",
+        draftId: "draft:1",
+        accountId: "email-account:1",
+        threadId: "thread-1",
+        assignmentRecordId: "assignment:email:1",
+        runRecordId: "run:email:1",
+        dispatchStatus: "dispatch_succeeded",
+        dispatchPolicy: {
+          allowed: true,
+          reason: "email_dispatch_policy_approved",
+          hardBlocked: false
+        },
+        requestedAt: "2026-03-12T00:02:00.000Z",
+        dispatchedAt: "2026-03-12T00:02:00.000Z",
+        failureCategory: null,
+        failureMessage: null,
+        gmailMessageId: "gmail-message-1",
+        gmailThreadId: "thread-1",
+        auditMetadata: { actorId: "actor-1" },
+        createdAt: "2026-03-12T00:02:00.000Z",
+        updatedAt: "2026-03-12T00:02:00.000Z"
+      }
+    })),
+    getDispatchRecord: vi.fn(async () => ({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      dispatchId: "email-dispatch:1",
+      reviewItemId: "email-review:1",
+      draftId: "draft:1",
+      accountId: "email-account:1",
+      threadId: "thread-1",
+      assignmentRecordId: "assignment:email:1",
+      runRecordId: "run:email:1",
+      dispatchStatus: "dispatch_succeeded",
+      dispatchPolicy: {
+        allowed: true,
+        reason: "email_dispatch_policy_approved",
+        hardBlocked: false
+      },
+      requestedAt: "2026-03-12T00:02:00.000Z",
+      dispatchedAt: "2026-03-12T00:02:00.000Z",
+      failureCategory: null,
+      failureMessage: null,
+      gmailMessageId: "gmail-message-1",
+      gmailThreadId: "thread-1",
+      auditMetadata: { actorId: "actor-1" },
+      createdAt: "2026-03-12T00:02:00.000Z",
+      updatedAt: "2026-03-12T00:02:00.000Z"
     }))
   } as never;
   const evalRunner = {
@@ -2231,6 +2286,21 @@ describe("agent routes", () => {
     expect(EmailReviewActionResponseSchema.parse(approveRes.json()).item.reviewStatus).toBe("approved");
     expect(EmailReviewActionResponseSchema.parse(rejectRes.json()).item.reviewStatus).toBe("rejected");
     expect(EmailReviewActionResponseSchema.parse(revisionRes.json()).item.reviewStatus).toBe("revision_requested");
+  });
+
+  it("dispatches only through the approved review route and exposes dispatch detail", async () => {
+    const dispatchRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/email/review/email-review:1/dispatch",
+      payload: {}
+    });
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/email/dispatch/email-dispatch:1"
+    });
+
+    expect(EmailDispatchResultResponseSchema.parse(dispatchRes.json()).dispatch.dispatchStatus).toBe("dispatch_succeeded");
+    expect(EmailDispatchDetailResponseSchema.parse(detailRes.json()).dispatch.gmailMessageId).toBe("gmail-message-1");
   });
 
   it("executes an agent request with normalized response", async () => {

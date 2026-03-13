@@ -36,6 +36,7 @@ export type {
   EmailThreadProcessingOutcomeSummary
 } from "./email/types.js";
 export type { EmailDraftReviewStatus, EmailDraftReviewRecord } from "./email/review-types.js";
+export type { EmailDispatchStatus, EmailDispatchPolicyResult, EmailDispatchRecord, EmailDispatchRequest, EmailDispatchResult } from "./email/dispatch-types.js";
 export * from "./email/config.js";
 export * from "./email/intent.js";
 export * from "./email/routing.js";
@@ -45,6 +46,7 @@ export * from "./email/classifier.js";
 export * from "./email/prompts.js";
 export * from "./email/service.js";
 export * from "./email/review.js";
+export * from "./email/dispatch.js";
 export * from "./incidents/types.js";
 export * from "./incidents/service.js";
 export * from "./telemetry/types.js";

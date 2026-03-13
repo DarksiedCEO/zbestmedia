@@ -39,6 +39,13 @@ describe("gmail connector scaffold", () => {
 
     await expect(connector.listThreads({})).rejects.toThrow("gmail_list_threads_not_implemented");
     await expect(connector.registerWatch()).rejects.toThrow("gmail_register_watch_not_implemented");
+    await expect(
+      connector.sendApprovedDraft({
+        threadId: "thread-1",
+        subject: "Re: hello",
+        body: "reply"
+      })
+    ).rejects.toThrow("gmail_send_approved_draft_not_implemented");
   });
 
   it("builds a real oauth authorization URL when config is present", async () => {

@@ -7,6 +7,8 @@ import { AgentIncidentService } from "../incidents/service.js";
 import { EmailThreadClassifier } from "./classifier.js";
 import { loadEmailIntegrationConfig, type EmailIntegrationConfig } from "./config.js";
 import { buildEmailDraftSuggestion } from "./drafts.js";
+import { EmailDraftDispatchService } from "./dispatch.js";
+import type { EmailDispatchRecord, EmailDispatchResult } from "./dispatch-types.js";
 import { EmailDraftReviewService } from "./review.js";
 import type { EmailDraftReviewRecord } from "./review-types.js";
 import {
@@ -97,6 +99,7 @@ export class EmailAccountConfigurationError extends Error {
 export class EmailAssistantService {
   private readonly gmailRuntime: GmailRuntimeGateway;
   private readonly reviewQueue: EmailDraftReviewService;
+  private readonly dispatchQueue: EmailDraftDispatchService;
 
   constructor(
     private readonly repository: AgentOsRepository,
@@ -110,6 +113,7 @@ export class EmailAssistantService {
   ) {
     this.gmailRuntime = gmailRuntime ?? new GmailRuntimeScaffold(this.config);
     this.reviewQueue = reviewQueue ?? new EmailDraftReviewService(repository);
+    this.dispatchQueue = new EmailDraftDispatchService(repository, incidents, this.gmailRuntime);
   }
 
   async listAccounts(args: { tenantId: string; limit?: number }) {
@@ -143,6 +147,27 @@ export class EmailAssistantService {
 
   async requestReviewRevision(args: { tenantId: string; reviewItemId: string; actorId: string; note: string; reviewedAt?: string }) {
     return this.reviewQueue.requestRevision(args);
+  }
+
+  async getDispatchRecord(args: { tenantId: string; dispatchId: string }): Promise<EmailDispatchRecord | null> {
+    return this.dispatchQueue.getDispatchRecord(args);
+  }
+
+  async dispatchApprovedReviewItem(args: {
+    tenantId: string;
+    actorId: string;
+    reviewItemId: string;
+    requestedAt?: string;
+  }): Promise<EmailDispatchResult> {
+    return this.dispatchQueue.dispatchApprovedReviewItem({
+      tenantId: args.tenantId,
+      actorId: args.actorId,
+      reviewItemId: args.reviewItemId,
+      requestedAt: args.requestedAt,
+      auditMetadata: {
+        source: "email-assistant-service"
+      }
+    });
   }
 
 

@@ -33,6 +33,18 @@ export type GmailWatchRegistration = {
   topicName: string;
 };
 
+export type GmailSendDraftArgs = {
+  threadId: string;
+  subject: string;
+  body: string;
+};
+
+export type GmailSendDraftResult = {
+  providerMessageId: string;
+  providerThreadId: string;
+  sentAt: string;
+};
+
 export type GmailNormalizeMessageInput = {
   providerMessageId: string;
   providerThreadId: string;
@@ -78,6 +90,7 @@ export interface GmailConnector {
   getThread(threadId: string): Promise<NormalizedEmailThread>;
   normalizeMessage(input: GmailNormalizeMessageInput): Promise<NormalizedEmailMessage>;
   registerWatch(): Promise<GmailWatchRegistration>;
+  sendApprovedDraft(args: GmailSendDraftArgs): Promise<GmailSendDraftResult>;
 }
 
 export interface GmailOAuthProvider {
@@ -215,6 +228,10 @@ export class GmailConnectorScaffold implements GmailConnector {
 
   async registerWatch(): Promise<GmailWatchRegistration> {
     throw new GmailConnectorNotConfiguredError("gmail_register_watch_not_implemented");
+  }
+
+  async sendApprovedDraft(_args: GmailSendDraftArgs): Promise<GmailSendDraftResult> {
+    throw new GmailConnectorNotConfiguredError("gmail_send_approved_draft_not_implemented");
   }
 }
 

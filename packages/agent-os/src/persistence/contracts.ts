@@ -13,6 +13,11 @@ import type {
   EmailProvider
 } from "../email/types.js";
 import type { EmailDraftReviewRecord as EmailDraftReviewRecordShape, EmailDraftReviewStatus } from "../email/review-types.js";
+import type {
+  EmailDispatchPolicyResult as EmailDispatchPolicyResultShape,
+  EmailDispatchRecord as EmailDispatchRecordShape,
+  EmailDispatchStatus
+} from "../email/dispatch-types.js";
 import {
   AssignmentPolicyDecisionSchema,
   AssignmentRecordSchema,
@@ -349,6 +354,44 @@ export const EmailDraftReviewRecordSchema = z.object({
   reviewNote: z.string().nullable()
 }) satisfies z.ZodType<EmailDraftReviewRecordShape>;
 export type EmailDraftReviewRecord = z.infer<typeof EmailDraftReviewRecordSchema>;
+
+export const EmailDispatchStatusSchema = z.enum([
+  "dispatch_pending",
+  "dispatch_blocked",
+  "dispatch_succeeded",
+  "dispatch_failed"
+]);
+export type { EmailDispatchStatus };
+
+export const EmailDispatchPolicyResultSchema = z.object({
+  allowed: z.boolean(),
+  reason: z.string().min(1),
+  hardBlocked: z.boolean()
+}) satisfies z.ZodType<EmailDispatchPolicyResultShape>;
+export type EmailDispatchPolicyResult = z.infer<typeof EmailDispatchPolicyResultSchema>;
+
+export const EmailDispatchRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  dispatchId: z.string().min(1),
+  reviewItemId: z.string().min(1),
+  draftId: z.string().min(1),
+  accountId: z.string().min(1),
+  threadId: z.string().min(1),
+  assignmentRecordId: z.string().nullable(),
+  runRecordId: z.string().nullable(),
+  dispatchStatus: EmailDispatchStatusSchema,
+  dispatchPolicy: EmailDispatchPolicyResultSchema,
+  requestedAt: z.string().datetime(),
+  dispatchedAt: z.string().datetime().nullable(),
+  failureCategory: z.string().nullable(),
+  failureMessage: z.string().nullable(),
+  gmailMessageId: z.string().nullable(),
+  gmailThreadId: z.string().nullable(),
+  auditMetadata: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+}) satisfies z.ZodType<EmailDispatchRecordShape>;
+export type EmailDispatchRecord = z.infer<typeof EmailDispatchRecordSchema>;
 
 export const MemoryEntryRecordSchema = z.object({
   tenantId: z.string().uuid(),

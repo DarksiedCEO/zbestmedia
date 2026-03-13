@@ -32,6 +32,9 @@ import type {
   IncidentType,
   EmailAccountConnectionRecord,
   EmailAccountConnectionStatus,
+  EmailDispatchPolicyResult,
+  EmailDispatchRecord,
+  EmailDispatchStatus,
   EmailDraftReviewRecord,
   EmailDraftReviewStatus,
   MemoryEntryRecord,
@@ -256,6 +259,28 @@ type EmailAccountConnectionRow = {
   oauth_state_expires_at: string | Date | null;
   last_processed_at: string | Date | null;
   last_error: string | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+};
+
+type EmailDispatchRow = {
+  tenant_id: string;
+  dispatch_id: string;
+  review_item_id: string;
+  draft_id: string;
+  account_id: string;
+  thread_id: string;
+  assignment_record_id: string | null;
+  run_record_id: string | null;
+  dispatch_status: EmailDispatchStatus;
+  dispatch_policy: EmailDispatchPolicyResult;
+  requested_at: string | Date;
+  dispatched_at: string | Date | null;
+  failure_category: string | null;
+  failure_message: string | null;
+  gmail_message_id: string | null;
+  gmail_thread_id: string | null;
+  audit_metadata: Record<string, unknown>;
   created_at: string | Date;
   updated_at: string | Date;
 };
@@ -570,6 +595,30 @@ function mapEmailAccountConnectionRow(row: EmailAccountConnectionRow): EmailAcco
     oauthStateExpiresAt: row.oauth_state_expires_at ? toIsoString(row.oauth_state_expires_at) : null,
     lastProcessedAt: row.last_processed_at ? toIsoString(row.last_processed_at) : null,
     lastError: row.last_error,
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at)
+  };
+}
+
+function mapEmailDispatchRow(row: EmailDispatchRow): EmailDispatchRecord {
+  return {
+    tenantId: row.tenant_id,
+    dispatchId: row.dispatch_id,
+    reviewItemId: row.review_item_id,
+    draftId: row.draft_id,
+    accountId: row.account_id,
+    threadId: row.thread_id,
+    assignmentRecordId: row.assignment_record_id,
+    runRecordId: row.run_record_id,
+    dispatchStatus: row.dispatch_status,
+    dispatchPolicy: row.dispatch_policy,
+    requestedAt: toIsoString(row.requested_at),
+    dispatchedAt: row.dispatched_at ? toIsoString(row.dispatched_at) : null,
+    failureCategory: row.failure_category,
+    failureMessage: row.failure_message,
+    gmailMessageId: row.gmail_message_id,
+    gmailThreadId: row.gmail_thread_id,
+    auditMetadata: row.audit_metadata,
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at)
   };
@@ -2026,6 +2075,143 @@ export class AgentOsRepository {
       throw new Error("email_review_state_conflict");
     }
     return mapEmailDraftReviewRow(res.rows[0]);
+  }
+
+  async createEmailDispatchRecord(args: {
+    tenantId: string;
+    reviewItemId: string;
+    draftId: string;
+    accountId: string;
+    threadId: string;
+    assignmentRecordId?: string | null;
+    runRecordId?: string | null;
+    dispatchStatus?: EmailDispatchStatus;
+    dispatchPolicy: EmailDispatchPolicyResult;
+    requestedAt?: string;
+    dispatchedAt?: string | null;
+    failureCategory?: string | null;
+    failureMessage?: string | null;
+    gmailMessageId?: string | null;
+    gmailThreadId?: string | null;
+    auditMetadata?: Record<string, unknown>;
+    createdAt?: string;
+  }): Promise<EmailDispatchRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const dispatchId = buildScopedId("email-dispatch", [args.accountId, args.threadId, createdAt]);
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EmailDispatchRow>(
+        `
+        INSERT INTO email_dispatch_records (
+          tenant_id, dispatch_id, review_item_id, draft_id, account_id, thread_id,
+          assignment_record_id, run_record_id, dispatch_status, dispatch_policy, requested_at,
+          dispatched_at, failure_category, failure_message, gmail_message_id, gmail_thread_id,
+          audit_metadata, created_at, updated_at
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,
+          $7,$8,$9,$10::jsonb,$11,
+          $12,$13,$14,$15,$16,
+          $17::jsonb,$18,$18
+        )
+        RETURNING tenant_id, dispatch_id, review_item_id, draft_id, account_id, thread_id,
+                  assignment_record_id, run_record_id, dispatch_status, dispatch_policy, requested_at,
+                  dispatched_at, failure_category, failure_message, gmail_message_id, gmail_thread_id,
+                  audit_metadata, created_at, updated_at
+        `,
+        [
+          args.tenantId,
+          dispatchId,
+          args.reviewItemId,
+          args.draftId,
+          args.accountId,
+          args.threadId,
+          args.assignmentRecordId ?? null,
+          args.runRecordId ?? null,
+          args.dispatchStatus ?? "dispatch_pending",
+          JSON.stringify(args.dispatchPolicy),
+          args.requestedAt ?? createdAt,
+          args.dispatchedAt ?? null,
+          args.failureCategory ?? null,
+          args.failureMessage ?? null,
+          args.gmailMessageId ?? null,
+          args.gmailThreadId ?? null,
+          JSON.stringify(args.auditMetadata ?? {}),
+          createdAt
+        ]
+      )
+    );
+    return mapEmailDispatchRow(res.rows[0]!);
+  }
+
+  async updateEmailDispatchRecord(args: {
+    tenantId: string;
+    dispatchId: string;
+    dispatchStatus: EmailDispatchStatus;
+    dispatchPolicy?: EmailDispatchPolicyResult;
+    dispatchedAt?: string | null;
+    failureCategory?: string | null;
+    failureMessage?: string | null;
+    gmailMessageId?: string | null;
+    gmailThreadId?: string | null;
+    auditMetadata?: Record<string, unknown>;
+    updatedAt?: string;
+  }): Promise<EmailDispatchRecord> {
+    const updatedAt = args.updatedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EmailDispatchRow>(
+        `
+        UPDATE email_dispatch_records
+        SET dispatch_status = $3,
+            dispatch_policy = COALESCE($4::jsonb, dispatch_policy),
+            dispatched_at = COALESCE($5, dispatched_at),
+            failure_category = $6,
+            failure_message = $7,
+            gmail_message_id = $8,
+            gmail_thread_id = $9,
+            audit_metadata = COALESCE($10::jsonb, audit_metadata),
+            updated_at = $11
+        WHERE tenant_id = $1
+          AND dispatch_id = $2
+        RETURNING tenant_id, dispatch_id, review_item_id, draft_id, account_id, thread_id,
+                  assignment_record_id, run_record_id, dispatch_status, dispatch_policy, requested_at,
+                  dispatched_at, failure_category, failure_message, gmail_message_id, gmail_thread_id,
+                  audit_metadata, created_at, updated_at
+        `,
+        [
+          args.tenantId,
+          args.dispatchId,
+          args.dispatchStatus,
+          args.dispatchPolicy ? JSON.stringify(args.dispatchPolicy) : null,
+          args.dispatchedAt ?? null,
+          args.failureCategory ?? null,
+          args.failureMessage ?? null,
+          args.gmailMessageId ?? null,
+          args.gmailThreadId ?? null,
+          args.auditMetadata ? JSON.stringify(args.auditMetadata) : null,
+          updatedAt
+        ]
+      )
+    );
+    if (!res.rows[0]) {
+      throw new Error("email_dispatch_not_found");
+    }
+    return mapEmailDispatchRow(res.rows[0]);
+  }
+
+  async getEmailDispatchRecord(args: { tenantId: string; dispatchId: string }): Promise<EmailDispatchRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EmailDispatchRow>(
+        `
+        SELECT tenant_id, dispatch_id, review_item_id, draft_id, account_id, thread_id,
+               assignment_record_id, run_record_id, dispatch_status, dispatch_policy, requested_at,
+               dispatched_at, failure_category, failure_message, gmail_message_id, gmail_thread_id,
+               audit_metadata, created_at, updated_at
+        FROM email_dispatch_records
+        WHERE tenant_id = $1 AND dispatch_id = $2
+        `,
+        [args.tenantId, args.dispatchId]
+      )
+    );
+    return res.rows[0] ? mapEmailDispatchRow(res.rows[0]) : null;
   }
 
   async createEmailAccountConnection(args: {

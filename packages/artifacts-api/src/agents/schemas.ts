@@ -6,6 +6,7 @@ import {
   AgentTaskDomainSchema,
   AssignmentRecordSchema,
   EmailAccountConnectionRecordSchema,
+  EmailDispatchRecordSchema,
   EmailDraftReviewRecordSchema,
   IncidentRecordSchema,
   IncidentSeveritySchema,
@@ -198,6 +199,23 @@ export const EmailReviewActionResponseSchema = z.object({
   resourceType: z.literal("email_review_action"),
   action: z.enum(["approve", "reject", "request_revision"]),
   item: EmailDraftReviewRecordSchema
+});
+
+export const EmailDispatchIdParamSchema = z.object({
+  dispatchId: z.string().min(1)
+});
+
+export const EmailDispatchRequestBodySchema = z.object({}).strict();
+
+export const EmailDispatchResultResponseSchema = z.object({
+  resourceType: z.literal("email_dispatch_result"),
+  sent: z.boolean(),
+  dispatch: EmailDispatchRecordSchema
+});
+
+export const EmailDispatchDetailResponseSchema = z.object({
+  resourceType: z.literal("email_dispatch_detail"),
+  dispatch: EmailDispatchRecordSchema
 });
 
 export const BrandPipelineAdvanceBodySchema = z.object({
