@@ -124,6 +124,38 @@ function buildRepository() {
     }),
     getExecutionRunRecord: vi.fn(async () => currentRun),
     createIncidentRecord: vi.fn(async () => ({ incidentId: "incident:1" })),
+    createEmailDraftReviewItem: vi.fn(async () => ({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      reviewItemId: "email-review:1",
+      draftId: "draft:1",
+      accountId: "account-1",
+      threadId: "thread-1",
+      assignmentRecordId: "assignment:1",
+      runRecordId: "run:1",
+      intentCategory: "lead_inquiry",
+      priority: "high",
+      riskLevel: "medium",
+      requiredApproval: true,
+      reviewStatus: "pending_review",
+      recommendedExecutiveId: "cmo",
+      recommendedDepartmentId: "marketing",
+      recommendedLeadAgentId: "kobe",
+      recommendedSubAgentId: null,
+      draftSummary: "summary",
+      proposedReplySubject: "Re: Need help with marketing strategy",
+      proposedReplyBody: "reply",
+      confidenceScore: 0.8,
+      riskScore: 0.3,
+      escalationRecommended: false,
+      blockedAutoSend: true,
+      manifestVersion: "2026-03-12.v1",
+      routingProvenance: { intentCategory: "lead_inquiry", target: { targetType: "lead_agent", departmentId: "marketing", executiveId: "cmo", leadAgentId: "kobe", subAgentId: null, executionAgentId: "kobe", requiresEscalation: false }, routingDecision: null, trace: [] },
+      createdAt: "2026-03-12T00:00:00.000Z",
+      updatedAt: "2026-03-12T00:00:00.000Z",
+      reviewedAt: null,
+      reviewedBy: null,
+      reviewNote: null
+    })),
     createEmailAccountConnection: vi.fn(async (args: any) => ({
       tenantId: args.tenantId,
       accountId: args.accountId,
@@ -273,6 +305,7 @@ describe("email assistant service", () => {
     expect(outcome.result.intentCategory).toBe("lead_inquiry");
     expect(outcome.result.draft?.approvalRequired).toBe(true);
     expect(outcome.result.draft?.blockedAutoSend).toBe(true);
+    expect(outcome.result.reviewItemId).toBe("email-review:1");
     expect(repository.createAssignmentRecord).toHaveBeenCalledOnce();
     expect(repository.createExecution).toHaveBeenCalledOnce();
     expect(repository.completeExecution).toHaveBeenCalledOnce();

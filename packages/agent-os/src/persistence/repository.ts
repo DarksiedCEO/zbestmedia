@@ -32,6 +32,8 @@ import type {
   IncidentType,
   EmailAccountConnectionRecord,
   EmailAccountConnectionStatus,
+  EmailDraftReviewRecord,
+  EmailDraftReviewStatus,
   MemoryEntryRecord,
   OrchestrationOpsSnapshotExportRecord,
   OrchestrationAlertAckRecord,
@@ -200,6 +202,39 @@ type IncidentRow = {
   resolved_at: string | Date | null;
   resolved_by: string | null;
   resolution_note: string | null;
+};
+
+type EmailDraftReviewRow = {
+  tenant_id: string;
+  review_item_id: string;
+  draft_id: string;
+  account_id: string;
+  thread_id: string;
+  assignment_record_id: string | null;
+  run_record_id: string | null;
+  intent_category: EmailDraftReviewRecord["intentCategory"];
+  priority: EmailDraftReviewRecord["priority"];
+  risk_level: EmailDraftReviewRecord["riskLevel"];
+  required_approval: true;
+  review_status: EmailDraftReviewStatus;
+  recommended_executive_id: string | null;
+  recommended_department_id: string | null;
+  recommended_lead_agent_id: string | null;
+  recommended_sub_agent_id: string | null;
+  draft_summary: string;
+  proposed_reply_subject: string;
+  proposed_reply_body: string;
+  confidence_score: number;
+  risk_score: number;
+  escalation_recommended: boolean;
+  blocked_auto_send: true;
+  manifest_version: string;
+  routing_provenance: Record<string, unknown>;
+  created_at: string | Date;
+  updated_at: string | Date;
+  reviewed_at: string | Date | null;
+  reviewed_by: string | null;
+  review_note: string | null;
 };
 
 type EmailAccountConnectionRow = {
@@ -477,6 +512,41 @@ function mapIncidentRow(row: IncidentRow): IncidentRecord {
     resolvedAt: row.resolved_at ? toIsoString(row.resolved_at) : null,
     resolvedBy: row.resolved_by,
     resolutionNote: row.resolution_note
+  };
+}
+
+function mapEmailDraftReviewRow(row: EmailDraftReviewRow): EmailDraftReviewRecord {
+  return {
+    tenantId: row.tenant_id,
+    reviewItemId: row.review_item_id,
+    draftId: row.draft_id,
+    accountId: row.account_id,
+    threadId: row.thread_id,
+    assignmentRecordId: row.assignment_record_id,
+    runRecordId: row.run_record_id,
+    intentCategory: row.intent_category,
+    priority: row.priority,
+    riskLevel: row.risk_level,
+    requiredApproval: true,
+    reviewStatus: row.review_status,
+    recommendedExecutiveId: row.recommended_executive_id,
+    recommendedDepartmentId: row.recommended_department_id,
+    recommendedLeadAgentId: row.recommended_lead_agent_id,
+    recommendedSubAgentId: row.recommended_sub_agent_id,
+    draftSummary: row.draft_summary,
+    proposedReplySubject: row.proposed_reply_subject,
+    proposedReplyBody: row.proposed_reply_body,
+    confidenceScore: row.confidence_score,
+    riskScore: row.risk_score,
+    escalationRecommended: row.escalation_recommended,
+    blockedAutoSend: true,
+    manifestVersion: row.manifest_version,
+    routingProvenance: row.routing_provenance as never,
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at),
+    reviewedAt: row.reviewed_at ? toIsoString(row.reviewed_at) : null,
+    reviewedBy: row.reviewed_by,
+    reviewNote: row.review_note
   };
 }
 
@@ -1805,6 +1875,157 @@ export class AgentOsRepository {
     );
 
     return mapIncidentRow(res.rows[0]!);
+  }
+
+  async createEmailDraftReviewItem(args: {
+    tenantId: string;
+    draftId: string;
+    accountId: string;
+    threadId: string;
+    assignmentRecordId?: string | null;
+    runRecordId?: string | null;
+    intentCategory: EmailDraftReviewRecord["intentCategory"];
+    priority: EmailDraftReviewRecord["priority"];
+    riskLevel: EmailDraftReviewRecord["riskLevel"];
+    reviewStatus?: EmailDraftReviewStatus;
+    recommendedExecutiveId?: string | null;
+    recommendedDepartmentId?: string | null;
+    recommendedLeadAgentId?: string | null;
+    recommendedSubAgentId?: string | null;
+    draftSummary: string;
+    proposedReplySubject: string;
+    proposedReplyBody: string;
+    confidenceScore: number;
+    riskScore: number;
+    escalationRecommended: boolean;
+    manifestVersion: string;
+    routingProvenance: Record<string, unknown>;
+    createdAt?: string;
+  }): Promise<EmailDraftReviewRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const reviewItemId = buildScopedId("email-review", [args.accountId, args.threadId, createdAt]);
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EmailDraftReviewRow>(
+        `
+        INSERT INTO email_draft_review_items (
+          tenant_id, review_item_id, draft_id, account_id, thread_id, assignment_record_id, run_record_id,
+          intent_category, priority, risk_level, required_approval, review_status,
+          recommended_executive_id, recommended_department_id, recommended_lead_agent_id, recommended_sub_agent_id,
+          draft_summary, proposed_reply_subject, proposed_reply_body, confidence_score, risk_score,
+          escalation_recommended, blocked_auto_send, manifest_version, routing_provenance,
+          created_at, updated_at, reviewed_at, reviewed_by, review_note
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$7,
+          $8,$9,$10,true,$11,
+          $12,$13,$14,$15,
+          $16,$17,$18,$19,$20,
+          $21,true,$22,$23::jsonb,
+          $24,$24,NULL,NULL,NULL
+        )
+        RETURNING tenant_id, review_item_id, draft_id, account_id, thread_id, assignment_record_id, run_record_id,
+                  intent_category, priority, risk_level, required_approval, review_status,
+                  recommended_executive_id, recommended_department_id, recommended_lead_agent_id, recommended_sub_agent_id,
+                  draft_summary, proposed_reply_subject, proposed_reply_body, confidence_score, risk_score,
+                  escalation_recommended, blocked_auto_send, manifest_version, routing_provenance,
+                  created_at, updated_at, reviewed_at, reviewed_by, review_note
+        `,
+        [
+          args.tenantId, reviewItemId, args.draftId, args.accountId, args.threadId, args.assignmentRecordId ?? null, args.runRecordId ?? null,
+          args.intentCategory, args.priority, args.riskLevel, args.reviewStatus ?? "pending_review",
+          args.recommendedExecutiveId ?? null, args.recommendedDepartmentId ?? null, args.recommendedLeadAgentId ?? null, args.recommendedSubAgentId ?? null,
+          args.draftSummary, args.proposedReplySubject, args.proposedReplyBody, args.confidenceScore, args.riskScore,
+          args.escalationRecommended, args.manifestVersion, JSON.stringify(args.routingProvenance), createdAt
+        ]
+      )
+    );
+    return mapEmailDraftReviewRow(res.rows[0]!);
+  }
+
+  async listEmailDraftReviewItems(args: {
+    tenantId: string;
+    status?: EmailDraftReviewStatus;
+    accountId?: string;
+    priority?: EmailDraftReviewRecord["priority"];
+    limit?: number;
+  }): Promise<EmailDraftReviewRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EmailDraftReviewRow>(
+        `
+        SELECT tenant_id, review_item_id, draft_id, account_id, thread_id, assignment_record_id, run_record_id,
+               intent_category, priority, risk_level, required_approval, review_status,
+               recommended_executive_id, recommended_department_id, recommended_lead_agent_id, recommended_sub_agent_id,
+               draft_summary, proposed_reply_subject, proposed_reply_body, confidence_score, risk_score,
+               escalation_recommended, blocked_auto_send, manifest_version, routing_provenance,
+               created_at, updated_at, reviewed_at, reviewed_by, review_note
+        FROM email_draft_review_items
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR review_status = $2)
+          AND ($3::text IS NULL OR account_id = $3)
+          AND ($4::text IS NULL OR priority = $4)
+        ORDER BY created_at DESC
+        LIMIT $5
+        `,
+        [args.tenantId, args.status ?? null, args.accountId ?? null, args.priority ?? null, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapEmailDraftReviewRow);
+  }
+
+  async getEmailDraftReviewItem(args: { tenantId: string; reviewItemId: string; }): Promise<EmailDraftReviewRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EmailDraftReviewRow>(
+        `
+        SELECT tenant_id, review_item_id, draft_id, account_id, thread_id, assignment_record_id, run_record_id,
+               intent_category, priority, risk_level, required_approval, review_status,
+               recommended_executive_id, recommended_department_id, recommended_lead_agent_id, recommended_sub_agent_id,
+               draft_summary, proposed_reply_subject, proposed_reply_body, confidence_score, risk_score,
+               escalation_recommended, blocked_auto_send, manifest_version, routing_provenance,
+               created_at, updated_at, reviewed_at, reviewed_by, review_note
+        FROM email_draft_review_items
+        WHERE tenant_id = $1 AND review_item_id = $2
+        `,
+        [args.tenantId, args.reviewItemId]
+      )
+    );
+    return res.rows[0] ? mapEmailDraftReviewRow(res.rows[0]) : null;
+  }
+
+  async transitionEmailDraftReviewItem(args: {
+    tenantId: string;
+    reviewItemId: string;
+    fromStatus: EmailDraftReviewStatus;
+    toStatus: EmailDraftReviewStatus;
+    reviewedBy: string;
+    reviewNote?: string | null;
+    reviewedAt?: string;
+  }): Promise<EmailDraftReviewRecord> {
+    const reviewedAt = args.reviewedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EmailDraftReviewRow>(
+        `
+        UPDATE email_draft_review_items
+        SET review_status = $4,
+            reviewed_at = $5,
+            reviewed_by = $6,
+            review_note = $7,
+            updated_at = $5
+        WHERE tenant_id = $1
+          AND review_item_id = $2
+          AND review_status = $3
+        RETURNING tenant_id, review_item_id, draft_id, account_id, thread_id, assignment_record_id, run_record_id,
+                  intent_category, priority, risk_level, required_approval, review_status,
+                  recommended_executive_id, recommended_department_id, recommended_lead_agent_id, recommended_sub_agent_id,
+                  draft_summary, proposed_reply_subject, proposed_reply_body, confidence_score, risk_score,
+                  escalation_recommended, blocked_auto_send, manifest_version, routing_provenance,
+                  created_at, updated_at, reviewed_at, reviewed_by, review_note
+        `,
+        [args.tenantId, args.reviewItemId, args.fromStatus, args.toStatus, reviewedAt, args.reviewedBy, args.reviewNote ?? null]
+      )
+    );
+    if (!res.rows[0]) {
+      throw new Error("email_review_state_conflict");
+    }
+    return mapEmailDraftReviewRow(res.rows[0]);
   }
 
   async createEmailAccountConnection(args: {

@@ -1,5 +1,6 @@
 import type { AgentId } from "../agents/registry.js";
 import type { RoutingDecision } from "../org/routing-types.js";
+import type { EmailDraftReviewStatus } from "./review-types.js";
 import type { DepartmentId, ExecutiveId, LeadAgentId, SubAgentId } from "../org/types.js";
 
 export type EmailProvider = "gmail";
@@ -157,6 +158,7 @@ export type EmailThreadClassification = {
 };
 
 export type EmailProcessingResult = {
+  reviewItemId: string | null;
   status: "drafted" | "escalated" | "suppressed" | "failed";
   threadId: string;
   intentCategory: EmailIntentCategory;
@@ -194,6 +196,7 @@ export type EmailAccountProcessingBatchResult = {
 };
 
 export type EmailThreadProcessingOutcomeSummary = {
+  reviewItemId: string | null;
   threadId: string;
   assignmentRecordId: string;
   runRecordId: string;

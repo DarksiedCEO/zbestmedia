@@ -6,6 +6,7 @@ import {
   AgentTaskDomainSchema,
   AssignmentRecordSchema,
   EmailAccountConnectionRecordSchema,
+  EmailDraftReviewRecordSchema,
   IncidentRecordSchema,
   IncidentSeveritySchema,
   IncidentStatusSchema,
@@ -163,6 +164,40 @@ export const GmailOauthCallbackBodySchema = z.object({
 
 export const EmailAccountProcessBodySchema = z.object({
   maxThreads: z.number().int().positive().max(100).optional()
+});
+
+
+export const EmailReviewItemIdParamSchema = z.object({
+  reviewItemId: z.string().min(1)
+});
+
+export const EmailReviewListQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).default(25),
+  accountId: z.string().min(1).optional(),
+  priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
+  status: z.enum(["pending_review", "approved", "rejected", "revision_requested"]).optional()
+});
+
+export const EmailReviewActionBodySchema = z.object({
+  note: z.string().min(1).optional()
+});
+
+const EmailDraftReviewListResponseSchemaItem = EmailDraftReviewRecordSchema;
+
+export const EmailReviewListResponseSchema = z.object({
+  resourceType: z.literal("email_review_list"),
+  items: z.array(EmailDraftReviewListResponseSchemaItem)
+});
+
+export const EmailReviewDetailResponseSchema = z.object({
+  resourceType: z.literal("email_review_detail"),
+  item: EmailDraftReviewRecordSchema
+});
+
+export const EmailReviewActionResponseSchema = z.object({
+  resourceType: z.literal("email_review_action"),
+  action: z.enum(["approve", "reject", "request_revision"]),
+  item: EmailDraftReviewRecordSchema
 });
 
 export const BrandPipelineAdvanceBodySchema = z.object({
@@ -777,7 +812,8 @@ const EmailProcessingOutcomeSummarySchema = z.object({
     "legal_or_sensitive"
   ]),
   approvalRequired: z.literal(true),
-  blockedAutoSend: z.literal(true)
+  blockedAutoSend: z.literal(true),
+  reviewItemId: z.string().min(1).nullable()
 });
 
 export const EmailAccountListResponseSchema = z.object({

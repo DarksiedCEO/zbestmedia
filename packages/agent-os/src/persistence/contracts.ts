@@ -12,6 +12,7 @@ import type {
   EmailAccountConnectionStatus,
   EmailProvider
 } from "../email/types.js";
+import type { EmailDraftReviewRecord as EmailDraftReviewRecordShape, EmailDraftReviewStatus } from "../email/review-types.js";
 import {
   AssignmentPolicyDecisionSchema,
   AssignmentRecordSchema,
@@ -249,6 +250,105 @@ export const EmailAccountConnectionRecordSchema = z.object({
   updatedAt: z.string().datetime()
 }) satisfies z.ZodType<EmailAccountConnectionRecordShape>;
 export type EmailAccountConnectionRecord = z.infer<typeof EmailAccountConnectionRecordSchema>;
+
+
+const EmailRoutingTargetSchema = z.union([
+  z.object({
+    targetType: z.literal("lead_agent"),
+    departmentId: z.string().min(1),
+    executiveId: z.string().min(1),
+    leadAgentId: z.string().min(1),
+    subAgentId: z.string().nullable(),
+    executionAgentId: z.string().nullable(),
+    requiresEscalation: z.boolean()
+  }),
+  z.object({
+    targetType: z.literal("executive_lane"),
+    departmentId: z.string().min(1),
+    executiveId: z.string().min(1),
+    leadAgentId: z.null(),
+    subAgentId: z.null(),
+    executionAgentId: z.null(),
+    requiresEscalation: z.boolean()
+  }),
+  z.object({
+    targetType: z.literal("suppressed"),
+    departmentId: z.null(),
+    executiveId: z.null(),
+    leadAgentId: z.null(),
+    subAgentId: z.null(),
+    executionAgentId: z.null(),
+    requiresEscalation: z.literal(false)
+  })
+]);
+
+const EmailRoutingResolutionSchema = z.object({
+  intentCategory: z.enum([
+    "lead_inquiry",
+    "client_request",
+    "billing_question",
+    "meeting_request",
+    "vendor_outreach",
+    "partnership_inquiry",
+    "technical_issue",
+    "support_request",
+    "general_inquiry",
+    "spam_or_irrelevant",
+    "legal_or_sensitive"
+  ]),
+  target: EmailRoutingTargetSchema,
+  routingDecision: z.record(z.string(), z.unknown()).nullable(),
+  trace: z.array(z.string())
+});
+
+export const EmailDraftReviewStatusSchema = z.enum(["pending_review", "approved", "rejected", "revision_requested"]);
+export type { EmailDraftReviewStatus };
+
+export const EmailDraftReviewRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  reviewItemId: z.string().min(1),
+  draftId: z.string().min(1),
+  accountId: z.string().min(1),
+  threadId: z.string().min(1),
+  assignmentRecordId: z.string().nullable(),
+  runRecordId: z.string().nullable(),
+  intentCategory: z.enum([
+    "lead_inquiry",
+    "client_request",
+    "billing_question",
+    "meeting_request",
+    "vendor_outreach",
+    "partnership_inquiry",
+    "technical_issue",
+    "support_request",
+    "general_inquiry",
+    "spam_or_irrelevant",
+    "legal_or_sensitive"
+  ]),
+  priority: z.enum(["low", "normal", "high", "urgent"]),
+  riskLevel: z.enum(["low", "medium", "high", "critical"]),
+  requiredApproval: z.literal(true),
+  reviewStatus: EmailDraftReviewStatusSchema,
+  recommendedExecutiveId: z.string().nullable(),
+  recommendedDepartmentId: z.string().nullable(),
+  recommendedLeadAgentId: z.string().nullable(),
+  recommendedSubAgentId: z.string().nullable(),
+  draftSummary: z.string().min(1),
+  proposedReplySubject: z.string().min(1),
+  proposedReplyBody: z.string().min(1),
+  confidenceScore: z.number(),
+  riskScore: z.number(),
+  escalationRecommended: z.boolean(),
+  blockedAutoSend: z.literal(true),
+  manifestVersion: z.string().min(1),
+  routingProvenance: EmailRoutingResolutionSchema,
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  reviewedAt: z.string().datetime().nullable(),
+  reviewedBy: z.string().nullable(),
+  reviewNote: z.string().nullable()
+}) satisfies z.ZodType<EmailDraftReviewRecordShape>;
+export type EmailDraftReviewRecord = z.infer<typeof EmailDraftReviewRecordSchema>;
 
 export const MemoryEntryRecordSchema = z.object({
   tenantId: z.string().uuid(),

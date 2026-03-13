@@ -53,6 +53,9 @@ import {
   EmailAccountListResponseSchema,
   EmailAccountProcessBatchResponseSchema,
   EmailAccountProcessBodySchema,
+  EmailReviewActionBodySchema,
+  EmailReviewItemIdParamSchema,
+  EmailReviewListQuerySchema,
   EmailAccountProcessSingleResponseSchema,
   EmailAccountThreadIdParamSchema,
   OrchestrationEscalateBodySchema,
@@ -1029,6 +1032,112 @@ export function agentRoutes(opts: {
         resourceType: "ops_code_sentinel_summary",
         summary
       });
+    });
+
+
+    app.get("/v1/agent-os/email/review", async (req, reply) => {
+      const query = EmailReviewListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      return reply.send({
+        resourceType: "email_review_list",
+        items: await opts.emailService.listReviewItems({
+          tenantId: req.auth.tenantId,
+          ...query.data
+        })
+      });
+    });
+
+    app.get("/v1/agent-os/email/review/:reviewItemId", async (req, reply) => {
+      const path = EmailReviewItemIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      const item = await opts.emailService.getReviewItem({
+        tenantId: req.auth.tenantId,
+        reviewItemId: path.data.reviewItemId
+      });
+      if (!item) {
+        return reply.code(404).send({ error: "email_review_item_not_found" });
+      }
+      return reply.send({ resourceType: "email_review_detail", item });
+    });
+
+    app.post("/v1/agent-os/email/review/:reviewItemId/approve", async (req, reply) => {
+      const path = EmailReviewItemIdParamSchema.safeParse(req.params);
+      const body = EmailReviewActionBodySchema.safeParse(req.body ?? {});
+      if (!path.success || !body.success) {
+        return reply.code(400).send({ error: "invalid_request", details: { params: path.success ? null : path.error.flatten(), body: body.success ? null : body.error.flatten() } });
+      }
+      try {
+        const item = await opts.emailService.approveReviewItem({
+          tenantId: req.auth.tenantId,
+          reviewItemId: path.data.reviewItemId,
+          actorId: req.auth.actorId,
+          note: body.data.note
+        });
+        return reply.send({ resourceType: "email_review_action", action: "approve", item });
+      } catch (error) {
+        if (error instanceof Error && ["email_review_item_not_found", "email_review_state_conflict"].includes(error.message)) {
+          return reply.code(error.message === "email_review_item_not_found" ? 404 : 409).send({ error: error.message });
+        }
+        if (error instanceof Error && error.message.startsWith("invalid_email_review_transition")) {
+          return reply.code(409).send({ error: error.message });
+        }
+        throw error;
+      }
+    });
+
+    app.post("/v1/agent-os/email/review/:reviewItemId/reject", async (req, reply) => {
+      const path = EmailReviewItemIdParamSchema.safeParse(req.params);
+      const body = EmailReviewActionBodySchema.safeParse(req.body ?? {});
+      if (!path.success || !body.success) {
+        return reply.code(400).send({ error: "invalid_request", details: { params: path.success ? null : path.error.flatten(), body: body.success ? null : body.error.flatten() } });
+      }
+      try {
+        const item = await opts.emailService.rejectReviewItem({
+          tenantId: req.auth.tenantId,
+          reviewItemId: path.data.reviewItemId,
+          actorId: req.auth.actorId,
+          note: body.data.note
+        });
+        return reply.send({ resourceType: "email_review_action", action: "reject", item });
+      } catch (error) {
+        if (error instanceof Error && ["email_review_item_not_found", "email_review_state_conflict"].includes(error.message)) {
+          return reply.code(error.message === "email_review_item_not_found" ? 404 : 409).send({ error: error.message });
+        }
+        if (error instanceof Error && error.message.startsWith("invalid_email_review_transition")) {
+          return reply.code(409).send({ error: error.message });
+        }
+        throw error;
+      }
+    });
+
+    app.post("/v1/agent-os/email/review/:reviewItemId/request-revision", async (req, reply) => {
+      const path = EmailReviewItemIdParamSchema.safeParse(req.params);
+      const body = EmailReviewActionBodySchema.safeParse(req.body ?? {});
+      if (!path.success || !body.success || !body.data.note) {
+        return reply.code(400).send({ error: "invalid_request", details: { params: path.success ? null : path.error.flatten(), body: body.success ? null : body.error.flatten() } });
+      }
+      try {
+        const item = await opts.emailService.requestReviewRevision({
+          tenantId: req.auth.tenantId,
+          reviewItemId: path.data.reviewItemId,
+          actorId: req.auth.actorId,
+          note: body.data.note
+        });
+        return reply.send({ resourceType: "email_review_action", action: "request_revision", item });
+      } catch (error) {
+        if (error instanceof Error && ["email_review_item_not_found", "email_review_state_conflict"].includes(error.message)) {
+          return reply.code(error.message === "email_review_item_not_found" ? 404 : 409).send({ error: error.message });
+        }
+        if (error instanceof Error && error.message.startsWith("invalid_email_review_transition")) {
+          return reply.code(409).send({ error: error.message });
+        }
+        throw error;
+      }
     });
 
     app.get("/v1/agent-os/admin/summary", async (req, reply) => {

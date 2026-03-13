@@ -7,6 +7,8 @@ import { AgentIncidentService } from "../incidents/service.js";
 import { EmailThreadClassifier } from "./classifier.js";
 import { loadEmailIntegrationConfig, type EmailIntegrationConfig } from "./config.js";
 import { buildEmailDraftSuggestion } from "./drafts.js";
+import { EmailDraftReviewService } from "./review.js";
+import type { EmailDraftReviewRecord } from "./review-types.js";
 import {
   buildGmailOauthState,
   GmailOauthConfigurationError,
@@ -44,6 +46,7 @@ export type EmailThreadProcessingOutcome = {
   execution: ExecutionRecord;
   result: EmailProcessingResult;
   promptAssembly: AaliyahPromptAssembly;
+  reviewItem: EmailDraftReviewRecord | null;
 };
 
 export type BeginGmailOAuthConnectionArgs = {
@@ -93,6 +96,7 @@ export class EmailAccountConfigurationError extends Error {
 
 export class EmailAssistantService {
   private readonly gmailRuntime: GmailRuntimeGateway;
+  private readonly reviewQueue: EmailDraftReviewService;
 
   constructor(
     private readonly repository: AgentOsRepository,
@@ -101,9 +105,11 @@ export class EmailAssistantService {
     private readonly classifier: EmailThreadClassifier = new EmailThreadClassifier(),
     private readonly routing: EmailRoutingService = new EmailRoutingService(),
     private readonly config: EmailIntegrationConfig = loadEmailIntegrationConfig(),
-    gmailRuntime?: GmailRuntimeGateway
+    gmailRuntime?: GmailRuntimeGateway,
+    reviewQueue?: EmailDraftReviewService
   ) {
     this.gmailRuntime = gmailRuntime ?? new GmailRuntimeScaffold(this.config);
+    this.reviewQueue = reviewQueue ?? new EmailDraftReviewService(repository);
   }
 
   async listAccounts(args: { tenantId: string; limit?: number }) {
@@ -113,6 +119,32 @@ export class EmailAssistantService {
   async getAccount(args: { tenantId: string; accountId: string }) {
     return this.repository.getEmailAccountConnection(args);
   }
+  async listReviewItems(args: {
+    tenantId: string;
+    status?: EmailDraftReviewRecord["reviewStatus"];
+    accountId?: string;
+    priority?: EmailDraftReviewRecord["priority"];
+    limit?: number;
+  }) {
+    return this.reviewQueue.listReviewItems(args);
+  }
+
+  async getReviewItem(args: { tenantId: string; reviewItemId: string }) {
+    return this.reviewQueue.getReviewItem(args);
+  }
+
+  async approveReviewItem(args: { tenantId: string; reviewItemId: string; actorId: string; note?: string; reviewedAt?: string }) {
+    return this.reviewQueue.approveReviewItem(args);
+  }
+
+  async rejectReviewItem(args: { tenantId: string; reviewItemId: string; actorId: string; note?: string; reviewedAt?: string }) {
+    return this.reviewQueue.rejectReviewItem(args);
+  }
+
+  async requestReviewRevision(args: { tenantId: string; reviewItemId: string; actorId: string; note: string; reviewedAt?: string }) {
+    return this.reviewQueue.requestRevision(args);
+  }
+
 
   async beginGmailOAuthConnection(args: BeginGmailOAuthConnectionArgs): Promise<EmailAccountOAuthStartResult> {
     if (!this.config.enabled) {
@@ -383,7 +415,25 @@ export class EmailAssistantService {
         routingResolution.target.targetType === "suppressed"
           ? null
           : this.generateDraft(args.thread, classification, routingResolution);
-      const result = this.buildProcessingResult(args, classification, routingResolution, draft);
+
+      let reviewItem: EmailDraftReviewRecord | null = null;
+      if (draft) {
+        reviewItem = await this.reviewQueue.createReviewItem({
+          tenantId: args.tenantId,
+          draft,
+          accountId: args.thread.accountId,
+          assignmentRecordId: assignment.assignmentRecordId,
+          runRecordId: run.runRecordId,
+          intentCategory: classification.intentCategory,
+          priority: classification.priority,
+          riskLevel: classification.riskLevel,
+          manifestVersion: assignment.manifestVersion,
+          routingProvenance: routingResolution,
+          createdAt
+        });
+      }
+
+      const result = this.buildProcessingResult(args, classification, routingResolution, draft, reviewItem);
 
       const execution = await this.repository.createExecution({
         tenantId: args.tenantId,
@@ -428,7 +478,7 @@ export class EmailAssistantService {
         stepName: "email_draft_generated",
         stepOrder: 2,
         status: "COMPLETED",
-        payload: { draftId: draft?.draftId ?? null, approvalRequired: draft?.approvalRequired ?? false },
+        payload: { draftId: draft?.draftId ?? null, reviewItemId: reviewItem?.reviewItemId ?? null, approvalRequired: draft?.approvalRequired ?? false },
         createdAt
       });
       await this.repository.completeExecution({
@@ -478,7 +528,8 @@ export class EmailAssistantService {
           updatedAt: createdAt
         },
         result,
-        promptAssembly
+        promptAssembly,
+        reviewItem
       };
     } catch (error) {
       const failureMessage = error instanceof Error ? error.message : "email_processing_failed";
@@ -735,7 +786,8 @@ export class EmailAssistantService {
     args: ProcessEmailThreadArgs,
     classification: EmailThreadClassification,
     routingResolution: ReturnType<EmailRoutingService["resolveIntent"]>,
-    draft: EmailDraftSuggestion | null
+    draft: EmailDraftSuggestion | null,
+    reviewItem: EmailDraftReviewRecord | null
   ): EmailProcessingResult {
     const assignmentIntegration: EmailAssignmentIntegrationRequest = {
       tenantId: args.tenantId,
@@ -747,6 +799,7 @@ export class EmailAssistantService {
     };
 
     return {
+      reviewItemId: reviewItem?.reviewItemId ?? null,
       status:
         routingResolution.target.targetType === "suppressed"
           ? "suppressed"
@@ -768,6 +821,7 @@ export class EmailAssistantService {
 
 function toOutcomeSummary(outcome: EmailThreadProcessingOutcome): EmailThreadProcessingOutcomeSummary {
   return {
+    reviewItemId: outcome.result.reviewItemId,
     threadId: outcome.result.threadId,
     assignmentRecordId: outcome.assignmentRecordId,
     runRecordId: outcome.runRecordId,
