@@ -6,6 +6,10 @@ import type {
   AaliyahModeVisibility
 } from "./registry-types.js";
 import type { FounderBriefing, FounderBriefingMode } from "./briefing-types.js";
+import type {
+  AaliyahFounderCommandSurface,
+  AaliyahQuickAction
+} from "./command-surface-types.js";
 import type { EmailDraftReviewRecord } from "../email/review-types.js";
 import type { EmailDispatchResult } from "../email/dispatch-types.js";
 import type { AdminRoutingCategoryDescriptor } from "../admin/types.js";
@@ -78,7 +82,10 @@ export type AaliyahRuntimeIntent =
   | "preview_routing"
   | "process_voice_intake"
   | "get_voice_call_summary"
-  | "get_pending_voice_escalations";
+  | "get_pending_voice_escalations"
+  | "get_founder_command_surface"
+  | "get_quick_actions"
+  | "execute_quick_action";
 
 export type AaliyahRuntimePayloadType =
   | "founder_briefing"
@@ -92,7 +99,9 @@ export type AaliyahRuntimePayloadType =
   | "routing_preview"
   | "voice_call_result"
   | "voice_call_summary"
-  | "voice_escalations";
+  | "voice_escalations"
+  | "founder_command_surface"
+  | "quick_actions";
 
 export type AaliyahRuntimeRequestInput = {
   intent: string;
@@ -134,6 +143,10 @@ export type AaliyahRuntimeVoiceEscalationsPayload = {
   totalPending: number;
 };
 
+export type AaliyahRuntimeQuickActionsPayload = {
+  items: AaliyahQuickAction[];
+};
+
 export type AaliyahRuntimeSuccessPayload =
   | { payloadType: "founder_briefing"; payload: FounderBriefing }
   | { payloadType: "approval_queue"; payload: AaliyahRuntimeApprovalQueuePayload }
@@ -146,7 +159,9 @@ export type AaliyahRuntimeSuccessPayload =
   | { payloadType: "routing_preview"; payload: AaliyahRuntimeRoutingPreviewPayload }
   | { payloadType: "voice_call_result"; payload: VoiceProcessingResult }
   | { payloadType: "voice_call_summary"; payload: VoiceCallRecord }
-  | { payloadType: "voice_escalations"; payload: AaliyahRuntimeVoiceEscalationsPayload };
+  | { payloadType: "voice_escalations"; payload: AaliyahRuntimeVoiceEscalationsPayload }
+  | { payloadType: "founder_command_surface"; payload: AaliyahFounderCommandSurface }
+  | { payloadType: "quick_actions"; payload: AaliyahRuntimeQuickActionsPayload };
 
 export type AaliyahRuntimeFallback = {
   outcome: Exclude<AaliyahRuntimeFallbackOutcome, "proceed_with_orchestration">;

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { AALIYAH_REGISTRY_VERSION } from "./registry-types.js";
 import { AaliyahFounderBriefingService } from "./briefing.js";
+import { AaliyahCommandSurfaceService } from "./command-surface.js";
 import { AaliyahRuntimeEnforcementService } from "./runtime-enforcement.js";
 import type {
   AaliyahRuntimeDecisionTrace,
@@ -34,7 +35,10 @@ const SUPPORTED_INTENTS = new Set<AaliyahRuntimeIntent>([
   "preview_routing",
   "process_voice_intake",
   "get_voice_call_summary",
-  "get_pending_voice_escalations"
+  "get_pending_voice_escalations",
+  "get_founder_command_surface",
+  "get_quick_actions",
+  "execute_quick_action"
 ]);
 
 const DEFAULT_MODE: AaliyahRuntimeMode = "founder";
@@ -45,6 +49,7 @@ export class AaliyahRuntimeService {
   constructor(
     private readonly org: AgentOrgService,
     private readonly briefing: AaliyahFounderBriefingService,
+    private readonly commandSurface: AaliyahCommandSurfaceService,
     private readonly email: EmailAssistantService,
     private readonly voice: VoiceRuntimeService,
     private readonly telemetry: AgentTelemetryService,
@@ -126,6 +131,104 @@ export class AaliyahRuntimeService {
           enforcement: enforcement.trace,
           payloadType: "founder_briefing",
           payload
+        });
+      }
+      case "get_founder_command_surface": {
+        const payload = await this.commandSurface.generateCommandSurface({
+          tenantId: args.tenantId,
+          mode: activeMode
+        });
+        return this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-command-surface",
+          enforcement: enforcement.trace,
+          payloadType: "founder_command_surface",
+          payload
+        });
+      }
+      case "get_quick_actions": {
+        const items = this.commandSurface.listQuickActions({
+          tenantId: args.tenantId,
+          mode: activeMode
+        });
+        return this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-quick-actions",
+          enforcement: enforcement.trace,
+          payloadType: "quick_actions",
+          payload: { items }
+        });
+      }
+      case "execute_quick_action": {
+        const actionId = this.requireStringParam(args.request.parameters, "actionId", "execute_quick_action");
+        const action = this.commandSurface.getQuickActionById({
+          tenantId: args.tenantId,
+          mode: activeMode,
+          actionId
+        });
+        if (!action) {
+          return this.buildFallback({
+            runtimeRequestId,
+            activeMode,
+            generatedAt,
+            requestId: args.requestId ?? null,
+            resolvedIntent,
+            invokedSurface: "aaliyah-quick-action",
+            enforcement: {
+              ...enforcement.trace,
+              reason: "quick_action_not_found"
+            },
+            fallback: {
+              outcome: "escalate_for_clarification",
+              reason: "quick_action_not_found",
+              delegateToAgentId: null
+            }
+          });
+        }
+        if (action.availabilityStatus !== "available") {
+          return this.buildFallback({
+            runtimeRequestId,
+            activeMode,
+            generatedAt,
+            requestId: args.requestId ?? null,
+            resolvedIntent,
+            invokedSurface: "aaliyah-quick-action",
+            enforcement: {
+              ...enforcement.trace,
+              reason: action.availabilityReason ?? "quick_action_unavailable"
+            },
+            fallback: {
+              outcome: action.availabilityStatus === "requires_parameters" ? "defer_due_to_low_confidence" : "escalate_for_clarification",
+              reason: action.availabilityReason ?? "quick_action_unavailable",
+              delegateToAgentId: null
+            }
+          });
+        }
+
+        const delegatedParameters = {
+          ...action.defaultParameters,
+          ...(args.request.parameters ?? {})
+        };
+        delete delegatedParameters.actionId;
+
+        return this.execute({
+          tenantId: args.tenantId,
+          actorId: args.actorId,
+          requestId: args.requestId,
+          principalContext: args.principalContext,
+          request: {
+            intent: action.targetIntent,
+            mode: activeMode,
+            parameters: delegatedParameters
+          }
         });
       }
       case "get_waiting_approvals":
@@ -456,6 +559,8 @@ export class AaliyahRuntimeService {
     enforcement: AaliyahRuntimeDecisionTrace;
     payloadType:
       | "founder_briefing"
+      | "founder_command_surface"
+      | "quick_actions"
       | "approval_queue"
       | "email_review_queue"
       | "email_review_action"

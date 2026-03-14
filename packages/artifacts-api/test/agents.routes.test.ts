@@ -29,6 +29,8 @@ import {
   AdminRoutingPreviewResponseSchema,
   AdminSummaryResponseSchema,
   AaliyahBriefingResponseSchema,
+  AaliyahCommandSurfaceResponseSchema,
+  AaliyahQuickActionsResponseSchema,
   AaliyahRuntimeResponseSchema,
   VoiceIntakeResponseSchema,
   VoiceCallDetailResponseSchema,
@@ -1964,7 +1966,7 @@ describe("agent routes", () => {
     }))
   };
   const aaliyahBriefingService = {
-    generateBriefing: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+    generateBriefing: vi.fn(async ({ mode }: { tenantId?: string; mode: "founder" | "zbestmedia" }) => ({
       briefingId: "briefing:1",
       generatedAt: "2026-03-14T00:00:00.000Z",
       activeMode: mode,
@@ -2097,6 +2099,97 @@ describe("agent routes", () => {
             }
           : null
     }))
+  };
+  const aaliyahCommandSurfaceService = {
+    generateCommandSurface: vi.fn(async ({ tenantId, mode }: { tenantId: string; mode: "founder" | "zbestmedia" }) => ({
+      shellId: "shell:1",
+      generatedAt: "2026-03-14T00:00:00.000Z",
+      activeMode: mode,
+      manifestVersion: "2026-03-12.v1",
+      founderBriefingSummary: await aaliyahBriefingService.generateBriefing({ tenantId, mode }),
+      whatMattersNow: [
+        {
+          itemId: "incident:1",
+          category: "top_priorities",
+          title: "Worker SLO degradation",
+          summary: "Worker freshness is critical and blocking release.",
+          urgency: "urgent",
+          owner: {
+            executiveId: "cto",
+            departmentId: "technology-engineering",
+            leadAgentId: "code-sentinel",
+            subAgentId: "slo-enforcer",
+            sourceLane: "code-sentinel"
+          },
+          recommendedAction: "Review the release gate and clear worker freshness immediately.",
+          interruptionClass: "interrupt_now",
+          requiresFounderAttention: true,
+          provenanceReferences: ["incident:1"]
+        }
+      ],
+      waitingOnMe: [],
+      openApprovals: {
+        totalPending: 1,
+        items: await (runtimeService as any).listReviewItems()
+      },
+      openIncidentSummary: await telemetryService.getIncidentSummary(),
+      opsStatusSummary: await telemetryService.getOpsStatusSummary(),
+      openVoiceEscalations: {
+        totalPending: 1,
+        items: await voiceService.listPendingEscalations(),
+        interruptNowCount: 1
+      },
+      recommendedNextActions: [
+        {
+          actionId: "action:1",
+          title: "Worker SLO degradation",
+          action: "Review the release gate and clear worker freshness immediately.",
+          urgency: "urgent",
+          sourceItemId: "incident:1"
+        }
+      ],
+      interruptQueueSummary: {
+        interruptNowCount: 1,
+        reviewSoonCount: 0,
+        canWaitCount: 0
+      },
+      quickActions: [
+        {
+          actionId: "open_approval_queue",
+          actionType: "open_approval_queue",
+          label: "Open approvals (1)",
+          targetIntent: "get_waiting_approvals",
+          allowedParameters: ["limit"],
+          defaultParameters: {},
+          approvalRequired: false,
+          availabilityStatus: "available",
+          availabilityReason: null
+        }
+      ],
+      provenanceSummary: {
+        orgManifestVersion: "2026-03-12.v1",
+        aaliyahRegistryVersion: "2026-03-12.aaliyah.v1",
+        generatedFrom: {
+          pendingApprovalCount: 1,
+          pendingVoiceEscalationCount: 1,
+          releaseBlockingIncidentCount: 1,
+          degradedSurfaceCount: 3
+        }
+      }
+    })),
+    listQuickActions: vi.fn(() => [
+      {
+        actionId: "open_approval_queue",
+        actionType: "open_approval_queue",
+        label: "Open approvals (1)",
+        targetIntent: "get_waiting_approvals",
+        allowedParameters: ["limit"],
+        defaultParameters: {},
+        approvalRequired: false,
+        availabilityStatus: "available",
+        availabilityReason: null
+      }
+    ])
   };
   const voiceService = {
     processInboundCall: vi.fn(async () => ({
@@ -2393,6 +2486,7 @@ describe("agent routes", () => {
         telemetryService: telemetryService as never,
         adminService: adminService as never,
         aaliyahBriefingService: aaliyahBriefingService as never,
+        aaliyahCommandSurfaceService: aaliyahCommandSurfaceService as never,
         aaliyahRuntimeService: aaliyahRuntimeService as never,
         emailService,
         voiceService: voiceService as never,
@@ -2583,6 +2677,27 @@ describe("agent routes", () => {
         parameters: {}
       }
     });
+  });
+
+  it("exposes the founder command surface routes", async () => {
+    const shellRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/command-surface?mode=founder"
+    });
+    const quickActionsRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/quick-actions?mode=zbestmedia"
+    });
+
+    expect(shellRes.statusCode).toBe(200);
+    const shell = AaliyahCommandSurfaceResponseSchema.parse(shellRes.json());
+    expect(shell.shell.activeMode).toBe("founder");
+    expect(shell.shell.quickActions[0]?.actionId).toBe("open_approval_queue");
+
+    expect(quickActionsRes.statusCode).toBe(200);
+    const quickActions = AaliyahQuickActionsResponseSchema.parse(quickActionsRes.json());
+    expect(quickActions.activeMode).toBe("zbestmedia");
+    expect(quickActions.items[0]?.targetIntent).toBe("get_waiting_approvals");
   });
 
   it("exposes governed voice intake routes", async () => {

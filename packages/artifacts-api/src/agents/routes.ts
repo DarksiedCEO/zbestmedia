@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 import {
   AgentAdminService,
+  AaliyahCommandSurfaceService,
   AaliyahFounderBriefingService,
   AaliyahRuntimeService,
   EmailAssistantService,
@@ -31,6 +32,7 @@ import {
 import {
   AgentIdParamSchema,
   AaliyahBriefingQuerySchema,
+  AaliyahCommandSurfaceQuerySchema,
   AaliyahRuntimeRequestBodySchema,
   AssignmentRecordIdParamSchema,
   AssignmentRecordListQuerySchema,
@@ -123,6 +125,7 @@ export function agentRoutes(opts: {
   telemetryService: AgentTelemetryService;
   adminService: AgentAdminService;
   aaliyahBriefingService: AaliyahFounderBriefingService;
+  aaliyahCommandSurfaceService: AaliyahCommandSurfaceService;
   aaliyahRuntimeService: AaliyahRuntimeService;
   emailService: EmailAssistantService;
   voiceService: VoiceRuntimeService;
@@ -425,6 +428,41 @@ export function agentRoutes(opts: {
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_founder_briefing",
         briefing
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/command-surface", async (req, reply) => {
+      const query = AaliyahCommandSurfaceQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const shell = await opts.aaliyahCommandSurfaceService.generateCommandSurface({
+        tenantId: req.auth.tenantId,
+        mode: query.data.mode
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_command_surface",
+        shell
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/quick-actions", async (req, reply) => {
+      const query = AaliyahCommandSurfaceQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_quick_actions",
+        activeMode: query.data.mode,
+        items: opts.aaliyahCommandSurfaceService.listQuickActions({
+          tenantId: req.auth.tenantId,
+          mode: query.data.mode
+        })
       });
     });
 

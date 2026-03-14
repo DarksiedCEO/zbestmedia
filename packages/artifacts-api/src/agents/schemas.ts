@@ -996,8 +996,110 @@ export const AaliyahBriefingResponseSchema = z.object({
   briefing: FounderBriefingSchema
 });
 
+const AaliyahQuickActionSchema = z.object({
+  actionId: z.string().min(1),
+  actionType: z.enum([
+    "refresh_founder_briefing",
+    "open_approval_queue",
+    "review_voice_escalations",
+    "get_incident_summary",
+    "get_ops_status",
+    "switch_mode",
+    "preview_routing"
+  ]),
+  label: z.string().min(1),
+  targetIntent: z.enum([
+    "get_founder_briefing",
+    "get_waiting_approvals",
+    "get_pending_voice_escalations",
+    "get_incident_summary",
+    "get_ops_status",
+    "switch_mode",
+    "preview_routing"
+  ]),
+  allowedParameters: z.array(z.string().min(1)),
+  defaultParameters: z.record(z.string(), z.unknown()),
+  approvalRequired: z.boolean(),
+  availabilityStatus: z.enum(["available", "requires_parameters", "disabled"]),
+  availabilityReason: z.string().min(1).nullable()
+});
+
+const AaliyahCommandSurfaceInterruptSummarySchema = z.object({
+  interruptNowCount: z.number().int().nonnegative(),
+  reviewSoonCount: z.number().int().nonnegative(),
+  canWaitCount: z.number().int().nonnegative()
+});
+
+const AaliyahApprovalSummarySchema = z.object({
+  totalPending: z.number().int().nonnegative(),
+  items: z.array(EmailDraftReviewRecordSchema)
+});
+
+const AaliyahVoiceEscalationSummarySchema = z.object({
+  totalPending: z.number().int().nonnegative(),
+  items: z.array(VoiceCallRecordSchema),
+  interruptNowCount: z.number().int().nonnegative()
+});
+
+const AaliyahCommandSurfaceProvenanceSummarySchema = z.object({
+  orgManifestVersion: ManifestVersionSchema,
+  aaliyahRegistryVersion: z.string().min(1),
+  generatedFrom: z.object({
+    pendingApprovalCount: z.number().int().nonnegative(),
+    pendingVoiceEscalationCount: z.number().int().nonnegative(),
+    releaseBlockingIncidentCount: z.number().int().nonnegative(),
+    degradedSurfaceCount: z.number().int().nonnegative()
+  })
+});
+
+const AaliyahCommandSurfaceSchema = z.object({
+  shellId: z.string().min(1),
+  generatedAt: z.string().datetime(),
+  activeMode: FounderBriefingModeSchema,
+  manifestVersion: ManifestVersionSchema,
+  founderBriefingSummary: FounderBriefingSchema,
+  whatMattersNow: z.array(FounderBriefingItemSchema),
+  waitingOnMe: z.array(FounderBriefingItemSchema),
+  openApprovals: AaliyahApprovalSummarySchema,
+  openIncidentSummary: OpsIncidentSummaryResponseSchema.shape.summary,
+  opsStatusSummary: OpsStatusSummaryResponseSchema.shape.summary,
+  openVoiceEscalations: AaliyahVoiceEscalationSummarySchema,
+  recommendedNextActions: z.array(
+    z.object({
+      actionId: z.string().min(1),
+      title: z.string().min(1),
+      action: z.string().min(1),
+      urgency: z.enum(["low", "normal", "high", "urgent"]),
+      sourceItemId: z.string().min(1)
+    })
+  ),
+  interruptQueueSummary: AaliyahCommandSurfaceInterruptSummarySchema,
+  quickActions: z.array(AaliyahQuickActionSchema),
+  provenanceSummary: AaliyahCommandSurfaceProvenanceSummarySchema
+});
+
+export const AaliyahCommandSurfaceQuerySchema = z.object({
+  mode: FounderBriefingModeSchema.optional().default("founder")
+});
+
+export const AaliyahCommandSurfaceResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_command_surface"),
+  shell: AaliyahCommandSurfaceSchema
+});
+
+export const AaliyahQuickActionsResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_quick_actions"),
+  activeMode: FounderBriefingModeSchema,
+  items: z.array(AaliyahQuickActionSchema)
+});
+
 const AaliyahRuntimeIntentSchema = z.enum([
   "get_founder_briefing",
+  "get_founder_command_surface",
+  "get_quick_actions",
+  "execute_quick_action",
   "get_waiting_approvals",
   "get_email_review_queue",
   "approve_email_review_item",
@@ -1104,6 +1206,10 @@ const VoiceEscalationsPayloadSchema = z.object({
   totalPending: z.number().int().nonnegative()
 });
 
+const AaliyahQuickActionsPayloadSchema = z.object({
+  items: z.array(AaliyahQuickActionSchema)
+});
+
 const AaliyahRuntimeSuccessSchema = z.object({
   runtimeRequestId: z.string().min(1),
   resolvedIntent: AaliyahRuntimeIntentSchema,
@@ -1121,10 +1227,14 @@ const AaliyahRuntimeSuccessSchema = z.object({
     "routing_preview",
     "voice_call_result",
     "voice_call_summary",
-    "voice_escalations"
+    "voice_escalations",
+    "founder_command_surface",
+    "quick_actions"
   ]),
   payload: z.union([
     FounderBriefingSchema,
+    AaliyahCommandSurfaceSchema,
+    AaliyahQuickActionsPayloadSchema,
     AaliyahApprovalQueuePayloadSchema,
     AaliyahReviewActionPayloadSchema,
     z.object({

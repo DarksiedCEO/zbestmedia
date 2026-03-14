@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { AaliyahFounderBriefingService } from "../src/aaliyah/briefing.js";
+import { AaliyahCommandSurfaceService } from "../src/aaliyah/command-surface.js";
 import { AaliyahRuntimeService } from "../src/aaliyah/runtime.js";
 import { AgentOrgService } from "../src/org/service.js";
 
@@ -96,6 +97,82 @@ describe("Aaliyah runtime agent", () => {
       }
     }))
   } as any;
+
+  const commandSurfaceService = {
+    generateCommandSurface: vi.fn(async ({ tenantId, mode }: { tenantId: string; mode: "founder" | "zbestmedia" }) => ({
+      shellId: "shell:1",
+      generatedAt: "2026-03-14T00:00:00.000Z",
+      activeMode: mode,
+      manifestVersion: "2026-03-12.v1",
+      founderBriefingSummary: await briefingService.generateBriefing({ tenantId, mode }),
+      whatMattersNow: [],
+      waitingOnMe: [],
+      openApprovals: {
+        totalPending: 1,
+        items: await emailService.listReviewItems()
+      },
+      openIncidentSummary: await telemetryService.getIncidentSummary(),
+      opsStatusSummary: await telemetryService.getOpsStatusSummary(),
+      openVoiceEscalations: {
+        totalPending: 1,
+        items: await voiceService.listPendingEscalations(),
+        interruptNowCount: 1
+      },
+      recommendedNextActions: [],
+      interruptQueueSummary: {
+        interruptNowCount: 1,
+        reviewSoonCount: 0,
+        canWaitCount: 0
+      },
+      quickActions: [
+        {
+          actionId: "open_approval_queue",
+          actionType: "open_approval_queue",
+          label: "Open approvals (1)",
+          targetIntent: "get_waiting_approvals",
+          allowedParameters: ["limit"],
+          defaultParameters: {},
+          approvalRequired: false,
+          availabilityStatus: "available",
+          availabilityReason: null
+        }
+      ],
+      provenanceSummary: {
+        orgManifestVersion: "2026-03-12.v1",
+        aaliyahRegistryVersion: "2026-03-12.aaliyah.v1",
+        generatedFrom: {
+          pendingApprovalCount: 1,
+          pendingVoiceEscalationCount: 1,
+          releaseBlockingIncidentCount: 0,
+          degradedSurfaceCount: 0
+        }
+      }
+    })),
+    listQuickActions: vi.fn(() => [
+      {
+        actionId: "open_approval_queue",
+        actionType: "open_approval_queue",
+        label: "Open approvals (1)",
+        targetIntent: "get_waiting_approvals",
+        allowedParameters: ["limit"],
+        defaultParameters: {},
+        approvalRequired: false,
+        availabilityStatus: "available",
+        availabilityReason: null
+      }
+    ]),
+    getQuickActionById: vi.fn(() => ({
+      actionId: "open_approval_queue",
+      actionType: "open_approval_queue",
+      label: "Open approvals (1)",
+      targetIntent: "get_waiting_approvals",
+      allowedParameters: ["limit"],
+      defaultParameters: {},
+      approvalRequired: false,
+      availabilityStatus: "available",
+      availabilityReason: null
+    }))
+  } as unknown as AaliyahCommandSurfaceService;
 
   const voiceService = {
     processInboundCall: vi.fn(async () => ({
@@ -223,6 +300,7 @@ describe("Aaliyah runtime agent", () => {
   const service = new AaliyahRuntimeService(
     new AgentOrgService(),
     briefingService,
+    commandSurfaceService,
     emailService,
     voiceService,
     telemetryService,
@@ -248,6 +326,33 @@ describe("Aaliyah runtime agent", () => {
     expect(result.payload.activeMode).toBe("founder");
   });
 
+  it("returns founder command surface payloads", async () => {
+    const result = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_founder_command_surface",
+        mode: "zbestmedia"
+      }
+    });
+
+    expect(result.outcomeType).toBe("completed");
+    expect(result.payloadType).toBe("founder_command_surface");
+  });
+
+  it("returns deterministic quick actions", async () => {
+    const result = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_quick_actions"
+      }
+    });
+
+    expect(result.outcomeType).toBe("completed");
+    expect(result.payloadType).toBe("quick_actions");
+  });
+
   it("passes review actions through governed email services", async () => {
     const result = await service.execute({
       tenantId: "tenant",
@@ -269,6 +374,22 @@ describe("Aaliyah runtime agent", () => {
       actorId: "actor-1",
       note: "approve it"
     });
+  });
+
+  it("executes quick actions through governed intent delegation", async () => {
+    const result = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "execute_quick_action",
+        parameters: {
+          actionId: "open_approval_queue"
+        }
+      }
+    });
+
+    expect(result.outcomeType).toBe("completed");
+    expect(result.payloadType).toBe("approval_queue");
   });
 
   it("dispatches approved email through the governed dispatch surface", async () => {

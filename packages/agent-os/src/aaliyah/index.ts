@@ -5,4 +5,6 @@ export * from "./runtime-types.js";
 export * from "./runtime-enforcement.js";
 export * from "./briefing-types.js";
 export * from "./briefing.js";
+export * from "./command-surface-types.js";
+export * from "./command-surface.js";
 export * from "./runtime.js";
