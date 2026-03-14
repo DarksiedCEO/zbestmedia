@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 import {
   AgentAdminService,
+  AaliyahFounderBriefingService,
   EmailAssistantService,
   EmailAccountConfigurationError,
   AgentLifecycleStateError,
@@ -27,6 +28,7 @@ import {
 
 import {
   AgentIdParamSchema,
+  AaliyahBriefingQuerySchema,
   AssignmentRecordIdParamSchema,
   AssignmentRecordListQuerySchema,
   AgentIncidentAcknowledgeBodySchema,
@@ -114,6 +116,7 @@ export function agentRoutes(opts: {
   incidentService: AgentIncidentService;
   telemetryService: AgentTelemetryService;
   adminService: AgentAdminService;
+  aaliyahBriefingService: AaliyahFounderBriefingService;
   emailService: EmailAssistantService;
   ledgerService: AgentExecutionLedgerService;
   memoryService: MemoryPartitionService;
@@ -396,6 +399,24 @@ export function agentRoutes(opts: {
       return reply.send({
         resourceType: "email_account_detail",
         account
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/briefing", async (req, reply) => {
+      const query = AaliyahBriefingQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const briefing = await opts.aaliyahBriefingService.generateBriefing({
+        tenantId: req.auth.tenantId,
+        mode: query.data.mode
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_founder_briefing",
+        briefing
       });
     });
 

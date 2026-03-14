@@ -28,6 +28,7 @@ import {
   AdminRoutingCategoriesResponseSchema,
   AdminRoutingPreviewResponseSchema,
   AdminSummaryResponseSchema,
+  AaliyahBriefingResponseSchema,
   AdminExecutionRecordListResponseSchema,
   AdminExecutionRecordDetailResponseSchema,
   AdminExecutionRunListResponseSchema,
@@ -1958,6 +1959,68 @@ describe("agent routes", () => {
       ]
     }))
   };
+  const aaliyahBriefingService = {
+    generateBriefing: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+      briefingId: "briefing:1",
+      generatedAt: "2026-03-14T00:00:00.000Z",
+      activeMode: mode,
+      manifestVersion: "2026-03-12.v1",
+      topPriorities: [
+        {
+          itemId: "incident:1",
+          category: "top_priorities",
+          title: "Worker SLO degradation",
+          summary: "Worker freshness is critical and blocking release.",
+          urgency: "urgent",
+          owner: {
+            executiveId: "cto",
+            departmentId: "technology-engineering",
+            leadAgentId: "code-sentinel",
+            subAgentId: "slo-enforcer",
+            sourceLane: "code-sentinel"
+          },
+          recommendedAction: "Review the release gate and clear worker freshness immediately.",
+          interruptionClass: "interrupt_now",
+          requiresFounderAttention: true,
+          provenanceReferences: ["incident:1"]
+        }
+      ],
+      waitingOnMe: [],
+      revenueWatch: [],
+      operationsWatch: [],
+      calendarWatch: [],
+      relationshipWatch: [],
+      recommendedActions: [
+        {
+          actionId: "action:1",
+          title: "Worker SLO degradation",
+          action: "Review the release gate and clear worker freshness immediately.",
+          urgency: "urgent",
+          sourceItemId: "incident:1"
+        }
+      ],
+      interruptSummary: {
+        interruptNowCount: 1,
+        reviewSoonCount: 0,
+        canWaitCount: 0
+      },
+      confidenceSummary: {
+        status: "critical",
+        lowConfidenceSignals: 0,
+        degradedSurfaces: ["slo"]
+      },
+      sourceMetadata: {
+        orgManifestVersion: "2026-03-12.v1",
+        aaliyahRegistryVersion: "2026-03-12.aaliyah.v1",
+        generatedFrom: {
+          pendingReviewCount: 0,
+          openIncidentCount: 1,
+          releaseBlockingIncidentCount: 1,
+          recentExecutionFailureCount: 1
+        }
+      }
+    }))
+  };
 
   const orgService = {
     getManifestVersion: vi.fn(() => "2026-03-12.v1"),
@@ -2125,6 +2188,7 @@ describe("agent routes", () => {
         incidentService: incidentService as never,
         telemetryService: telemetryService as never,
         adminService: adminService as never,
+        aaliyahBriefingService: aaliyahBriefingService as never,
         emailService,
         ledgerService,
         memoryService,
@@ -2272,6 +2336,21 @@ describe("agent routes", () => {
     expect(GmailOauthCallbackResponseSchema.parse(oauthCallbackRes.json()).account.connectionStatus).toBe("connected");
     expect(EmailAccountProcessBatchResponseSchema.parse(processRes.json()).processedCount).toBe(1);
     expect(EmailAccountProcessSingleResponseSchema.parse(threadProcessRes.json()).outcome.threadId).toBe("thread-1");
+  });
+
+  it("exposes the founder briefing route", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/briefing?mode=zbestmedia"
+    });
+
+    expect(res.statusCode).toBe(200);
+    const briefing = AaliyahBriefingResponseSchema.parse(res.json());
+    expect(briefing.briefing.activeMode).toBe("zbestmedia");
+    expect(aaliyahBriefingService.generateBriefing).toHaveBeenCalledWith({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      mode: "zbestmedia"
+    });
   });
 
   it("exposes email review queue routes", async () => {

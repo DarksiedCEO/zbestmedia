@@ -123,6 +123,11 @@ export class EmailAssistantService {
   async getAccount(args: { tenantId: string; accountId: string }) {
     return this.repository.getEmailAccountConnection(args);
   }
+
+  getReviewQueueService(): EmailDraftReviewService {
+    return this.reviewQueue;
+  }
+
   async listReviewItems(args: {
     tenantId: string;
     status?: EmailDraftReviewRecord["reviewStatus"];

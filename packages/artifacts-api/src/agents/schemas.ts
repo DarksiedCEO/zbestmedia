@@ -423,7 +423,8 @@ const ResourceTypeSchema = z.enum([
   "gmail_oauth_start",
   "gmail_oauth_callback",
   "email_account_process_batch",
-  "email_account_process_single"
+  "email_account_process_single",
+  "aaliyah_founder_briefing"
 ]);
 
 const ExecutiveResourceSchema = z.object({
@@ -885,6 +886,87 @@ export const AdminSummaryResponseSchema = z.object({
     recentExecutionFailureCount: z.number().int().nonnegative(),
     degradedSurfaces: z.array(TelemetrySurfaceSchema)
   })
+});
+
+const FounderBriefingModeSchema = z.enum(["founder", "zbestmedia"]);
+const FounderBriefingSectionSchema = z.enum([
+  "top_priorities",
+  "waiting_on_me",
+  "revenue_watch",
+  "operations_watch",
+  "calendar_watch",
+  "relationship_watch",
+  "recommended_actions"
+]);
+const FounderInterruptClassSchema = z.enum(["interrupt_now", "review_soon", "can_wait"]);
+const FounderBriefingOwnerSchema = z.object({
+  executiveId: ExecutiveIdSchema.nullable(),
+  departmentId: DepartmentIdSchema.nullable(),
+  leadAgentId: LeadAgentOrgIdSchema.nullable(),
+  subAgentId: SubAgentOrgIdSchema.nullable(),
+  sourceLane: z.string().min(1)
+});
+const FounderBriefingItemSchema = z.object({
+  itemId: z.string().min(1),
+  category: FounderBriefingSectionSchema,
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  urgency: z.enum(["low", "normal", "high", "urgent"]),
+  owner: FounderBriefingOwnerSchema,
+  recommendedAction: z.string().min(1),
+  interruptionClass: FounderInterruptClassSchema,
+  requiresFounderAttention: z.boolean(),
+  provenanceReferences: z.array(z.string().min(1))
+});
+const FounderRecommendedActionSchema = z.object({
+  actionId: z.string().min(1),
+  title: z.string().min(1),
+  action: z.string().min(1),
+  urgency: z.enum(["low", "normal", "high", "urgent"]),
+  sourceItemId: z.string().min(1)
+});
+const FounderBriefingSchema = z.object({
+  briefingId: z.string().min(1),
+  generatedAt: z.string().datetime(),
+  activeMode: FounderBriefingModeSchema,
+  manifestVersion: ManifestVersionSchema,
+  topPriorities: z.array(FounderBriefingItemSchema),
+  waitingOnMe: z.array(FounderBriefingItemSchema),
+  revenueWatch: z.array(FounderBriefingItemSchema),
+  operationsWatch: z.array(FounderBriefingItemSchema),
+  calendarWatch: z.array(FounderBriefingItemSchema),
+  relationshipWatch: z.array(FounderBriefingItemSchema),
+  recommendedActions: z.array(FounderRecommendedActionSchema),
+  interruptSummary: z.object({
+    interruptNowCount: z.number().int().nonnegative(),
+    reviewSoonCount: z.number().int().nonnegative(),
+    canWaitCount: z.number().int().nonnegative()
+  }),
+  confidenceSummary: z.object({
+    status: OpsStatusLevelSchema,
+    lowConfidenceSignals: z.number().int().nonnegative(),
+    degradedSurfaces: z.array(TelemetrySurfaceSchema)
+  }),
+  sourceMetadata: z.object({
+    orgManifestVersion: ManifestVersionSchema,
+    aaliyahRegistryVersion: z.string().min(1),
+    generatedFrom: z.object({
+      pendingReviewCount: z.number().int().nonnegative(),
+      openIncidentCount: z.number().int().nonnegative(),
+      releaseBlockingIncidentCount: z.number().int().nonnegative(),
+      recentExecutionFailureCount: z.number().int().nonnegative()
+    })
+  })
+});
+
+export const AaliyahBriefingQuerySchema = z.object({
+  mode: FounderBriefingModeSchema.optional().default("founder")
+});
+
+export const AaliyahBriefingResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_founder_briefing"),
+  briefing: FounderBriefingSchema
 });
 
 export const ExecutiveIdParamSchema = z.object({
