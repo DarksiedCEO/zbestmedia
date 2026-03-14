@@ -3,6 +3,7 @@ import rateLimit from "@fastify/rate-limit";
 import {
   AgentAdminService,
   AaliyahFounderBriefingService,
+  AaliyahRuntimeService,
   EmailAssistantService,
   AgentExecutionService,
   AgentExecutionLedgerService,
@@ -95,6 +96,13 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
     ledgerService,
     emailService.getReviewQueueService()
   );
+  const aaliyahRuntimeService = new AaliyahRuntimeService(
+    agentOrgService,
+    aaliyahBriefingService,
+    emailService,
+    telemetryService,
+    adminService
+  );
   const agentExecutionService = new AgentExecutionService(
     agentRepository,
     approvalWorkflow,
@@ -149,6 +157,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       telemetryService,
       adminService,
       aaliyahBriefingService,
+      aaliyahRuntimeService,
       emailService,
       ledgerService,
       memoryService,

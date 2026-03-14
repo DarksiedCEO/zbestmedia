@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   AgentAdminService,
   AaliyahFounderBriefingService,
+  AaliyahRuntimeService,
   EmailAssistantService,
   EmailAccountConfigurationError,
   AgentLifecycleStateError,
@@ -29,6 +30,7 @@ import {
 import {
   AgentIdParamSchema,
   AaliyahBriefingQuerySchema,
+  AaliyahRuntimeRequestBodySchema,
   AssignmentRecordIdParamSchema,
   AssignmentRecordListQuerySchema,
   AgentIncidentAcknowledgeBodySchema,
@@ -117,6 +119,7 @@ export function agentRoutes(opts: {
   telemetryService: AgentTelemetryService;
   adminService: AgentAdminService;
   aaliyahBriefingService: AaliyahFounderBriefingService;
+  aaliyahRuntimeService: AaliyahRuntimeService;
   emailService: EmailAssistantService;
   ledgerService: AgentExecutionLedgerService;
   memoryService: MemoryPartitionService;
@@ -417,6 +420,27 @@ export function agentRoutes(opts: {
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_founder_briefing",
         briefing
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/runtime", async (req, reply) => {
+      const body = AaliyahRuntimeRequestBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahRuntimeService.execute({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        requestId: req.id,
+        principalContext: "founder",
+        request: body.data
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_runtime_result",
+        result
       });
     });
 

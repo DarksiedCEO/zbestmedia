@@ -424,7 +424,8 @@ const ResourceTypeSchema = z.enum([
   "gmail_oauth_callback",
   "email_account_process_batch",
   "email_account_process_single",
-  "aaliyah_founder_briefing"
+  "aaliyah_founder_briefing",
+  "aaliyah_runtime_result"
 ]);
 
 const ExecutiveResourceSchema = z.object({
@@ -967,6 +968,143 @@ export const AaliyahBriefingResponseSchema = z.object({
   manifestVersion: ManifestVersionSchema,
   resourceType: z.literal("aaliyah_founder_briefing"),
   briefing: FounderBriefingSchema
+});
+
+const AaliyahRuntimeIntentSchema = z.enum([
+  "get_founder_briefing",
+  "get_waiting_approvals",
+  "get_email_review_queue",
+  "approve_email_review_item",
+  "reject_email_review_item",
+  "request_email_revision",
+  "dispatch_approved_email",
+  "get_ops_status",
+  "get_incident_summary",
+  "switch_mode",
+  "preview_routing"
+]);
+
+const AaliyahRuntimeModeSchema = FounderBriefingModeSchema;
+const AaliyahRuntimeFallbackOutcomeSchema = z.enum([
+  "delegate_to_specialist",
+  "escalate_for_clarification",
+  "deny_due_to_scope",
+  "defer_due_to_low_confidence",
+  "deny_due_to_mode_boundary"
+]);
+
+const AaliyahRuntimeRequestParametersSchema = z.record(z.string(), z.unknown()).default({});
+
+export const AaliyahRuntimeRequestBodySchema = z.object({
+  intent: z.string().min(1),
+  mode: AaliyahRuntimeModeSchema.optional(),
+  parameters: AaliyahRuntimeRequestParametersSchema.optional().default({})
+});
+
+const AaliyahRuntimeProvenanceSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  aaliyahRegistryVersion: z.string().min(1),
+  requestId: z.string().min(1).nullable(),
+  generatedAt: z.string().datetime(),
+  invokedSurface: z.string().min(1),
+  enforcement: z.object({
+    requestedAgentId: z.string().min(1),
+    requestedAtomicTaskId: z.string().min(1).nullable(),
+    resolvedAgentId: z.string().min(1),
+    resolvedAtomicTaskId: z.string().min(1),
+    confidence: z.enum(["high", "medium", "low"]),
+    company: z.string().min(1),
+    mode: z.string().min(1),
+    principalContext: z.enum(["founder", "operator"]),
+    approvalState: z.enum(["not_required", "required_missing", "approved"]),
+    approvalClass: z.enum(["orchestration_only", "always_required", "operator_action_required", "system_guarded"]),
+    reason: z.string().min(1)
+  })
+});
+
+const AaliyahApprovalQueuePayloadSchema = z.object({
+  items: z.array(EmailDraftReviewRecordSchema),
+  totalPending: z.number().int().nonnegative()
+});
+
+const AaliyahReviewActionPayloadSchema = z.object({
+  action: z.enum(["approve", "reject", "request_revision"]),
+  item: EmailDraftReviewRecordSchema
+});
+
+const AaliyahModeSwitchPayloadSchema = z.object({
+  previousMode: AaliyahRuntimeModeSchema,
+  activeMode: AaliyahRuntimeModeSchema,
+  supportedCategories: z.array(
+    z.object({
+      category: RoutingTaskCategorySchema,
+      responsibilityKey: ResponsibilityKeySchema.nullable(),
+      operationalSignalType: OperationalSignalTypeSchema.nullable(),
+      requiresDisambiguation: z.boolean(),
+      supported: z.boolean(),
+      supportedJingleModes: z.array(JingleRoutingModeSchema).optional()
+    })
+  )
+});
+
+const AaliyahRoutingPreviewPayloadSchema = z.object({
+  category: RoutingTaskCategorySchema,
+  jingleMode: JingleRoutingModeSchema.optional(),
+  decision: RoutingResolveResponseSchema.shape.decision
+});
+
+const AaliyahRuntimeSuccessSchema = z.object({
+  runtimeRequestId: z.string().min(1),
+  resolvedIntent: AaliyahRuntimeIntentSchema,
+  outcomeType: z.literal("completed"),
+  activeMode: AaliyahRuntimeModeSchema,
+  payloadType: z.enum([
+    "founder_briefing",
+    "approval_queue",
+    "email_review_queue",
+    "email_review_action",
+    "email_dispatch_result",
+    "ops_status",
+    "incident_summary",
+    "mode_switch",
+    "routing_preview"
+  ]),
+  payload: z.union([
+    FounderBriefingSchema,
+    AaliyahApprovalQueuePayloadSchema,
+    AaliyahReviewActionPayloadSchema,
+    z.object({
+      sent: z.boolean(),
+      dispatch: EmailDispatchRecordSchema
+    }),
+    OpsStatusSummaryResponseSchema.shape.summary,
+    OpsIncidentSummaryResponseSchema.shape.summary,
+    AaliyahModeSwitchPayloadSchema,
+    AaliyahRoutingPreviewPayloadSchema
+  ]),
+  provenance: AaliyahRuntimeProvenanceSchema,
+  fallback: z.null()
+});
+
+const AaliyahRuntimeFallbackSchema = z.object({
+  runtimeRequestId: z.string().min(1),
+  resolvedIntent: AaliyahRuntimeIntentSchema.nullable(),
+  outcomeType: z.literal("fallback"),
+  activeMode: AaliyahRuntimeModeSchema,
+  payloadType: z.null(),
+  payload: z.null(),
+  provenance: AaliyahRuntimeProvenanceSchema,
+  fallback: z.object({
+    outcome: AaliyahRuntimeFallbackOutcomeSchema,
+    reason: z.string().min(1),
+    delegateToAgentId: z.string().min(1).nullable()
+  })
+});
+
+export const AaliyahRuntimeResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_runtime_result"),
+  result: z.union([AaliyahRuntimeSuccessSchema, AaliyahRuntimeFallbackSchema])
 });
 
 export const ExecutiveIdParamSchema = z.object({

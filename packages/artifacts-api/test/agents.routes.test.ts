@@ -29,6 +29,7 @@ import {
   AdminRoutingPreviewResponseSchema,
   AdminSummaryResponseSchema,
   AaliyahBriefingResponseSchema,
+  AaliyahRuntimeResponseSchema,
   AdminExecutionRecordListResponseSchema,
   AdminExecutionRecordDetailResponseSchema,
   AdminExecutionRunListResponseSchema,
@@ -2021,6 +2022,79 @@ describe("agent routes", () => {
       }
     }))
   };
+  const aaliyahRuntimeService = {
+    execute: vi.fn(async ({ request }: { request: { intent: string; mode?: "founder" | "zbestmedia" } }) => ({
+      runtimeRequestId: "aaliyah-runtime:1",
+      resolvedIntent: request.intent === "do_everything" ? null : "get_founder_briefing",
+      outcomeType: request.intent === "do_everything" ? "fallback" : "completed",
+      activeMode: request.mode ?? "founder",
+      payloadType: request.intent === "do_everything" ? null : "founder_briefing",
+      payload:
+        request.intent === "do_everything"
+          ? null
+          : {
+              briefingId: "briefing:1",
+              generatedAt: "2026-03-14T00:00:00.000Z",
+              activeMode: request.mode ?? "founder",
+              manifestVersion: "2026-03-12.v1",
+              topPriorities: [],
+              waitingOnMe: [],
+              revenueWatch: [],
+              operationsWatch: [],
+              calendarWatch: [],
+              relationshipWatch: [],
+              recommendedActions: [],
+              interruptSummary: {
+                interruptNowCount: 0,
+                reviewSoonCount: 0,
+                canWaitCount: 0
+              },
+              confidenceSummary: {
+                status: "healthy",
+                lowConfidenceSignals: 0,
+                degradedSurfaces: []
+              },
+              sourceMetadata: {
+                orgManifestVersion: "2026-03-12.v1",
+                aaliyahRegistryVersion: "2026-03-12.aaliyah.v1",
+                generatedFrom: {
+                  pendingReviewCount: 0,
+                  openIncidentCount: 0,
+                  releaseBlockingIncidentCount: 0,
+                  recentExecutionFailureCount: 0
+                }
+              }
+            },
+      provenance: {
+        manifestVersion: "2026-03-12.v1",
+        aaliyahRegistryVersion: "2026-03-12.aaliyah.v1",
+        requestId: "req-1",
+        generatedAt: "2026-03-14T00:00:00.000Z",
+        invokedSurface: "aaliyah-runtime",
+        enforcement: {
+          requestedAgentId: "aaliyah",
+          requestedAtomicTaskId: "executive_orchestration_founder_protection",
+          resolvedAgentId: "aaliyah",
+          resolvedAtomicTaskId: "executive_orchestration_founder_protection",
+          confidence: request.intent === "do_everything" ? "low" : "high",
+          company: "zbestmedia",
+          mode: "executive_assistant",
+          principalContext: "founder",
+          approvalState: "not_required",
+          approvalClass: "orchestration_only",
+          reason: request.intent === "do_everything" ? "unsupported founder runtime intent" : "request is inside atomic scope and passed runtime safety checks"
+        }
+      },
+      fallback:
+        request.intent === "do_everything"
+          ? {
+              outcome: "escalate_for_clarification",
+              reason: "unsupported founder runtime intent",
+              delegateToAgentId: null
+            }
+          : null
+    }))
+  };
 
   const orgService = {
     getManifestVersion: vi.fn(() => "2026-03-12.v1"),
@@ -2189,6 +2263,7 @@ describe("agent routes", () => {
         telemetryService: telemetryService as never,
         adminService: adminService as never,
         aaliyahBriefingService: aaliyahBriefingService as never,
+        aaliyahRuntimeService: aaliyahRuntimeService as never,
         emailService,
         ledgerService,
         memoryService,
@@ -2350,6 +2425,32 @@ describe("agent routes", () => {
     expect(aaliyahBriefingService.generateBriefing).toHaveBeenCalledWith({
       tenantId: "11111111-1111-4111-8111-111111111111",
       mode: "zbestmedia"
+    });
+  });
+
+  it("exposes the founder runtime route", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/runtime",
+      payload: {
+        intent: "get_founder_briefing",
+        mode: "zbestmedia"
+      }
+    });
+
+    expect(res.statusCode).toBe(200);
+    const runtime = AaliyahRuntimeResponseSchema.parse(res.json());
+    expect(runtime.result.outcomeType).toBe("completed");
+    expect(aaliyahRuntimeService.execute).toHaveBeenCalledWith({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      actorId: "actor-1",
+      requestId: expect.any(String),
+      principalContext: "founder",
+      request: {
+        intent: "get_founder_briefing",
+        mode: "zbestmedia",
+        parameters: {}
+      }
     });
   });
 
