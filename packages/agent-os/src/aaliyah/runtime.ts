@@ -16,6 +16,9 @@ import { AgentOrgService } from "../org/service.js";
 import { AgentTelemetryService } from "../telemetry/service.js";
 import { AgentAdminService } from "../admin/service.js";
 import { EmailAssistantService } from "../email/service.js";
+import { VoiceRuntimeService } from "../voice/service.js";
+import { VoiceIntakeValidationError } from "../voice/intake.js";
+import type { VoiceIntakePayload } from "../voice/types.js";
 
 const SUPPORTED_INTENTS = new Set<AaliyahRuntimeIntent>([
   "get_founder_briefing",
@@ -28,7 +31,10 @@ const SUPPORTED_INTENTS = new Set<AaliyahRuntimeIntent>([
   "get_ops_status",
   "get_incident_summary",
   "switch_mode",
-  "preview_routing"
+  "preview_routing",
+  "process_voice_intake",
+  "get_voice_call_summary",
+  "get_pending_voice_escalations"
 ]);
 
 const DEFAULT_MODE: AaliyahRuntimeMode = "founder";
@@ -40,6 +46,7 @@ export class AaliyahRuntimeService {
     private readonly org: AgentOrgService,
     private readonly briefing: AaliyahFounderBriefingService,
     private readonly email: EmailAssistantService,
+    private readonly voice: VoiceRuntimeService,
     private readonly telemetry: AgentTelemetryService,
     private readonly admin: AgentAdminService
   ) {}
@@ -304,8 +311,102 @@ export class AaliyahRuntimeService {
           }
         });
       }
+      case "process_voice_intake": {
+        const payload = await this.voice.processInboundCall({
+          tenantId: args.tenantId,
+          actorId: args.actorId,
+          correlationId: args.requestId ?? runtimeRequestId,
+          requestSource: "aaliyah-runtime",
+          payload: this.requireVoicePayload(args.request.parameters)
+        });
+        return this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "voice-intake-runtime",
+          enforcement: enforcement.trace,
+          payloadType: "voice_call_result",
+          payload
+        });
+      }
+      case "get_voice_call_summary": {
+        const callId = this.requireStringParam(args.request.parameters, "callId", "get_voice_call_summary");
+        const payload = await this.voice.getCall({ tenantId: args.tenantId, callId });
+        if (!payload) {
+          return this.buildFallback({
+            runtimeRequestId,
+            activeMode,
+            generatedAt,
+            requestId: args.requestId ?? null,
+            resolvedIntent,
+            invokedSurface: "voice-call-lookup",
+            enforcement: {
+              ...enforcement.trace,
+              reason: "voice_call_not_found"
+            },
+            fallback: {
+              outcome: "escalate_for_clarification",
+              reason: "voice_call_not_found",
+              delegateToAgentId: null
+            }
+          });
+        }
+        return this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "voice-call-lookup",
+          enforcement: enforcement.trace,
+          payloadType: "voice_call_summary",
+          payload
+        });
+      }
+      case "get_pending_voice_escalations": {
+        const items = await this.voice.listPendingEscalations({
+          tenantId: args.tenantId,
+          limit: this.readOptionalLimit(args.request.parameters?.limit)
+        });
+        return this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "voice-escalations",
+          enforcement: enforcement.trace,
+          payloadType: "voice_escalations",
+          payload: {
+            items,
+            totalPending: items.length
+          }
+        });
+      }
       }
     } catch (error) {
+      if (error instanceof VoiceIntakeValidationError) {
+        const message = error.message;
+        return this.buildFallback({
+          runtimeRequestId,
+          activeMode,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          resolvedIntent,
+          invokedSurface: "voice-intake-runtime",
+          enforcement: {
+            ...enforcement.trace,
+            reason: message
+          },
+          fallback: {
+            outcome: "escalate_for_clarification",
+            reason: message,
+            delegateToAgentId: null
+          }
+        });
+      }
       if (error instanceof Error && error.message.startsWith("aaliyah_runtime_")) {
         const fallbackOutcome =
           error.message === "aaliyah_runtime_invalid_target_mode" ? "deny_due_to_mode_boundary" : "escalate_for_clarification";
@@ -362,7 +463,10 @@ export class AaliyahRuntimeService {
       | "ops_status"
       | "incident_summary"
       | "mode_switch"
-      | "routing_preview";
+      | "routing_preview"
+      | "voice_call_result"
+      | "voice_call_summary"
+      | "voice_escalations";
     payload: unknown;
   }): AaliyahRuntimeResult {
     return {
@@ -466,5 +570,13 @@ export class AaliyahRuntimeService {
 
   private readOptionalJingleMode(value: unknown) {
     return value === "composition" || value === "packaging" ? value : undefined;
+  }
+
+  private requireVoicePayload(parameters: Record<string, unknown> | undefined): VoiceIntakePayload {
+    const payload = parameters?.payload;
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      throw new Error("aaliyah_runtime_missing_parameter:process_voice_intake:payload");
+    }
+    return payload as VoiceIntakePayload;
   }
 }

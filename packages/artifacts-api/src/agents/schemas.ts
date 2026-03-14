@@ -8,6 +8,7 @@ import {
   EmailAccountConnectionRecordSchema,
   EmailDispatchRecordSchema,
   EmailDraftReviewRecordSchema,
+  VoiceCallRecordSchema,
   IncidentRecordSchema,
   IncidentSeveritySchema,
   IncidentStatusSchema,
@@ -165,6 +166,28 @@ export const GmailOauthCallbackBodySchema = z.object({
 
 export const EmailAccountProcessBodySchema = z.object({
   maxThreads: z.number().int().positive().max(100).optional()
+});
+
+export const VoiceCallIdParamSchema = z.object({
+  callId: z.string().min(1)
+});
+
+export const VoiceEscalationListQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(100).default(25)
+});
+
+export const VoiceIntakeBodySchema = z.object({
+  externalCallId: z.string().min(1).optional().nullable(),
+  sourceSystem: z.string().min(1),
+  receivedAt: z.string().datetime().optional(),
+  caller: z.object({
+    phoneNumber: z.string().min(1),
+    displayName: z.string().min(1).optional().nullable(),
+    organizationName: z.string().min(1).optional().nullable()
+  }),
+  transcript: z.string().min(1),
+  callSummary: z.string().min(1).optional().nullable(),
+  durationSeconds: z.number().int().nonnegative().optional().nullable()
 });
 
 
@@ -425,7 +448,10 @@ const ResourceTypeSchema = z.enum([
   "email_account_process_batch",
   "email_account_process_single",
   "aaliyah_founder_briefing",
-  "aaliyah_runtime_result"
+  "aaliyah_runtime_result",
+  "voice_intake_result",
+  "voice_call_detail",
+  "voice_escalation_list"
 ]);
 
 const ExecutiveResourceSchema = z.object({
@@ -981,7 +1007,10 @@ const AaliyahRuntimeIntentSchema = z.enum([
   "get_ops_status",
   "get_incident_summary",
   "switch_mode",
-  "preview_routing"
+  "preview_routing",
+  "process_voice_intake",
+  "get_voice_call_summary",
+  "get_pending_voice_escalations"
 ]);
 
 const AaliyahRuntimeModeSchema = FounderBriefingModeSchema;
@@ -1053,6 +1082,28 @@ const AaliyahRoutingPreviewPayloadSchema = z.object({
   decision: RoutingResolveResponseSchema.shape.decision
 });
 
+const VoiceSummarySchema = z.object({
+  callerDisplay: z.string().min(1),
+  intent: VoiceCallRecordSchema.shape.intent,
+  urgency: VoiceCallRecordSchema.shape.urgency,
+  riskLevel: VoiceCallRecordSchema.shape.riskLevel,
+  companyMode: VoiceCallRecordSchema.shape.companyMode,
+  routingTarget: VoiceCallRecordSchema.shape.routingTarget,
+  recommendedNextAction: z.string().min(1),
+  founderAttentionRequired: z.boolean(),
+  interruptionClass: VoiceCallRecordSchema.shape.interruptionClass
+});
+
+const VoiceProcessingResultSchema = z.object({
+  call: VoiceCallRecordSchema,
+  summary: VoiceSummarySchema
+});
+
+const VoiceEscalationsPayloadSchema = z.object({
+  items: z.array(VoiceCallRecordSchema),
+  totalPending: z.number().int().nonnegative()
+});
+
 const AaliyahRuntimeSuccessSchema = z.object({
   runtimeRequestId: z.string().min(1),
   resolvedIntent: AaliyahRuntimeIntentSchema,
@@ -1067,7 +1118,10 @@ const AaliyahRuntimeSuccessSchema = z.object({
     "ops_status",
     "incident_summary",
     "mode_switch",
-    "routing_preview"
+    "routing_preview",
+    "voice_call_result",
+    "voice_call_summary",
+    "voice_escalations"
   ]),
   payload: z.union([
     FounderBriefingSchema,
@@ -1080,7 +1134,10 @@ const AaliyahRuntimeSuccessSchema = z.object({
     OpsStatusSummaryResponseSchema.shape.summary,
     OpsIncidentSummaryResponseSchema.shape.summary,
     AaliyahModeSwitchPayloadSchema,
-    AaliyahRoutingPreviewPayloadSchema
+    AaliyahRoutingPreviewPayloadSchema,
+    VoiceProcessingResultSchema,
+    VoiceCallRecordSchema,
+    VoiceEscalationsPayloadSchema
   ]),
   provenance: AaliyahRuntimeProvenanceSchema,
   fallback: z.null()
@@ -1105,6 +1162,24 @@ export const AaliyahRuntimeResponseSchema = z.object({
   manifestVersion: ManifestVersionSchema,
   resourceType: z.literal("aaliyah_runtime_result"),
   result: z.union([AaliyahRuntimeSuccessSchema, AaliyahRuntimeFallbackSchema])
+});
+
+export const VoiceIntakeResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("voice_intake_result"),
+  result: VoiceProcessingResultSchema
+});
+
+export const VoiceCallDetailResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("voice_call_detail"),
+  call: VoiceCallRecordSchema
+});
+
+export const VoiceEscalationListResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("voice_escalation_list"),
+  items: z.array(VoiceCallRecordSchema)
 });
 
 export const ExecutiveIdParamSchema = z.object({

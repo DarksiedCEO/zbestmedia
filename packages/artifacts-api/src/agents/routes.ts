@@ -24,7 +24,8 @@ import {
   EvalRunnerService,
   MaestroOrchestrationError,
   MaestroOrchestrationService,
-  MemoryPartitionService
+  MemoryPartitionService,
+  VoiceRuntimeService
 } from "@zbest/agent-os";
 
 import {
@@ -64,6 +65,9 @@ import {
   EmailReviewListQuerySchema,
   EmailAccountProcessSingleResponseSchema,
   EmailAccountThreadIdParamSchema,
+  VoiceIntakeBodySchema,
+  VoiceCallIdParamSchema,
+  VoiceEscalationListQuerySchema,
   OrchestrationEscalateBodySchema,
   OrchestrationExecutionListQuerySchema,
   OrchestrationPlanBodySchema,
@@ -121,6 +125,7 @@ export function agentRoutes(opts: {
   aaliyahBriefingService: AaliyahFounderBriefingService;
   aaliyahRuntimeService: AaliyahRuntimeService;
   emailService: EmailAssistantService;
+  voiceService: VoiceRuntimeService;
   ledgerService: AgentExecutionLedgerService;
   memoryService: MemoryPartitionService;
   evalRunner: EvalRunnerService;
@@ -441,6 +446,65 @@ export function agentRoutes(opts: {
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_runtime_result",
         result
+      });
+    });
+
+    app.post("/v1/agent-os/voice/intake", async (req, reply) => {
+      const body = VoiceIntakeBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      try {
+        const result = await opts.voiceService.processInboundCall({
+          tenantId: req.auth.tenantId,
+          actorId: req.auth.actorId,
+          correlationId: req.id,
+          requestSource: "artifacts-api",
+          payload: body.data
+        });
+        return reply.send({
+          manifestVersion: orgManifestVersion,
+          resourceType: "voice_intake_result",
+          result
+        });
+      } catch (error) {
+        return handleAgentError(reply, error);
+      }
+    });
+
+    app.get("/v1/agent-os/voice/calls/:callId", async (req, reply) => {
+      const path = VoiceCallIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      const call = await opts.voiceService.getCall({
+        tenantId: req.auth.tenantId,
+        callId: path.data.callId
+      });
+      if (!call) {
+        return reply.code(404).send({ error: "voice_call_not_found" });
+      }
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "voice_call_detail",
+        call
+      });
+    });
+
+    app.get("/v1/agent-os/voice/escalations", async (req, reply) => {
+      const query = VoiceEscalationListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+      const items = await opts.voiceService.listPendingEscalations({
+        tenantId: req.auth.tenantId,
+        limit: query.data.limit
+      });
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "voice_escalation_list",
+        items
       });
     });
 

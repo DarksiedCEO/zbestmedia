@@ -47,6 +47,26 @@ export * from "./email/prompts.js";
 export * from "./email/service.js";
 export * from "./email/review.js";
 export * from "./email/dispatch.js";
+export type {
+  InboundCaller,
+  NormalizedVoiceCall,
+  VoiceCallClassification,
+  VoiceCallIntent,
+  VoiceCallOutcome,
+  VoiceCallRiskLevel,
+  VoiceCallSummary,
+  VoiceCallUrgency,
+  VoiceCompanyMode,
+  VoiceIntakePayload,
+  VoiceInterruptionClass,
+  VoiceProcessingResult,
+  VoiceRoutingResolution,
+  VoiceRoutingTarget
+} from "./voice/types.js";
+export * from "./voice/intake.js";
+export * from "./voice/classifier.js";
+export * from "./voice/routing.js";
+export * from "./voice/service.js";
 export * from "./incidents/types.js";
 export * from "./incidents/service.js";
 export * from "./telemetry/types.js";

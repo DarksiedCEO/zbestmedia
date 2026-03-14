@@ -30,6 +30,9 @@ import {
   AdminSummaryResponseSchema,
   AaliyahBriefingResponseSchema,
   AaliyahRuntimeResponseSchema,
+  VoiceIntakeResponseSchema,
+  VoiceCallDetailResponseSchema,
+  VoiceEscalationListResponseSchema,
   AdminExecutionRecordListResponseSchema,
   AdminExecutionRecordDetailResponseSchema,
   AdminExecutionRunListResponseSchema,
@@ -2095,6 +2098,133 @@ describe("agent routes", () => {
           : null
     }))
   };
+  const voiceService = {
+    processInboundCall: vi.fn(async () => ({
+      call: {
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        callId: "voice-call:1",
+        externalCallId: "external-call-1",
+        sourceSystem: "voice-gateway",
+        callerPhoneNumber: "+13105551212",
+        callerDisplayName: "Taylor Client",
+        callerOrganizationName: "Z Best Media",
+        transcript: "I need to speak to the founder about an urgent partnership.",
+        callSummaryText: "Urgent founder access request.",
+        durationSeconds: 95,
+        intent: "executive_access_request",
+        urgency: "high",
+        riskLevel: "high",
+        companyMode: "zbestmedia",
+        routingTarget: {
+          targetType: "founder_review",
+          executiveId: "coo",
+          departmentId: "operations",
+          leadAgentId: null,
+          subAgentId: null,
+          executionAgentId: null,
+          requiresEscalation: true
+        },
+        assignmentRecordId: "assignment:voice:1",
+        runRecordId: "run:voice:1",
+        outcome: "escalated",
+        founderAttentionRequired: true,
+        escalationRecommended: true,
+        interruptionClass: "interrupt_now",
+        recommendedNextAction: "Route this call summary into Aaliyah founder review before any response or commitment.",
+        createdAt: "2026-03-14T00:00:00.000Z",
+        updatedAt: "2026-03-14T00:00:00.000Z"
+      },
+      summary: {
+        callerDisplay: "Taylor Client",
+        intent: "executive_access_request",
+        urgency: "high",
+        riskLevel: "high",
+        companyMode: "zbestmedia",
+        routingTarget: {
+          targetType: "founder_review",
+          executiveId: "coo",
+          departmentId: "operations",
+          leadAgentId: null,
+          subAgentId: null,
+          executionAgentId: null,
+          requiresEscalation: true
+        },
+        recommendedNextAction: "Route this call summary into Aaliyah founder review before any response or commitment.",
+        founderAttentionRequired: true,
+        interruptionClass: "interrupt_now"
+      }
+    })),
+    getCall: vi.fn(async () => ({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      callId: "voice-call:1",
+      externalCallId: "external-call-1",
+      sourceSystem: "voice-gateway",
+      callerPhoneNumber: "+13105551212",
+      callerDisplayName: "Taylor Client",
+      callerOrganizationName: "Z Best Media",
+      transcript: "I need to speak to the founder about an urgent partnership.",
+      callSummaryText: "Urgent founder access request.",
+      durationSeconds: 95,
+      intent: "executive_access_request",
+      urgency: "high",
+      riskLevel: "high",
+      companyMode: "zbestmedia",
+      routingTarget: {
+        targetType: "founder_review",
+        executiveId: "coo",
+        departmentId: "operations",
+        leadAgentId: null,
+        subAgentId: null,
+        executionAgentId: null,
+        requiresEscalation: true
+      },
+      assignmentRecordId: "assignment:voice:1",
+      runRecordId: "run:voice:1",
+      outcome: "escalated",
+      founderAttentionRequired: true,
+      escalationRecommended: true,
+      interruptionClass: "interrupt_now",
+      recommendedNextAction: "Route this call summary into Aaliyah founder review before any response or commitment.",
+      createdAt: "2026-03-14T00:00:00.000Z",
+      updatedAt: "2026-03-14T00:00:00.000Z"
+    })),
+    listPendingEscalations: vi.fn(async () => [
+      {
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        callId: "voice-call:1",
+        externalCallId: "external-call-1",
+        sourceSystem: "voice-gateway",
+        callerPhoneNumber: "+13105551212",
+        callerDisplayName: "Taylor Client",
+        callerOrganizationName: "Z Best Media",
+        transcript: "I need to speak to the founder about an urgent partnership.",
+        callSummaryText: "Urgent founder access request.",
+        durationSeconds: 95,
+        intent: "executive_access_request",
+        urgency: "high",
+        riskLevel: "high",
+        companyMode: "zbestmedia",
+        routingTarget: {
+          targetType: "founder_review",
+          executiveId: "coo",
+          departmentId: "operations",
+          leadAgentId: null,
+          subAgentId: null,
+          executionAgentId: null,
+          requiresEscalation: true
+        },
+        assignmentRecordId: "assignment:voice:1",
+        runRecordId: "run:voice:1",
+        outcome: "escalated",
+        founderAttentionRequired: true,
+        escalationRecommended: true,
+        interruptionClass: "interrupt_now",
+        recommendedNextAction: "Route this call summary into Aaliyah founder review before any response or commitment.",
+        createdAt: "2026-03-14T00:00:00.000Z",
+        updatedAt: "2026-03-14T00:00:00.000Z"
+      }
+    ])
+  };
 
   const orgService = {
     getManifestVersion: vi.fn(() => "2026-03-12.v1"),
@@ -2265,6 +2395,7 @@ describe("agent routes", () => {
         aaliyahBriefingService: aaliyahBriefingService as never,
         aaliyahRuntimeService: aaliyahRuntimeService as never,
         emailService,
+        voiceService: voiceService as never,
         ledgerService,
         memoryService,
         evalRunner,
@@ -2452,6 +2583,33 @@ describe("agent routes", () => {
         parameters: {}
       }
     });
+  });
+
+  it("exposes governed voice intake routes", async () => {
+    const intakeRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/voice/intake",
+      payload: {
+        sourceSystem: "voice-gateway",
+        caller: {
+          phoneNumber: "+13105551212",
+          displayName: "Taylor Client"
+        },
+        transcript: "I need to speak to the founder about an urgent partnership."
+      }
+    });
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/voice/calls/voice-call:1"
+    });
+    const escalationsRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/voice/escalations?limit=10"
+    });
+
+    expect(VoiceIntakeResponseSchema.parse(intakeRes.json()).result.call.callId).toBe("voice-call:1");
+    expect(VoiceCallDetailResponseSchema.parse(detailRes.json()).call.intent).toBe("executive_access_request");
+    expect(VoiceEscalationListResponseSchema.parse(escalationsRes.json()).items).toHaveLength(1);
   });
 
   it("exposes email review queue routes", async () => {

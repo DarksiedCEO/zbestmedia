@@ -18,6 +18,7 @@ import type {
   EmailDispatchRecord as EmailDispatchRecordShape,
   EmailDispatchStatus
 } from "../email/dispatch-types.js";
+import type { VoiceCallRecord as VoiceCallRecordShape } from "../voice/types.js";
 import {
   AssignmentPolicyDecisionSchema,
   AssignmentRecordSchema,
@@ -392,6 +393,84 @@ export const EmailDispatchRecordSchema = z.object({
   updatedAt: z.string().datetime()
 }) satisfies z.ZodType<EmailDispatchRecordShape>;
 export type EmailDispatchRecord = z.infer<typeof EmailDispatchRecordSchema>;
+
+const VoiceRoutingTargetSchema = z.union([
+  z.object({
+    targetType: z.literal("lead_agent"),
+    executiveId: z.string().min(1),
+    departmentId: z.string().min(1),
+    leadAgentId: z.string().min(1),
+    subAgentId: z.string().nullable(),
+    executionAgentId: z.string().nullable(),
+    requiresEscalation: z.boolean()
+  }),
+  z.object({
+    targetType: z.literal("executive_lane"),
+    executiveId: z.string().min(1),
+    departmentId: z.string().min(1),
+    leadAgentId: z.null(),
+    subAgentId: z.null(),
+    executionAgentId: z.null(),
+    requiresEscalation: z.boolean()
+  }),
+  z.object({
+    targetType: z.literal("founder_review"),
+    executiveId: z.string().nullable(),
+    departmentId: z.string().nullable(),
+    leadAgentId: z.null(),
+    subAgentId: z.null(),
+    executionAgentId: z.null(),
+    requiresEscalation: z.literal(true)
+  }),
+  z.object({
+    targetType: z.literal("suppressed"),
+    executiveId: z.null(),
+    departmentId: z.null(),
+    leadAgentId: z.null(),
+    subAgentId: z.null(),
+    executionAgentId: z.null(),
+    requiresEscalation: z.literal(false)
+  })
+]);
+
+export const VoiceCallRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  callId: z.string().min(1),
+  externalCallId: z.string().nullable(),
+  sourceSystem: z.string().min(1),
+  callerPhoneNumber: z.string().min(1),
+  callerDisplayName: z.string().nullable(),
+  callerOrganizationName: z.string().nullable(),
+  transcript: z.string().min(1),
+  callSummaryText: z.string().nullable(),
+  durationSeconds: z.number().int().nonnegative().nullable(),
+  intent: z.enum([
+    "emergency_service_request",
+    "appointment_request",
+    "service_inquiry",
+    "existing_customer_followup",
+    "billing_question",
+    "sales_inquiry",
+    "executive_access_request",
+    "general_information",
+    "wrong_number_or_irrelevant",
+    "legal_or_sensitive"
+  ]),
+  urgency: z.enum(["low", "normal", "high", "critical"]),
+  riskLevel: z.enum(["low", "moderate", "high"]),
+  companyMode: z.enum(["founder", "zbestmedia"]),
+  routingTarget: VoiceRoutingTargetSchema,
+  assignmentRecordId: z.string().nullable(),
+  runRecordId: z.string().nullable(),
+  outcome: z.enum(["routed", "escalated", "suppressed"]),
+  founderAttentionRequired: z.boolean(),
+  escalationRecommended: z.boolean(),
+  interruptionClass: z.enum(["interrupt_now", "review_soon", "can_wait"]),
+  recommendedNextAction: z.string().min(1),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+}) satisfies z.ZodType<VoiceCallRecordShape>;
+export type VoiceCallRecord = z.infer<typeof VoiceCallRecordSchema>;
 
 export const MemoryEntryRecordSchema = z.object({
   tenantId: z.string().uuid(),

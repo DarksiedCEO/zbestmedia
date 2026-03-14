@@ -22,7 +22,8 @@ import {
   BrandPipelineOrchestrator,
   EvalRunnerService,
   MaestroOrchestrationService,
-  MemoryPartitionService
+  MemoryPartitionService,
+  VoiceRuntimeService
 } from "@zbest/agent-os";
 
 import { agentRoutes } from "./agents/routes";
@@ -89,6 +90,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
     telemetryService
   );
   const emailService = new EmailAssistantService(agentRepository, ledgerService, incidentService);
+  const voiceService = new VoiceRuntimeService(agentRepository, ledgerService, incidentService);
   const aaliyahBriefingService = new AaliyahFounderBriefingService(
     agentOrgService,
     telemetryService,
@@ -100,6 +102,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
     agentOrgService,
     aaliyahBriefingService,
     emailService,
+    voiceService,
     telemetryService,
     adminService
   );
@@ -159,6 +162,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       aaliyahBriefingService,
       aaliyahRuntimeService,
       emailService,
+      voiceService,
       ledgerService,
       memoryService,
       evalRunner,

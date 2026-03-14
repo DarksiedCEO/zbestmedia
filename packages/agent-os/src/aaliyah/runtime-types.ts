@@ -11,6 +11,7 @@ import type { EmailDispatchResult } from "../email/dispatch-types.js";
 import type { AdminRoutingCategoryDescriptor } from "../admin/types.js";
 import type { OpsStatusSummary, IncidentTelemetrySummary } from "../telemetry/types.js";
 import type { RoutingDecision, RoutingTaskCategory, JingleRoutingMode } from "../org/routing-types.js";
+import type { VoiceCallRecord, VoiceIntakePayload, VoiceProcessingResult } from "../voice/types.js";
 
 export type AaliyahRuntimeConfidence = "high" | "medium" | "low";
 
@@ -74,7 +75,10 @@ export type AaliyahRuntimeIntent =
   | "get_ops_status"
   | "get_incident_summary"
   | "switch_mode"
-  | "preview_routing";
+  | "preview_routing"
+  | "process_voice_intake"
+  | "get_voice_call_summary"
+  | "get_pending_voice_escalations";
 
 export type AaliyahRuntimePayloadType =
   | "founder_briefing"
@@ -85,7 +89,10 @@ export type AaliyahRuntimePayloadType =
   | "ops_status"
   | "incident_summary"
   | "mode_switch"
-  | "routing_preview";
+  | "routing_preview"
+  | "voice_call_result"
+  | "voice_call_summary"
+  | "voice_escalations";
 
 export type AaliyahRuntimeRequestInput = {
   intent: string;
@@ -122,6 +129,11 @@ export type AaliyahRuntimeRoutingPreviewPayload = {
   decision: RoutingDecision;
 };
 
+export type AaliyahRuntimeVoiceEscalationsPayload = {
+  items: VoiceCallRecord[];
+  totalPending: number;
+};
+
 export type AaliyahRuntimeSuccessPayload =
   | { payloadType: "founder_briefing"; payload: FounderBriefing }
   | { payloadType: "approval_queue"; payload: AaliyahRuntimeApprovalQueuePayload }
@@ -131,7 +143,10 @@ export type AaliyahRuntimeSuccessPayload =
   | { payloadType: "ops_status"; payload: OpsStatusSummary }
   | { payloadType: "incident_summary"; payload: IncidentTelemetrySummary }
   | { payloadType: "mode_switch"; payload: AaliyahRuntimeModeSwitchPayload }
-  | { payloadType: "routing_preview"; payload: AaliyahRuntimeRoutingPreviewPayload };
+  | { payloadType: "routing_preview"; payload: AaliyahRuntimeRoutingPreviewPayload }
+  | { payloadType: "voice_call_result"; payload: VoiceProcessingResult }
+  | { payloadType: "voice_call_summary"; payload: VoiceCallRecord }
+  | { payloadType: "voice_escalations"; payload: AaliyahRuntimeVoiceEscalationsPayload };
 
 export type AaliyahRuntimeFallback = {
   outcome: Exclude<AaliyahRuntimeFallbackOutcome, "proceed_with_orchestration">;

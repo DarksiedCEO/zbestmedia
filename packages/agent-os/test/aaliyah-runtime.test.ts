@@ -97,6 +97,24 @@ describe("Aaliyah runtime agent", () => {
     }))
   } as any;
 
+  const voiceService = {
+    processInboundCall: vi.fn(async () => ({
+      call: {
+        callId: "voice-call:1",
+        intent: "executive_access_request"
+      },
+      summary: {
+        callerDisplay: "Taylor Client",
+        founderAttentionRequired: true
+      }
+    })),
+    getCall: vi.fn(async () => ({
+      callId: "voice-call:1",
+      intent: "executive_access_request"
+    })),
+    listPendingEscalations: vi.fn(async () => [{ callId: "voice-call:1" }])
+  } as any;
+
   const telemetryService = {
     getOpsStatusSummary: vi.fn(async () => ({
       status: "warning",
@@ -206,6 +224,7 @@ describe("Aaliyah runtime agent", () => {
     new AgentOrgService(),
     briefingService,
     emailService,
+    voiceService,
     telemetryService,
     adminService
   );
@@ -318,5 +337,63 @@ describe("Aaliyah runtime agent", () => {
 
     expect(result.outcomeType).toBe("fallback");
     expect(result.fallback?.outcome).toBe("defer_due_to_low_confidence");
+  });
+
+  it("passes governed voice intake through the voice runtime surface", async () => {
+    const result = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "process_voice_intake",
+        parameters: {
+          payload: {
+            sourceSystem: "voice-gateway",
+            caller: { phoneNumber: "+13105551212" },
+            transcript: "I need to speak to the founder today."
+          }
+        }
+      }
+    });
+
+    expect(result.outcomeType).toBe("completed");
+    expect(result.payloadType).toBe("voice_call_result");
+    expect(voiceService.processInboundCall).toHaveBeenCalled();
+  });
+
+  it("returns governed voice call summaries without absorbing voice work", async () => {
+    const result = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_voice_call_summary",
+        parameters: {
+          callId: "voice-call:1"
+        }
+      }
+    });
+
+    expect(result.outcomeType).toBe("completed");
+    expect(result.payloadType).toBe("voice_call_summary");
+    expect(voiceService.getCall).toHaveBeenCalledWith({
+      tenantId: "tenant",
+      callId: "voice-call:1"
+    });
+  });
+
+  it("returns pending voice escalations through governed runtime passthrough", async () => {
+    const result = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_pending_voice_escalations"
+      }
+    });
+
+    expect(result.outcomeType).toBe("completed");
+    expect(result.payloadType).toBe("voice_escalations");
+    expect(voiceService.listPendingEscalations).toHaveBeenCalledWith({
+      tenantId: "tenant",
+      limit: undefined
+    });
   });
 });

@@ -37,6 +37,7 @@ import type {
   EmailDispatchStatus,
   EmailDraftReviewRecord,
   EmailDraftReviewStatus,
+  VoiceCallRecord,
   MemoryEntryRecord,
   OrchestrationOpsSnapshotExportRecord,
   OrchestrationAlertAckRecord,
@@ -281,6 +282,33 @@ type EmailDispatchRow = {
   gmail_message_id: string | null;
   gmail_thread_id: string | null;
   audit_metadata: Record<string, unknown>;
+  created_at: string | Date;
+  updated_at: string | Date;
+};
+
+type VoiceCallRow = {
+  tenant_id: string;
+  call_id: string;
+  external_call_id: string | null;
+  source_system: string;
+  caller_phone_number: string;
+  caller_display_name: string | null;
+  caller_organization_name: string | null;
+  transcript: string;
+  call_summary_text: string | null;
+  duration_seconds: number | null;
+  intent: VoiceCallRecord["intent"];
+  urgency: VoiceCallRecord["urgency"];
+  risk_level: VoiceCallRecord["riskLevel"];
+  company_mode: VoiceCallRecord["companyMode"];
+  routing_target: VoiceCallRecord["routingTarget"];
+  assignment_record_id: string | null;
+  run_record_id: string | null;
+  outcome: VoiceCallRecord["outcome"];
+  founder_attention_required: boolean;
+  escalation_recommended: boolean;
+  interruption_class: VoiceCallRecord["interruptionClass"];
+  recommended_next_action: string;
   created_at: string | Date;
   updated_at: string | Date;
 };
@@ -619,6 +647,35 @@ function mapEmailDispatchRow(row: EmailDispatchRow): EmailDispatchRecord {
     gmailMessageId: row.gmail_message_id,
     gmailThreadId: row.gmail_thread_id,
     auditMetadata: row.audit_metadata,
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at)
+  };
+}
+
+function mapVoiceCallRow(row: VoiceCallRow): VoiceCallRecord {
+  return {
+    tenantId: row.tenant_id,
+    callId: row.call_id,
+    externalCallId: row.external_call_id,
+    sourceSystem: row.source_system,
+    callerPhoneNumber: row.caller_phone_number,
+    callerDisplayName: row.caller_display_name,
+    callerOrganizationName: row.caller_organization_name,
+    transcript: row.transcript,
+    callSummaryText: row.call_summary_text,
+    durationSeconds: row.duration_seconds,
+    intent: row.intent,
+    urgency: row.urgency,
+    riskLevel: row.risk_level,
+    companyMode: row.company_mode,
+    routingTarget: row.routing_target,
+    assignmentRecordId: row.assignment_record_id,
+    runRecordId: row.run_record_id,
+    outcome: row.outcome,
+    founderAttentionRequired: row.founder_attention_required,
+    escalationRecommended: row.escalation_recommended,
+    interruptionClass: row.interruption_class,
+    recommendedNextAction: row.recommended_next_action,
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at)
   };
@@ -2212,6 +2269,127 @@ export class AgentOsRepository {
       )
     );
     return res.rows[0] ? mapEmailDispatchRow(res.rows[0]) : null;
+  }
+
+  async createVoiceCallRecord(args: {
+    tenantId: string;
+    externalCallId?: string | null;
+    sourceSystem: string;
+    callerPhoneNumber: string;
+    callerDisplayName?: string | null;
+    callerOrganizationName?: string | null;
+    transcript: string;
+    callSummaryText?: string | null;
+    durationSeconds?: number | null;
+    intent: VoiceCallRecord["intent"];
+    urgency: VoiceCallRecord["urgency"];
+    riskLevel: VoiceCallRecord["riskLevel"];
+    companyMode: VoiceCallRecord["companyMode"];
+    routingTarget: VoiceCallRecord["routingTarget"];
+    assignmentRecordId?: string | null;
+    runRecordId?: string | null;
+    outcome: VoiceCallRecord["outcome"];
+    founderAttentionRequired: boolean;
+    escalationRecommended: boolean;
+    interruptionClass: VoiceCallRecord["interruptionClass"];
+    recommendedNextAction: string;
+    createdAt?: string;
+  }): Promise<VoiceCallRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const callId = buildScopedId("voice-call", [args.sourceSystem, args.callerPhoneNumber, createdAt]);
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<VoiceCallRow>(
+        `
+        INSERT INTO voice_call_records (
+          tenant_id, call_id, external_call_id, source_system, caller_phone_number, caller_display_name,
+          caller_organization_name, transcript, call_summary_text, duration_seconds, intent, urgency,
+          risk_level, company_mode, routing_target, assignment_record_id, run_record_id, outcome,
+          founder_attention_required, escalation_recommended, interruption_class, recommended_next_action,
+          created_at, updated_at
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,
+          $7,$8,$9,$10,$11,$12,
+          $13,$14,$15::jsonb,$16,$17,$18,
+          $19,$20,$21,$22,
+          $23,$23
+        )
+        RETURNING tenant_id, call_id, external_call_id, source_system, caller_phone_number, caller_display_name,
+                  caller_organization_name, transcript, call_summary_text, duration_seconds, intent, urgency,
+                  risk_level, company_mode, routing_target, assignment_record_id, run_record_id, outcome,
+                  founder_attention_required, escalation_recommended, interruption_class, recommended_next_action,
+                  created_at, updated_at
+        `,
+        [
+          args.tenantId,
+          callId,
+          args.externalCallId ?? null,
+          args.sourceSystem,
+          args.callerPhoneNumber,
+          args.callerDisplayName ?? null,
+          args.callerOrganizationName ?? null,
+          args.transcript,
+          args.callSummaryText ?? null,
+          args.durationSeconds ?? null,
+          args.intent,
+          args.urgency,
+          args.riskLevel,
+          args.companyMode,
+          JSON.stringify(args.routingTarget),
+          args.assignmentRecordId ?? null,
+          args.runRecordId ?? null,
+          args.outcome,
+          args.founderAttentionRequired,
+          args.escalationRecommended,
+          args.interruptionClass,
+          args.recommendedNextAction,
+          createdAt
+        ]
+      )
+    );
+    return mapVoiceCallRow(res.rows[0]!);
+  }
+
+  async getVoiceCallRecord(args: { tenantId: string; callId: string }): Promise<VoiceCallRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<VoiceCallRow>(
+        `
+        SELECT tenant_id, call_id, external_call_id, source_system, caller_phone_number, caller_display_name,
+               caller_organization_name, transcript, call_summary_text, duration_seconds, intent, urgency,
+               risk_level, company_mode, routing_target, assignment_record_id, run_record_id, outcome,
+               founder_attention_required, escalation_recommended, interruption_class, recommended_next_action,
+               created_at, updated_at
+        FROM voice_call_records
+        WHERE tenant_id = $1 AND call_id = $2
+        `,
+        [args.tenantId, args.callId]
+      )
+    );
+    return res.rows[0] ? mapVoiceCallRow(res.rows[0]) : null;
+  }
+
+  async listVoiceCallRecords(args: {
+    tenantId: string;
+    founderAttentionRequired?: boolean;
+    limit?: number;
+  }): Promise<VoiceCallRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<VoiceCallRow>(
+        `
+        SELECT tenant_id, call_id, external_call_id, source_system, caller_phone_number, caller_display_name,
+               caller_organization_name, transcript, call_summary_text, duration_seconds, intent, urgency,
+               risk_level, company_mode, routing_target, assignment_record_id, run_record_id, outcome,
+               founder_attention_required, escalation_recommended, interruption_class, recommended_next_action,
+               created_at, updated_at
+        FROM voice_call_records
+        WHERE tenant_id = $1
+          AND ($2::boolean IS NULL OR founder_attention_required = $2)
+        ORDER BY created_at DESC
+        LIMIT $3
+        `,
+        [args.tenantId, args.founderAttentionRequired ?? null, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapVoiceCallRow);
   }
 
   async createEmailAccountConnection(args: {
