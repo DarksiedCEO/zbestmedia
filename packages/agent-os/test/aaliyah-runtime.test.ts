@@ -400,6 +400,171 @@ describe("Aaliyah runtime agent", () => {
     }))
   } as any;
 
+  const baseSession = {
+    sessionId: "aaliyah-session:1",
+    tenantId: "tenant",
+    actorId: "actor-1",
+    principalContext: "founder",
+    companyScope: "zbestmedia",
+    activeModeState: {
+      activeMode: "founder",
+      previousMode: null,
+      switchedAt: "2026-03-15T00:00:00.000Z",
+      switchReason: "fallback_to_default",
+      boundaryDecisionId: null
+    },
+    interactionState: {
+      lastInteractionAt: "2026-03-15T00:00:00.000Z",
+      lastIntent: null,
+      lastResolvedIntent: null,
+      intentTrail: [],
+      workingItem: {
+        contextId: "working:1",
+        workingItemType: "founder_queue_item",
+        sourceSubsystem: "email_review_queue",
+        sourceItemId: "review:1",
+        queueItemId: "queue:item:1",
+        reviewItemId: "review:1",
+        callId: null,
+        incidentId: null,
+        dispatchId: null,
+        title: "subject",
+        summary: "summary",
+        founderAttentionRequired: true,
+        confidenceLevel: "high",
+        interruptionClass: "same_day_briefing",
+        setByIntent: "get_founder_queue_item",
+        setAt: "2026-03-15T00:00:00.000Z",
+        updatedAt: "2026-03-15T00:00:00.000Z",
+        closureState: "open",
+        closureReason: null,
+        closedAt: null,
+        closedByIntent: null
+      },
+      reviewApprovalContext: {
+        reviewItemId: "review:1",
+        draftId: "draft:1",
+        accountId: "account:1",
+        threadId: "thread:1",
+        reviewStatus: "pending_review",
+        dispatchReady: false,
+        setAt: "2026-03-15T00:00:00.000Z",
+        updatedAt: "2026-03-15T00:00:00.000Z",
+        invalidatedAt: null,
+        invalidationReason: null
+      },
+      pendingDisambiguation: null
+    },
+    retentionPolicy: {
+      intentTrailMaxEntries: 12,
+      idleTtlSeconds: 14400,
+      hardTtlSeconds: 86400,
+      snapshotIntentTrailEntries: 6
+    },
+    createdAt: "2026-03-15T00:00:00.000Z",
+    updatedAt: "2026-03-15T00:00:00.000Z",
+    expiresAt: "2026-03-15T04:00:00.000Z",
+    hardExpiresAt: "2026-03-16T00:00:00.000Z",
+    lastResetAt: null,
+    lastResetReason: null,
+    version: 1
+  };
+
+  const sessionService = {
+    resolveSession: vi.fn(async ({ requestedMode }: { requestedMode?: "founder" | "zbestmedia" }) => ({
+      session: {
+        ...baseSession,
+        activeModeState: {
+          ...baseSession.activeModeState,
+          activeMode: requestedMode ?? "founder"
+        }
+      },
+      activeMode: requestedMode ?? "founder",
+      boundaryViolation: null
+    })),
+    applyRuntimeResult: vi.fn(async () => ({
+      sessionId: "aaliyah-session:1",
+      tenantId: "tenant",
+      actorId: "actor-1",
+      principalContext: "founder",
+      activeModeState: baseSession.activeModeState,
+      interactionState: {
+        lastInteractionAt: "2026-03-15T00:05:00.000Z",
+        lastIntent: "get_founder_briefing",
+        lastResolvedIntent: "get_founder_briefing",
+        intentTrail: [],
+        workingItem: baseSession.interactionState.workingItem,
+        reviewApprovalContext: baseSession.interactionState.reviewApprovalContext,
+        pendingDisambiguation: null
+      },
+      retentionPolicy: baseSession.retentionPolicy,
+      expiresAt: "2026-03-15T04:05:00.000Z",
+      hardExpiresAt: "2026-03-16T00:00:00.000Z",
+      lastResetAt: null,
+      lastResetReason: null,
+      updatedAt: "2026-03-15T00:05:00.000Z",
+      version: 2
+    })),
+    getSessionSnapshot: vi.fn(async () => ({
+      sessionId: "aaliyah-session:1",
+      tenantId: "tenant",
+      actorId: "actor-1",
+      principalContext: "founder",
+      activeModeState: baseSession.activeModeState,
+      interactionState: {
+        lastInteractionAt: "2026-03-15T00:05:00.000Z",
+        lastIntent: "get_founder_queue_item",
+        lastResolvedIntent: "get_founder_queue_item",
+        intentTrail: [],
+        workingItem: baseSession.interactionState.workingItem,
+        reviewApprovalContext: baseSession.interactionState.reviewApprovalContext,
+        pendingDisambiguation: null
+      },
+      retentionPolicy: baseSession.retentionPolicy,
+      expiresAt: "2026-03-15T04:05:00.000Z",
+      hardExpiresAt: "2026-03-16T00:00:00.000Z",
+      lastResetAt: null,
+      lastResetReason: null,
+      updatedAt: "2026-03-15T00:05:00.000Z",
+      version: 2
+    })),
+    resetSession: vi.fn(async () => ({
+      resetReason: "manual_reset",
+      session: {
+        sessionId: "aaliyah-session:1",
+        tenantId: "tenant",
+        actorId: "actor-1",
+        principalContext: "founder",
+        activeModeState: {
+          activeMode: "founder",
+          previousMode: "zbestmedia",
+          switchedAt: "2026-03-15T00:06:00.000Z",
+          switchReason: "fallback_to_default",
+          boundaryDecisionId: null
+        },
+        interactionState: {
+          lastInteractionAt: null,
+          lastIntent: null,
+          lastResolvedIntent: null,
+          intentTrail: [],
+          workingItem: null,
+          reviewApprovalContext: null,
+          pendingDisambiguation: null
+        },
+        retentionPolicy: baseSession.retentionPolicy,
+        expiresAt: "2026-03-15T04:06:00.000Z",
+        hardExpiresAt: "2026-03-16T00:06:00.000Z",
+        lastResetAt: "2026-03-15T00:06:00.000Z",
+        lastResetReason: "manual_reset",
+        updatedAt: "2026-03-15T00:06:00.000Z",
+        version: 3
+      }
+    })),
+    resolveQueueItemId: vi.fn((parameters?: Record<string, unknown>) => typeof parameters?.queueItemId === "string" ? parameters.queueItemId : "queue:item:1"),
+    resolveReviewItemId: vi.fn((parameters?: Record<string, unknown>) => typeof parameters?.reviewItemId === "string" ? parameters.reviewItemId : "review:1"),
+    resolveVoiceCallId: vi.fn((parameters?: Record<string, unknown>) => typeof parameters?.callId === "string" ? parameters.callId : "voice-call:1")
+  } as any;
+
   const reviewQueueService = {
     getQueue: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
       queueId: "queue:1",
@@ -504,6 +669,7 @@ describe("Aaliyah runtime agent", () => {
     telemetryService,
     adminService,
     reviewQueueService,
+    sessionService,
     preferenceService,
     memoryBoundaryService
   );
@@ -630,6 +796,48 @@ describe("Aaliyah runtime agent", () => {
     expect(queue.payloadType).toBe("founder_review_queue");
     expect(item.payloadType).toBe("founder_queue_item");
     expect(summary.payloadType).toBe("founder_queue_summary");
+  });
+
+  it("returns session snapshot and reset through governed runtime", async () => {
+    const snapshot = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_session_snapshot"
+      }
+    });
+    const reset = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "reset_session_context",
+        parameters: { scope: "hard" }
+      }
+    });
+
+    expect(snapshot.payloadType).toBe("session_snapshot");
+    expect(reset.payloadType).toBe("session_reset");
+  });
+
+  it("uses active review context when review item id is omitted", async () => {
+    const result = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "approve_email_review_item",
+        parameters: {
+          note: "approve it"
+        }
+      }
+    });
+
+    expect(result.outcomeType).toBe("completed");
+    expect(emailService.approveReviewItem).toHaveBeenCalledWith({
+      tenantId: "tenant",
+      reviewItemId: "review:1",
+      actorId: "actor-1",
+      note: "approve it"
+    });
   });
 
   it("passes review actions through governed email services", async () => {

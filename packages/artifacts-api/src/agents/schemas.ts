@@ -1291,6 +1291,150 @@ const AaliyahReviewQueueSchema = AaliyahReviewQueueSummarySchema.extend({
   items: z.array(AaliyahReviewQueueItemSchema)
 });
 
+const AaliyahSessionIntentTrailEntrySchema = z.object({
+  entryId: z.string().min(1),
+  sourceSurface: z.enum(["aaliyah_runtime", "aaliyah_admin"]),
+  requestId: z.string().min(1).nullable(),
+  requestedIntent: z.string().min(1),
+  resolvedIntent: z.string().min(1).nullable(),
+  activeMode: FounderBriefingModeSchema,
+  outcomeType: z.enum(["completed", "fallback"]),
+  confidenceLevel: z.enum(["high", "medium", "low"]),
+  fallbackOutcome: z.enum([
+    "delegate_to_specialist",
+    "escalate_for_clarification",
+    "deny_due_to_scope",
+    "defer_due_to_low_confidence",
+    "deny_due_to_mode_boundary"
+  ]).nullable(),
+  parameterSummary: z.object({
+    queueItemId: z.string().min(1).optional(),
+    reviewItemId: z.string().min(1).optional(),
+    callId: z.string().min(1).optional(),
+    incidentId: z.string().min(1).optional(),
+    targetMode: FounderBriefingModeSchema.optional()
+  }),
+  createdAt: z.string().datetime()
+});
+
+const AaliyahSessionWorkingItemSchema = z.object({
+  contextId: z.string().min(1),
+  workingItemType: z.enum([
+    "founder_queue_item",
+    "email_review_item",
+    "voice_call",
+    "incident",
+    "dispatch_candidate",
+    "routing_preview"
+  ]),
+  sourceSubsystem: z.string().min(1),
+  sourceItemId: z.string().min(1),
+  queueItemId: z.string().min(1).nullable(),
+  reviewItemId: z.string().min(1).nullable(),
+  callId: z.string().min(1).nullable(),
+  incidentId: z.string().min(1).nullable(),
+  dispatchId: z.string().min(1).nullable(),
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  founderAttentionRequired: z.boolean(),
+  confidenceLevel: z.enum(["high", "medium", "low"]),
+  interruptionClass: z.enum(["interrupt_now", "same_day_briefing", "passive_queue", "silent_log"]).nullable(),
+  setByIntent: z.string().min(1).nullable(),
+  setAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  closureState: z.enum(["open", "completed", "abandoned", "escalated", "invalidated", "reset"]),
+  closureReason: z.enum([
+    "review_approved",
+    "review_rejected",
+    "revision_requested",
+    "email_dispatched",
+    "mode_switched",
+    "expired",
+    "manual_reset",
+    "boundary_denied",
+    "ambiguity",
+    "item_not_found",
+    "cleared_by_runtime"
+  ]).nullable(),
+  closedAt: z.string().datetime().nullable(),
+  closedByIntent: z.string().min(1).nullable()
+});
+
+const AaliyahSessionReviewContextSchema = z.object({
+  reviewItemId: z.string().min(1),
+  draftId: z.string().min(1).nullable(),
+  accountId: z.string().min(1).nullable(),
+  threadId: z.string().min(1).nullable(),
+  reviewStatus: z.enum(["pending_review", "approved", "rejected", "revision_requested"]),
+  dispatchReady: z.boolean(),
+  setAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  invalidatedAt: z.string().datetime().nullable(),
+  invalidationReason: z.enum([
+    "review_approved",
+    "review_rejected",
+    "revision_requested",
+    "email_dispatched",
+    "mode_switched",
+    "expired",
+    "manual_reset",
+    "item_not_found"
+  ]).nullable()
+});
+
+const AaliyahSessionSnapshotSchema = z.object({
+  sessionId: z.string().min(1),
+  tenantId: z.string().uuid(),
+  actorId: z.string().min(1),
+  principalContext: z.enum(["founder", "operator"]),
+  activeModeState: z.object({
+    activeMode: FounderBriefingModeSchema,
+    previousMode: FounderBriefingModeSchema.nullable(),
+    switchedAt: z.string().datetime(),
+    switchReason: z.enum([
+      "session_resume",
+      "explicit_request",
+      "runtime_switch_intent",
+      "fallback_to_default",
+      "boundary_enforced_reset"
+    ]),
+    boundaryDecisionId: z.string().min(1).nullable()
+  }),
+  interactionState: z.object({
+    lastInteractionAt: z.string().datetime().nullable(),
+    lastIntent: z.string().min(1).nullable(),
+    lastResolvedIntent: z.string().min(1).nullable(),
+    intentTrail: z.array(AaliyahSessionIntentTrailEntrySchema),
+    workingItem: AaliyahSessionWorkingItemSchema.nullable(),
+    reviewApprovalContext: AaliyahSessionReviewContextSchema.nullable(),
+    pendingDisambiguation: z.object({
+      reason: z.string().min(1),
+      requestedIntent: z.string().min(1).nullable(),
+      createdAt: z.string().datetime()
+    }).nullable()
+  }),
+  retentionPolicy: z.object({
+    intentTrailMaxEntries: z.number().int().positive(),
+    idleTtlSeconds: z.number().int().positive(),
+    hardTtlSeconds: z.number().int().positive(),
+    snapshotIntentTrailEntries: z.number().int().positive()
+  }),
+  expiresAt: z.string().datetime(),
+  hardExpiresAt: z.string().datetime(),
+  lastResetAt: z.string().datetime().nullable(),
+  lastResetReason: z.enum([
+    "manual_reset",
+    "idle_expired",
+    "hard_expired",
+    "mode_switch",
+    "boundary_violation",
+    "ambiguity_reset",
+    "working_item_closed"
+  ]).nullable(),
+  updatedAt: z.string().datetime(),
+  version: z.number().int().positive()
+});
+
 export const AaliyahPreferenceListResponseSchema = z.object({
   manifestVersion: ManifestVersionSchema,
   resourceType: z.literal("aaliyah_preferences"),
@@ -1325,6 +1469,33 @@ export const AaliyahReviewQueueDetailResponseSchema = z.object({
   item: AaliyahReviewQueueItemSchema
 });
 
+export const AaliyahSessionResetBodySchema = z.object({
+  scope: z.enum(["soft", "hard"]).optional().default("soft")
+});
+
+export const AaliyahSessionSnapshotResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_session_snapshot"),
+  session: AaliyahSessionSnapshotSchema
+});
+
+export const AaliyahSessionResetResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_session_reset"),
+  reset: z.object({
+    session: AaliyahSessionSnapshotSchema,
+    resetReason: z.enum([
+      "manual_reset",
+      "idle_expired",
+      "hard_expired",
+      "mode_switch",
+      "boundary_violation",
+      "ambiguity_reset",
+      "working_item_closed"
+    ])
+  })
+});
+
 const AaliyahRuntimeIntentSchema = z.enum([
   "get_founder_briefing",
   "get_founder_command_surface",
@@ -1337,6 +1508,8 @@ const AaliyahRuntimeIntentSchema = z.enum([
   "get_founder_review_queue",
   "get_founder_queue_item",
   "get_founder_queue_summary",
+  "get_session_snapshot",
+  "reset_session_context",
   "get_waiting_approvals",
   "get_email_review_queue",
   "approve_email_review_item",
@@ -1473,7 +1646,9 @@ const AaliyahRuntimeSuccessSchema = z.object({
     "memory_boundary_summary",
     "founder_review_queue",
     "founder_queue_item",
-    "founder_queue_summary"
+    "founder_queue_summary",
+    "session_snapshot",
+    "session_reset"
   ]),
   payload: z.union([
     FounderBriefingSchema,
@@ -1486,6 +1661,8 @@ const AaliyahRuntimeSuccessSchema = z.object({
     AaliyahReviewQueueSchema,
     AaliyahReviewQueueItemSchema,
     AaliyahReviewQueueSummarySchema,
+    AaliyahSessionSnapshotSchema,
+    AaliyahSessionResetResponseSchema.shape.reset,
     AaliyahApprovalQueuePayloadSchema,
     AaliyahReviewActionPayloadSchema,
     z.object({

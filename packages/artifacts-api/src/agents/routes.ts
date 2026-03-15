@@ -7,6 +7,7 @@ import {
   AaliyahMemoryBoundaryService,
   AaliyahPreferenceService,
   AaliyahFounderReviewQueueService,
+  AaliyahSessionContextService,
   AaliyahRuntimeService,
   EmailAssistantService,
   EmailAccountConfigurationError,
@@ -39,6 +40,7 @@ import {
   AaliyahReviewQueueDetailResponseSchema,
   AaliyahReviewQueueListResponseSchema,
   AaliyahReviewQueueItemIdParamSchema,
+  AaliyahSessionResetBodySchema,
   AaliyahPreferenceCreateBodySchema,
   AaliyahPreferenceDetailResponseSchema,
   AaliyahPreferenceIdParamSchema,
@@ -141,6 +143,7 @@ export function agentRoutes(opts: {
   aaliyahPreferenceService: AaliyahPreferenceService;
   aaliyahMemoryBoundaryService: AaliyahMemoryBoundaryService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
+  aaliyahSessionService: AaliyahSessionContextService;
   aaliyahRuntimeService: AaliyahRuntimeService;
   emailService: EmailAssistantService;
   voiceService: VoiceRuntimeService;
@@ -650,6 +653,41 @@ export function agentRoutes(opts: {
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_review_queue_item",
         item
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/session", async (req, reply) => {
+      const session = await opts.aaliyahSessionService.getSessionSnapshot({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder"
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_session_snapshot",
+        session
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/session/reset", async (req, reply) => {
+      const body = AaliyahSessionResetBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const reset = await opts.aaliyahSessionService.resetSession({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        resetReason: "manual_reset",
+        hardReset: body.data.scope === "hard"
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_session_reset",
+        reset
       });
     });
 

@@ -35,6 +35,18 @@ import type {
   AaliyahPreferenceValue
 } from "../aaliyah/preference-types.js";
 import type {
+  AaliyahActiveModeState as AaliyahActiveModeStateShape,
+  AaliyahBoundaryViolationResult as AaliyahBoundaryViolationResultShape,
+  AaliyahFounderInteractionState as AaliyahFounderInteractionStateShape,
+  AaliyahIntentTrailEntry as AaliyahIntentTrailEntryShape,
+  AaliyahReviewApprovalContext as AaliyahReviewApprovalContextShape,
+  AaliyahSessionContext as AaliyahSessionContextShape,
+  AaliyahSessionResetReason,
+  AaliyahSessionRetentionPolicy as AaliyahSessionRetentionPolicyShape,
+  AaliyahSessionSnapshotView as AaliyahSessionSnapshotViewShape,
+  AaliyahWorkingItemContext as AaliyahWorkingItemContextShape
+} from "../aaliyah/session-types.js";
+import type {
   AssignmentPolicyDecision,
   AssignmentRecord,
   ExecutionRunRecord,
@@ -534,6 +546,205 @@ export const AaliyahFounderPreferenceRecordSchema = z.object({
   deactivatedBy: z.string().nullable()
 }) satisfies z.ZodType<AaliyahFounderPreferenceRecordShape>;
 export type AaliyahFounderPreferenceRecord = z.infer<typeof AaliyahFounderPreferenceRecordSchema>;
+
+export const AaliyahSessionResetReasonSchema = z.enum([
+  "manual_reset",
+  "idle_expired",
+  "hard_expired",
+  "mode_switch",
+  "boundary_violation",
+  "ambiguity_reset",
+  "working_item_closed"
+]);
+export type { AaliyahSessionResetReason };
+
+export const AaliyahActiveModeStateSchema = z.object({
+  activeMode: z.enum(["founder", "zbestmedia"]),
+  previousMode: z.enum(["founder", "zbestmedia"]).nullable(),
+  switchedAt: z.string().datetime(),
+  switchReason: z.enum([
+    "session_resume",
+    "explicit_request",
+    "runtime_switch_intent",
+    "fallback_to_default",
+    "boundary_enforced_reset"
+  ]),
+  boundaryDecisionId: z.string().min(1).nullable()
+}) satisfies z.ZodType<AaliyahActiveModeStateShape>;
+type AaliyahActiveModeStateRecord = z.infer<typeof AaliyahActiveModeStateSchema>;
+
+export const AaliyahIntentTrailEntrySchema = z.object({
+  entryId: z.string().min(1),
+  sourceSurface: z.enum(["aaliyah_runtime", "aaliyah_admin"]),
+  requestId: z.string().min(1).nullable(),
+  requestedIntent: z.string().min(1),
+  resolvedIntent: z.string().min(1).nullable(),
+  activeMode: z.enum(["founder", "zbestmedia"]),
+  outcomeType: z.enum(["completed", "fallback"]),
+  confidenceLevel: z.enum(["high", "medium", "low"]),
+  fallbackOutcome: z.enum([
+    "delegate_to_specialist",
+    "escalate_for_clarification",
+    "deny_due_to_scope",
+    "defer_due_to_low_confidence",
+    "deny_due_to_mode_boundary"
+  ]).nullable(),
+  parameterSummary: z.object({
+    queueItemId: z.string().min(1).optional(),
+    reviewItemId: z.string().min(1).optional(),
+    callId: z.string().min(1).optional(),
+    incidentId: z.string().min(1).optional(),
+    targetMode: z.enum(["founder", "zbestmedia"]).optional()
+  }),
+  createdAt: z.string().datetime()
+}) satisfies z.ZodType<AaliyahIntentTrailEntryShape>;
+type AaliyahIntentTrailEntryRecord = z.infer<typeof AaliyahIntentTrailEntrySchema>;
+
+export const AaliyahWorkingItemContextSchema = z.object({
+  contextId: z.string().min(1),
+  workingItemType: z.enum([
+    "founder_queue_item",
+    "email_review_item",
+    "voice_call",
+    "incident",
+    "dispatch_candidate",
+    "routing_preview"
+  ]),
+  sourceSubsystem: z.string().min(1),
+  sourceItemId: z.string().min(1),
+  queueItemId: z.string().min(1).nullable(),
+  reviewItemId: z.string().min(1).nullable(),
+  callId: z.string().min(1).nullable(),
+  incidentId: z.string().min(1).nullable(),
+  dispatchId: z.string().min(1).nullable(),
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  founderAttentionRequired: z.boolean(),
+  confidenceLevel: z.enum(["high", "medium", "low"]),
+  interruptionClass: z.enum(["interrupt_now", "same_day_briefing", "passive_queue", "silent_log"]).nullable(),
+  setByIntent: z.string().min(1).nullable(),
+  setAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  closureState: z.enum(["open", "completed", "abandoned", "escalated", "invalidated", "reset"]),
+  closureReason: z.enum([
+    "review_approved",
+    "review_rejected",
+    "revision_requested",
+    "email_dispatched",
+    "mode_switched",
+    "expired",
+    "manual_reset",
+    "boundary_denied",
+    "ambiguity",
+    "item_not_found",
+    "cleared_by_runtime"
+  ]).nullable(),
+  closedAt: z.string().datetime().nullable(),
+  closedByIntent: z.string().min(1).nullable()
+}) satisfies z.ZodType<AaliyahWorkingItemContextShape>;
+type AaliyahWorkingItemContextRecord = z.infer<typeof AaliyahWorkingItemContextSchema>;
+
+export const AaliyahReviewApprovalContextSchema = z.object({
+  reviewItemId: z.string().min(1),
+  draftId: z.string().min(1).nullable(),
+  accountId: z.string().min(1).nullable(),
+  threadId: z.string().min(1).nullable(),
+  reviewStatus: EmailDraftReviewStatusSchema,
+  dispatchReady: z.boolean(),
+  setAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  invalidatedAt: z.string().datetime().nullable(),
+  invalidationReason: z.enum([
+    "review_approved",
+    "review_rejected",
+    "revision_requested",
+    "email_dispatched",
+    "mode_switched",
+    "expired",
+    "manual_reset",
+    "item_not_found"
+  ]).nullable()
+}) satisfies z.ZodType<AaliyahReviewApprovalContextShape>;
+type AaliyahReviewApprovalContextRecord = z.infer<typeof AaliyahReviewApprovalContextSchema>;
+
+export const AaliyahFounderInteractionStateSchema = z.object({
+  lastInteractionAt: z.string().datetime().nullable(),
+  lastIntent: z.string().min(1).nullable(),
+  lastResolvedIntent: z.string().min(1).nullable(),
+  intentTrail: z.array(AaliyahIntentTrailEntrySchema),
+  workingItem: AaliyahWorkingItemContextSchema.nullable(),
+  reviewApprovalContext: AaliyahReviewApprovalContextSchema.nullable(),
+  pendingDisambiguation: z.object({
+    reason: z.string().min(1),
+    requestedIntent: z.string().min(1).nullable(),
+    createdAt: z.string().datetime()
+  }).nullable()
+}) satisfies z.ZodType<AaliyahFounderInteractionStateShape>;
+type AaliyahFounderInteractionStateRecord = z.infer<typeof AaliyahFounderInteractionStateSchema>;
+
+export const AaliyahSessionRetentionPolicySchema = z.object({
+  intentTrailMaxEntries: z.number().int().positive(),
+  idleTtlSeconds: z.number().int().positive(),
+  hardTtlSeconds: z.number().int().positive(),
+  snapshotIntentTrailEntries: z.number().int().positive()
+}) satisfies z.ZodType<AaliyahSessionRetentionPolicyShape>;
+type AaliyahSessionRetentionPolicyRecord = z.infer<typeof AaliyahSessionRetentionPolicySchema>;
+
+export const AaliyahBoundaryViolationResultSchema = z.object({
+  violationId: z.string().min(1),
+  activeMode: z.enum(["founder", "zbestmedia"]),
+  requestedMode: z.enum(["founder", "zbestmedia"]),
+  requestedCompanies: z.array(z.string().min(1)),
+  access: z.enum(["denied", "allowed_founder_summary_only"]),
+  reasonCodes: z.array(z.string().min(1)),
+  enforcedReset: z.boolean(),
+  createdAt: z.string().datetime()
+}) satisfies z.ZodType<AaliyahBoundaryViolationResultShape>;
+type AaliyahBoundaryViolationResultRecord = z.infer<typeof AaliyahBoundaryViolationResultSchema>;
+
+export const AaliyahSessionContextRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  actorId: z.string().min(1),
+  principalContext: z.enum(["founder", "operator"]),
+  sessionId: z.string().min(1),
+  companyScope: z.literal("zbestmedia"),
+  activeModeState: AaliyahActiveModeStateSchema,
+  interactionState: AaliyahFounderInteractionStateSchema,
+  retentionPolicy: AaliyahSessionRetentionPolicySchema,
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  expiresAt: z.string().datetime(),
+  hardExpiresAt: z.string().datetime(),
+  lastResetAt: z.string().datetime().nullable(),
+  lastResetReason: AaliyahSessionResetReasonSchema.nullable(),
+  version: z.number().int().positive()
+}) satisfies z.ZodType<AaliyahSessionContextShape>;
+export type AaliyahSessionContextRecord = z.infer<typeof AaliyahSessionContextRecordSchema>;
+
+export const AaliyahSessionSnapshotViewSchema = z.object({
+  sessionId: z.string().min(1),
+  tenantId: z.string().uuid(),
+  actorId: z.string().min(1),
+  principalContext: z.enum(["founder", "operator"]),
+  activeModeState: AaliyahActiveModeStateSchema,
+  interactionState: z.object({
+    lastInteractionAt: z.string().datetime().nullable(),
+    lastIntent: z.string().min(1).nullable(),
+    lastResolvedIntent: z.string().min(1).nullable(),
+    intentTrail: z.array(AaliyahIntentTrailEntrySchema),
+    workingItem: AaliyahWorkingItemContextSchema.nullable(),
+    reviewApprovalContext: AaliyahReviewApprovalContextSchema.nullable(),
+    pendingDisambiguation: AaliyahFounderInteractionStateSchema.shape.pendingDisambiguation
+  }),
+  retentionPolicy: AaliyahSessionRetentionPolicySchema,
+  expiresAt: z.string().datetime(),
+  hardExpiresAt: z.string().datetime(),
+  lastResetAt: z.string().datetime().nullable(),
+  lastResetReason: AaliyahSessionResetReasonSchema.nullable(),
+  updatedAt: z.string().datetime(),
+  version: z.number().int().positive()
+}) satisfies z.ZodType<AaliyahSessionSnapshotViewShape>;
+type AaliyahSessionSnapshotViewRecord = z.infer<typeof AaliyahSessionSnapshotViewSchema>;
 
 export const MemoryEntryRecordSchema = z.object({
   tenantId: z.string().uuid(),

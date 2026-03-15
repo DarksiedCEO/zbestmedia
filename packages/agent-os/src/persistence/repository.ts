@@ -13,6 +13,7 @@ import {
 import { AGENT_EVAL_PROFILES } from "../evals/specs.js";
 import type {
   AgentLifecycleEventRecord,
+  AaliyahSessionContextRecord,
   AaliyahFounderPreferenceRecord,
   AgentRecord,
   AssignmentRecord,
@@ -328,6 +329,24 @@ type AaliyahFounderPreferenceRow = {
   deactivated_at: string | Date | null;
   created_by: string;
   deactivated_by: string | null;
+};
+
+type AaliyahSessionContextRow = {
+  tenant_id: string;
+  actor_id: string;
+  principal_context: AaliyahSessionContextRecord["principalContext"];
+  session_id: string;
+  company_scope: AaliyahSessionContextRecord["companyScope"];
+  active_mode_state: AaliyahSessionContextRecord["activeModeState"];
+  interaction_state: AaliyahSessionContextRecord["interactionState"];
+  retention_policy: AaliyahSessionContextRecord["retentionPolicy"];
+  created_at: string | Date;
+  updated_at: string | Date;
+  expires_at: string | Date;
+  hard_expires_at: string | Date;
+  last_reset_at: string | Date | null;
+  last_reset_reason: AaliyahSessionContextRecord["lastResetReason"];
+  version: number;
 };
 
 type EvalRunRow = {
@@ -713,6 +732,26 @@ function mapAaliyahFounderPreferenceRow(row: AaliyahFounderPreferenceRow): Aaliy
     deactivatedAt: row.deactivated_at ? toIsoString(row.deactivated_at)! : null,
     createdBy: row.created_by,
     deactivatedBy: row.deactivated_by
+  };
+}
+
+function mapAaliyahSessionContextRow(row: AaliyahSessionContextRow): AaliyahSessionContextRecord {
+  return {
+    tenantId: row.tenant_id,
+    actorId: row.actor_id,
+    principalContext: row.principal_context,
+    sessionId: row.session_id,
+    companyScope: row.company_scope,
+    activeModeState: row.active_mode_state,
+    interactionState: row.interaction_state,
+    retentionPolicy: row.retention_policy,
+    createdAt: toIsoString(row.created_at)!,
+    updatedAt: toIsoString(row.updated_at)!,
+    expiresAt: toIsoString(row.expires_at)!,
+    hardExpiresAt: toIsoString(row.hard_expires_at)!,
+    lastResetAt: row.last_reset_at ? toIsoString(row.last_reset_at)! : null,
+    lastResetReason: row.last_reset_reason,
+    version: row.version
   };
 }
 
@@ -2764,6 +2803,89 @@ export class AgentOsRepository {
         ]
       )
     );
+  }
+
+  async getAaliyahSessionContext(args: {
+    tenantId: string;
+    actorId: string;
+    principalContext: AaliyahSessionContextRecord["principalContext"];
+  }): Promise<AaliyahSessionContextRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahSessionContextRow>(
+        `
+        SELECT tenant_id, actor_id, principal_context, session_id, company_scope,
+               active_mode_state, interaction_state, retention_policy,
+               created_at, updated_at, expires_at, hard_expires_at,
+               last_reset_at, last_reset_reason, version
+        FROM aaliyah_session_contexts
+        WHERE tenant_id = $1
+          AND actor_id = $2
+          AND principal_context = $3
+        `,
+        [args.tenantId, args.actorId, args.principalContext]
+      )
+    );
+
+    return res.rows[0] ? mapAaliyahSessionContextRow(res.rows[0]) : null;
+  }
+
+  async upsertAaliyahSessionContext(args: {
+    session: AaliyahSessionContextRecord;
+  }): Promise<AaliyahSessionContextRecord> {
+    const session = args.session;
+    const res = await this.runWithTenant(this.pool, session.tenantId, (client) =>
+      client.query<AaliyahSessionContextRow>(
+        `
+        INSERT INTO aaliyah_session_contexts (
+          tenant_id, actor_id, principal_context, session_id, company_scope,
+          active_mode_state, interaction_state, retention_policy,
+          created_at, updated_at, expires_at, hard_expires_at,
+          last_reset_at, last_reset_reason, version
+        ) VALUES (
+          $1,$2,$3,$4,$5,
+          $6::jsonb,$7::jsonb,$8::jsonb,
+          $9,$10,$11,$12,
+          $13,$14,$15
+        )
+        ON CONFLICT (tenant_id, actor_id, principal_context)
+        DO UPDATE SET
+          session_id = EXCLUDED.session_id,
+          company_scope = EXCLUDED.company_scope,
+          active_mode_state = EXCLUDED.active_mode_state,
+          interaction_state = EXCLUDED.interaction_state,
+          retention_policy = EXCLUDED.retention_policy,
+          updated_at = EXCLUDED.updated_at,
+          expires_at = EXCLUDED.expires_at,
+          hard_expires_at = EXCLUDED.hard_expires_at,
+          last_reset_at = EXCLUDED.last_reset_at,
+          last_reset_reason = EXCLUDED.last_reset_reason,
+          version = EXCLUDED.version
+        RETURNING tenant_id, actor_id, principal_context, session_id, company_scope,
+                  active_mode_state, interaction_state, retention_policy,
+                  created_at, updated_at, expires_at, hard_expires_at,
+                  last_reset_at, last_reset_reason, version
+        `,
+        [
+          session.tenantId,
+          session.actorId,
+          session.principalContext,
+          session.sessionId,
+          session.companyScope,
+          JSON.stringify(session.activeModeState),
+          JSON.stringify(session.interactionState),
+          JSON.stringify(session.retentionPolicy),
+          session.createdAt,
+          session.updatedAt,
+          session.expiresAt,
+          session.hardExpiresAt,
+          session.lastResetAt,
+          session.lastResetReason,
+          session.version
+        ]
+      )
+    );
+
+    return mapAaliyahSessionContextRow(res.rows[0]!);
   }
 
   async listIncidentRecords(args: {

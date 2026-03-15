@@ -6,6 +6,7 @@ import { AaliyahCommandSurfaceService } from "./command-surface.js";
 import { AaliyahMemoryBoundaryService } from "./memory-boundary.js";
 import { AaliyahPreferenceService } from "./preferences.js";
 import { AaliyahFounderReviewQueueService } from "./review-queue.js";
+import { AaliyahSessionContextService } from "./session.js";
 import { AaliyahRuntimeEnforcementService } from "./runtime-enforcement.js";
 import type {
   AaliyahRuntimeDecisionTrace,
@@ -48,7 +49,9 @@ const SUPPORTED_INTENTS = new Set<AaliyahRuntimeIntent>([
   "get_memory_boundary_summary",
   "get_founder_review_queue",
   "get_founder_queue_item",
-  "get_founder_queue_summary"
+  "get_founder_queue_summary",
+  "get_session_snapshot",
+  "reset_session_context"
 ]);
 
 const DEFAULT_MODE: AaliyahRuntimeMode = "founder";
@@ -66,6 +69,7 @@ export class AaliyahRuntimeService {
     private readonly telemetry: AgentTelemetryService,
     private readonly admin: AgentAdminService,
     private readonly reviewQueue: AaliyahFounderReviewQueueService,
+    private readonly sessions: AaliyahSessionContextService,
     private readonly preferences?: AaliyahPreferenceService,
     boundary?: AaliyahMemoryBoundaryService
   ) {
@@ -75,8 +79,43 @@ export class AaliyahRuntimeService {
   async execute(args: AaliyahRuntimeRequestContext & { request: AaliyahRuntimeRequestInput }): Promise<AaliyahRuntimeResult> {
     const runtimeRequestId = `aaliyah-runtime:${randomUUID()}`;
     const generatedAt = new Date().toISOString();
-    const activeMode = args.request.mode ?? DEFAULT_MODE;
+    const sessionResolution = await this.sessions.resolveSession({
+      tenantId: args.tenantId,
+      actorId: args.actorId,
+      principalContext: args.principalContext ?? "founder",
+      requestedMode: args.request.mode,
+      generatedAt
+    });
+    const activeMode = sessionResolution.activeMode ?? DEFAULT_MODE;
     const resolvedIntent = this.resolveIntent(args.request.intent);
+    if (sessionResolution.boundaryViolation) {
+      return this.finalizeRuntimeResult(sessionResolution.session, args.request, generatedAt, this.buildFallback({
+        runtimeRequestId,
+        activeMode,
+        generatedAt,
+        requestId: args.requestId ?? null,
+        resolvedIntent,
+        invokedSurface: "aaliyah-session",
+        enforcement: {
+          requestedAgentId: "aaliyah",
+          requestedAtomicTaskId: "executive_orchestration_founder_protection",
+          resolvedAgentId: "aaliyah",
+          resolvedAtomicTaskId: "executive_orchestration_founder_protection",
+          confidence: "low",
+          company: "zbestmedia",
+          mode: "executive_assistant",
+          principalContext: args.principalContext ?? "founder",
+          approvalState: "not_required",
+          approvalClass: "orchestration_only",
+          reason: sessionResolution.boundaryViolation.reasonCodes.join(",")
+        },
+        fallback: {
+          outcome: "deny_due_to_mode_boundary",
+          reason: sessionResolution.boundaryViolation.reasonCodes.join(","),
+          delegateToAgentId: null
+        }
+      }));
+    }
     const enforcement = this.runtime.evaluate({
       requestedAgentId: "aaliyah",
       requestedAtomicTaskId: "executive_orchestration_founder_protection",
@@ -92,7 +131,7 @@ export class AaliyahRuntimeService {
     });
 
     if (!resolvedIntent) {
-      return this.buildFallback({
+      return this.finalizeRuntimeResult(sessionResolution.session, args.request, generatedAt, this.buildFallback({
         runtimeRequestId,
         activeMode,
         generatedAt,
@@ -108,11 +147,11 @@ export class AaliyahRuntimeService {
           reason: "unsupported founder runtime intent",
           delegateToAgentId: null
         }
-      });
+      }));
     }
 
     if (!enforcement.allowed) {
-      return this.buildFallback({
+      return this.finalizeRuntimeResult(sessionResolution.session, args.request, generatedAt, this.buildFallback({
         runtimeRequestId,
         activeMode,
         generatedAt,
@@ -127,17 +166,18 @@ export class AaliyahRuntimeService {
           reason: enforcement.trace.reason,
           delegateToAgentId: enforcement.delegateToAgentId
         }
-      });
+      }));
     }
 
     try {
+      let result: AaliyahRuntimeResult;
       switch (resolvedIntent) {
       case "get_founder_briefing": {
         const payload = await this.briefing.generateBriefing({
           tenantId: args.tenantId,
           mode: activeMode
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -148,13 +188,14 @@ export class AaliyahRuntimeService {
           payloadType: "founder_briefing",
           payload
         });
+        break;
       }
       case "get_founder_command_surface": {
         const payload = await this.commandSurface.generateCommandSurface({
           tenantId: args.tenantId,
           mode: activeMode
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -165,13 +206,14 @@ export class AaliyahRuntimeService {
           payloadType: "founder_command_surface",
           payload
         });
+        break;
       }
       case "get_quick_actions": {
         const items = this.commandSurface.listQuickActions({
           tenantId: args.tenantId,
           mode: activeMode
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -182,13 +224,14 @@ export class AaliyahRuntimeService {
           payloadType: "quick_actions",
           payload: { items }
         });
+        break;
       }
       case "get_interrupt_queue": {
         const payload = await this.commandSurface.getInterruptionQueue({
           tenantId: args.tenantId,
           mode: activeMode
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -199,13 +242,14 @@ export class AaliyahRuntimeService {
           payloadType: "interrupt_queue",
           payload
         });
+        break;
       }
       case "get_confidence_summary": {
         const payload = await this.commandSurface.getConfidenceSummary({
           tenantId: args.tenantId,
           mode: activeMode
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -216,6 +260,7 @@ export class AaliyahRuntimeService {
           payloadType: "confidence_summary",
           payload
         });
+        break;
       }
       case "get_founder_preferences": {
         if (!this.preferences) {
@@ -225,7 +270,7 @@ export class AaliyahRuntimeService {
           tenantId: args.tenantId,
           mode: activeMode
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -236,13 +281,14 @@ export class AaliyahRuntimeService {
           payloadType: "founder_preferences",
           payload
         });
+        break;
       }
       case "get_memory_boundary_summary": {
         const payload = this.boundary.getSummary({
           activeMode,
           generatedAt
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -253,6 +299,7 @@ export class AaliyahRuntimeService {
           payloadType: "memory_boundary_summary",
           payload
         });
+        break;
       }
       case "get_founder_review_queue": {
         const payload = await this.reviewQueue.getQueue({
@@ -260,7 +307,7 @@ export class AaliyahRuntimeService {
           mode: activeMode,
           generatedAt
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -271,16 +318,37 @@ export class AaliyahRuntimeService {
           payloadType: "founder_review_queue",
           payload
         });
+        break;
       }
       case "get_founder_queue_item": {
-        const queueItemId = this.requireStringParam(args.request.parameters, "queueItemId", "get_founder_queue_item");
+        const queueItemId = this.sessions.resolveQueueItemId(args.request.parameters, sessionResolution.session);
+        if (!queueItemId) {
+          result = this.buildFallback({
+            runtimeRequestId,
+            activeMode,
+            generatedAt,
+            requestId: args.requestId ?? null,
+            resolvedIntent,
+            invokedSurface: "aaliyah-review-queue",
+            enforcement: {
+              ...enforcement.trace,
+              reason: "aaliyah_runtime_missing_current_queue_item"
+            },
+            fallback: {
+              outcome: "escalate_for_clarification",
+              reason: "aaliyah_runtime_missing_current_queue_item",
+              delegateToAgentId: null
+            }
+          });
+          break;
+        }
         const payload = await this.reviewQueue.getQueueItem({
           tenantId: args.tenantId,
           mode: activeMode,
           queueItemId
         });
         if (!payload) {
-          return this.buildFallback({
+          result = this.buildFallback({
             runtimeRequestId,
             activeMode,
             generatedAt,
@@ -297,8 +365,9 @@ export class AaliyahRuntimeService {
               delegateToAgentId: null
             }
           });
+          break;
         }
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -309,6 +378,7 @@ export class AaliyahRuntimeService {
           payloadType: "founder_queue_item",
           payload
         });
+        break;
       }
       case "get_founder_queue_summary": {
         const payload = await this.reviewQueue.getQueueSummary({
@@ -316,7 +386,7 @@ export class AaliyahRuntimeService {
           mode: activeMode,
           generatedAt
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -327,6 +397,48 @@ export class AaliyahRuntimeService {
           payloadType: "founder_queue_summary",
           payload
         });
+        break;
+      }
+      case "get_session_snapshot": {
+        const payload = await this.sessions.getSessionSnapshot({
+          tenantId: args.tenantId,
+          actorId: args.actorId,
+          principalContext: args.principalContext ?? "founder"
+        });
+        result = this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-session",
+          enforcement: enforcement.trace,
+          payloadType: "session_snapshot",
+          payload
+        });
+        break;
+      }
+      case "reset_session_context": {
+        const payload = await this.sessions.resetSession({
+          tenantId: args.tenantId,
+          actorId: args.actorId,
+          principalContext: args.principalContext ?? "founder",
+          resetReason: "manual_reset",
+          hardReset: args.request.parameters?.scope === "hard",
+          generatedAt
+        });
+        result = this.buildSuccess({
+          runtimeRequestId,
+          activeMode: payload.session.activeModeState.activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-session",
+          enforcement: enforcement.trace,
+          payloadType: "session_reset",
+          payload
+        });
+        break;
       }
       case "execute_quick_action": {
         const actionId = this.requireStringParam(args.request.parameters, "actionId", "execute_quick_action");
@@ -402,7 +514,7 @@ export class AaliyahRuntimeService {
           priority: this.readOptionalPriority(args.request.parameters?.priority),
           limit
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -416,16 +528,37 @@ export class AaliyahRuntimeService {
             totalPending: items.length
           }
         });
+        break;
       }
       case "approve_email_review_item": {
-        const reviewItemId = this.requireStringParam(args.request.parameters, "reviewItemId", "approve_email_review_item");
+        const reviewItemId = this.sessions.resolveReviewItemId(args.request.parameters, sessionResolution.session);
+        if (!reviewItemId) {
+          result = this.buildFallback({
+            runtimeRequestId,
+            activeMode,
+            generatedAt,
+            requestId: args.requestId ?? null,
+            resolvedIntent,
+            invokedSurface: "email-review-approve",
+            enforcement: {
+              ...enforcement.trace,
+              reason: "aaliyah_runtime_missing_current_review_item"
+            },
+            fallback: {
+              outcome: "escalate_for_clarification",
+              reason: "aaliyah_runtime_missing_current_review_item",
+              delegateToAgentId: null
+            }
+          });
+          break;
+        }
         const item = await this.email.approveReviewItem({
           tenantId: args.tenantId,
           reviewItemId,
           actorId: args.actorId,
           note: this.readOptionalString(args.request.parameters, "note")
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -439,16 +572,37 @@ export class AaliyahRuntimeService {
             item
           }
         });
+        break;
       }
       case "reject_email_review_item": {
-        const reviewItemId = this.requireStringParam(args.request.parameters, "reviewItemId", "reject_email_review_item");
+        const reviewItemId = this.sessions.resolveReviewItemId(args.request.parameters, sessionResolution.session);
+        if (!reviewItemId) {
+          result = this.buildFallback({
+            runtimeRequestId,
+            activeMode,
+            generatedAt,
+            requestId: args.requestId ?? null,
+            resolvedIntent,
+            invokedSurface: "email-review-reject",
+            enforcement: {
+              ...enforcement.trace,
+              reason: "aaliyah_runtime_missing_current_review_item"
+            },
+            fallback: {
+              outcome: "escalate_for_clarification",
+              reason: "aaliyah_runtime_missing_current_review_item",
+              delegateToAgentId: null
+            }
+          });
+          break;
+        }
         const item = await this.email.rejectReviewItem({
           tenantId: args.tenantId,
           reviewItemId,
           actorId: args.actorId,
           note: this.readOptionalString(args.request.parameters, "note")
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -462,9 +616,30 @@ export class AaliyahRuntimeService {
             item
           }
         });
+        break;
       }
       case "request_email_revision": {
-        const reviewItemId = this.requireStringParam(args.request.parameters, "reviewItemId", "request_email_revision");
+        const reviewItemId = this.sessions.resolveReviewItemId(args.request.parameters, sessionResolution.session);
+        if (!reviewItemId) {
+          result = this.buildFallback({
+            runtimeRequestId,
+            activeMode,
+            generatedAt,
+            requestId: args.requestId ?? null,
+            resolvedIntent,
+            invokedSurface: "email-review-request-revision",
+            enforcement: {
+              ...enforcement.trace,
+              reason: "aaliyah_runtime_missing_current_review_item"
+            },
+            fallback: {
+              outcome: "escalate_for_clarification",
+              reason: "aaliyah_runtime_missing_current_review_item",
+              delegateToAgentId: null
+            }
+          });
+          break;
+        }
         const note = this.requireStringParam(args.request.parameters, "note", "request_email_revision");
         const item = await this.email.requestReviewRevision({
           tenantId: args.tenantId,
@@ -472,7 +647,7 @@ export class AaliyahRuntimeService {
           actorId: args.actorId,
           note
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -486,15 +661,36 @@ export class AaliyahRuntimeService {
             item
           }
         });
+        break;
       }
       case "dispatch_approved_email": {
-        const reviewItemId = this.requireStringParam(args.request.parameters, "reviewItemId", "dispatch_approved_email");
+        const reviewItemId = this.sessions.resolveReviewItemId(args.request.parameters, sessionResolution.session);
+        if (!reviewItemId) {
+          result = this.buildFallback({
+            runtimeRequestId,
+            activeMode,
+            generatedAt,
+            requestId: args.requestId ?? null,
+            resolvedIntent,
+            invokedSurface: "email-approved-dispatch",
+            enforcement: {
+              ...enforcement.trace,
+              reason: "aaliyah_runtime_missing_current_review_item"
+            },
+            fallback: {
+              outcome: "escalate_for_clarification",
+              reason: "aaliyah_runtime_missing_current_review_item",
+              delegateToAgentId: null
+            }
+          });
+          break;
+        }
         const payload = await this.email.dispatchApprovedReviewItem({
           tenantId: args.tenantId,
           actorId: args.actorId,
           reviewItemId
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -505,10 +701,11 @@ export class AaliyahRuntimeService {
           payloadType: "email_dispatch_result",
           payload
         });
+        break;
       }
       case "get_ops_status": {
         const payload = await this.telemetry.getOpsStatusSummary({ tenantId: args.tenantId });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -519,10 +716,11 @@ export class AaliyahRuntimeService {
           payloadType: "ops_status",
           payload
         });
+        break;
       }
       case "get_incident_summary": {
         const payload = await this.telemetry.getIncidentSummary({ tenantId: args.tenantId });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -533,6 +731,7 @@ export class AaliyahRuntimeService {
           payloadType: "incident_summary",
           payload
         });
+        break;
       }
       case "switch_mode": {
         const targetMode = this.requireModeParam(args.request.parameters, activeMode);
@@ -545,7 +744,7 @@ export class AaliyahRuntimeService {
         if (boundaryDecision.access === "denied") {
           throw new Error("aaliyah_runtime_invalid_target_mode");
         }
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode: targetMode,
           resolvedIntent,
@@ -560,6 +759,7 @@ export class AaliyahRuntimeService {
             supportedCategories: this.admin.getSupportedRoutingCategories()
           }
         });
+        break;
       }
       case "preview_routing": {
         const category = this.requireRoutingCategory(args.request.parameters);
@@ -568,7 +768,7 @@ export class AaliyahRuntimeService {
           category,
           ...(jingleMode ? { jingleMode } : {})
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -583,6 +783,7 @@ export class AaliyahRuntimeService {
             decision
           }
         });
+        break;
       }
       case "process_voice_intake": {
         const payload = await this.voice.processInboundCall({
@@ -592,7 +793,7 @@ export class AaliyahRuntimeService {
           requestSource: "aaliyah-runtime",
           payload: this.requireVoicePayload(args.request.parameters)
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -603,12 +804,33 @@ export class AaliyahRuntimeService {
           payloadType: "voice_call_result",
           payload
         });
+        break;
       }
       case "get_voice_call_summary": {
-        const callId = this.requireStringParam(args.request.parameters, "callId", "get_voice_call_summary");
+        const callId = this.sessions.resolveVoiceCallId(args.request.parameters, sessionResolution.session);
+        if (!callId) {
+          result = this.buildFallback({
+            runtimeRequestId,
+            activeMode,
+            generatedAt,
+            requestId: args.requestId ?? null,
+            resolvedIntent,
+            invokedSurface: "voice-call-lookup",
+            enforcement: {
+              ...enforcement.trace,
+              reason: "aaliyah_runtime_missing_current_voice_call"
+            },
+            fallback: {
+              outcome: "escalate_for_clarification",
+              reason: "aaliyah_runtime_missing_current_voice_call",
+              delegateToAgentId: null
+            }
+          });
+          break;
+        }
         const payload = await this.voice.getCall({ tenantId: args.tenantId, callId });
         if (!payload) {
-          return this.buildFallback({
+          result = this.buildFallback({
             runtimeRequestId,
             activeMode,
             generatedAt,
@@ -625,8 +847,9 @@ export class AaliyahRuntimeService {
               delegateToAgentId: null
             }
           });
+          break;
         }
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -637,13 +860,14 @@ export class AaliyahRuntimeService {
           payloadType: "voice_call_summary",
           payload
         });
+        break;
       }
       case "get_pending_voice_escalations": {
         const items = await this.voice.listPendingEscalations({
           tenantId: args.tenantId,
           limit: this.readOptionalLimit(args.request.parameters?.limit)
         });
-        return this.buildSuccess({
+        result = this.buildSuccess({
           runtimeRequestId,
           activeMode,
           resolvedIntent,
@@ -657,12 +881,14 @@ export class AaliyahRuntimeService {
             totalPending: items.length
           }
         });
+        break;
       }
       }
+      return this.finalizeRuntimeResult(sessionResolution.session, args.request, generatedAt, result);
     } catch (error) {
       if (error instanceof VoiceIntakeValidationError) {
         const message = error.message;
-        return this.buildFallback({
+        return this.finalizeRuntimeResult(sessionResolution.session, args.request, generatedAt, this.buildFallback({
           runtimeRequestId,
           activeMode,
           generatedAt,
@@ -678,12 +904,12 @@ export class AaliyahRuntimeService {
             reason: message,
             delegateToAgentId: null
           }
-        });
+        }));
       }
       if (error instanceof Error && error.message.startsWith("aaliyah_runtime_")) {
         const fallbackOutcome =
           error.message === "aaliyah_runtime_invalid_target_mode" ? "deny_due_to_mode_boundary" : "escalate_for_clarification";
-        return this.buildFallback({
+        return this.finalizeRuntimeResult(sessionResolution.session, args.request, generatedAt, this.buildFallback({
           runtimeRequestId,
           activeMode,
           generatedAt,
@@ -699,7 +925,7 @@ export class AaliyahRuntimeService {
             reason: error.message,
             delegateToAgentId: null
           }
-        });
+        }));
       }
       throw error;
     }
@@ -738,6 +964,8 @@ export class AaliyahRuntimeService {
       | "founder_review_queue"
       | "founder_queue_item"
       | "founder_queue_summary"
+      | "session_snapshot"
+      | "session_reset"
       | "approval_queue"
       | "email_review_queue"
       | "email_review_action"
@@ -768,6 +996,21 @@ export class AaliyahRuntimeService {
       },
       fallback: null
     } as AaliyahRuntimeResult;
+  }
+
+  private async finalizeRuntimeResult(
+    session: import("./session-types.js").AaliyahSessionContext,
+    request: AaliyahRuntimeRequestInput,
+    generatedAt: string,
+    result: AaliyahRuntimeResult
+  ): Promise<AaliyahRuntimeResult> {
+    await this.sessions.applyRuntimeResult({
+      session,
+      request,
+      result,
+      generatedAt
+    });
+    return result;
   }
 
   private buildFallback(args: {

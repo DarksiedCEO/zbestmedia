@@ -19,6 +19,10 @@ export type {
 } from "./preference-types.js";
 export * from "./preferences.js";
 export * from "./memory-boundary.js";
+export * from "./session-types.js";
+export * from "./session-state.js";
+export * from "./session-guards.js";
+export * from "./session.js";
 export * from "./review-queue-types.js";
 export * from "./review-queue.js";
 export * from "./command-surface-types.js";

@@ -37,6 +37,8 @@ import {
   AaliyahPreferenceListResponseSchema,
   AaliyahReviewQueueDetailResponseSchema,
   AaliyahReviewQueueListResponseSchema,
+  AaliyahSessionResetResponseSchema,
+  AaliyahSessionSnapshotResponseSchema,
   AaliyahQuickActionsResponseSchema,
   AaliyahRuntimeResponseSchema,
   VoiceIntakeResponseSchema,
@@ -2235,6 +2237,79 @@ describe("agent routes", () => {
       updatedAt: "2026-03-15T00:00:00.000Z"
     }))
   };
+  const aaliyahSessionService = {
+    getSessionSnapshot: vi.fn(async () => ({
+      sessionId: "aaliyah-session:1",
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      actorId: "actor-1",
+      principalContext: "founder",
+      activeModeState: {
+        activeMode: "founder",
+        previousMode: null,
+        switchedAt: "2026-03-15T00:00:00.000Z",
+        switchReason: "fallback_to_default",
+        boundaryDecisionId: null
+      },
+      interactionState: {
+        lastInteractionAt: "2026-03-15T00:10:00.000Z",
+        lastIntent: "get_founder_review_queue",
+        lastResolvedIntent: "get_founder_review_queue",
+        intentTrail: [],
+        workingItem: null,
+        reviewApprovalContext: null,
+        pendingDisambiguation: null
+      },
+      retentionPolicy: {
+        intentTrailMaxEntries: 12,
+        idleTtlSeconds: 14400,
+        hardTtlSeconds: 86400,
+        snapshotIntentTrailEntries: 6
+      },
+      expiresAt: "2026-03-15T04:10:00.000Z",
+      hardExpiresAt: "2026-03-16T00:00:00.000Z",
+      lastResetAt: null,
+      lastResetReason: null,
+      updatedAt: "2026-03-15T00:10:00.000Z",
+      version: 1
+    })),
+    resetSession: vi.fn(async () => ({
+      resetReason: "manual_reset",
+      session: {
+        sessionId: "aaliyah-session:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        actorId: "actor-1",
+        principalContext: "founder",
+        activeModeState: {
+          activeMode: "founder",
+          previousMode: "zbestmedia",
+          switchedAt: "2026-03-15T00:20:00.000Z",
+          switchReason: "fallback_to_default",
+          boundaryDecisionId: null
+        },
+        interactionState: {
+          lastInteractionAt: null,
+          lastIntent: null,
+          lastResolvedIntent: null,
+          intentTrail: [],
+          workingItem: null,
+          reviewApprovalContext: null,
+          pendingDisambiguation: null
+        },
+        retentionPolicy: {
+          intentTrailMaxEntries: 12,
+          idleTtlSeconds: 14400,
+          hardTtlSeconds: 86400,
+          snapshotIntentTrailEntries: 6
+        },
+        expiresAt: "2026-03-15T04:20:00.000Z",
+        hardExpiresAt: "2026-03-16T00:20:00.000Z",
+        lastResetAt: "2026-03-15T00:20:00.000Z",
+        lastResetReason: "manual_reset",
+        updatedAt: "2026-03-15T00:20:00.000Z",
+        version: 2
+      }
+    }))
+  };
   const aaliyahCommandSurfaceService = {
     generateCommandSurface: vi.fn(async ({ tenantId, mode }: { tenantId: string; mode: "founder" | "zbestmedia" }) => ({
       shellId: "shell:1",
@@ -2690,6 +2765,7 @@ describe("agent routes", () => {
         aaliyahPreferenceService: aaliyahPreferenceService as never,
         aaliyahMemoryBoundaryService: aaliyahMemoryBoundaryService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
+        aaliyahSessionService: aaliyahSessionService as never,
         aaliyahRuntimeService: aaliyahRuntimeService as never,
         emailService,
         voiceService: voiceService as never,
@@ -2915,6 +2991,15 @@ describe("agent routes", () => {
       method: "GET",
       url: "/v1/agent-os/aaliyah/review-queue/queue:item:1?mode=founder"
     });
+    const sessionRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/session"
+    });
+    const resetRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/session/reset",
+      payload: { scope: "hard" }
+    });
 
     expect(shellRes.statusCode).toBe(200);
     const shell = AaliyahCommandSurfaceResponseSchema.parse(shellRes.json());
@@ -2949,6 +3034,14 @@ describe("agent routes", () => {
     expect(queueItemRes.statusCode).toBe(200);
     const queueItem = AaliyahReviewQueueDetailResponseSchema.parse(queueItemRes.json());
     expect(queueItem.item.itemType).toBe("approval_required");
+
+    expect(sessionRes.statusCode).toBe(200);
+    const session = AaliyahSessionSnapshotResponseSchema.parse(sessionRes.json());
+    expect(session.session.activeModeState.activeMode).toBe("founder");
+
+    expect(resetRes.statusCode).toBe(200);
+    const reset = AaliyahSessionResetResponseSchema.parse(resetRes.json());
+    expect(reset.reset.resetReason).toBe("manual_reset");
   });
 
   it("exposes founder preference mutation routes", async () => {

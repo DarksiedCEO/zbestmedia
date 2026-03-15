@@ -14,6 +14,7 @@ import type { AaliyahConfidenceSummary, AaliyahInterruptionSummary } from "./con
 import type { AaliyahMemoryBoundarySummary } from "./memory-boundary.js";
 import type { AaliyahPreferenceList } from "./preference-types.js";
 import type { AaliyahFounderReviewQueue, AaliyahFounderReviewQueueSummary, AaliyahFounderQueueItem } from "./review-queue-types.js";
+import type { AaliyahSessionResetResult, AaliyahSessionSnapshotView } from "./session-types.js";
 import type { EmailDraftReviewRecord } from "../email/review-types.js";
 import type { EmailDispatchResult } from "../email/dispatch-types.js";
 import type { AdminRoutingCategoryDescriptor } from "../admin/types.js";
@@ -96,7 +97,9 @@ export type AaliyahRuntimeIntent =
   | "get_memory_boundary_summary"
   | "get_founder_review_queue"
   | "get_founder_queue_item"
-  | "get_founder_queue_summary";
+  | "get_founder_queue_summary"
+  | "get_session_snapshot"
+  | "reset_session_context";
 
 export type AaliyahRuntimePayloadType =
   | "founder_briefing"
@@ -119,7 +122,9 @@ export type AaliyahRuntimePayloadType =
   | "memory_boundary_summary"
   | "founder_review_queue"
   | "founder_queue_item"
-  | "founder_queue_summary";
+  | "founder_queue_summary"
+  | "session_snapshot"
+  | "session_reset";
 
 export type AaliyahRuntimeRequestInput = {
   intent: string;
@@ -189,7 +194,9 @@ export type AaliyahRuntimeSuccessPayload =
   | { payloadType: "memory_boundary_summary"; payload: AaliyahMemoryBoundarySummary }
   | { payloadType: "founder_review_queue"; payload: AaliyahFounderReviewQueue }
   | { payloadType: "founder_queue_item"; payload: AaliyahFounderQueueItem }
-  | { payloadType: "founder_queue_summary"; payload: AaliyahFounderReviewQueueSummary };
+  | { payloadType: "founder_queue_summary"; payload: AaliyahFounderReviewQueueSummary }
+  | { payloadType: "session_snapshot"; payload: AaliyahSessionSnapshotView }
+  | { payloadType: "session_reset"; payload: AaliyahSessionResetResult };
 
 export type AaliyahRuntimeFallback = {
   outcome: Exclude<AaliyahRuntimeFallbackOutcome, "proceed_with_orchestration">;
