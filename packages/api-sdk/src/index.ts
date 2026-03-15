@@ -144,6 +144,72 @@ export type AaliyahReviewQueue = AaliyahReviewQueueSummary & {
   items: AaliyahReviewQueueItem[];
 };
 
+export type AaliyahTriageClass =
+  | "act_now"
+  | "review_today"
+  | "blocked"
+  | "stale"
+  | "monitor"
+  | "resolved_or_terminal";
+
+export type AaliyahPriorityBand = "p0" | "p1" | "p2" | "p3";
+
+export type AaliyahNextFounderAction =
+  | "approve_review_item"
+  | "reject_review_item"
+  | "request_revision"
+  | "dispatch_email"
+  | "review_voice_escalation"
+  | "review_incident"
+  | "review_routing_preview"
+  | "refresh_briefing"
+  | "select_new_item"
+  | "wait"
+  | "none_terminal";
+
+export type AaliyahInboxItem = {
+  inboxItemId: string;
+  queueItemId: string;
+  sourceSubsystem: string;
+  sourceItemId: string;
+  itemType: AaliyahReviewQueueItem["itemType"];
+  title: string;
+  summary: string;
+  activeMode: AaliyahMode;
+  urgency: AaliyahUrgency;
+  risk: AaliyahRisk;
+  triageClass: AaliyahTriageClass;
+  priorityBand: AaliyahPriorityBand;
+  reasonCodes: string[];
+  nextFounderAction: AaliyahNextFounderAction;
+  founderAttentionRequired: boolean;
+  interruptionClass: AaliyahInterruptionClass;
+  confidenceLevel: AaliyahConfidenceLevel;
+  followThroughStatus: "active" | "completed" | "abandoned" | "escalated" | "invalidated" | "reset" | null;
+  followThroughClosureReason: string | null;
+  nextGovernedAction: string | null;
+  isBlocked: boolean;
+  isStale: boolean;
+  ageSeconds: number;
+  provenanceSummary: AaliyahReviewQueueItem["provenanceSummary"];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AaliyahInboxSummary = {
+  inboxId: string;
+  generatedAt: string;
+  activeMode: AaliyahMode;
+  manifestVersion: string;
+  totalItems: number;
+  countsByTriageClass: Record<AaliyahTriageClass, number>;
+  countsByPriorityBand: Record<AaliyahPriorityBand, number>;
+  topActionableItems: AaliyahInboxItem[];
+  blockedItems: AaliyahInboxItem[];
+  staleItems: AaliyahInboxItem[];
+  items: AaliyahInboxItem[];
+};
+
 export type AaliyahInterruptionItem = {
   sourceItemId: string;
   title: string;
@@ -239,6 +305,7 @@ export type AaliyahCommandSurface = {
   confidenceSummary: AaliyahConfidenceSummary;
   interruptionQueue: AaliyahInterruptionSummary;
   founderReviewQueue: AaliyahReviewQueueSummary;
+  founderInbox: AaliyahInboxSummary;
   quickActions: AaliyahQuickAction[];
   provenanceSummary: {
     orgManifestVersion: string;
@@ -522,6 +589,18 @@ export async function getAaliyahReviewQueue(args: {
 }): Promise<{ manifestVersion: string; resourceType: "aaliyah_review_queue"; queue: AaliyahReviewQueue }> {
   return args.fetchClient({
     url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/review-queue`, { mode: args.mode }),
+    bearer: args.bearer,
+  });
+}
+
+export async function getAaliyahInbox(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+}): Promise<{ manifestVersion: string; resourceType: "aaliyah_inbox"; inbox: AaliyahInboxSummary }> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/inbox`, { mode: args.mode }),
     bearer: args.bearer,
   });
 }

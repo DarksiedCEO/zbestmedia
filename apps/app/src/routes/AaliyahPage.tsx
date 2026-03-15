@@ -3,17 +3,16 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import {
   createFetchClient,
   getAaliyahCommandSurface,
-  getAaliyahReviewQueue,
+  getAaliyahInbox,
   getAaliyahSessionSnapshot,
   resetAaliyahSession,
   resolveAppApiBaseUrl,
   readApiEnv,
   runAaliyahRuntime,
+  type AaliyahInboxItem,
   type AaliyahCommandSurface,
   type AaliyahMode,
   type AaliyahQuickAction,
-  type AaliyahReviewQueue,
-  type AaliyahReviewQueueItem,
   type AaliyahRuntimeResponse,
   type AaliyahSessionSnapshot,
 } from "@zbest/api-sdk";
@@ -96,7 +95,7 @@ export default function AaliyahPage() {
 
   const activeMode = sessionQuery.data?.session.activeModeState.activeMode ?? "founder";
 
-  const [shellQuery, reviewQueueQuery] = useQueries({
+  const [shellQuery, inboxQuery] = useQueries({
     queries: [
       {
         queryKey: ["aaliyah", "command-surface", activeMode],
@@ -111,10 +110,10 @@ export default function AaliyahPage() {
         refetchInterval: 20_000,
       },
       {
-        queryKey: ["aaliyah", "review-queue", activeMode],
+        queryKey: ["aaliyah", "inbox", activeMode],
         enabled: Boolean(envData.env && envData.appApiBaseUrl),
         queryFn: async () =>
-          getAaliyahReviewQueue({
+          getAaliyahInbox({
             baseUrl: envData.appApiBaseUrl!,
             bearer: envData.env!.VITE_POLICY_BEARER,
             fetchClient,
@@ -180,17 +179,17 @@ export default function AaliyahPage() {
     },
   });
 
-  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || reviewQueueQuery.isLoading;
-  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || reviewQueueQuery.isError;
+  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading;
+  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError;
   const errorMessage =
     envData.error ??
     (sessionQuery.error as Error | undefined)?.message ??
     (shellQuery.error as Error | undefined)?.message ??
-    (reviewQueueQuery.error as Error | undefined)?.message ??
+    (inboxQuery.error as Error | undefined)?.message ??
     null;
 
   const shell = shellQuery.data?.shell;
-  const reviewQueue = reviewQueueQuery.data?.queue;
+  const inbox = inboxQuery.data?.inbox;
   const session = sessionQuery.data?.session;
 
   async function executeIntent(intent: string, parameters?: Record<string, unknown>, mode?: AaliyahMode) {
@@ -206,7 +205,7 @@ export default function AaliyahPage() {
     await executeIntent("execute_quick_action", { actionId: action.actionId });
   }
 
-  async function handleQueueAction(item: AaliyahReviewQueueItem, action: string) {
+  async function handleQueueAction(item: AaliyahInboxItem, action: string) {
     switch (action) {
       case "open_review_item":
         await executeIntent("get_founder_queue_item", { queueItemId: item.queueItemId });
@@ -294,7 +293,7 @@ export default function AaliyahPage() {
     >
       {isLoading ? (
         <LoadingState />
-      ) : isError || !shell || !reviewQueue || !session ? (
+      ) : isError || !shell || !inbox || !session ? (
         <ErrorState message={errorMessage ?? "Failed to load Aaliyah founder console."} />
       ) : (
         <div style={{ display: "grid", gap: 16 }}>
@@ -324,7 +323,7 @@ export default function AaliyahPage() {
             <MetricTile label="What Matters" value={`${shell.whatMattersNow.length}`} accent />
             <MetricTile label="Open Approvals" value={`${shell.openApprovals.totalPending}`} />
             <MetricTile label="Interrupt Now" value={`${shell.interruptQueueSummary.interruptNowCount}`} />
-            <MetricTile label="Founder Queue" value={`${reviewQueue.totalFounderActionableItems}`} />
+            <MetricTile label="Founder Inbox" value={`${inbox.totalItems}`} />
           </div>
 
           {runtimeNotice || runtimeError ? (
@@ -363,12 +362,12 @@ export default function AaliyahPage() {
                 subtitle="One governed queue for approvals, dispatch-ready actions, escalations, and founder-relevant incidents."
               >
                 <div style={{ display: "grid", gap: 12 }}>
-                  {reviewQueue.items.length === 0 ? (
+                  {inbox.items.length === 0 ? (
                     <EmptyState text="The founder queue is clear." />
                   ) : (
-                    reviewQueue.items.map((item) => (
-                      <QueueItemCard
-                        key={item.queueItemId}
+                    inbox.items.map((item) => (
+                      <InboxItemCard
+                        key={item.inboxItemId}
                         item={item}
                         busy={runtimeMutation.isPending}
                         onAction={(action) => void handleQueueAction(item, action)}
@@ -420,12 +419,27 @@ export default function AaliyahPage() {
   );
 }
 
-function QueueItemCard({
+function triageTone(triageClass: string) {
+  switch (triageClass) {
+    case "act_now":
+      return "filled";
+    case "blocked":
+      return "filled";
+    case "stale":
+      return "outline";
+    case "resolved_or_terminal":
+      return "outline";
+    default:
+      return "outline";
+  }
+}
+
+function InboxItemCard({
   item,
   busy,
   onAction,
 }: {
-  item: AaliyahReviewQueueItem;
+  item: AaliyahInboxItem;
   busy: boolean;
   onAction: (action: string) => void;
 }) {
@@ -435,19 +449,28 @@ function QueueItemCard({
         <div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ fontWeight: 650 }}>{item.title}</div>
+            <Tag label={item.priorityBand.toUpperCase()} tone={item.priorityBand === "p0" || item.priorityBand === "p1" ? "filled" : "outline"} />
+            <Tag label={item.triageClass.replaceAll("_", " ")} tone={triageTone(item.triageClass)} />
             <Tag label={item.itemType.replaceAll("_", " ")} />
             <Tag label={interruptionLabel(item.interruptionClass)} tone="outline" />
+            {item.isBlocked ? <Tag label="blocked" tone="filled" /> : null}
+            {item.isStale ? <Tag label="stale" tone="outline" /> : null}
           </div>
           <div style={{ marginTop: 6, color: tokens.colors.muted, fontSize: 13 }}>{item.summary}</div>
+          <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {item.reasonCodes.map((reason) => (
+              <Tag key={reason} label={reason.replaceAll("_", " ")} tone="outline" />
+            ))}
+          </div>
         </div>
         <div style={{ display: "grid", gap: 6, justifyItems: "end" }}>
           <span style={{ color: urgencyTone(item.urgency), fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>{item.urgency}</span>
-          <span style={{ color: tokens.colors.muted, fontSize: 12 }}>confidence {item.confidenceLevel}</span>
+          <span style={{ color: tokens.colors.muted, fontSize: 12 }}>next {item.nextFounderAction.replaceAll("_", " ")}</span>
         </div>
       </div>
 
       <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {item.allowedNextActions.map((action) => (
+        {actionListForInbox(item).map((action) => (
           <button key={action} style={chipButtonStyle} onClick={() => onAction(action)} disabled={busy}>
             {actionLabel(action)}
           </button>
@@ -455,6 +478,23 @@ function QueueItemCard({
       </div>
     </div>
   );
+}
+
+function actionListForInbox(item: AaliyahInboxItem) {
+  switch (item.nextFounderAction) {
+    case "approve_review_item":
+      return ["open_review_item", "approve_review_item", "reject_review_item", "request_review_revision"];
+    case "dispatch_email":
+      return ["open_review_item", "dispatch_approved_email"];
+    case "review_voice_escalation":
+      return ["open_voice_escalation"];
+    case "review_incident":
+      return ["open_incident"];
+    case "refresh_briefing":
+      return ["refresh_founder_briefing"];
+    default:
+      return [];
+  }
 }
 
 function InterruptionPanel({ shell }: { shell: AaliyahCommandSurface }) {

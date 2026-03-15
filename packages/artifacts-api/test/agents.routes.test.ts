@@ -33,6 +33,8 @@ import {
   AaliyahConfidenceSummaryResponseSchema,
   AaliyahInterruptionsResponseSchema,
   AaliyahMemoryBoundaryResponseSchema,
+  AaliyahInboxItemResponseSchema,
+  AaliyahInboxListResponseSchema,
   AaliyahPreferenceDetailResponseSchema,
   AaliyahPreferenceListResponseSchema,
   AaliyahReviewQueueDetailResponseSchema,
@@ -2455,6 +2457,95 @@ describe("agent routes", () => {
       attentionFlags: []
     }))
   };
+  const aaliyahTriageService = {
+    getPrioritizedInbox: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+      inboxId: "inbox:1",
+      generatedAt: "2026-03-15T01:00:00.000Z",
+      activeMode: mode,
+      manifestVersion: "2026-03-12.v1",
+      totalItems: 2,
+      countsByTriageClass: {
+        act_now: 1,
+        review_today: 1,
+        blocked: 0,
+        stale: 0,
+        monitor: 0,
+        resolved_or_terminal: 0
+      },
+      countsByPriorityBand: { p0: 1, p1: 1, p2: 0, p3: 0 },
+      topActionableItems: [
+        {
+          inboxItemId: "inbox:queue:item:1",
+          queueItemId: "queue:item:1",
+          sourceSubsystem: "email_review_queue",
+          sourceItemId: "review:1",
+          itemType: "approval_required",
+          title: "Review founder email",
+          summary: "Founder approval is needed.",
+          activeMode: mode,
+          urgency: "high",
+          risk: "medium",
+          triageClass: "review_today",
+          priorityBand: "p1",
+          reasonCodes: ["approval_required", "founder_attention_required"],
+          nextFounderAction: "approve_review_item",
+          founderAttentionRequired: true,
+          interruptionClass: "same_day_briefing",
+          confidenceLevel: "high",
+          followThroughStatus: null,
+          followThroughClosureReason: null,
+          nextGovernedAction: null,
+          isBlocked: false,
+          isStale: false,
+          ageSeconds: 600,
+          provenanceSummary: {
+            manifestVersion: "2026-03-12.v1",
+            references: ["review:1"],
+            contributingSourceItemIds: ["review:1"]
+          },
+          createdAt: "2026-03-15T00:00:00.000Z",
+          updatedAt: "2026-03-15T00:00:00.000Z"
+        }
+      ],
+      blockedItems: [],
+      staleItems: [],
+      items: []
+    })),
+    getBlockedItems: vi.fn(async () => []),
+    getStaleItems: vi.fn(async () => []),
+    getInboxItem: vi.fn(async () => ({
+      inboxItemId: "inbox:queue:item:1",
+      queueItemId: "queue:item:1",
+      sourceSubsystem: "email_review_queue",
+      sourceItemId: "review:1",
+      itemType: "approval_required",
+      title: "Review founder email",
+      summary: "Founder approval is needed.",
+      activeMode: "founder",
+      urgency: "high",
+      risk: "medium",
+      triageClass: "review_today",
+      priorityBand: "p1",
+      reasonCodes: ["approval_required"],
+      nextFounderAction: "approve_review_item",
+      founderAttentionRequired: true,
+      interruptionClass: "same_day_briefing",
+      confidenceLevel: "high",
+      followThroughStatus: null,
+      followThroughClosureReason: null,
+      nextGovernedAction: null,
+      isBlocked: false,
+      isStale: false,
+      ageSeconds: 600,
+      provenanceSummary: {
+        manifestVersion: "2026-03-12.v1",
+        references: ["review:1"],
+        contributingSourceItemIds: ["review:1"]
+      },
+      createdAt: "2026-03-15T00:00:00.000Z",
+      updatedAt: "2026-03-15T00:00:00.000Z"
+    }))
+  };
   const aaliyahCommandSurfaceService = {
     generateCommandSurface: vi.fn(async ({ tenantId, mode }: { tenantId: string; mode: "founder" | "zbestmedia" }) => ({
       shellId: "shell:1",
@@ -2551,6 +2642,97 @@ describe("agent routes", () => {
         },
         topActionableItems: [],
         totalFounderActionableItems: 3
+      },
+      founderInbox: {
+        inboxId: "inbox:1",
+        generatedAt: "2026-03-15T00:00:00.000Z",
+        activeMode: mode,
+        manifestVersion: "2026-03-12.v1",
+        totalItems: 1,
+        countsByTriageClass: {
+          act_now: 0,
+          review_today: 1,
+          blocked: 0,
+          stale: 0,
+          monitor: 0,
+          resolved_or_terminal: 0
+        },
+        countsByPriorityBand: {
+          p0: 0,
+          p1: 1,
+          p2: 0,
+          p3: 0
+        },
+        topActionableItems: [
+          {
+            inboxItemId: "inbox:queue:item:1",
+            queueItemId: "queue:item:1",
+            sourceSubsystem: "email_review_queue",
+            sourceItemId: "review:1",
+            itemType: "approval_required",
+            title: "Review founder email",
+            summary: "Founder approval is needed.",
+            activeMode: mode,
+            urgency: "high",
+            risk: "medium",
+            triageClass: "review_today",
+            priorityBand: "p1",
+            reasonCodes: ["approval_required", "founder_attention_required"],
+            nextFounderAction: "approve_review_item",
+            founderAttentionRequired: true,
+            interruptionClass: "same_day_briefing",
+            confidenceLevel: "high",
+            followThroughStatus: null,
+            followThroughClosureReason: null,
+            nextGovernedAction: null,
+            isBlocked: false,
+            isStale: false,
+            ageSeconds: 600,
+            provenanceSummary: {
+              manifestVersion: "2026-03-12.v1",
+              references: ["review:1"],
+              contributingSourceItemIds: ["review:1"]
+            },
+            createdAt: "2026-03-15T00:00:00.000Z",
+            updatedAt: "2026-03-15T00:00:00.000Z"
+          }
+        ],
+        blockedItems: [],
+        staleItems: [],
+        items: [
+          {
+            inboxItemId: "inbox:queue:item:1",
+            queueItemId: "queue:item:1",
+            sourceSubsystem: "email_review_queue",
+            sourceItemId: "review:1",
+            itemType: "approval_required",
+            title: "Review founder email",
+            summary: "Founder approval is needed.",
+            activeMode: mode,
+            urgency: "high",
+            risk: "medium",
+            triageClass: "review_today",
+            priorityBand: "p1",
+            reasonCodes: ["approval_required", "founder_attention_required"],
+            nextFounderAction: "approve_review_item",
+            founderAttentionRequired: true,
+            interruptionClass: "same_day_briefing",
+            confidenceLevel: "high",
+            followThroughStatus: null,
+            followThroughClosureReason: null,
+            nextGovernedAction: null,
+            isBlocked: false,
+            isStale: false,
+            ageSeconds: 600,
+            provenanceSummary: {
+              manifestVersion: "2026-03-12.v1",
+              references: ["review:1"],
+              contributingSourceItemIds: ["review:1"]
+            },
+            createdAt: "2026-03-15T00:00:00.000Z",
+            updatedAt: "2026-03-15T00:00:00.000Z"
+          }
+        ]
       },
       quickActions: [
         {
@@ -2910,6 +3092,7 @@ describe("agent routes", () => {
         aaliyahPreferenceService: aaliyahPreferenceService as never,
         aaliyahMemoryBoundaryService: aaliyahMemoryBoundaryService as never,
         aaliyahDiagnosticsService: aaliyahDiagnosticsService as never,
+        aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
         aaliyahFollowThroughService: aaliyahFollowThroughService as never,
         aaliyahSessionService: aaliyahSessionService as never,
@@ -3138,6 +3321,22 @@ describe("agent routes", () => {
       method: "GET",
       url: "/v1/agent-os/aaliyah/review-queue/queue:item:1?mode=founder"
     });
+    const inboxRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/inbox?mode=founder"
+    });
+    const blockedInboxRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/inbox/blocked?mode=founder"
+    });
+    const staleInboxRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/inbox/stale?mode=founder"
+    });
+    const inboxItemRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/inbox/inbox:queue:item:1?mode=founder"
+    });
     const sessionRes = await app.inject({
       method: "GET",
       url: "/v1/agent-os/aaliyah/session"
@@ -3201,6 +3400,23 @@ describe("agent routes", () => {
     expect(queueItemRes.statusCode).toBe(200);
     const queueItem = AaliyahReviewQueueDetailResponseSchema.parse(queueItemRes.json());
     expect(queueItem.item.itemType).toBe("approval_required");
+
+    expect(inboxRes.statusCode).toBe(200);
+    const inbox = AaliyahInboxListResponseSchema.parse(inboxRes.json());
+    expect(inbox.inbox.activeMode).toBe("founder");
+    expect(inbox.inbox.topActionableItems[0]?.nextFounderAction).toBe("approve_review_item");
+
+    expect(blockedInboxRes.statusCode).toBe(200);
+    const blockedInbox = AaliyahInboxListResponseSchema.parse(blockedInboxRes.json());
+    expect(blockedInbox.inbox.totalItems).toBe(0);
+
+    expect(staleInboxRes.statusCode).toBe(200);
+    const staleInbox = AaliyahInboxListResponseSchema.parse(staleInboxRes.json());
+    expect(staleInbox.inbox.totalItems).toBe(0);
+
+    expect(inboxItemRes.statusCode).toBe(200);
+    const inboxItem = AaliyahInboxItemResponseSchema.parse(inboxItemRes.json());
+    expect(inboxItem.item.inboxItemId).toBe("inbox:queue:item:1");
 
     expect(sessionRes.statusCode).toBe(200);
     const session = AaliyahSessionSnapshotResponseSchema.parse(sessionRes.json());

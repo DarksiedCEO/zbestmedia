@@ -8,6 +8,7 @@ import { AaliyahPreferenceService } from "./preferences.js";
 import { AaliyahFounderReviewQueueService } from "./review-queue.js";
 import { AaliyahSessionContextService } from "./session.js";
 import { AaliyahFollowThroughService } from "./follow-through.js";
+import { AaliyahFounderInboxTriageService } from "./triage.js";
 import { AaliyahRuntimeEnforcementService } from "./runtime-enforcement.js";
 import type {
   AaliyahRuntimeDecisionTrace,
@@ -58,7 +59,10 @@ const SUPPORTED_INTENTS = new Set<AaliyahRuntimeIntent>([
   "escalate_active_item",
   "invalidate_active_item",
   "get_active_follow_through",
-  "get_follow_through_history"
+  "get_follow_through_history",
+  "get_prioritized_founder_inbox",
+  "get_blocked_founder_items",
+  "get_stale_founder_items"
 ]);
 
 const DEFAULT_MODE: AaliyahRuntimeMode = "founder";
@@ -78,6 +82,7 @@ export class AaliyahRuntimeService {
     private readonly reviewQueue: AaliyahFounderReviewQueueService,
     private readonly sessions: AaliyahSessionContextService,
     private readonly followThrough: AaliyahFollowThroughService,
+    private readonly triage: AaliyahFounderInboxTriageService,
     private readonly preferences?: AaliyahPreferenceService,
     boundary?: AaliyahMemoryBoundaryService
   ) {
@@ -201,6 +206,7 @@ export class AaliyahRuntimeService {
       case "get_founder_command_surface": {
         const payload = await this.commandSurface.generateCommandSurface({
           tenantId: args.tenantId,
+          actorId: args.actorId,
           mode: activeMode
         });
         result = this.buildSuccess({
@@ -404,6 +410,69 @@ export class AaliyahRuntimeService {
           enforcement: enforcement.trace,
           payloadType: "founder_queue_summary",
           payload
+        });
+        break;
+      }
+      case "get_prioritized_founder_inbox": {
+        const payload = await this.triage.getPrioritizedInbox({
+          tenantId: args.tenantId,
+          actorId: args.actorId,
+          principalContext: args.principalContext ?? "founder",
+          mode: activeMode,
+          generatedAt
+        });
+        result = this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-founder-inbox",
+          enforcement: enforcement.trace,
+          payloadType: "founder_inbox",
+          payload
+        });
+        break;
+      }
+      case "get_blocked_founder_items": {
+        const items = await this.triage.getBlockedItems({
+          tenantId: args.tenantId,
+          actorId: args.actorId,
+          principalContext: args.principalContext ?? "founder",
+          mode: activeMode,
+          generatedAt
+        });
+        result = this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-founder-inbox",
+          enforcement: enforcement.trace,
+          payloadType: "blocked_founder_items",
+          payload: { items, total: items.length }
+        });
+        break;
+      }
+      case "get_stale_founder_items": {
+        const items = await this.triage.getStaleItems({
+          tenantId: args.tenantId,
+          actorId: args.actorId,
+          principalContext: args.principalContext ?? "founder",
+          mode: activeMode,
+          generatedAt
+        });
+        result = this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-founder-inbox",
+          enforcement: enforcement.trace,
+          payloadType: "stale_founder_items",
+          payload: { items, total: items.length }
         });
         break;
       }
@@ -1062,6 +1131,9 @@ export class AaliyahRuntimeService {
       | "follow_through_active"
       | "follow_through_action"
       | "follow_through_history"
+      | "founder_inbox"
+      | "blocked_founder_items"
+      | "stale_founder_items"
       | "approval_queue"
       | "email_review_queue"
       | "email_review_action"

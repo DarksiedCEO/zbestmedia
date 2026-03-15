@@ -5,6 +5,7 @@ import {
   AaliyahCommandSurfaceService,
   AaliyahDiagnosticsService,
   AaliyahFounderBriefingService,
+  AaliyahFounderInboxTriageService,
   AaliyahMemoryBoundaryService,
   AaliyahPreferenceService,
   AaliyahFounderReviewQueueService,
@@ -124,6 +125,11 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
     voiceService,
     incidentService
   );
+  const aaliyahTriageService = new AaliyahFounderInboxTriageService(
+    agentOrgService,
+    aaliyahReviewQueueService,
+    agentRepository
+  );
   const aaliyahCommandSurfaceService = new AaliyahCommandSurfaceService(
     agentOrgService,
     aaliyahBriefingService,
@@ -131,6 +137,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
     voiceService,
     telemetryService,
     aaliyahReviewQueueService,
+    aaliyahTriageService,
     aaliyahPreferenceService,
     aaliyahMemoryBoundaryService
   );
@@ -145,6 +152,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
     aaliyahReviewQueueService,
     aaliyahSessionService,
     aaliyahFollowThroughService,
+    aaliyahTriageService,
     aaliyahPreferenceService,
     aaliyahMemoryBoundaryService
   );
@@ -207,6 +215,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       aaliyahMemoryBoundaryService,
       aaliyahDiagnosticsService,
       aaliyahReviewQueueService,
+      aaliyahTriageService,
       aaliyahFollowThroughService,
       aaliyahSessionService,
       aaliyahRuntimeService,

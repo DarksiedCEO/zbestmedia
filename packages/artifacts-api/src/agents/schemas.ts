@@ -1127,6 +1127,7 @@ const AaliyahCommandSurfaceSchema = z.object({
   confidenceSummary: AaliyahConfidenceSummarySchema,
   interruptionQueue: AaliyahInterruptionSummarySchema,
   founderReviewQueue: z.lazy(() => AaliyahReviewQueueSummarySchema),
+  founderInbox: z.lazy(() => AaliyahInboxSummarySchema),
   quickActions: z.array(AaliyahQuickActionSchema),
   provenanceSummary: AaliyahCommandSurfaceProvenanceSummarySchema
 });
@@ -1469,6 +1470,141 @@ export const AaliyahReviewQueueDetailResponseSchema = z.object({
   item: AaliyahReviewQueueItemSchema
 });
 
+export const AaliyahInboxQuerySchema = z.object({
+  mode: FounderBriefingModeSchema.default("founder")
+});
+
+export const AaliyahInboxItemIdParamSchema = z.object({
+  itemId: z.string().min(1)
+});
+
+const AaliyahInboxItemSchema = z.object({
+  inboxItemId: z.string().min(1),
+  queueItemId: z.string().min(1),
+  sourceSubsystem: AaliyahReviewQueueItemSchema.shape.sourceSubsystem,
+  sourceItemId: z.string().min(1),
+  itemType: AaliyahReviewQueueItemSchema.shape.itemType,
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  activeMode: FounderBriefingModeSchema,
+  urgency: AaliyahReviewQueueItemSchema.shape.urgency,
+  risk: AaliyahReviewQueueItemSchema.shape.risk,
+  triageClass: z.enum(["act_now", "review_today", "blocked", "stale", "monitor", "resolved_or_terminal"]),
+  priorityBand: z.enum(["p0", "p1", "p2", "p3"]),
+  reasonCodes: z.array(z.enum([
+    "release_blocking_incident",
+    "interrupt_now_signal",
+    "same_day_attention",
+    "founder_attention_required",
+    "approval_required",
+    "dispatch_ready",
+    "pending_review_over_sla",
+    "queue_item_over_sla",
+    "dispatch_blocked_by_policy",
+    "blocked_no_allowed_actions",
+    "blocked_missing_next_action",
+    "terminal_state",
+    "escalation_active",
+    "critical_risk",
+    "high_risk",
+    "low_confidence_wait",
+    "next_action_available",
+    "monitor_only"
+  ])),
+  nextFounderAction: z.enum([
+    "approve_review_item",
+    "reject_review_item",
+    "request_revision",
+    "dispatch_email",
+    "review_voice_escalation",
+    "review_incident",
+    "review_routing_preview",
+    "refresh_briefing",
+    "select_new_item",
+    "wait",
+    "none_terminal"
+  ]),
+  founderAttentionRequired: z.boolean(),
+  interruptionClass: AaliyahReviewQueueItemSchema.shape.interruptionClass,
+  confidenceLevel: AaliyahReviewQueueItemSchema.shape.confidenceLevel,
+  followThroughStatus: z.enum(["active", "completed", "abandoned", "escalated", "invalidated", "reset"]).nullable(),
+  followThroughClosureReason: z.enum([
+    "review_approved",
+    "review_rejected",
+    "revision_requested",
+    "email_dispatched",
+    "mode_switched",
+    "expired",
+    "manual_reset",
+    "boundary_denied",
+    "ambiguity",
+    "item_not_found",
+    "cleared_by_runtime",
+    "founder_declared_completed",
+    "founder_declared_abandoned",
+    "founder_declared_escalated",
+    "founder_declared_invalidated",
+    "dispatch_confirmed",
+    "review_completed",
+    "voice_escalated",
+    "incident_acknowledged",
+    "incident_resolved"
+  ]).nullable(),
+  nextGovernedAction: z.enum([
+    "none_terminal",
+    "await_founder_review",
+    "dispatch_approved_email",
+    "open_voice_escalation",
+    "refresh_briefing",
+    "select_new_queue_item",
+    "resolve_disambiguation"
+  ]).nullable(),
+  isBlocked: z.boolean(),
+  isStale: z.boolean(),
+  ageSeconds: z.number().int().nonnegative(),
+  provenanceSummary: AaliyahReviewQueueItemSchema.shape.provenanceSummary,
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+const AaliyahInboxSummarySchema = z.object({
+  inboxId: z.string().min(1),
+  generatedAt: z.string().datetime(),
+  activeMode: FounderBriefingModeSchema,
+  manifestVersion: ManifestVersionSchema,
+  totalItems: z.number().int().nonnegative(),
+  countsByTriageClass: z.object({
+    act_now: z.number().int().nonnegative(),
+    review_today: z.number().int().nonnegative(),
+    blocked: z.number().int().nonnegative(),
+    stale: z.number().int().nonnegative(),
+    monitor: z.number().int().nonnegative(),
+    resolved_or_terminal: z.number().int().nonnegative()
+  }),
+  countsByPriorityBand: z.object({
+    p0: z.number().int().nonnegative(),
+    p1: z.number().int().nonnegative(),
+    p2: z.number().int().nonnegative(),
+    p3: z.number().int().nonnegative()
+  }),
+  topActionableItems: z.array(AaliyahInboxItemSchema),
+  blockedItems: z.array(AaliyahInboxItemSchema),
+  staleItems: z.array(AaliyahInboxItemSchema),
+  items: z.array(AaliyahInboxItemSchema)
+});
+
+export const AaliyahInboxListResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_inbox"),
+  inbox: AaliyahInboxSummarySchema
+});
+
+export const AaliyahInboxItemResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_inbox_item"),
+  item: AaliyahInboxItemSchema
+});
+
 export const AaliyahSessionResetBodySchema = z.object({
   scope: z.enum(["soft", "hard"]).optional().default("soft")
 });
@@ -1766,6 +1902,9 @@ const AaliyahRuntimeIntentSchema = z.enum([
   "invalidate_active_item",
   "get_active_follow_through",
   "get_follow_through_history",
+  "get_prioritized_founder_inbox",
+  "get_blocked_founder_items",
+  "get_stale_founder_items",
   "get_waiting_approvals",
   "get_email_review_queue",
   "approve_email_review_item",
@@ -1907,7 +2046,10 @@ const AaliyahRuntimeSuccessSchema = z.object({
     "session_reset",
     "follow_through_active",
     "follow_through_action",
-    "follow_through_history"
+    "follow_through_history",
+    "founder_inbox",
+    "blocked_founder_items",
+    "stale_founder_items"
   ]),
   payload: z.union([
     FounderBriefingSchema,
@@ -1925,6 +2067,8 @@ const AaliyahRuntimeSuccessSchema = z.object({
     AaliyahFollowThroughRecordSchema.nullable(),
     AaliyahFollowThroughActionResponseSchema.shape.result,
     AaliyahFollowThroughHistoryResponseSchema.pick({ items: true, total: true }),
+    AaliyahInboxSummarySchema,
+    z.object({ items: z.array(AaliyahInboxItemSchema), total: z.number().int().nonnegative() }),
     AaliyahApprovalQueuePayloadSchema,
     AaliyahReviewActionPayloadSchema,
     z.object({

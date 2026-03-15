@@ -728,6 +728,64 @@ describe("Aaliyah runtime agent", () => {
       nextGovernedAction: "select_new_queue_item"
     }))
   } as any;
+  const triageService = {
+    getPrioritizedInbox: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+      inboxId: "inbox:1",
+      generatedAt: "2026-03-15T00:00:00.000Z",
+      activeMode: mode,
+      manifestVersion: "2026-03-12.v1",
+      totalItems: 1,
+      countsByTriageClass: {
+        act_now: 0,
+        review_today: 1,
+        blocked: 0,
+        stale: 0,
+        monitor: 0,
+        resolved_or_terminal: 0
+      },
+      countsByPriorityBand: { p0: 0, p1: 1, p2: 0, p3: 0 },
+      topActionableItems: [],
+      blockedItems: [],
+      staleItems: [],
+      items: [
+        {
+          inboxItemId: "inbox:queue:item:1",
+          queueItemId: "queue:item:1",
+          sourceSubsystem: "email_review_queue",
+          sourceItemId: "review:1",
+          itemType: "approval_required",
+          title: "subject",
+          summary: "summary",
+          activeMode: mode,
+          urgency: "high",
+          risk: "medium",
+          triageClass: "review_today",
+          priorityBand: "p1",
+          reasonCodes: ["approval_required", "founder_attention_required"],
+          nextFounderAction: "approve_review_item",
+          founderAttentionRequired: true,
+          interruptionClass: "same_day_briefing",
+          confidenceLevel: "high",
+          followThroughStatus: null,
+          followThroughClosureReason: null,
+          nextGovernedAction: null,
+          isBlocked: false,
+          isStale: false,
+          ageSeconds: 120,
+          provenanceSummary: {
+            manifestVersion: "2026-03-12.v1",
+            references: ["review:1"],
+            contributingSourceItemIds: ["review:1"]
+          },
+          createdAt: "2026-03-15T00:00:00.000Z",
+          updatedAt: "2026-03-15T00:00:00.000Z"
+        }
+      ]
+    })),
+    getBlockedItems: vi.fn(async () => []),
+    getStaleItems: vi.fn(async () => []),
+    getInboxItem: vi.fn(async () => null)
+  } as any;
 
   const service = new AaliyahRuntimeService(
     new AgentOrgService(),
@@ -740,6 +798,7 @@ describe("Aaliyah runtime agent", () => {
     reviewQueueService,
     sessionService,
     followThroughService,
+    triageService,
     preferenceService,
     memoryBoundaryService
   );
@@ -904,6 +963,55 @@ describe("Aaliyah runtime agent", () => {
     expect(queue.payloadType).toBe("founder_review_queue");
     expect(item.payloadType).toBe("founder_queue_item");
     expect(summary.payloadType).toBe("founder_queue_summary");
+  });
+
+  it("returns prioritized founder inbox views through governed runtime", async () => {
+    const inbox = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_prioritized_founder_inbox",
+        mode: "founder"
+      }
+    });
+    const blocked = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_blocked_founder_items",
+        mode: "founder"
+      }
+    });
+    const stale = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_stale_founder_items",
+        mode: "zbestmedia"
+      }
+    });
+
+    expect(inbox.payloadType).toBe("founder_inbox");
+    expect(blocked.payloadType).toBe("blocked_founder_items");
+    expect(stale.payloadType).toBe("stale_founder_items");
+    expect(triageService.getPrioritizedInbox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant",
+        actorId: "actor-1",
+        principalContext: "founder",
+        mode: "founder"
+      })
+    );
+    expect(triageService.getBlockedItems).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "founder"
+      })
+    );
+    expect(triageService.getStaleItems).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "zbestmedia"
+      })
+    );
   });
 
   it("returns session snapshot and reset through governed runtime", async () => {

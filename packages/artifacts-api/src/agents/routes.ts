@@ -5,6 +5,7 @@ import {
   AaliyahCommandSurfaceService,
   AaliyahDiagnosticsService,
   AaliyahFounderBriefingService,
+  AaliyahFounderInboxTriageService,
   AaliyahMemoryBoundaryService,
   AaliyahPreferenceService,
   AaliyahFounderReviewQueueService,
@@ -42,6 +43,10 @@ import {
   AaliyahReviewQueueDetailResponseSchema,
   AaliyahReviewQueueListResponseSchema,
   AaliyahReviewQueueItemIdParamSchema,
+  AaliyahInboxListResponseSchema,
+  AaliyahInboxQuerySchema,
+  AaliyahInboxItemIdParamSchema,
+  AaliyahInboxItemResponseSchema,
   AaliyahFollowThroughActionBodySchema,
   AaliyahFollowThroughActionResponseSchema,
   AaliyahFollowThroughHistoryResponseSchema,
@@ -151,6 +156,7 @@ export function agentRoutes(opts: {
   aaliyahMemoryBoundaryService: AaliyahMemoryBoundaryService;
   aaliyahDiagnosticsService: AaliyahDiagnosticsService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
+  aaliyahTriageService: AaliyahFounderInboxTriageService;
   aaliyahFollowThroughService: AaliyahFollowThroughService;
   aaliyahSessionService: AaliyahSessionContextService;
   aaliyahRuntimeService: AaliyahRuntimeService;
@@ -476,6 +482,7 @@ export function agentRoutes(opts: {
 
       const shell = await opts.aaliyahCommandSurfaceService.generateCommandSurface({
         tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
         mode: query.data.mode
       });
 
@@ -661,6 +668,141 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_review_queue_item",
+        item
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/inbox", async (req, reply) => {
+      const query = AaliyahInboxQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const inbox = await opts.aaliyahTriageService.getPrioritizedInbox({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        generatedAt: undefined
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_inbox",
+        inbox
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/inbox/blocked", async (req, reply) => {
+      const query = AaliyahInboxQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const items = await opts.aaliyahTriageService.getBlockedItems({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_inbox",
+        inbox: {
+          inboxId: `blocked:${req.auth.actorId}`,
+          generatedAt: new Date().toISOString(),
+          activeMode: query.data.mode,
+          manifestVersion: orgManifestVersion,
+          totalItems: items.length,
+          countsByTriageClass: {
+            act_now: 0,
+            review_today: 0,
+            blocked: items.length,
+            stale: 0,
+            monitor: 0,
+            resolved_or_terminal: 0
+          },
+          countsByPriorityBand: {
+            p0: items.filter((item) => item.priorityBand === "p0").length,
+            p1: items.filter((item) => item.priorityBand === "p1").length,
+            p2: items.filter((item) => item.priorityBand === "p2").length,
+            p3: items.filter((item) => item.priorityBand === "p3").length
+          },
+          topActionableItems: [],
+          blockedItems: items,
+          staleItems: [],
+          items
+        }
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/inbox/stale", async (req, reply) => {
+      const query = AaliyahInboxQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const items = await opts.aaliyahTriageService.getStaleItems({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_inbox",
+        inbox: {
+          inboxId: `stale:${req.auth.actorId}`,
+          generatedAt: new Date().toISOString(),
+          activeMode: query.data.mode,
+          manifestVersion: orgManifestVersion,
+          totalItems: items.length,
+          countsByTriageClass: {
+            act_now: 0,
+            review_today: 0,
+            blocked: 0,
+            stale: items.length,
+            monitor: 0,
+            resolved_or_terminal: 0
+          },
+          countsByPriorityBand: {
+            p0: items.filter((item) => item.priorityBand === "p0").length,
+            p1: items.filter((item) => item.priorityBand === "p1").length,
+            p2: items.filter((item) => item.priorityBand === "p2").length,
+            p3: items.filter((item) => item.priorityBand === "p3").length
+          },
+          topActionableItems: [],
+          blockedItems: [],
+          staleItems: items,
+          items
+        }
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/inbox/:itemId", async (req, reply) => {
+      const path = AaliyahInboxItemIdParamSchema.safeParse(req.params);
+      const query = AaliyahInboxQuerySchema.safeParse(req.query ?? {});
+      if (!path.success || !query.success) {
+        return reply.code(400).send({ error: "invalid_request" });
+      }
+
+      const item = await opts.aaliyahTriageService.getInboxItem({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        inboxItemId: path.data.itemId
+      });
+
+      if (!item) {
+        return reply.code(404).send({ error: "founder_inbox_item_not_found" });
+      }
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_inbox_item",
         item
       });
     });

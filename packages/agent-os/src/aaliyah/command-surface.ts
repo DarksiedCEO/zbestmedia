@@ -5,6 +5,8 @@ import { AaliyahConfidenceControlService } from "./confidence.js";
 import { AaliyahMemoryBoundaryService } from "./memory-boundary.js";
 import { AaliyahPreferenceService } from "./preferences.js";
 import { AaliyahFounderReviewQueueService } from "./review-queue.js";
+import { AaliyahFounderInboxTriageService } from "./triage.js";
+import type { AaliyahFounderInboxItem, AaliyahNextFounderAction } from "./triage-types.js";
 import type {
   AaliyahApprovalSummary,
   AaliyahCommandSurfaceContext,
@@ -47,6 +49,7 @@ export class AaliyahCommandSurfaceService {
     private readonly voice: VoiceRuntimeService,
     private readonly telemetry: AgentTelemetryService,
     private readonly reviewQueue: AaliyahFounderReviewQueueService,
+    private readonly triage: AaliyahFounderInboxTriageService,
     private readonly preferences?: AaliyahPreferenceService,
     boundary?: AaliyahMemoryBoundaryService
   ) {
@@ -76,13 +79,20 @@ export class AaliyahCommandSurfaceService {
           modeVisibility: "strict",
           appliedPreferences: []
         };
-    const [briefing, approvals, voiceEscalations, openIncidentSummary, opsStatusSummary, founderQueue] = await Promise.all([
+    const [briefing, approvals, voiceEscalations, openIncidentSummary, opsStatusSummary, founderQueue, founderInbox] = await Promise.all([
       this.briefing.generateBriefing({ tenantId: args.tenantId, mode: args.mode, generatedAt }),
       this.email.listReviewItems({ tenantId: args.tenantId, status: "pending_review", limit: 10 }),
       this.voice.listPendingEscalations({ tenantId: args.tenantId, limit: 10 }),
       this.telemetry.getIncidentSummary({ tenantId: args.tenantId }),
       this.telemetry.getOpsStatusSummary({ tenantId: args.tenantId }),
-      this.reviewQueue.getQueue({ tenantId: args.tenantId, mode: args.mode, generatedAt })
+      this.reviewQueue.getQueue({ tenantId: args.tenantId, mode: args.mode, generatedAt }),
+      this.triage.getPrioritizedInbox({
+        tenantId: args.tenantId,
+        actorId: args.actorId ?? "founder",
+        principalContext: "founder",
+        mode: args.mode,
+        generatedAt
+      })
     ]);
 
     const visibleApprovals = approvals.filter((item) =>
@@ -108,16 +118,16 @@ export class AaliyahCommandSurfaceService {
       voiceEscalations
     });
 
-    const whatMattersNow = founderQueue.topActionableItems
+    const whatMattersNow = founderInbox.topActionableItems
       .filter((item) => this.isVisibleUnderTolerance(item.interruptionClass, resolvedPreferences.interruptionTolerance))
       .map((item) => this.queueItemToBriefingItem(item))
       .slice(0, this.sectionLimit(resolvedPreferences.briefingLength));
 
-    const recommendedNextActions = founderQueue.topActionableItems
+    const recommendedNextActions = founderInbox.topActionableItems
       .map((item, index) => ({
         actionId: `queue-action:${index + 1}`,
         title: item.title,
-        action: this.formatText(item.recommendedNextAction, resolvedPreferences.tonePreference),
+        action: this.formatText(this.describeNextFounderAction(item.nextFounderAction), resolvedPreferences.tonePreference),
         urgency: item.urgency,
         sourceItemId: item.queueItemId
       }))
@@ -158,6 +168,7 @@ export class AaliyahCommandSurfaceService {
       confidenceSummary,
       interruptionQueue: evaluatedInterruptions.summary,
       founderReviewQueue: founderQueue,
+      founderInbox,
       quickActions,
       provenanceSummary: {
         orgManifestVersion: this.org.getManifestVersion(),
@@ -346,7 +357,7 @@ export class AaliyahCommandSurfaceService {
     ].sort((a, b) => this.scoreAction(b) - this.scoreAction(a));
   }
 
-  private queueItemToBriefingItem(item: import("./review-queue-types.js").AaliyahFounderQueueItem): FounderBriefingItem {
+  private queueItemToBriefingItem(item: import("./review-queue-types.js").AaliyahFounderQueueItem | AaliyahFounderInboxItem): FounderBriefingItem {
     return {
       itemId: item.queueItemId,
       category: "top_priorities",
@@ -360,7 +371,7 @@ export class AaliyahCommandSurfaceService {
         subAgentId: null,
         sourceLane: item.sourceSubsystem
       },
-      recommendedAction: item.recommendedNextAction,
+      recommendedAction: "nextFounderAction" in item ? this.describeNextFounderAction(item.nextFounderAction) : item.recommendedNextAction,
       interruptionClass:
         item.interruptionClass === "same_day_briefing"
           ? "review_soon"
@@ -560,5 +571,32 @@ export class AaliyahCommandSurfaceService {
     const maxLength = tone === "concise" ? 90 : 150;
     if (text.length <= maxLength) return text;
     return `${text.slice(0, maxLength - 1).trimEnd()}…`;
+  }
+
+  private describeNextFounderAction(action: AaliyahNextFounderAction): string {
+    switch (action) {
+      case "approve_review_item":
+        return "Approve the review item.";
+      case "reject_review_item":
+        return "Reject the review item.";
+      case "request_revision":
+        return "Request a revision on the draft.";
+      case "dispatch_email":
+        return "Dispatch the approved email.";
+      case "review_voice_escalation":
+        return "Review the voice escalation.";
+      case "review_incident":
+        return "Review the incident details.";
+      case "review_routing_preview":
+        return "Review the routing preview.";
+      case "refresh_briefing":
+        return "Refresh the founder briefing.";
+      case "select_new_item":
+        return "Select the next founder queue item.";
+      case "wait":
+        return "Wait for the next governed action.";
+      case "none_terminal":
+        return "No further founder action is required.";
+    }
   }
 }

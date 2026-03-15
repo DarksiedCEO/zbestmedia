@@ -282,6 +282,61 @@ describe("Aaliyah command surface", () => {
       }))
     } as never,
     {
+      getPrioritizedInbox: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+        inboxId: "inbox:1",
+        generatedAt: "2026-03-14T00:00:00.000Z",
+        activeMode: mode,
+        manifestVersion: "2026-03-12.v1",
+        totalItems: 3,
+        countsByTriageClass: {
+          act_now: 1,
+          review_today: 1,
+          blocked: 0,
+          stale: 1,
+          monitor: 0,
+          resolved_or_terminal: 0
+        },
+        countsByPriorityBand: { p0: 1, p1: 2, p2: 0, p3: 0 },
+        topActionableItems: [
+          {
+            inboxItemId: "inbox:incident:1",
+            queueItemId: "queue:incident:1",
+            sourceSubsystem: "incident_pipeline",
+            sourceItemId: "incident:1",
+            itemType: "incident_attention",
+            title: "Release gate degraded",
+            summary: "Critical ops issue.",
+            activeMode: mode,
+            urgency: "urgent",
+            risk: "critical",
+            triageClass: "act_now",
+            priorityBand: "p0",
+            reasonCodes: ["release_blocking_incident", "interrupt_now_signal"],
+            nextFounderAction: "review_incident",
+            founderAttentionRequired: true,
+            interruptionClass: "interrupt_now",
+            confidenceLevel: "high",
+            followThroughStatus: null,
+            followThroughClosureReason: null,
+            nextGovernedAction: null,
+            isBlocked: false,
+            isStale: false,
+            ageSeconds: 600,
+            provenanceSummary: {
+              manifestVersion: "2026-03-12.v1",
+              references: ["incident:1"],
+              contributingSourceItemIds: ["incident:1"]
+            },
+            createdAt: "2026-03-14T00:00:00.000Z",
+            updatedAt: "2026-03-14T00:00:00.000Z"
+          }
+        ],
+        blockedItems: [],
+        staleItems: [],
+        items: []
+      }))
+    } as never,
+    {
       resolvePreferences: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
         activeMode: mode,
         briefingLength: "compact",
@@ -308,6 +363,7 @@ describe("Aaliyah command surface", () => {
     expect(shell.confidenceSummary.overallConfidenceLevel).toBe("high");
     expect(shell.interruptionQueue.interruptNowCount).toBeGreaterThan(0);
     expect(shell.founderReviewQueue.totalFounderActionableItems).toBe(3);
+    expect(shell.founderInbox.totalItems).toBe(3);
   });
 
   it("marks voice review quick action disabled when there are no pending escalations", () => {

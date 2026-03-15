@@ -16,6 +16,7 @@ import type { AaliyahPreferenceList } from "./preference-types.js";
 import type { AaliyahFounderReviewQueue, AaliyahFounderReviewQueueSummary, AaliyahFounderQueueItem } from "./review-queue-types.js";
 import type { AaliyahSessionResetResult, AaliyahSessionSnapshotView } from "./session-types.js";
 import type { FollowThroughActionResult, FollowThroughHistoryEntry, FollowThroughRecord } from "./follow-through-types.js";
+import type { AaliyahFounderInboxItem, AaliyahPrioritizedQueueResult } from "./triage-types.js";
 import type { EmailDraftReviewRecord } from "../email/review-types.js";
 import type { EmailDispatchResult } from "../email/dispatch-types.js";
 import type { AdminRoutingCategoryDescriptor } from "../admin/types.js";
@@ -106,7 +107,10 @@ export type AaliyahRuntimeIntent =
   | "escalate_active_item"
   | "invalidate_active_item"
   | "get_active_follow_through"
-  | "get_follow_through_history";
+  | "get_follow_through_history"
+  | "get_prioritized_founder_inbox"
+  | "get_blocked_founder_items"
+  | "get_stale_founder_items";
 
 export type AaliyahRuntimePayloadType =
   | "founder_briefing"
@@ -134,7 +138,10 @@ export type AaliyahRuntimePayloadType =
   | "session_reset"
   | "follow_through_active"
   | "follow_through_action"
-  | "follow_through_history";
+  | "follow_through_history"
+  | "founder_inbox"
+  | "blocked_founder_items"
+  | "stale_founder_items";
 
 export type AaliyahRuntimeRequestInput = {
   intent: string;
@@ -209,7 +216,10 @@ export type AaliyahRuntimeSuccessPayload =
   | { payloadType: "session_reset"; payload: AaliyahSessionResetResult }
   | { payloadType: "follow_through_active"; payload: FollowThroughRecord | null }
   | { payloadType: "follow_through_action"; payload: FollowThroughActionResult }
-  | { payloadType: "follow_through_history"; payload: { items: FollowThroughHistoryEntry[]; total: number } };
+  | { payloadType: "follow_through_history"; payload: { items: FollowThroughHistoryEntry[]; total: number } }
+  | { payloadType: "founder_inbox"; payload: AaliyahPrioritizedQueueResult }
+  | { payloadType: "blocked_founder_items"; payload: { items: AaliyahFounderInboxItem[]; total: number } }
+  | { payloadType: "stale_founder_items"; payload: { items: AaliyahFounderInboxItem[]; total: number } };
 
 export type AaliyahRuntimeFallback = {
   outcome: Exclude<AaliyahRuntimeFallbackOutcome, "proceed_with_orchestration">;

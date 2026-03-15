@@ -3385,6 +3385,40 @@ export class AgentOsRepository {
     return res.rows.map(mapFollowThroughHistoryEntryRow);
   }
 
+  async listAaliyahFollowThroughRecordsBySourceIds(args: {
+    tenantId: string;
+    actorId: string;
+    principalContext: FollowThroughRecord["principalContext"];
+    sourceItemIds: string[];
+  }): Promise<FollowThroughRecord[]> {
+    if (args.sourceItemIds.length === 0) {
+      return [];
+    }
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FollowThroughRecordRow>(
+        `
+        SELECT DISTINCT ON (source_item_id)
+               tenant_id, follow_through_id, session_id, actor_id, principal_context,
+               active_mode, company_scope, working_item_type, source_subsystem, source_item_id,
+               queue_item_id, review_item_id, call_id, incident_id, dispatch_id,
+               title, summary, status, closure_state, closure_reason, next_governed_action,
+               founder_declared_completion, downstream_action_ref, escalation_target,
+               escalation_class, escalation_rationale, escalation_provenance, note,
+               provenance, created_at, updated_at, closed_at
+        FROM aaliyah_follow_through_records
+        WHERE tenant_id = $1
+          AND actor_id = $2
+          AND principal_context = $3
+          AND source_item_id = ANY($4::text[])
+        ORDER BY source_item_id, updated_at DESC
+        `,
+        [args.tenantId, args.actorId, args.principalContext, args.sourceItemIds]
+      )
+    );
+
+    return res.rows.map(mapFollowThroughRecordRow);
+  }
+
   async listIncidentRecords(args: {
     tenantId: string;
     status?: IncidentStatus;

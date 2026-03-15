@@ -26,6 +26,8 @@ export * from "./session-state.js";
 export * from "./session-guards.js";
 export * from "./session.js";
 export * from "./follow-through.js";
+export * from "./triage-types.js";
+export * from "./triage.js";
 export * from "./review-queue-types.js";
 export * from "./review-queue.js";
 export * from "./command-surface-types.js";
