@@ -1,3 +1,4 @@
+import { AaliyahIdempotencyService, stableRequestFingerprint } from "../aaliyah/idempotency.js";
 import type { EmailDraftSuggestion, EmailPriority, EmailRiskLevel, EmailRoutingResolution } from "./types.js";
 import type { AgentOsRepository } from "../persistence/repository.js";
 import type { EmailDraftReviewRecord, EmailDraftReviewStatus } from "./review-types.js";
@@ -16,7 +17,11 @@ const ALLOWED_TRANSITIONS: Record<EmailDraftReviewStatus, EmailDraftReviewStatus
 };
 
 export class EmailDraftReviewService {
-  constructor(private readonly repository: AgentOsRepository) {}
+  private readonly idempotency: AaliyahIdempotencyService;
+
+  constructor(private readonly repository: AgentOsRepository) {
+    this.idempotency = new AaliyahIdempotencyService(repository);
+  }
 
   async createReviewItem(args: {
     tenantId: string;
@@ -72,15 +77,15 @@ export class EmailDraftReviewService {
     return this.repository.getEmailDraftReviewItem(args);
   }
 
-  async approveReviewItem(args: { tenantId: string; reviewItemId: string; actorId: string; note?: string; reviewedAt?: string }) {
+  async approveReviewItem(args: { tenantId: string; reviewItemId: string; actorId: string; note?: string; reviewedAt?: string; idempotencyKey?: string | null }) {
     return this.transition({ ...args, toStatus: "approved" });
   }
 
-  async rejectReviewItem(args: { tenantId: string; reviewItemId: string; actorId: string; note?: string; reviewedAt?: string }) {
+  async rejectReviewItem(args: { tenantId: string; reviewItemId: string; actorId: string; note?: string; reviewedAt?: string; idempotencyKey?: string | null }) {
     return this.transition({ ...args, toStatus: "rejected" });
   }
 
-  async requestRevision(args: { tenantId: string; reviewItemId: string; actorId: string; note: string; reviewedAt?: string }) {
+  async requestRevision(args: { tenantId: string; reviewItemId: string; actorId: string; note: string; reviewedAt?: string; idempotencyKey?: string | null }) {
     return this.transition({ ...args, toStatus: "revision_requested" });
   }
 
@@ -91,22 +96,38 @@ export class EmailDraftReviewService {
     note?: string;
     reviewedAt?: string;
     toStatus: EmailDraftReviewStatus;
+    idempotencyKey?: string | null;
   }) {
-    const current = await this.repository.getEmailDraftReviewItem({ tenantId: args.tenantId, reviewItemId: args.reviewItemId });
-    if (!current) {
-      throw new EmailDraftReviewStateError("email_review_item_not_found");
-    }
-    if (!ALLOWED_TRANSITIONS[current.reviewStatus].includes(args.toStatus)) {
-      throw new EmailDraftReviewStateError(`invalid_email_review_transition:${current.reviewStatus}:${args.toStatus}`);
-    }
-    return this.repository.transitionEmailDraftReviewItem({
+    return this.idempotency.execute<EmailDraftReviewRecord>({
       tenantId: args.tenantId,
-      reviewItemId: args.reviewItemId,
-      fromStatus: current.reviewStatus,
-      toStatus: args.toStatus,
-      reviewedBy: args.actorId,
-      reviewNote: args.note ?? null,
-      reviewedAt: args.reviewedAt
+      actorId: args.actorId,
+      principalContext: "founder",
+      operationName: "email_review_transition",
+      idempotencyKey: args.idempotencyKey ?? null,
+      requestFingerprint: stableRequestFingerprint([args.reviewItemId, args.toStatus, args.note ?? null]),
+      serializeResult: (result) => ({ item: result }),
+      deserializeResult: (payload) => (payload.item as unknown as EmailDraftReviewRecord),
+      execute: async () => {
+        const current = await this.repository.getEmailDraftReviewItem({ tenantId: args.tenantId, reviewItemId: args.reviewItemId });
+        if (!current) {
+          throw new EmailDraftReviewStateError("email_review_item_not_found");
+        }
+        if (!ALLOWED_TRANSITIONS[current.reviewStatus].includes(args.toStatus)) {
+          if (current.reviewStatus === args.toStatus) {
+            return current;
+          }
+          throw new EmailDraftReviewStateError(`invalid_email_review_transition:${current.reviewStatus}:${args.toStatus}`);
+        }
+        return this.repository.transitionEmailDraftReviewItem({
+          tenantId: args.tenantId,
+          reviewItemId: args.reviewItemId,
+          fromStatus: current.reviewStatus,
+          toStatus: args.toStatus,
+          reviewedBy: args.actorId,
+          reviewNote: args.note ?? null,
+          reviewedAt: args.reviewedAt
+        });
+      }
     });
   }
 }

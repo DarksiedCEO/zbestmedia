@@ -198,6 +198,10 @@ export function agentRoutes(opts: {
 }): FastifyPluginAsync {
   return async (app) => {
     const orgManifestVersion = opts.orgService.getManifestVersion();
+    const resolveIdempotencyKey = (req: { headers: Record<string, unknown>; id: string }) => {
+      const header = req.headers["x-idempotency-key"];
+      return typeof header === "string" && header.trim().length > 0 ? header.trim() : req.id;
+    };
 
     function orgOwnershipForLeadAgent(leadAgent: ReturnType<typeof opts.orgService.getLeadAgent>) {
       return {
@@ -827,19 +831,27 @@ export function agentRoutes(opts: {
         return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
       }
 
-      const reset = await opts.aaliyahSessionService.resetSession({
-        tenantId: req.auth.tenantId,
-        actorId: req.auth.actorId,
-        principalContext: "founder",
-        resetReason: "manual_reset",
-        hardReset: body.data.scope === "hard"
-      });
+      try {
+        const reset = await opts.aaliyahSessionService.resetSession({
+          tenantId: req.auth.tenantId,
+          actorId: req.auth.actorId,
+          principalContext: "founder",
+          resetReason: "manual_reset",
+          hardReset: body.data.scope === "hard",
+          idempotencyKey: resolveIdempotencyKey(req)
+        });
 
-      return reply.send({
-        manifestVersion: orgManifestVersion,
-        resourceType: "aaliyah_session_reset",
-        reset
-      });
+        return reply.send({
+          manifestVersion: orgManifestVersion,
+          resourceType: "aaliyah_session_reset",
+          reset
+        });
+      } catch (error) {
+        if (error instanceof Error && ["aaliyah_idempotency_operation_in_progress", "aaliyah_idempotency_key_reused_with_different_request", "aaliyah_session_version_conflict"].includes(error.message)) {
+          return reply.code(409).send({ error: error.message });
+        }
+        throw error;
+      }
     });
 
     app.get("/v1/agent-os/aaliyah/follow-through", async (req, reply) => {
@@ -892,7 +904,7 @@ export function agentRoutes(opts: {
     });
 
     async function handleFollowThroughAction(
-      req: { body?: unknown; query?: unknown; auth: { tenantId: string; actorId: string } },
+      req: { body?: unknown; query?: unknown; headers: Record<string, unknown>; id: string; auth: { tenantId: string; actorId: string } },
       reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown }; send: (payload: unknown) => unknown },
       action: "complete" | "abandon" | "escalate" | "invalidate"
     ) {
@@ -916,7 +928,8 @@ export function agentRoutes(opts: {
           escalationTarget: body.data.escalationTarget,
           escalationClass: body.data.escalationClass,
           escalationRationale: body.data.escalationRationale,
-          escalationProvenance: body.data.escalationProvenance
+          escalationProvenance: body.data.escalationProvenance,
+          idempotencyKey: resolveIdempotencyKey(req)
         });
 
         return reply.send({
@@ -943,19 +956,34 @@ export function agentRoutes(opts: {
         return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
       }
 
-      const result = await opts.aaliyahRuntimeService.execute({
-        tenantId: req.auth.tenantId,
-        actorId: req.auth.actorId,
-        requestId: req.id,
-        principalContext: "founder",
-        request: body.data
-      });
+      try {
+        const result = await opts.aaliyahRuntimeService.execute({
+          tenantId: req.auth.tenantId,
+          actorId: req.auth.actorId,
+          requestId: req.id,
+          principalContext: "founder",
+          request: {
+            ...body.data,
+            idempotencyKey: body.data.idempotencyKey ?? resolveIdempotencyKey(req)
+          }
+        });
 
-      return reply.send({
-        manifestVersion: orgManifestVersion,
-        resourceType: "aaliyah_runtime_result",
-        result
-      });
+        return reply.send({
+          manifestVersion: orgManifestVersion,
+          resourceType: "aaliyah_runtime_result",
+          result
+        });
+      } catch (error) {
+        if (error instanceof Error && [
+          "aaliyah_idempotency_operation_in_progress",
+          "aaliyah_idempotency_key_reused_with_different_request",
+          "aaliyah_session_version_conflict",
+          "aaliyah_follow_through_version_conflict"
+        ].includes(error.message)) {
+          return reply.code(409).send({ error: error.message });
+        }
+        throw error;
+      }
     });
 
     app.post("/v1/agent-os/voice/intake", async (req, reply) => {
@@ -1696,11 +1724,12 @@ export function agentRoutes(opts: {
           tenantId: req.auth.tenantId,
           reviewItemId: path.data.reviewItemId,
           actorId: req.auth.actorId,
-          note: body.data.note
+          note: body.data.note,
+          idempotencyKey: resolveIdempotencyKey(req)
         });
         return reply.send({ resourceType: "email_review_action", action: "approve", item });
       } catch (error) {
-        if (error instanceof Error && ["email_review_item_not_found", "email_review_state_conflict"].includes(error.message)) {
+        if (error instanceof Error && ["email_review_item_not_found", "email_review_state_conflict", "aaliyah_idempotency_operation_in_progress", "aaliyah_idempotency_key_reused_with_different_request"].includes(error.message)) {
           return reply.code(error.message === "email_review_item_not_found" ? 404 : 409).send({ error: error.message });
         }
         if (error instanceof Error && error.message.startsWith("invalid_email_review_transition")) {
@@ -1721,11 +1750,12 @@ export function agentRoutes(opts: {
           tenantId: req.auth.tenantId,
           reviewItemId: path.data.reviewItemId,
           actorId: req.auth.actorId,
-          note: body.data.note
+          note: body.data.note,
+          idempotencyKey: resolveIdempotencyKey(req)
         });
         return reply.send({ resourceType: "email_review_action", action: "reject", item });
       } catch (error) {
-        if (error instanceof Error && ["email_review_item_not_found", "email_review_state_conflict"].includes(error.message)) {
+        if (error instanceof Error && ["email_review_item_not_found", "email_review_state_conflict", "aaliyah_idempotency_operation_in_progress", "aaliyah_idempotency_key_reused_with_different_request"].includes(error.message)) {
           return reply.code(error.message === "email_review_item_not_found" ? 404 : 409).send({ error: error.message });
         }
         if (error instanceof Error && error.message.startsWith("invalid_email_review_transition")) {
@@ -1746,11 +1776,12 @@ export function agentRoutes(opts: {
           tenantId: req.auth.tenantId,
           reviewItemId: path.data.reviewItemId,
           actorId: req.auth.actorId,
-          note: body.data.note
+          note: body.data.note,
+          idempotencyKey: resolveIdempotencyKey(req)
         });
         return reply.send({ resourceType: "email_review_action", action: "request_revision", item });
       } catch (error) {
-        if (error instanceof Error && ["email_review_item_not_found", "email_review_state_conflict"].includes(error.message)) {
+        if (error instanceof Error && ["email_review_item_not_found", "email_review_state_conflict", "aaliyah_idempotency_operation_in_progress", "aaliyah_idempotency_key_reused_with_different_request"].includes(error.message)) {
           return reply.code(error.message === "email_review_item_not_found" ? 404 : 409).send({ error: error.message });
         }
         if (error instanceof Error && error.message.startsWith("invalid_email_review_transition")) {
@@ -1776,12 +1807,16 @@ export function agentRoutes(opts: {
         const result = await opts.emailService.dispatchApprovedReviewItem({
           tenantId: req.auth.tenantId,
           actorId: req.auth.actorId,
-          reviewItemId: path.data.reviewItemId
+          reviewItemId: path.data.reviewItemId,
+          idempotencyKey: resolveIdempotencyKey(req)
         });
         return reply.send({ resourceType: "email_dispatch_result", ...result });
       } catch (error) {
         if (error instanceof Error && ["email_dispatch_review_item_not_found", "email_dispatch_account_not_found"].includes(error.message)) {
           return reply.code(404).send({ error: error.message });
+        }
+        if (error instanceof Error && ["aaliyah_idempotency_operation_in_progress", "aaliyah_idempotency_key_reused_with_different_request"].includes(error.message)) {
+          return reply.code(409).send({ error: error.message });
         }
         throw error;
       }

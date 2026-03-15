@@ -14,6 +14,7 @@ import { AGENT_EVAL_PROFILES } from "../evals/specs.js";
 import type {
   AgentLifecycleEventRecord,
   AaliyahDiagnosticsEventRecord,
+  AaliyahMutationIdempotencyRecord,
   AaliyahSessionContextRecord,
   AaliyahFounderPreferenceRecord,
   FollowThroughHistoryEntry,
@@ -355,6 +356,7 @@ type AaliyahSessionContextRow = {
 type FollowThroughRecordRow = {
   tenant_id: string;
   follow_through_id: string;
+  version: number;
   session_id: string;
   actor_id: string;
   principal_context: FollowThroughRecord["principalContext"];
@@ -385,6 +387,21 @@ type FollowThroughRecordRow = {
   created_at: string | Date;
   updated_at: string | Date;
   closed_at: string | Date | null;
+};
+
+type AaliyahMutationIdempotencyRow = {
+  tenant_id: string;
+  actor_id: string;
+  principal_context: AaliyahMutationIdempotencyRecord["principalContext"];
+  operation_name: AaliyahMutationIdempotencyRecord["operationName"];
+  idempotency_key: string;
+  request_fingerprint: string;
+  state: AaliyahMutationIdempotencyRecord["state"];
+  response_payload: Record<string, unknown> | null;
+  error_code: string | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+  completed_at: string | Date | null;
 };
 
 type FollowThroughHistoryEntryRow = {
@@ -831,6 +848,7 @@ function mapFollowThroughRecordRow(row: FollowThroughRecordRow): FollowThroughRe
   return {
     tenantId: row.tenant_id,
     followThroughId: row.follow_through_id,
+    version: row.version,
     sessionId: row.session_id,
     actorId: row.actor_id,
     principalContext: row.principal_context,
@@ -861,6 +879,23 @@ function mapFollowThroughRecordRow(row: FollowThroughRecordRow): FollowThroughRe
     createdAt: toIsoString(row.created_at)!,
     updatedAt: toIsoString(row.updated_at)!,
     closedAt: row.closed_at ? toIsoString(row.closed_at)! : null
+  };
+}
+
+function mapAaliyahMutationIdempotencyRow(row: AaliyahMutationIdempotencyRow): AaliyahMutationIdempotencyRecord {
+  return {
+    tenantId: row.tenant_id,
+    actorId: row.actor_id,
+    principalContext: row.principal_context,
+    operationName: row.operation_name,
+    idempotencyKey: row.idempotency_key,
+    requestFingerprint: row.request_fingerprint,
+    state: row.state,
+    responsePayload: row.response_payload,
+    errorCode: row.error_code,
+    createdAt: toIsoString(row.created_at)!,
+    updatedAt: toIsoString(row.updated_at)!,
+    completedAt: row.completed_at ? toIsoString(row.completed_at)! : null
   };
 }
 
@@ -2492,6 +2527,29 @@ export class AgentOsRepository {
     return res.rows[0] ? mapEmailDispatchRow(res.rows[0]) : null;
   }
 
+  async getLatestEmailDispatchRecordForReviewItem(args: {
+    tenantId: string;
+    reviewItemId: string;
+  }): Promise<EmailDispatchRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EmailDispatchRow>(
+        `
+        SELECT tenant_id, dispatch_id, review_item_id, draft_id, account_id, thread_id,
+               assignment_record_id, run_record_id, dispatch_status, dispatch_policy, requested_at,
+               dispatched_at, failure_category, failure_message, gmail_message_id, gmail_thread_id,
+               audit_metadata, created_at, updated_at
+        FROM email_dispatch_records
+        WHERE tenant_id = $1
+          AND review_item_id = $2
+        ORDER BY created_at DESC
+        LIMIT 1
+        `,
+        [args.tenantId, args.reviewItemId]
+      )
+    );
+    return res.rows[0] ? mapEmailDispatchRow(res.rows[0]) : null;
+  }
+
   async createVoiceCallRecord(args: {
     tenantId: string;
     externalCallId?: string | null;
@@ -3005,6 +3063,7 @@ export class AgentOsRepository {
 
   async upsertAaliyahSessionContext(args: {
     session: AaliyahSessionContextRecord;
+    expectedVersion?: number | null;
   }): Promise<AaliyahSessionContextRecord> {
     const session = args.session;
     const res = await this.runWithTenant(this.pool, session.tenantId, (client) =>
@@ -3034,6 +3093,7 @@ export class AgentOsRepository {
           last_reset_at = EXCLUDED.last_reset_at,
           last_reset_reason = EXCLUDED.last_reset_reason,
           version = EXCLUDED.version
+        WHERE $16::int IS NULL OR aaliyah_session_contexts.version = $16
         RETURNING tenant_id, actor_id, principal_context, session_id, company_scope,
                   active_mode_state, interaction_state, retention_policy,
                   created_at, updated_at, expires_at, hard_expires_at,
@@ -3054,12 +3114,172 @@ export class AgentOsRepository {
           session.hardExpiresAt,
           session.lastResetAt,
           session.lastResetReason,
-          session.version
+          session.version,
+          args.expectedVersion ?? null
         ]
       )
     );
 
+    if (!res.rows[0]) {
+      throw new Error("aaliyah_session_version_conflict");
+    }
+
     return mapAaliyahSessionContextRow(res.rows[0]!);
+  }
+
+  async claimAaliyahMutationIdempotency(args: {
+    tenantId: string;
+    actorId: string;
+    principalContext: AaliyahMutationIdempotencyRecord["principalContext"];
+    operationName: AaliyahMutationIdempotencyRecord["operationName"];
+    idempotencyKey: string;
+    requestFingerprint: string;
+    createdAt?: string;
+  }): Promise<
+    | { status: "claimed"; record: AaliyahMutationIdempotencyRecord }
+    | { status: "completed"; record: AaliyahMutationIdempotencyRecord }
+    | { status: "in_progress"; record: AaliyahMutationIdempotencyRecord }
+    | { status: "conflict"; record: AaliyahMutationIdempotencyRecord }
+  > {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    return this.runWithTenant(this.pool, args.tenantId, async (client) => {
+      const inserted = await client.query<AaliyahMutationIdempotencyRow>(
+        `
+        INSERT INTO aaliyah_mutation_idempotency (
+          tenant_id, actor_id, principal_context, operation_name, idempotency_key,
+          request_fingerprint, state, response_payload, error_code, created_at, updated_at, completed_at
+        ) VALUES (
+          $1,$2,$3,$4,$5,
+          $6,'in_progress',NULL,NULL,$7,$7,NULL
+        )
+        ON CONFLICT DO NOTHING
+        RETURNING tenant_id, actor_id, principal_context, operation_name, idempotency_key,
+                  request_fingerprint, state, response_payload, error_code, created_at, updated_at, completed_at
+        `,
+        [
+          args.tenantId,
+          args.actorId,
+          args.principalContext,
+          args.operationName,
+          args.idempotencyKey,
+          args.requestFingerprint,
+          createdAt
+        ]
+      );
+
+      if (inserted.rows[0]) {
+        return { status: "claimed" as const, record: mapAaliyahMutationIdempotencyRow(inserted.rows[0]) };
+      }
+
+      const existing = await client.query<AaliyahMutationIdempotencyRow>(
+        `
+        SELECT tenant_id, actor_id, principal_context, operation_name, idempotency_key,
+               request_fingerprint, state, response_payload, error_code, created_at, updated_at, completed_at
+        FROM aaliyah_mutation_idempotency
+        WHERE tenant_id = $1
+          AND actor_id = $2
+          AND principal_context = $3
+          AND operation_name = $4
+          AND idempotency_key = $5
+        `,
+        [args.tenantId, args.actorId, args.principalContext, args.operationName, args.idempotencyKey]
+      );
+
+      const record = mapAaliyahMutationIdempotencyRow(existing.rows[0]!);
+      if (record.requestFingerprint !== args.requestFingerprint) {
+        return { status: "conflict" as const, record };
+      }
+      if (record.state === "completed") {
+        return { status: "completed" as const, record };
+      }
+      return { status: "in_progress" as const, record };
+    });
+  }
+
+  async completeAaliyahMutationIdempotency(args: {
+    tenantId: string;
+    actorId: string;
+    principalContext: AaliyahMutationIdempotencyRecord["principalContext"];
+    operationName: AaliyahMutationIdempotencyRecord["operationName"];
+    idempotencyKey: string;
+    responsePayload: Record<string, unknown>;
+    completedAt?: string;
+  }): Promise<AaliyahMutationIdempotencyRecord> {
+    const completedAt = args.completedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahMutationIdempotencyRow>(
+        `
+        UPDATE aaliyah_mutation_idempotency
+        SET state = 'completed',
+            response_payload = $6::jsonb,
+            error_code = NULL,
+            updated_at = $7,
+            completed_at = $7
+        WHERE tenant_id = $1
+          AND actor_id = $2
+          AND principal_context = $3
+          AND operation_name = $4
+          AND idempotency_key = $5
+        RETURNING tenant_id, actor_id, principal_context, operation_name, idempotency_key,
+                  request_fingerprint, state, response_payload, error_code, created_at, updated_at, completed_at
+        `,
+        [
+          args.tenantId,
+          args.actorId,
+          args.principalContext,
+          args.operationName,
+          args.idempotencyKey,
+          JSON.stringify(args.responsePayload),
+          completedAt
+        ]
+      )
+    );
+    if (!res.rows[0]) {
+      throw new Error("aaliyah_idempotency_record_not_found");
+    }
+    return mapAaliyahMutationIdempotencyRow(res.rows[0]);
+  }
+
+  async failAaliyahMutationIdempotency(args: {
+    tenantId: string;
+    actorId: string;
+    principalContext: AaliyahMutationIdempotencyRecord["principalContext"];
+    operationName: AaliyahMutationIdempotencyRecord["operationName"];
+    idempotencyKey: string;
+    errorCode: string;
+    failedAt?: string;
+  }): Promise<AaliyahMutationIdempotencyRecord> {
+    const failedAt = args.failedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahMutationIdempotencyRow>(
+        `
+        UPDATE aaliyah_mutation_idempotency
+        SET state = 'failed',
+            error_code = $6,
+            updated_at = $7
+        WHERE tenant_id = $1
+          AND actor_id = $2
+          AND principal_context = $3
+          AND operation_name = $4
+          AND idempotency_key = $5
+        RETURNING tenant_id, actor_id, principal_context, operation_name, idempotency_key,
+                  request_fingerprint, state, response_payload, error_code, created_at, updated_at, completed_at
+        `,
+        [
+          args.tenantId,
+          args.actorId,
+          args.principalContext,
+          args.operationName,
+          args.idempotencyKey,
+          args.errorCode,
+          failedAt
+        ]
+      )
+    );
+    if (!res.rows[0]) {
+      throw new Error("aaliyah_idempotency_record_not_found");
+    }
+    return mapAaliyahMutationIdempotencyRow(res.rows[0]);
   }
 
   async createAaliyahDiagnosticsEvent(args: {
@@ -3142,7 +3362,7 @@ export class AgentOsRepository {
     const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
       client.query<FollowThroughRecordRow>(
         `
-        SELECT tenant_id, follow_through_id, session_id, actor_id, principal_context,
+        SELECT tenant_id, follow_through_id, version, session_id, actor_id, principal_context,
                active_mode, company_scope, working_item_type, source_subsystem, source_item_id,
                queue_item_id, review_item_id, call_id, incident_id, dispatch_id,
                title, summary, status, closure_state, closure_reason, next_governed_action,
@@ -3172,7 +3392,7 @@ export class AgentOsRepository {
       client.query<FollowThroughRecordRow>(
         `
         INSERT INTO aaliyah_follow_through_records (
-          tenant_id, follow_through_id, session_id, actor_id, principal_context,
+          tenant_id, follow_through_id, version, session_id, actor_id, principal_context,
           active_mode, company_scope, working_item_type, source_subsystem, source_item_id,
           queue_item_id, review_item_id, call_id, incident_id, dispatch_id,
           title, summary, status, closure_state, closure_reason, next_governed_action,
@@ -3180,16 +3400,17 @@ export class AgentOsRepository {
           escalation_class, escalation_rationale, escalation_provenance, note,
           provenance, created_at, updated_at, closed_at
         ) VALUES (
-          $1,$2,$3,$4,$5,
-          $6,$7,$8,$9,$10,
-          $11,$12,$13,$14,$15,
-          $16,$17,$18,$19,$20,$21,
-          $22,$23,$24,
-          $25,$26,$27::jsonb,$28,
-          $29::jsonb,$30,$31,$32
+          $1,$2,$3,$4,$5,$6,
+          $7,$8,$9,$10,$11,
+          $12,$13,$14,$15,$16,
+          $17,$18,$19,$20,$21,$22,
+          $23,$24,$25,
+          $26,$27,$28::jsonb,$29,
+          $30::jsonb,$31,$32,$33
         )
         ON CONFLICT (tenant_id, follow_through_id)
         DO UPDATE SET
+          version = EXCLUDED.version,
           session_id = EXCLUDED.session_id,
           actor_id = EXCLUDED.actor_id,
           principal_context = EXCLUDED.principal_context,
@@ -3219,7 +3440,7 @@ export class AgentOsRepository {
           provenance = EXCLUDED.provenance,
           updated_at = EXCLUDED.updated_at,
           closed_at = EXCLUDED.closed_at
-        RETURNING tenant_id, follow_through_id, session_id, actor_id, principal_context,
+        RETURNING tenant_id, follow_through_id, version, session_id, actor_id, principal_context,
                   active_mode, company_scope, working_item_type, source_subsystem, source_item_id,
                   queue_item_id, review_item_id, call_id, incident_id, dispatch_id,
                   title, summary, status, closure_state, closure_reason, next_governed_action,
@@ -3230,6 +3451,7 @@ export class AgentOsRepository {
         [
           record.tenantId,
           record.followThroughId,
+          record.version,
           record.sessionId,
           record.actorId,
           record.principalContext,
@@ -3265,6 +3487,290 @@ export class AgentOsRepository {
     );
 
     return mapFollowThroughRecordRow(res.rows[0]!);
+  }
+
+  async createOrGetAaliyahFollowThroughRecord(args: {
+    record: FollowThroughRecord;
+  }): Promise<FollowThroughRecord> {
+    const record = args.record;
+    return this.runWithTenant(this.pool, record.tenantId, async (client) => {
+      const inserted = await client.query<FollowThroughRecordRow>(
+        `
+        INSERT INTO aaliyah_follow_through_records (
+          tenant_id, follow_through_id, version, session_id, actor_id, principal_context,
+          active_mode, company_scope, working_item_type, source_subsystem, source_item_id,
+          queue_item_id, review_item_id, call_id, incident_id, dispatch_id,
+          title, summary, status, closure_state, closure_reason, next_governed_action,
+          founder_declared_completion, downstream_action_ref, escalation_target,
+          escalation_class, escalation_rationale, escalation_provenance, note,
+          provenance, created_at, updated_at, closed_at
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,
+          $7,$8,$9,$10,$11,
+          $12,$13,$14,$15,$16,
+          $17,$18,$19,$20,$21,$22,
+          $23,$24,$25,
+          $26,$27,$28::jsonb,$29,
+          $30::jsonb,$31,$32,$33
+        )
+        ON CONFLICT (tenant_id, actor_id, principal_context, source_item_id) DO NOTHING
+        RETURNING tenant_id, follow_through_id, version, session_id, actor_id, principal_context,
+                  active_mode, company_scope, working_item_type, source_subsystem, source_item_id,
+                  queue_item_id, review_item_id, call_id, incident_id, dispatch_id,
+                  title, summary, status, closure_state, closure_reason, next_governed_action,
+                  founder_declared_completion, downstream_action_ref, escalation_target,
+                  escalation_class, escalation_rationale, escalation_provenance, note,
+                  provenance, created_at, updated_at, closed_at
+        `,
+        [
+          record.tenantId,
+          record.followThroughId,
+          record.version,
+          record.sessionId,
+          record.actorId,
+          record.principalContext,
+          record.activeMode,
+          record.companyScope,
+          record.workingItemType,
+          record.sourceSubsystem,
+          record.sourceItemId,
+          record.queueItemId,
+          record.reviewItemId,
+          record.callId,
+          record.incidentId,
+          record.dispatchId,
+          record.title,
+          record.summary,
+          record.status,
+          record.closureState,
+          record.closureReason,
+          record.nextGovernedAction,
+          record.founderDeclaredCompletion,
+          record.downstreamActionRef,
+          record.escalationTarget,
+          record.escalationClass,
+          record.escalationRationale,
+          JSON.stringify(record.escalationProvenance ?? {}),
+          record.note,
+          JSON.stringify(record.provenance),
+          record.createdAt,
+          record.updatedAt,
+          record.closedAt
+        ]
+      );
+
+      if (inserted.rows[0]) {
+        return mapFollowThroughRecordRow(inserted.rows[0]);
+      }
+
+      const existing = await client.query<FollowThroughRecordRow>(
+        `
+        SELECT tenant_id, follow_through_id, version, session_id, actor_id, principal_context,
+               active_mode, company_scope, working_item_type, source_subsystem, source_item_id,
+               queue_item_id, review_item_id, call_id, incident_id, dispatch_id,
+               title, summary, status, closure_state, closure_reason, next_governed_action,
+               founder_declared_completion, downstream_action_ref, escalation_target,
+               escalation_class, escalation_rationale, escalation_provenance, note,
+               provenance, created_at, updated_at, closed_at
+        FROM aaliyah_follow_through_records
+        WHERE tenant_id = $1
+          AND actor_id = $2
+          AND principal_context = $3
+          AND source_item_id = $4
+        `,
+        [record.tenantId, record.actorId, record.principalContext, record.sourceItemId]
+      );
+
+      return mapFollowThroughRecordRow(existing.rows[0]!);
+    });
+  }
+
+  async commitAaliyahFollowThroughTransition(args: {
+    session: AaliyahSessionContextRecord;
+    expectedSessionVersion: number;
+    record: FollowThroughRecord;
+    expectedFollowThroughVersion: number;
+    historyEntry: FollowThroughHistoryEntry;
+  }): Promise<{ session: AaliyahSessionContextRecord; record: FollowThroughRecord; historyEntry: FollowThroughHistoryEntry }> {
+    return this.runWithTenant(this.pool, args.session.tenantId, async (client) => {
+      const sessionRes = await client.query<AaliyahSessionContextRow>(
+        `
+        UPDATE aaliyah_session_contexts
+        SET session_id = $4,
+            company_scope = $5,
+            active_mode_state = $6::jsonb,
+            interaction_state = $7::jsonb,
+            retention_policy = $8::jsonb,
+            updated_at = $9,
+            expires_at = $10,
+            hard_expires_at = $11,
+            last_reset_at = $12,
+            last_reset_reason = $13,
+            version = $14
+        WHERE tenant_id = $1
+          AND actor_id = $2
+          AND principal_context = $3
+          AND version = $15
+        RETURNING tenant_id, actor_id, principal_context, session_id, company_scope,
+                  active_mode_state, interaction_state, retention_policy,
+                  created_at, updated_at, expires_at, hard_expires_at,
+                  last_reset_at, last_reset_reason, version
+        `,
+        [
+          args.session.tenantId,
+          args.session.actorId,
+          args.session.principalContext,
+          args.session.sessionId,
+          args.session.companyScope,
+          JSON.stringify(args.session.activeModeState),
+          JSON.stringify(args.session.interactionState),
+          JSON.stringify(args.session.retentionPolicy),
+          args.session.updatedAt,
+          args.session.expiresAt,
+          args.session.hardExpiresAt,
+          args.session.lastResetAt,
+          args.session.lastResetReason,
+          args.session.version,
+          args.expectedSessionVersion
+        ]
+      );
+      if (!sessionRes.rows[0]) {
+        throw new Error("aaliyah_session_version_conflict");
+      }
+
+      const recordRes = await client.query<FollowThroughRecordRow>(
+        `
+        UPDATE aaliyah_follow_through_records
+        SET version = $3,
+            session_id = $4,
+            actor_id = $5,
+            principal_context = $6,
+            active_mode = $7,
+            company_scope = $8,
+            working_item_type = $9,
+            source_subsystem = $10,
+            source_item_id = $11,
+            queue_item_id = $12,
+            review_item_id = $13,
+            call_id = $14,
+            incident_id = $15,
+            dispatch_id = $16,
+            title = $17,
+            summary = $18,
+            status = $19,
+            closure_state = $20,
+            closure_reason = $21,
+            next_governed_action = $22,
+            founder_declared_completion = $23,
+            downstream_action_ref = $24,
+            escalation_target = $25,
+            escalation_class = $26,
+            escalation_rationale = $27,
+            escalation_provenance = $28::jsonb,
+            note = $29,
+            provenance = $30::jsonb,
+            updated_at = $31,
+            closed_at = $32
+        WHERE tenant_id = $1
+          AND follow_through_id = $2
+          AND version = $33
+        RETURNING tenant_id, follow_through_id, version, session_id, actor_id, principal_context,
+                  active_mode, company_scope, working_item_type, source_subsystem, source_item_id,
+                  queue_item_id, review_item_id, call_id, incident_id, dispatch_id,
+                  title, summary, status, closure_state, closure_reason, next_governed_action,
+                  founder_declared_completion, downstream_action_ref, escalation_target,
+                  escalation_class, escalation_rationale, escalation_provenance, note,
+                  provenance, created_at, updated_at, closed_at
+        `,
+        [
+          args.record.tenantId,
+          args.record.followThroughId,
+          args.record.version,
+          args.record.sessionId,
+          args.record.actorId,
+          args.record.principalContext,
+          args.record.activeMode,
+          args.record.companyScope,
+          args.record.workingItemType,
+          args.record.sourceSubsystem,
+          args.record.sourceItemId,
+          args.record.queueItemId,
+          args.record.reviewItemId,
+          args.record.callId,
+          args.record.incidentId,
+          args.record.dispatchId,
+          args.record.title,
+          args.record.summary,
+          args.record.status,
+          args.record.closureState,
+          args.record.closureReason,
+          args.record.nextGovernedAction,
+          args.record.founderDeclaredCompletion,
+          args.record.downstreamActionRef,
+          args.record.escalationTarget,
+          args.record.escalationClass,
+          args.record.escalationRationale,
+          JSON.stringify(args.record.escalationProvenance ?? {}),
+          args.record.note,
+          JSON.stringify(args.record.provenance),
+          args.record.updatedAt,
+          args.record.closedAt,
+          args.expectedFollowThroughVersion
+        ]
+      );
+      if (!recordRes.rows[0]) {
+        throw new Error("aaliyah_follow_through_version_conflict");
+      }
+
+      const historyRes = await client.query<FollowThroughHistoryEntryRow>(
+        `
+        INSERT INTO aaliyah_follow_through_history (
+          tenant_id, event_id, follow_through_id, action, previous_status,
+          resulting_status, closure_state, closure_reason, next_governed_action,
+          founder_declared_completion, downstream_action_ref, escalation_target,
+          escalation_class, escalation_rationale, escalation_provenance, note,
+          actor_id, created_at
+        ) VALUES (
+          $1,$2,$3,$4,$5,
+          $6,$7,$8,$9,
+          $10,$11,$12,
+          $13,$14,$15::jsonb,$16,
+          $17,$18
+        )
+        RETURNING tenant_id, event_id, follow_through_id, action, previous_status,
+                  resulting_status, closure_state, closure_reason, next_governed_action,
+                  founder_declared_completion, downstream_action_ref, escalation_target,
+                  escalation_class, escalation_rationale, escalation_provenance, note,
+                  actor_id, created_at
+        `,
+        [
+          args.historyEntry.tenantId,
+          args.historyEntry.eventId,
+          args.historyEntry.followThroughId,
+          args.historyEntry.action,
+          args.historyEntry.previousStatus,
+          args.historyEntry.resultingStatus,
+          args.historyEntry.closureState,
+          args.historyEntry.closureReason,
+          args.historyEntry.nextGovernedAction,
+          args.historyEntry.founderDeclaredCompletion,
+          args.historyEntry.downstreamActionRef,
+          args.historyEntry.escalationTarget,
+          args.historyEntry.escalationClass,
+          args.historyEntry.escalationRationale,
+          JSON.stringify(args.historyEntry.escalationProvenance ?? {}),
+          args.historyEntry.note,
+          args.historyEntry.actorId,
+          args.historyEntry.createdAt
+        ]
+      );
+
+      return {
+        session: mapAaliyahSessionContextRow(sessionRes.rows[0]),
+        record: mapFollowThroughRecordRow(recordRes.rows[0]),
+        historyEntry: mapFollowThroughHistoryEntryRow(historyRes.rows[0])
+      };
+    });
   }
 
   async createAaliyahFollowThroughHistoryEntry(args: {
@@ -3398,7 +3904,7 @@ export class AgentOsRepository {
       client.query<FollowThroughRecordRow>(
         `
         SELECT DISTINCT ON (source_item_id)
-               tenant_id, follow_through_id, session_id, actor_id, principal_context,
+               tenant_id, follow_through_id, version, session_id, actor_id, principal_context,
                active_mode, company_scope, working_item_type, source_subsystem, source_item_id,
                queue_item_id, review_item_id, call_id, incident_id, dispatch_id,
                title, summary, status, closure_state, closure_reason, next_governed_action,

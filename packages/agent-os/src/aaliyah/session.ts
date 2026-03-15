@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { AaliyahMemoryBoundaryService } from "./memory-boundary.js";
 import type { AaliyahDiagnosticsService } from "./diagnostics.js";
+import { AaliyahIdempotencyService, stableRequestFingerprint } from "./idempotency.js";
 import { assertAaliyahSessionIntegrity } from "./session-guards.js";
 import {
   appendIntentTrail,
@@ -51,7 +52,8 @@ export class AaliyahSessionContextService {
   constructor(
     private readonly repository: AgentOsRepository,
     boundary?: AaliyahMemoryBoundaryService,
-    private readonly diagnostics?: AaliyahDiagnosticsService
+    private readonly diagnostics?: AaliyahDiagnosticsService,
+    private readonly idempotency: AaliyahIdempotencyService = new AaliyahIdempotencyService(repository)
   ) {
     this.boundary = boundary ?? new AaliyahMemoryBoundaryService();
   }
@@ -68,11 +70,12 @@ export class AaliyahSessionContextService {
     boundaryViolation: AaliyahBoundaryViolationResult | null;
   }> {
     const generatedAt = args.generatedAt ?? new Date().toISOString();
-    let session = await this.repository.getAaliyahSessionContext({
+    const loadedSession = await this.repository.getAaliyahSessionContext({
       tenantId: args.tenantId,
       actorId: args.actorId,
       principalContext: args.principalContext
     });
+    let session = loadedSession;
 
     let resetTelemetry: { resetReason: string; resetScope: "soft" | "hard"; expiredPendingDisambiguation: boolean } | null = null;
 
@@ -128,7 +131,26 @@ export class AaliyahSessionContextService {
     }
 
     assertAaliyahSessionIntegrity(session);
-    await this.repository.upsertAaliyahSessionContext({ session });
+    try {
+      await this.repository.upsertAaliyahSessionContext({
+        session,
+        expectedVersion: loadedSession?.version ?? null
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "aaliyah_session_version_conflict") {
+        const latest = await this.repository.getAaliyahSessionContext({
+          tenantId: args.tenantId,
+          actorId: args.actorId,
+          principalContext: args.principalContext
+        });
+        if (!latest) {
+          throw error;
+        }
+        session = latest;
+      } else {
+        throw error;
+      }
+    }
     if (resetTelemetry && this.diagnostics) {
       await this.diagnostics.recordEvent({
         tenantId: session.tenantId,
@@ -166,43 +188,60 @@ export class AaliyahSessionContextService {
     resetReason?: AaliyahSessionResetReason;
     hardReset?: boolean;
     generatedAt?: string;
+    idempotencyKey?: string | null;
   }): Promise<AaliyahSessionResetResult> {
     const generatedAt = args.generatedAt ?? new Date().toISOString();
-    const { session } = await this.resolveSession({
+    return this.idempotency.execute({
       tenantId: args.tenantId,
       actorId: args.actorId,
       principalContext: args.principalContext,
-      generatedAt
+      operationName: "session_reset",
+      idempotencyKey: args.idempotencyKey ?? null,
+      requestFingerprint: stableRequestFingerprint([args.resetReason ?? "manual_reset", args.hardReset === true]),
+      startedAt: generatedAt,
+      serializeResult: (result) => ({ session: result.session, resetReason: result.resetReason }),
+      deserializeResult: (payload) => payload as unknown as AaliyahSessionResetResult,
+      execute: async () => {
+        const { session } = await this.resolveSession({
+          tenantId: args.tenantId,
+          actorId: args.actorId,
+          principalContext: args.principalContext,
+          generatedAt
+        });
+
+        const resetReason = args.resetReason ?? "manual_reset";
+        const updated = args.hardReset
+          ? hardResetSession(session, resetReason, generatedAt)
+          : softResetSession(session, resetReason, generatedAt, "manual_reset");
+
+        assertAaliyahSessionIntegrity(updated);
+        await this.repository.upsertAaliyahSessionContext({
+          session: updated,
+          expectedVersion: session.version
+        });
+        if (this.diagnostics) {
+          await this.diagnostics.recordEvent({
+            tenantId: updated.tenantId,
+            actorId: updated.actorId,
+            principalContext: updated.principalContext,
+            activeMode: updated.activeModeState.activeMode,
+            eventType: "session_reset",
+            eventSource: "aaliyah_session",
+            signalKey: `session_reset:${resetReason}`,
+            payload: {
+              resetReason,
+              resetScope: args.hardReset ? "hard" : "soft",
+              expiredPendingDisambiguation: Boolean(session.interactionState.pendingDisambiguation)
+            },
+            createdAt: generatedAt
+          });
+        }
+        return {
+          session: buildSessionSnapshotView(updated),
+          resetReason
+        };
+      }
     });
-
-    const resetReason = args.resetReason ?? "manual_reset";
-    const updated = args.hardReset
-      ? hardResetSession(session, resetReason, generatedAt)
-      : softResetSession(session, resetReason, generatedAt, "manual_reset");
-
-    assertAaliyahSessionIntegrity(updated);
-    await this.repository.upsertAaliyahSessionContext({ session: updated });
-    if (this.diagnostics) {
-      await this.diagnostics.recordEvent({
-        tenantId: updated.tenantId,
-        actorId: updated.actorId,
-        principalContext: updated.principalContext,
-        activeMode: updated.activeModeState.activeMode,
-        eventType: "session_reset",
-        eventSource: "aaliyah_session",
-        signalKey: `session_reset:${resetReason}`,
-        payload: {
-          resetReason,
-          resetScope: args.hardReset ? "hard" : "soft",
-          expiredPendingDisambiguation: Boolean(session.interactionState.pendingDisambiguation)
-        },
-        createdAt: generatedAt
-      });
-    }
-    return {
-      session: buildSessionSnapshotView(updated),
-      resetReason
-    };
   }
 
   async applyRuntimeResult(args: {
@@ -224,7 +263,7 @@ export class AaliyahSessionContextService {
         session = clearPendingDisambiguation(session, args.generatedAt);
       }
       assertAaliyahSessionIntegrity(session);
-      await this.repository.upsertAaliyahSessionContext({ session });
+      await this.repository.upsertAaliyahSessionContext({ session, expectedVersion: args.session.version });
       if (this.diagnostics) {
         await this.diagnostics.recordEvent({
           tenantId: session.tenantId,
@@ -286,7 +325,7 @@ export class AaliyahSessionContextService {
     }
 
     assertAaliyahSessionIntegrity(session);
-    await this.repository.upsertAaliyahSessionContext({ session });
+    await this.repository.upsertAaliyahSessionContext({ session, expectedVersion: args.session.version });
     if (this.diagnostics) {
       await this.diagnostics.recordEvent({
         tenantId: session.tenantId,

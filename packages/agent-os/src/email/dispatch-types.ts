@@ -37,6 +37,7 @@ export type EmailDispatchRequest = {
   actorId: string;
   reviewItemId: string;
   requestedAt?: string;
+  idempotencyKey?: string | null;
   auditMetadata?: Record<string, unknown>;
 };
 

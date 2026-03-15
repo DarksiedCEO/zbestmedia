@@ -142,4 +142,78 @@ describe("Aaliyah session context", () => {
     expect(resolved.session.lastResetReason).toBe("idle_expired");
     expect(resolved.activeMode).toBe("zbestmedia");
   });
+
+  it("replays a completed session reset when the same idempotency key is retried", async () => {
+    const snapshot = {
+      session: {
+        sessionId: "aaliyah-session:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        actorId: "actor-1",
+        principalContext: "founder",
+        activeModeState: {
+          activeMode: "founder",
+          previousMode: "zbestmedia",
+          switchedAt: "2026-03-15T00:00:00.000Z",
+          switchReason: "explicit_request",
+          boundaryDecisionId: null
+        },
+        interactionState: {
+          lastInteractionAt: null,
+          lastIntent: null,
+          lastResolvedIntent: null,
+          intentTrail: [],
+          workingItem: null,
+          reviewApprovalContext: null,
+          pendingDisambiguation: null
+        },
+        retentionPolicy: {
+          intentTrailMaxEntries: 12,
+          idleTtlSeconds: 60,
+          hardTtlSeconds: 86400,
+          snapshotIntentTrailEntries: 6
+        },
+        expiresAt: "2026-03-15T00:01:00.000Z",
+        hardExpiresAt: "2026-03-16T00:00:00.000Z",
+        lastResetAt: "2026-03-15T00:00:00.000Z",
+        lastResetReason: "manual_reset",
+        updatedAt: "2026-03-15T00:00:00.000Z",
+        version: 2
+      },
+      resetReason: "manual_reset"
+    };
+    const repository = {
+      claimAaliyahMutationIdempotency: vi.fn(async () => ({
+        status: "completed",
+        record: {
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          actorId: "actor-1",
+          principalContext: "founder",
+          operationName: "session_reset",
+          idempotencyKey: "reset-idem-1",
+          requestFingerprint: "fingerprint",
+          state: "completed",
+          responsePayload: snapshot,
+          errorCode: null,
+          createdAt: "2026-03-15T00:00:00.000Z",
+          updatedAt: "2026-03-15T00:00:00.000Z",
+          completedAt: "2026-03-15T00:00:00.000Z"
+        }
+      })),
+      getAaliyahSessionContext: vi.fn(),
+      upsertAaliyahSessionContext: vi.fn()
+    } as any;
+
+    const service = new AaliyahSessionContextService(repository);
+    const result = await service.resetSession({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      actorId: "actor-1",
+      principalContext: "founder",
+      idempotencyKey: "reset-idem-1",
+      generatedAt: "2026-03-15T00:00:00.000Z"
+    });
+
+    expect(result.resetReason).toBe("manual_reset");
+    expect(repository.getAaliyahSessionContext).not.toHaveBeenCalled();
+    expect(repository.upsertAaliyahSessionContext).not.toHaveBeenCalled();
+  });
 });

@@ -142,15 +142,15 @@ export class EmailAssistantService {
     return this.reviewQueue.getReviewItem(args);
   }
 
-  async approveReviewItem(args: { tenantId: string; reviewItemId: string; actorId: string; note?: string; reviewedAt?: string }) {
+  async approveReviewItem(args: { tenantId: string; reviewItemId: string; actorId: string; note?: string; reviewedAt?: string; idempotencyKey?: string | null }) {
     return this.reviewQueue.approveReviewItem(args);
   }
 
-  async rejectReviewItem(args: { tenantId: string; reviewItemId: string; actorId: string; note?: string; reviewedAt?: string }) {
+  async rejectReviewItem(args: { tenantId: string; reviewItemId: string; actorId: string; note?: string; reviewedAt?: string; idempotencyKey?: string | null }) {
     return this.reviewQueue.rejectReviewItem(args);
   }
 
-  async requestReviewRevision(args: { tenantId: string; reviewItemId: string; actorId: string; note: string; reviewedAt?: string }) {
+  async requestReviewRevision(args: { tenantId: string; reviewItemId: string; actorId: string; note: string; reviewedAt?: string; idempotencyKey?: string | null }) {
     return this.reviewQueue.requestRevision(args);
   }
 
@@ -163,12 +163,14 @@ export class EmailAssistantService {
     actorId: string;
     reviewItemId: string;
     requestedAt?: string;
+    idempotencyKey?: string | null;
   }): Promise<EmailDispatchResult> {
     return this.dispatchQueue.dispatchApprovedReviewItem({
       tenantId: args.tenantId,
       actorId: args.actorId,
       reviewItemId: args.reviewItemId,
       requestedAt: args.requestedAt,
+      idempotencyKey: args.idempotencyKey ?? null,
       auditMetadata: {
         source: "email-assistant-service"
       }

@@ -2323,6 +2323,7 @@ describe("agent routes", () => {
       record: {
         tenantId: "11111111-1111-4111-8111-111111111111",
         followThroughId: "follow-through:1",
+        version: 2,
         sessionId: "aaliyah-session:1",
         actorId: "actor-1",
         principalContext: "founder",
@@ -3278,12 +3279,13 @@ describe("agent routes", () => {
     expect(aaliyahRuntimeService.execute).toHaveBeenCalledWith({
       tenantId: "11111111-1111-4111-8111-111111111111",
       actorId: "actor-1",
-      requestId: expect.any(String),
+      requestId: "req-k",
       principalContext: "founder",
       request: {
         intent: "get_founder_briefing",
         mode: "zbestmedia",
-        parameters: {}
+        parameters: {},
+        idempotencyKey: "req-k"
       }
     });
   });

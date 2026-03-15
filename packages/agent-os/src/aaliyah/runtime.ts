@@ -502,7 +502,8 @@ export class AaliyahRuntimeService {
           principalContext: args.principalContext ?? "founder",
           resetReason: "manual_reset",
           hardReset: args.request.parameters?.scope === "hard",
-          generatedAt
+          generatedAt,
+          idempotencyKey: args.request.idempotencyKey ?? args.requestId ?? null
         });
         result = this.buildSuccess({
           runtimeRequestId,
@@ -579,6 +580,7 @@ export class AaliyahRuntimeService {
                   ? "escalate"
                   : "invalidate",
           generatedAt,
+          idempotencyKey: args.request.idempotencyKey ?? args.requestId ?? null,
           queueItemId: this.readOptionalString(args.request.parameters, "queueItemId"),
           founderDeclaredCompletion: args.request.parameters?.founderDeclaredCompletion === true,
           closureReason: this.requireStringParam(args.request.parameters, "closureReason", resolvedIntent) as never,
@@ -718,7 +720,8 @@ export class AaliyahRuntimeService {
           tenantId: args.tenantId,
           reviewItemId,
           actorId: args.actorId,
-          note: this.readOptionalString(args.request.parameters, "note")
+          note: this.readOptionalString(args.request.parameters, "note"),
+          idempotencyKey: args.request.idempotencyKey ?? args.requestId ?? null
         });
         result = this.buildSuccess({
           runtimeRequestId,
@@ -762,7 +765,8 @@ export class AaliyahRuntimeService {
           tenantId: args.tenantId,
           reviewItemId,
           actorId: args.actorId,
-          note: this.readOptionalString(args.request.parameters, "note")
+          note: this.readOptionalString(args.request.parameters, "note"),
+          idempotencyKey: args.request.idempotencyKey ?? args.requestId ?? null
         });
         result = this.buildSuccess({
           runtimeRequestId,
@@ -807,7 +811,8 @@ export class AaliyahRuntimeService {
           tenantId: args.tenantId,
           reviewItemId,
           actorId: args.actorId,
-          note
+          note,
+          idempotencyKey: args.request.idempotencyKey ?? args.requestId ?? null
         });
         result = this.buildSuccess({
           runtimeRequestId,
@@ -850,7 +855,8 @@ export class AaliyahRuntimeService {
         const payload = await this.email.dispatchApprovedReviewItem({
           tenantId: args.tenantId,
           actorId: args.actorId,
-          reviewItemId
+          reviewItemId,
+          idempotencyKey: args.request.idempotencyKey ?? args.requestId ?? null
         });
         result = this.buildSuccess({
           runtimeRequestId,

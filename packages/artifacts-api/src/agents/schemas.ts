@@ -1635,6 +1635,7 @@ export const AaliyahSessionResetResponseSchema = z.object({
 const AaliyahFollowThroughRecordSchema = z.object({
   tenantId: z.string().uuid(),
   followThroughId: z.string().min(1),
+  version: z.number().int().positive(),
   sessionId: z.string().min(1),
   actorId: z.string().min(1),
   principalContext: z.enum(["founder", "operator"]),
@@ -1934,7 +1935,8 @@ const AaliyahRuntimeRequestParametersSchema = z.record(z.string(), z.unknown()).
 export const AaliyahRuntimeRequestBodySchema = z.object({
   intent: z.string().min(1),
   mode: AaliyahRuntimeModeSchema.optional(),
-  parameters: AaliyahRuntimeRequestParametersSchema.optional().default({})
+  parameters: AaliyahRuntimeRequestParametersSchema.optional().default({}),
+  idempotencyKey: z.string().min(1).optional()
 });
 
 const AaliyahRuntimeProvenanceSchema = z.object({

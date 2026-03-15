@@ -51,6 +51,7 @@ export type FollowThroughActionRequest = {
   mode: FounderBriefingMode;
   action: FollowThroughActionType;
   generatedAt?: string;
+  idempotencyKey?: string | null;
   queueItemId?: string | null;
   founderDeclaredCompletion?: boolean;
   closureReason: WorkingItemClosureReason;
@@ -98,6 +99,7 @@ export type FollowThroughHistoryEntry = WorkingItemClosureEvent;
 export type FollowThroughRecord = {
   tenantId: string;
   followThroughId: string;
+  version: number;
   sessionId: string;
   actorId: string;
   principalContext: "founder" | "operator";

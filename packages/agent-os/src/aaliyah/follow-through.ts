@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { AaliyahMemoryBoundaryService } from "./memory-boundary.js";
 import type { AaliyahDiagnosticsService } from "./diagnostics.js";
+import { AaliyahIdempotencyService, stableRequestFingerprint } from "./idempotency.js";
 import { AaliyahSessionContextService } from "./session.js";
 import { assertAaliyahSessionIntegrity } from "./session-guards.js";
 import {
@@ -38,7 +39,8 @@ export class AaliyahFollowThroughService {
     private readonly repository: AgentOsRepository,
     private readonly sessions: AaliyahSessionContextService,
     boundary?: AaliyahMemoryBoundaryService,
-    private readonly diagnostics?: AaliyahDiagnosticsService
+    private readonly diagnostics?: AaliyahDiagnosticsService,
+    private readonly idempotency: AaliyahIdempotencyService = new AaliyahIdempotencyService(repository)
   ) {
     this.boundary = boundary ?? new AaliyahMemoryBoundaryService();
   }
@@ -78,87 +80,115 @@ export class AaliyahFollowThroughService {
 
   async applyAction(args: FollowThroughActionRequest): Promise<FollowThroughActionResult> {
     const generatedAt = args.generatedAt ?? new Date().toISOString();
-    const { session } = await this.sessions.resolveSession({
+    return this.idempotency.execute({
       tenantId: args.tenantId,
       actorId: args.actorId,
       principalContext: args.principalContext,
-      requestedMode: args.mode,
-      generatedAt
+      operationName: "follow_through_action",
+      idempotencyKey: args.idempotencyKey ?? null,
+      requestFingerprint: stableRequestFingerprint([
+        args.mode,
+        args.action,
+        args.queueItemId ?? null,
+        args.closureReason,
+        args.founderDeclaredCompletion === true,
+        args.downstreamActionRef ?? null,
+        args.escalationTarget ?? null,
+        args.escalationClass ?? null,
+        args.escalationRationale ?? null,
+        args.escalationProvenance ?? null
+      ]),
+      startedAt: generatedAt,
+      serializeResult: (result) => ({
+        record: result.record,
+        historyEntry: result.historyEntry,
+        nextGovernedAction: result.nextGovernedAction
+      }),
+      deserializeResult: (payload) => payload as unknown as FollowThroughActionResult,
+      execute: async () => {
+        const { session } = await this.sessions.resolveSession({
+          tenantId: args.tenantId,
+          actorId: args.actorId,
+          principalContext: args.principalContext,
+          requestedMode: args.mode,
+          generatedAt
+        });
+
+        const eligibility = await this.getEligibility({ ...args, generatedAt }, session);
+        if (!eligibility.allowed) {
+          await this.recordInvalidAction(args, session, eligibility.reason, generatedAt);
+          throw new Error(eligibility.reason);
+        }
+
+        const current = await this.repository.createOrGetAaliyahFollowThroughRecord({
+          record: this.buildRecord(session, generatedAt)
+        });
+        if (current.status !== "active") {
+          await this.recordInvalidAction(args, session, "aaliyah_follow_through_terminal_immutable", generatedAt);
+          throw new Error("aaliyah_follow_through_terminal_immutable");
+        }
+
+        const transition = this.resolveTransition(args);
+        const nextGovernedAction = this.resolveNextAction(transition.status);
+
+        const record: FollowThroughRecord = {
+          ...current,
+          version: current.version + 1,
+          activeMode: session.activeModeState.activeMode,
+          status: transition.status,
+          closureState: transition.closureState,
+          closureReason: args.closureReason,
+          nextGovernedAction,
+          founderDeclaredCompletion: Boolean(args.founderDeclaredCompletion),
+          downstreamActionRef: args.downstreamActionRef ?? null,
+          escalationTarget: args.escalationTarget ?? null,
+          escalationClass: args.escalationClass ?? null,
+          escalationRationale: args.escalationRationale ?? null,
+          escalationProvenance: args.escalationProvenance ?? null,
+          note: args.closureNote ?? null,
+          updatedAt: generatedAt,
+          closedAt: generatedAt
+        };
+
+        const historyEntry: WorkingItemClosureEvent = {
+          tenantId: args.tenantId,
+          eventId: `follow-through-event:${randomUUID()}`,
+          followThroughId: record.followThroughId,
+          action: args.action,
+          previousStatus: current.status,
+          resultingStatus: record.status,
+          closureState: record.closureState,
+          closureReason: args.closureReason,
+          nextGovernedAction,
+          founderDeclaredCompletion: Boolean(args.founderDeclaredCompletion),
+          downstreamActionRef: args.downstreamActionRef ?? null,
+          escalationTarget: args.escalationTarget ?? null,
+          escalationClass: args.escalationClass ?? null,
+          escalationRationale: args.escalationRationale ?? null,
+          escalationProvenance: args.escalationProvenance ?? null,
+          note: args.closureNote ?? null,
+          actorId: args.actorId,
+          createdAt: generatedAt
+        };
+
+        const updatedSession = this.applySessionClosure(session, args.closureReason, transition.closureState, generatedAt);
+        assertAaliyahSessionIntegrity(updatedSession);
+
+        const committed = await this.repository.commitAaliyahFollowThroughTransition({
+          session: updatedSession,
+          expectedSessionVersion: session.version,
+          record,
+          expectedFollowThroughVersion: current.version,
+          historyEntry
+        });
+
+        return {
+          record: committed.record,
+          historyEntry: committed.historyEntry,
+          nextGovernedAction
+        };
+      }
     });
-
-    const eligibility = await this.getEligibility({ ...args, generatedAt }, session);
-    if (!eligibility.allowed) {
-      await this.recordInvalidAction(args, session, eligibility.reason, generatedAt);
-      throw new Error(eligibility.reason);
-    }
-
-    const workingItem = this.requireWorkingItem(session, args.queueItemId ?? null);
-    const existing = await this.repository.getAaliyahFollowThroughRecordBySource({
-      tenantId: args.tenantId,
-      actorId: args.actorId,
-      principalContext: args.principalContext,
-      sourceItemId: workingItem.sourceItemId
-    });
-    const current = existing ?? this.buildRecord(session, generatedAt);
-    if (current.status !== "active") {
-      await this.recordInvalidAction(args, session, "aaliyah_follow_through_terminal_immutable", generatedAt);
-      throw new Error("aaliyah_follow_through_terminal_immutable");
-    }
-
-    const transition = this.resolveTransition(args);
-    const nextGovernedAction = this.resolveNextAction(transition.status);
-
-    const record: FollowThroughRecord = {
-      ...current,
-      activeMode: session.activeModeState.activeMode,
-      status: transition.status,
-      closureState: transition.closureState,
-      closureReason: args.closureReason,
-      nextGovernedAction,
-      founderDeclaredCompletion: Boolean(args.founderDeclaredCompletion),
-      downstreamActionRef: args.downstreamActionRef ?? null,
-      escalationTarget: args.escalationTarget ?? null,
-      escalationClass: args.escalationClass ?? null,
-      escalationRationale: args.escalationRationale ?? null,
-      escalationProvenance: args.escalationProvenance ?? null,
-      note: args.closureNote ?? null,
-      updatedAt: generatedAt,
-      closedAt: generatedAt
-    };
-
-    const historyEntry: WorkingItemClosureEvent = {
-      tenantId: args.tenantId,
-      eventId: `follow-through-event:${randomUUID()}`,
-      followThroughId: record.followThroughId,
-      action: args.action,
-      previousStatus: current.status,
-      resultingStatus: record.status,
-      closureState: record.closureState,
-      closureReason: args.closureReason,
-      nextGovernedAction,
-      founderDeclaredCompletion: Boolean(args.founderDeclaredCompletion),
-      downstreamActionRef: args.downstreamActionRef ?? null,
-      escalationTarget: args.escalationTarget ?? null,
-      escalationClass: args.escalationClass ?? null,
-      escalationRationale: args.escalationRationale ?? null,
-      escalationProvenance: args.escalationProvenance ?? null,
-      note: args.closureNote ?? null,
-      actorId: args.actorId,
-      createdAt: generatedAt
-    };
-
-    const updatedSession = this.applySessionClosure(session, args.closureReason, transition.closureState, generatedAt);
-    assertAaliyahSessionIntegrity(updatedSession);
-
-    await this.repository.upsertAaliyahSessionContext({ session: updatedSession });
-    await this.repository.upsertAaliyahFollowThroughRecord({ record });
-    await this.repository.createAaliyahFollowThroughHistoryEntry({ entry: historyEntry });
-
-    return {
-      record,
-      historyEntry,
-      nextGovernedAction
-    };
   }
 
   async getEligibility(
@@ -305,19 +335,8 @@ export class AaliyahFollowThroughService {
   }
 
   private async ensureRecord(session: AaliyahSessionContext, generatedAt: string): Promise<FollowThroughRecord> {
-    const workingItem = this.requireWorkingItem(session, null);
-    const existing = await this.repository.getAaliyahFollowThroughRecordBySource({
-      tenantId: session.tenantId,
-      actorId: session.actorId,
-      principalContext: session.principalContext,
-      sourceItemId: workingItem.sourceItemId
-    });
-    if (existing) {
-      return existing;
-    }
     const record = this.buildRecord(session, generatedAt);
-    await this.repository.upsertAaliyahFollowThroughRecord({ record });
-    return record;
+    return this.repository.createOrGetAaliyahFollowThroughRecord({ record });
   }
 
   private buildRecord(session: AaliyahSessionContext, generatedAt: string): FollowThroughRecord {
@@ -325,6 +344,7 @@ export class AaliyahFollowThroughService {
     return {
       tenantId: session.tenantId,
       followThroughId: `follow-through:${randomUUID()}`,
+      version: 1,
       sessionId: session.sessionId,
       actorId: session.actorId,
       principalContext: session.principalContext,

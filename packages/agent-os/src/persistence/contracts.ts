@@ -47,6 +47,11 @@ import type {
   AaliyahWorkingItemContext as AaliyahWorkingItemContextShape
 } from "../aaliyah/session-types.js";
 import type {
+  AaliyahMutationIdempotencyRecord as AaliyahMutationIdempotencyRecordShape,
+  AaliyahMutationIdempotencyState,
+  AaliyahMutationOperation
+} from "../aaliyah/idempotency-types.js";
+import type {
   FollowThroughActionType,
   FollowThroughEscalationClass,
   FollowThroughHistoryEntry as FollowThroughHistoryEntryShape,
@@ -844,6 +849,7 @@ type FollowThroughActionTypeRecord = z.infer<typeof FollowThroughActionTypeSchem
 export const FollowThroughRecordSchema = z.object({
   tenantId: z.string().uuid(),
   followThroughId: z.string().min(1),
+  version: z.number().int().positive(),
   sessionId: z.string().min(1),
   actorId: z.string().min(1),
   principalContext: z.enum(["founder", "operator"]),
@@ -890,6 +896,37 @@ export const FollowThroughRecordSchema = z.object({
   closedAt: z.string().datetime().nullable()
 }) satisfies z.ZodType<FollowThroughRecordShape>;
 export type FollowThroughRecord = z.infer<typeof FollowThroughRecordSchema>;
+
+export const AaliyahMutationOperationSchema = z.enum([
+  "session_reset",
+  "follow_through_action",
+  "email_review_transition",
+  "email_dispatch"
+]) satisfies z.ZodType<AaliyahMutationOperation>;
+export type AaliyahMutationOperationRecord = z.infer<typeof AaliyahMutationOperationSchema>;
+
+export const AaliyahMutationIdempotencyStateSchema = z.enum([
+  "in_progress",
+  "completed",
+  "failed"
+]) satisfies z.ZodType<AaliyahMutationIdempotencyState>;
+export type AaliyahMutationIdempotencyStateRecord = z.infer<typeof AaliyahMutationIdempotencyStateSchema>;
+
+export const AaliyahMutationIdempotencyRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  actorId: z.string().min(1),
+  principalContext: z.enum(["founder", "operator"]),
+  operationName: AaliyahMutationOperationSchema,
+  idempotencyKey: z.string().min(1),
+  requestFingerprint: z.string().min(1),
+  state: AaliyahMutationIdempotencyStateSchema,
+  responsePayload: z.record(z.string(), z.unknown()).nullable(),
+  errorCode: z.string().min(1).nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  completedAt: z.string().datetime().nullable()
+}) satisfies z.ZodType<AaliyahMutationIdempotencyRecordShape>;
+export type AaliyahMutationIdempotencyRecord = z.infer<typeof AaliyahMutationIdempotencyRecordSchema>;
 
 export const FollowThroughHistoryEntrySchema = z.object({
   tenantId: z.string().uuid(),

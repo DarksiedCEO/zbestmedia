@@ -109,6 +109,7 @@ describe("email draft dispatch service", () => {
   it("dispatches an approved review item", async () => {
     const repository = {
       getEmailDraftReviewItem: vi.fn(async () => buildReviewItem()),
+      getLatestEmailDispatchRecordForReviewItem: vi.fn(async () => null),
       getEmailAccountConnection: vi.fn(async () => buildAccount()),
       createEmailDispatchRecord: vi.fn(async () => buildDispatch("dispatch_pending")),
       updateEmailDispatchRecord: vi.fn(async () => buildDispatch("dispatch_succeeded")),
@@ -143,6 +144,7 @@ describe("email draft dispatch service", () => {
   it("blocks non-approved review items", async () => {
     const repository = {
       getEmailDraftReviewItem: vi.fn(async () => buildReviewItem({ reviewStatus: "pending_review" })),
+      getLatestEmailDispatchRecordForReviewItem: vi.fn(async () => null),
       getEmailAccountConnection: vi.fn(async () => buildAccount()),
       createEmailDispatchRecord: vi.fn(async () => buildDispatch("dispatch_pending")),
       updateEmailDispatchRecord: vi.fn(async () => buildDispatch("dispatch_blocked")),
@@ -172,6 +174,7 @@ describe("email draft dispatch service", () => {
   it("records dispatch failure when connector send fails", async () => {
     const repository = {
       getEmailDraftReviewItem: vi.fn(async () => buildReviewItem()),
+      getLatestEmailDispatchRecordForReviewItem: vi.fn(async () => null),
       getEmailAccountConnection: vi.fn(async () => buildAccount()),
       createEmailDispatchRecord: vi.fn(async () => buildDispatch("dispatch_pending")),
       updateEmailDispatchRecord: vi.fn(async () => buildDispatch("dispatch_failed")),
@@ -199,5 +202,54 @@ describe("email draft dispatch service", () => {
     expect(result.sent).toBe(false);
     expect(result.dispatch.dispatchStatus).toBe("dispatch_failed");
     expect(incidents.createFromExecutionFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses a previously succeeded dispatch instead of sending the same approved draft twice", async () => {
+    const repository = {
+      claimAaliyahMutationIdempotency: vi.fn(async () => ({
+        status: "claimed",
+        record: {
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          actorId: "actor-1",
+          principalContext: "founder",
+          operationName: "email_dispatch",
+          idempotencyKey: "dispatch-idem-1",
+          requestFingerprint: "fingerprint",
+          state: "in_progress",
+          responsePayload: null,
+          errorCode: null,
+          createdAt: "2026-03-12T00:02:00.000Z",
+          updatedAt: "2026-03-12T00:02:00.000Z",
+          completedAt: null
+        }
+      })),
+      completeAaliyahMutationIdempotency: vi.fn(async () => ({})),
+      failAaliyahMutationIdempotency: vi.fn(async () => ({})),
+      getEmailDraftReviewItem: vi.fn(async () => buildReviewItem()),
+      getLatestEmailDispatchRecordForReviewItem: vi.fn(async () => buildDispatch("dispatch_succeeded")),
+      getEmailAccountConnection: vi.fn(async () => buildAccount()),
+      createEmailDispatchRecord: vi.fn(),
+      updateEmailDispatchRecord: vi.fn(),
+      getExecutionRunRecord: vi.fn(async () => ({ executionId: "execution:1" })),
+      appendExecutionStep: vi.fn(async () => ({ executionStepId: "step:1" }))
+    };
+    const incidents = {
+      createFromExecutionFailure: vi.fn()
+    };
+    const gmailRuntime = {
+      createConnector: vi.fn()
+    };
+
+    const service = new EmailDraftDispatchService(repository as never, incidents as never, gmailRuntime as never);
+    const result = await service.dispatchApprovedReviewItem({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      actorId: "actor-1",
+      reviewItemId: "email-review:1"
+    });
+
+    expect(result.sent).toBe(true);
+    expect(result.dispatch.dispatchStatus).toBe("dispatch_succeeded");
+    expect(repository.createEmailDispatchRecord).not.toHaveBeenCalled();
+    expect(gmailRuntime.createConnector).not.toHaveBeenCalled();
   });
 });

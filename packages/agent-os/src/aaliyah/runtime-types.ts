@@ -147,6 +147,7 @@ export type AaliyahRuntimeRequestInput = {
   intent: string;
   mode?: AaliyahRuntimeMode;
   parameters?: Record<string, unknown>;
+  idempotencyKey?: string;
 };
 
 export type AaliyahRuntimeRequestContext = {

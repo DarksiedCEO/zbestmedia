@@ -133,6 +133,7 @@ describe("Aaliyah founder inbox triage", () => {
         .map((sourceItemId) => ({
           tenantId: "tenant",
           followThroughId: `follow-through:${sourceItemId}`,
+          version: 1,
           sessionId: "session:1",
           actorId: "actor-1",
           principalContext: "founder",

@@ -1,5 +1,6 @@
 import type { AgentOsRepository } from "../persistence/repository.js";
 import { AgentIncidentService } from "../incidents/service.js";
+import { AaliyahIdempotencyService, stableRequestFingerprint } from "../aaliyah/idempotency.js";
 import type { EmailAccountConnectionRecord, EmailIntentCategory } from "./types.js";
 import type { GmailConnectorFactory, GmailSendDraftResult } from "./gmail.js";
 import type { EmailDraftReviewRecord } from "./review-types.js";
@@ -18,11 +19,15 @@ export class EmailDispatchError extends Error {
 }
 
 export class EmailDraftDispatchService {
+  private readonly idempotency: AaliyahIdempotencyService;
+
   constructor(
     private readonly repository: AgentOsRepository,
     private readonly incidents: AgentIncidentService,
     private readonly gmailRuntime: GmailConnectorFactory
-  ) {}
+  ) {
+    this.idempotency = new AaliyahIdempotencyService(repository);
+  }
 
   async getDispatchRecord(args: { tenantId: string; dispatchId: string }): Promise<EmailDispatchRecord | null> {
     return this.repository.getEmailDispatchRecord(args);
@@ -30,165 +35,187 @@ export class EmailDraftDispatchService {
 
   async dispatchApprovedReviewItem(args: EmailDispatchRequest): Promise<EmailDispatchResult> {
     const requestedAt = args.requestedAt ?? new Date().toISOString();
-    const reviewItem = await this.repository.getEmailDraftReviewItem({
+    return this.idempotency.execute({
       tenantId: args.tenantId,
-      reviewItemId: args.reviewItemId
-    });
-    if (!reviewItem) {
-      throw new EmailDispatchError("email_dispatch_review_item_not_found");
-    }
-
-    const account = await this.repository.getEmailAccountConnection({
-      tenantId: args.tenantId,
-      accountId: reviewItem.accountId
-    });
-    if (!account) {
-      throw new EmailDispatchError("email_dispatch_account_not_found");
-    }
-
-    const policy = this.evaluateDispatchPolicy(reviewItem, account);
-    let dispatch = await this.repository.createEmailDispatchRecord({
-      tenantId: args.tenantId,
-      reviewItemId: reviewItem.reviewItemId,
-      draftId: reviewItem.draftId,
-      accountId: reviewItem.accountId,
-      threadId: reviewItem.threadId,
-      assignmentRecordId: reviewItem.assignmentRecordId,
-      runRecordId: reviewItem.runRecordId,
-      dispatchStatus: "dispatch_pending",
-      dispatchPolicy: policy,
-      requestedAt,
-      auditMetadata: {
-        actorId: args.actorId,
-        ...args.auditMetadata
-      },
-      createdAt: requestedAt
-    });
-
-    if (!policy.allowed) {
-      dispatch = await this.repository.updateEmailDispatchRecord({
-        tenantId: args.tenantId,
-        dispatchId: dispatch.dispatchId,
-        dispatchStatus: "dispatch_blocked",
-        dispatchPolicy: policy,
-        failureCategory: "dispatch_policy_blocked",
-        failureMessage: policy.reason,
-        updatedAt: requestedAt
-      });
-      await this.appendDispatchExecutionStep({
-        tenantId: args.tenantId,
-        reviewItem,
-        stepName: "email_draft_dispatch_blocked",
-        status: "FAILED",
-        payload: { reason: policy.reason, reviewStatus: reviewItem.reviewStatus, dispatchId: dispatch.dispatchId },
-        createdAt: requestedAt
-      });
-
-      if (this.shouldCreatePolicyIncident(policy.reason)) {
-        await this.incidents.createFromExecutionFailure({
+      actorId: args.actorId,
+      principalContext: "founder",
+      operationName: "email_dispatch",
+      idempotencyKey: args.idempotencyKey ?? null,
+      requestFingerprint: stableRequestFingerprint([args.reviewItemId]),
+      startedAt: requestedAt,
+      serializeResult: (result) => ({ dispatch: result.dispatch, sent: result.sent }),
+      deserializeResult: (payload) => payload as unknown as EmailDispatchResult,
+      execute: async () => {
+        const reviewItem = await this.repository.getEmailDraftReviewItem({
           tenantId: args.tenantId,
-          actorId: args.actorId,
-          failure: {
-            incidentType: "execution_policy_failure",
-            sourceSystem: "email-dispatch-service",
-            message: policy.reason,
-            details: {
-              reviewItemId: reviewItem.reviewItemId,
-              draftId: reviewItem.draftId,
-              accountId: reviewItem.accountId
-            },
-            relatedAssignmentRecordId: reviewItem.assignmentRecordId,
-            relatedRunRecordId: reviewItem.runRecordId,
-            releaseBlocking: false
+          reviewItemId: args.reviewItemId
+        });
+        if (!reviewItem) {
+          throw new EmailDispatchError("email_dispatch_review_item_not_found");
+        }
+
+        const latestDispatch = await this.repository.getLatestEmailDispatchRecordForReviewItem({
+          tenantId: args.tenantId,
+          reviewItemId: reviewItem.reviewItemId
+        });
+        if (latestDispatch?.dispatchStatus === "dispatch_succeeded") {
+          return { dispatch: latestDispatch, sent: true };
+        }
+
+        const account = await this.repository.getEmailAccountConnection({
+          tenantId: args.tenantId,
+          accountId: reviewItem.accountId
+        });
+        if (!account) {
+          throw new EmailDispatchError("email_dispatch_account_not_found");
+        }
+
+        const policy = this.evaluateDispatchPolicy(reviewItem, account);
+        let dispatch = await this.repository.createEmailDispatchRecord({
+          tenantId: args.tenantId,
+          reviewItemId: reviewItem.reviewItemId,
+          draftId: reviewItem.draftId,
+          accountId: reviewItem.accountId,
+          threadId: reviewItem.threadId,
+          assignmentRecordId: reviewItem.assignmentRecordId,
+          runRecordId: reviewItem.runRecordId,
+          dispatchStatus: "dispatch_pending",
+          dispatchPolicy: policy,
+          requestedAt,
+          auditMetadata: {
+            actorId: args.actorId,
+            idempotencyKey: args.idempotencyKey ?? null,
+            ...args.auditMetadata
           },
           createdAt: requestedAt
         });
+
+        if (!policy.allowed) {
+          dispatch = await this.repository.updateEmailDispatchRecord({
+            tenantId: args.tenantId,
+            dispatchId: dispatch.dispatchId,
+            dispatchStatus: "dispatch_blocked",
+            dispatchPolicy: policy,
+            failureCategory: "dispatch_policy_blocked",
+            failureMessage: policy.reason,
+            updatedAt: requestedAt
+          });
+          await this.appendDispatchExecutionStep({
+            tenantId: args.tenantId,
+            reviewItem,
+            stepName: "email_draft_dispatch_blocked",
+            status: "FAILED",
+            payload: { reason: policy.reason, reviewStatus: reviewItem.reviewStatus, dispatchId: dispatch.dispatchId },
+            createdAt: requestedAt
+          });
+
+          if (this.shouldCreatePolicyIncident(policy.reason)) {
+            await this.incidents.createFromExecutionFailure({
+              tenantId: args.tenantId,
+              actorId: args.actorId,
+              failure: {
+                incidentType: "execution_policy_failure",
+                sourceSystem: "email-dispatch-service",
+                message: policy.reason,
+                details: {
+                  reviewItemId: reviewItem.reviewItemId,
+                  draftId: reviewItem.draftId,
+                  accountId: reviewItem.accountId
+                },
+                relatedAssignmentRecordId: reviewItem.assignmentRecordId,
+                relatedRunRecordId: reviewItem.runRecordId,
+                releaseBlocking: false
+              },
+              createdAt: requestedAt
+            });
+          }
+
+          return { dispatch, sent: false };
+        }
+
+        try {
+          const connector = await this.gmailRuntime.createConnector({ account });
+          await this.appendDispatchExecutionStep({
+            tenantId: args.tenantId,
+            reviewItem,
+            stepName: "email_draft_dispatch_started",
+            status: "COMPLETED",
+            payload: { dispatchId: dispatch.dispatchId, accountId: account.accountId },
+            createdAt: requestedAt
+          });
+          const sent = await connector.sendApprovedDraft({
+            threadId: reviewItem.threadId,
+            subject: reviewItem.proposedReplySubject,
+            body: reviewItem.proposedReplyBody
+          });
+          dispatch = await this.repository.updateEmailDispatchRecord({
+            tenantId: args.tenantId,
+            dispatchId: dispatch.dispatchId,
+            dispatchStatus: "dispatch_succeeded",
+            dispatchPolicy: policy,
+            dispatchedAt: requestedAt,
+            gmailMessageId: sent.providerMessageId,
+            gmailThreadId: sent.providerThreadId,
+            auditMetadata: {
+              ...dispatch.auditMetadata,
+              connectorResult: sent
+            },
+            updatedAt: requestedAt
+          });
+          await this.appendDispatchExecutionStep({
+            tenantId: args.tenantId,
+            reviewItem,
+            stepName: "email_draft_dispatch_succeeded",
+            status: "COMPLETED",
+            payload: {
+              dispatchId: dispatch.dispatchId,
+              providerMessageId: sent.providerMessageId,
+              providerThreadId: sent.providerThreadId
+            },
+            createdAt: requestedAt
+          });
+          return { dispatch, sent: true };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "email_dispatch_failed";
+          dispatch = await this.repository.updateEmailDispatchRecord({
+            tenantId: args.tenantId,
+            dispatchId: dispatch.dispatchId,
+            dispatchStatus: "dispatch_failed",
+            dispatchPolicy: policy,
+            failureCategory: "gmail_dispatch_failure",
+            failureMessage: message,
+            updatedAt: requestedAt
+          });
+          await this.appendDispatchExecutionStep({
+            tenantId: args.tenantId,
+            reviewItem,
+            stepName: "email_draft_dispatch_failed",
+            status: "FAILED",
+            payload: { dispatchId: dispatch.dispatchId, error: message },
+            createdAt: requestedAt
+          });
+          await this.incidents.createFromExecutionFailure({
+            tenantId: args.tenantId,
+            actorId: args.actorId,
+            failure: {
+              incidentType: "execution_runtime_failure",
+              sourceSystem: "email-dispatch-service",
+              message,
+              details: {
+                reviewItemId: reviewItem.reviewItemId,
+                accountId: reviewItem.accountId,
+                dispatchId: dispatch.dispatchId
+              },
+              relatedAssignmentRecordId: reviewItem.assignmentRecordId,
+              relatedRunRecordId: reviewItem.runRecordId,
+              releaseBlocking: false
+            },
+            createdAt: requestedAt
+          });
+          return { dispatch, sent: false };
+        }
       }
-
-      return { dispatch, sent: false };
-    }
-
-    try {
-      const connector = await this.gmailRuntime.createConnector({ account });
-      await this.appendDispatchExecutionStep({
-        tenantId: args.tenantId,
-        reviewItem,
-        stepName: "email_draft_dispatch_started",
-        status: "COMPLETED",
-        payload: { dispatchId: dispatch.dispatchId, accountId: account.accountId },
-        createdAt: requestedAt
-      });
-      const sent = await connector.sendApprovedDraft({
-        threadId: reviewItem.threadId,
-        subject: reviewItem.proposedReplySubject,
-        body: reviewItem.proposedReplyBody
-      });
-      dispatch = await this.repository.updateEmailDispatchRecord({
-        tenantId: args.tenantId,
-        dispatchId: dispatch.dispatchId,
-        dispatchStatus: "dispatch_succeeded",
-        dispatchPolicy: policy,
-        dispatchedAt: requestedAt,
-        gmailMessageId: sent.providerMessageId,
-        gmailThreadId: sent.providerThreadId,
-        auditMetadata: {
-          ...dispatch.auditMetadata,
-          connectorResult: sent
-        },
-        updatedAt: requestedAt
-      });
-      await this.appendDispatchExecutionStep({
-        tenantId: args.tenantId,
-        reviewItem,
-        stepName: "email_draft_dispatch_succeeded",
-        status: "COMPLETED",
-        payload: {
-          dispatchId: dispatch.dispatchId,
-          providerMessageId: sent.providerMessageId,
-          providerThreadId: sent.providerThreadId
-        },
-        createdAt: requestedAt
-      });
-      return { dispatch, sent: true };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "email_dispatch_failed";
-      dispatch = await this.repository.updateEmailDispatchRecord({
-        tenantId: args.tenantId,
-        dispatchId: dispatch.dispatchId,
-        dispatchStatus: "dispatch_failed",
-        dispatchPolicy: policy,
-        failureCategory: "gmail_dispatch_failure",
-        failureMessage: message,
-        updatedAt: requestedAt
-      });
-      await this.appendDispatchExecutionStep({
-        tenantId: args.tenantId,
-        reviewItem,
-        stepName: "email_draft_dispatch_failed",
-        status: "FAILED",
-        payload: { dispatchId: dispatch.dispatchId, error: message },
-        createdAt: requestedAt
-      });
-      await this.incidents.createFromExecutionFailure({
-        tenantId: args.tenantId,
-        actorId: args.actorId,
-        failure: {
-          incidentType: "execution_runtime_failure",
-          sourceSystem: "email-dispatch-service",
-          message,
-          details: {
-            reviewItemId: reviewItem.reviewItemId,
-            accountId: reviewItem.accountId,
-            dispatchId: dispatch.dispatchId
-          },
-          relatedAssignmentRecordId: reviewItem.assignmentRecordId,
-          relatedRunRecordId: reviewItem.runRecordId,
-          releaseBlocking: false
-        },
-        createdAt: requestedAt
-      });
-      return { dispatch, sent: false };
-    }
+    });
   }
 
   private evaluateDispatchPolicy(

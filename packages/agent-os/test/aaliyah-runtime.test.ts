@@ -667,6 +667,7 @@ describe("Aaliyah runtime agent", () => {
       record: {
         tenantId: "tenant",
         followThroughId: "follow-through:1",
+        version: 2,
         sessionId: "session:1",
         actorId: "actor-1",
         principalContext: "founder",
@@ -1052,7 +1053,8 @@ describe("Aaliyah runtime agent", () => {
       tenantId: "tenant",
       reviewItemId: "review:1",
       actorId: "actor-1",
-      note: "approve it"
+      note: "approve it",
+      idempotencyKey: null
     });
   });
 
@@ -1075,7 +1077,8 @@ describe("Aaliyah runtime agent", () => {
       tenantId: "tenant",
       reviewItemId: "review:1",
       actorId: "actor-1",
-      note: "approve it"
+      note: "approve it",
+      idempotencyKey: null
     });
   });
 
@@ -1112,7 +1115,8 @@ describe("Aaliyah runtime agent", () => {
     expect(emailService.dispatchApprovedReviewItem).toHaveBeenCalledWith({
       tenantId: "tenant",
       actorId: "actor-1",
-      reviewItemId: "review:1"
+      reviewItemId: "review:1",
+      idempotencyKey: null
     });
   });
 
