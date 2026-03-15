@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { AaliyahMemoryBoundaryService } from "./memory-boundary.js";
+import type { AaliyahDiagnosticsService } from "./diagnostics.js";
 import { assertAaliyahSessionIntegrity } from "./session-guards.js";
 import {
   appendIntentTrail,
@@ -47,7 +48,11 @@ const DEFAULT_COMPANY = "zbestmedia";
 export class AaliyahSessionContextService {
   private readonly boundary: AaliyahMemoryBoundaryService;
 
-  constructor(private readonly repository: AgentOsRepository, boundary?: AaliyahMemoryBoundaryService) {
+  constructor(
+    private readonly repository: AgentOsRepository,
+    boundary?: AaliyahMemoryBoundaryService,
+    private readonly diagnostics?: AaliyahDiagnosticsService
+  ) {
     this.boundary = boundary ?? new AaliyahMemoryBoundaryService();
   }
 
@@ -69,6 +74,8 @@ export class AaliyahSessionContextService {
       principalContext: args.principalContext
     });
 
+    let resetTelemetry: { resetReason: string; resetScope: "soft" | "hard"; expiredPendingDisambiguation: boolean } | null = null;
+
     if (!session) {
       session = createInitialAaliyahSession({
         tenantId: args.tenantId,
@@ -80,9 +87,13 @@ export class AaliyahSessionContextService {
     }
 
     if (isHardExpired(session, generatedAt)) {
+      const expiredPendingDisambiguation = Boolean(session.interactionState.pendingDisambiguation);
       session = hardResetSession(session, "hard_expired", generatedAt);
+      resetTelemetry = { resetReason: "hard_expired", resetScope: "hard", expiredPendingDisambiguation };
     } else if (isIdleExpired(session, generatedAt)) {
+      const expiredPendingDisambiguation = Boolean(session.interactionState.pendingDisambiguation);
       session = softResetSession(session, "idle_expired", generatedAt, "expired");
+      resetTelemetry = { resetReason: "idle_expired", resetScope: "soft", expiredPendingDisambiguation };
     }
 
     let boundaryViolation: AaliyahBoundaryViolationResult | null = null;
@@ -94,7 +105,9 @@ export class AaliyahSessionContextService {
         detailLevel: args.requestedMode === "founder" ? "summary" : "detail"
       });
       if (decision.access === "denied") {
+        const expiredPendingDisambiguation = Boolean(session.interactionState.pendingDisambiguation);
         session = softResetSession(session, "boundary_violation", generatedAt, "boundary_denied");
+        resetTelemetry = { resetReason: "boundary_violation", resetScope: "soft", expiredPendingDisambiguation };
         boundaryViolation = createBoundaryViolation({
           activeMode: session.activeModeState.activeMode,
           requestedMode: args.requestedMode,
@@ -116,6 +129,19 @@ export class AaliyahSessionContextService {
 
     assertAaliyahSessionIntegrity(session);
     await this.repository.upsertAaliyahSessionContext({ session });
+    if (resetTelemetry && this.diagnostics) {
+      await this.diagnostics.recordEvent({
+        tenantId: session.tenantId,
+        actorId: session.actorId,
+        principalContext: session.principalContext,
+        activeMode: session.activeModeState.activeMode,
+        eventType: "session_reset",
+        eventSource: "aaliyah_session",
+        signalKey: `session_reset:${resetTelemetry.resetReason}`,
+        payload: resetTelemetry,
+        createdAt: generatedAt
+      });
+    }
 
     return {
       session,
@@ -156,6 +182,23 @@ export class AaliyahSessionContextService {
 
     assertAaliyahSessionIntegrity(updated);
     await this.repository.upsertAaliyahSessionContext({ session: updated });
+    if (this.diagnostics) {
+      await this.diagnostics.recordEvent({
+        tenantId: updated.tenantId,
+        actorId: updated.actorId,
+        principalContext: updated.principalContext,
+        activeMode: updated.activeModeState.activeMode,
+        eventType: "session_reset",
+        eventSource: "aaliyah_session",
+        signalKey: `session_reset:${resetReason}`,
+        payload: {
+          resetReason,
+          resetScope: args.hardReset ? "hard" : "soft",
+          expiredPendingDisambiguation: Boolean(session.interactionState.pendingDisambiguation)
+        },
+        createdAt: generatedAt
+      });
+    }
     return {
       session: buildSessionSnapshotView(updated),
       resetReason
@@ -182,6 +225,27 @@ export class AaliyahSessionContextService {
       }
       assertAaliyahSessionIntegrity(session);
       await this.repository.upsertAaliyahSessionContext({ session });
+      if (this.diagnostics) {
+        await this.diagnostics.recordEvent({
+          tenantId: session.tenantId,
+          actorId: session.actorId,
+          principalContext: session.principalContext,
+          activeMode: session.activeModeState.activeMode,
+          eventType: "runtime_result",
+          eventSource: "aaliyah_runtime",
+          signalKey: `runtime_fallback:${args.result.fallback.reason}`,
+          payload: {
+            requestIntent: args.request.intent,
+            resolvedIntent: args.result.resolvedIntent,
+            outcomeType: args.result.outcomeType,
+            confidenceLevel: args.result.provenance.enforcement.confidence,
+            fallbackOutcome: args.result.fallback.outcome,
+            fallbackReason: args.result.fallback.reason,
+            payloadType: null
+          },
+          createdAt: args.generatedAt
+        });
+      }
       return buildSessionSnapshotView(session);
     }
 
@@ -223,6 +287,27 @@ export class AaliyahSessionContextService {
 
     assertAaliyahSessionIntegrity(session);
     await this.repository.upsertAaliyahSessionContext({ session });
+    if (this.diagnostics) {
+      await this.diagnostics.recordEvent({
+        tenantId: session.tenantId,
+        actorId: session.actorId,
+        principalContext: session.principalContext,
+        activeMode: session.activeModeState.activeMode,
+        eventType: "runtime_result",
+        eventSource: "aaliyah_runtime",
+        signalKey: `runtime_completed:${args.result.payloadType}`,
+        payload: {
+          requestIntent: args.request.intent,
+          resolvedIntent: args.result.resolvedIntent,
+          outcomeType: args.result.outcomeType,
+          confidenceLevel: args.result.provenance.enforcement.confidence,
+          fallbackOutcome: null,
+          fallbackReason: null,
+          payloadType: args.result.payloadType
+        },
+        createdAt: args.generatedAt
+      });
+    }
     return buildSessionSnapshotView(session);
   }
 

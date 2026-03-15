@@ -57,6 +57,20 @@ import type {
   WorkingItemClosureState as WorkingItemClosureStateShape
 } from "../aaliyah/follow-through-types.js";
 import type {
+  AaliyahClosureQualitySignal as AaliyahClosureQualitySignalShape,
+  AaliyahDiagnosticsEvent as AaliyahDiagnosticsEventShape,
+  AaliyahDiagnosticsEventType,
+  AaliyahDiagnosticsSummary as AaliyahDiagnosticsSummaryShape,
+  AaliyahDiagnosticsWindow,
+  AaliyahDriftSignal as AaliyahDriftSignalShape,
+  AaliyahEnforcementTriggerSignal as AaliyahEnforcementTriggerSignalShape,
+  AaliyahFounderFrictionSignal as AaliyahFounderFrictionSignalShape,
+  AaliyahInterruptionLoadSignal as AaliyahInterruptionLoadSignalShape,
+  AaliyahPerformanceSnapshot as AaliyahPerformanceSnapshotShape,
+  AaliyahQueueLatencySignal as AaliyahQueueLatencySignalShape,
+  AaliyahSessionResetSignal as AaliyahSessionResetSignalShape
+} from "../aaliyah/diagnostics-types.js";
+import type {
   AssignmentPolicyDecision,
   AssignmentRecord,
   ExecutionRunRecord,
@@ -898,6 +912,144 @@ export const FollowThroughHistoryEntrySchema = z.object({
   createdAt: z.string().datetime()
 }) satisfies z.ZodType<FollowThroughHistoryEntryShape>;
 export type FollowThroughHistoryEntry = z.infer<typeof FollowThroughHistoryEntrySchema>;
+
+export const AaliyahDiagnosticsWindowSchema = z.enum(["24h", "7d", "30d"]) satisfies z.ZodType<AaliyahDiagnosticsWindow>;
+export type AaliyahDiagnosticsWindowRecord = z.infer<typeof AaliyahDiagnosticsWindowSchema>;
+
+export const AaliyahDiagnosticsEventTypeSchema = z.enum([
+  "runtime_result",
+  "session_reset",
+  "follow_through_invalid_action"
+]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
+export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
+
+export const AaliyahDiagnosticsEventSchema = z.object({
+  tenantId: z.string().uuid(),
+  eventId: z.string().min(1),
+  actorId: z.string().min(1),
+  principalContext: z.enum(["founder", "operator"]),
+  activeMode: z.enum(["founder", "zbestmedia"]),
+  eventType: AaliyahDiagnosticsEventTypeSchema,
+  eventSource: z.enum(["aaliyah_runtime", "aaliyah_session", "aaliyah_follow_through"]),
+  signalKey: z.string().min(1),
+  payload: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime()
+}) satisfies z.ZodType<AaliyahDiagnosticsEventShape>;
+export type AaliyahDiagnosticsEventRecord = z.infer<typeof AaliyahDiagnosticsEventSchema>;
+
+export const AaliyahDriftSignalSchema = z.object({
+  signalId: z.string().min(1),
+  metric: z.enum([
+    "ambiguity_fallback_rate",
+    "low_confidence_defer_rate",
+    "denied_due_to_scope_rate",
+    "specialist_delegation_rate",
+    "invalid_action_attempt_rate",
+    "escalation_rate"
+  ]),
+  count: z.number().int().nonnegative(),
+  denominator: z.number().int().nonnegative(),
+  rate: z.number().min(0)
+}) satisfies z.ZodType<AaliyahDriftSignalShape>;
+
+export const AaliyahQueueLatencySignalSchema = z.object({
+  pendingReviewCount: z.number().int().nonnegative(),
+  pendingReviewAgeBuckets: z.object({
+    under1Hour: z.number().int().nonnegative(),
+    oneToFourHours: z.number().int().nonnegative(),
+    fourToTwentyFourHours: z.number().int().nonnegative(),
+    overTwentyFourHours: z.number().int().nonnegative()
+  }),
+  oldestPendingReviewAgeSeconds: z.number().int().nonnegative().nullable()
+}) satisfies z.ZodType<AaliyahQueueLatencySignalShape>;
+
+export const AaliyahClosureQualitySignalSchema = z.object({
+  totalTerminalEvents: z.number().int().nonnegative(),
+  founderDeclaredCompletionCount: z.number().int().nonnegative(),
+  founderDeclaredCompletionRate: z.number().min(0),
+  downstreamConfirmedCompletionCount: z.number().int().nonnegative(),
+  downstreamConfirmedCompletionRate: z.number().min(0),
+  invalidationCount: z.number().int().nonnegative(),
+  invalidationRate: z.number().min(0),
+  abandonmentCount: z.number().int().nonnegative(),
+  abandonmentRate: z.number().min(0),
+  escalationCount: z.number().int().nonnegative(),
+  escalationWithRationaleCount: z.number().int().nonnegative(),
+  escalationWithRationaleCompleteness: z.number().min(0),
+  terminalActionIdempotencyFailureCount: z.number().int().nonnegative()
+}) satisfies z.ZodType<AaliyahClosureQualitySignalShape>;
+
+export const AaliyahInterruptionLoadSignalSchema = z.object({
+  interruptNowCount: z.number().int().nonnegative(),
+  sameDayBriefingCount: z.number().int().nonnegative(),
+  passiveQueueCount: z.number().int().nonnegative(),
+  silentLogCount: z.number().int().nonnegative(),
+  highInterruptionConcentrationWindows: z.array(z.object({
+    hourStartedAt: z.string().datetime(),
+    interruptNowCount: z.number().int().positive()
+  }))
+}) satisfies z.ZodType<AaliyahInterruptionLoadSignalShape>;
+
+export const AaliyahSessionResetSignalSchema = z.object({
+  softResetCount: z.number().int().nonnegative(),
+  hardExpirationCount: z.number().int().nonnegative(),
+  disambiguationExpiryCount: z.number().int().nonnegative(),
+  staleContextRejectionCount: z.number().int().nonnegative()
+}) satisfies z.ZodType<AaliyahSessionResetSignalShape>;
+
+export const AaliyahEnforcementTriggerSignalSchema = z.object({
+  deniedDueToScopeCount: z.number().int().nonnegative(),
+  deniedDueToModeBoundaryCount: z.number().int().nonnegative(),
+  lowConfidenceDeferCount: z.number().int().nonnegative(),
+  ambiguityFallbackCount: z.number().int().nonnegative(),
+  specialistDelegationCount: z.number().int().nonnegative(),
+  invalidActionAttemptCount: z.number().int().nonnegative()
+}) satisfies z.ZodType<AaliyahEnforcementTriggerSignalShape>;
+
+export const AaliyahFounderFrictionSignalSchema = z.object({
+  founderDeclaredCompletionCount: z.number().int().nonnegative(),
+  manualResetCount: z.number().int().nonnegative(),
+  pendingReviewOverTwentyFourHoursCount: z.number().int().nonnegative(),
+  staleContextRejectionCount: z.number().int().nonnegative(),
+  openCriticalIncidentCount: z.number().int().nonnegative()
+}) satisfies z.ZodType<AaliyahFounderFrictionSignalShape>;
+
+export const AaliyahPerformanceSnapshotSchema = z.object({
+  snapshotId: z.string().min(1),
+  generatedAt: z.string().datetime(),
+  window: AaliyahDiagnosticsWindowSchema,
+  windowStartedAt: z.string().datetime(),
+  windowEndedAt: z.string().datetime(),
+  nextGovernedActionDistribution: z.record(z.string(), z.number().int().nonnegative()),
+  followThroughTerminalCounts: z.record(z.string(), z.number().int().nonnegative()),
+  reviewQueueLatency: AaliyahQueueLatencySignalSchema,
+  closureQuality: AaliyahClosureQualitySignalSchema,
+  interruptionLoad: AaliyahInterruptionLoadSignalSchema,
+  sessionReset: AaliyahSessionResetSignalSchema,
+  enforcementTriggers: AaliyahEnforcementTriggerSignalSchema,
+  founderFriction: AaliyahFounderFrictionSignalSchema,
+  driftSignals: z.array(AaliyahDriftSignalSchema),
+  sourceMetadata: z.object({
+    runtimeEventCount: z.number().int().nonnegative(),
+    followThroughHistoryCount: z.number().int().nonnegative(),
+    voiceCallCount: z.number().int().nonnegative(),
+    pendingReviewCount: z.number().int().nonnegative(),
+    incidentCount: z.number().int().nonnegative()
+  })
+}) satisfies z.ZodType<AaliyahPerformanceSnapshotShape>;
+
+export const AaliyahDiagnosticsSummarySchema = z.object({
+  tenantId: z.string().uuid(),
+  principalContext: z.enum(["founder", "operator"]),
+  activeMode: z.enum(["founder", "zbestmedia", "mixed"]),
+  snapshot: AaliyahPerformanceSnapshotSchema,
+  attentionFlags: z.array(z.object({
+    code: z.string().min(1),
+    severity: z.enum(["info", "warning", "critical"]),
+    summary: z.string().min(1)
+  }))
+}) satisfies z.ZodType<AaliyahDiagnosticsSummaryShape>;
+export type AaliyahDiagnosticsSummaryRecord = z.infer<typeof AaliyahDiagnosticsSummarySchema>;
 
 export const MemoryEntryRecordSchema = z.object({
   tenantId: z.string().uuid(),

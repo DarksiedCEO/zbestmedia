@@ -13,6 +13,7 @@ import {
 import { AGENT_EVAL_PROFILES } from "../evals/specs.js";
 import type {
   AgentLifecycleEventRecord,
+  AaliyahDiagnosticsEventRecord,
   AaliyahSessionContextRecord,
   AaliyahFounderPreferenceRecord,
   FollowThroughHistoryEntry,
@@ -404,6 +405,19 @@ type FollowThroughHistoryEntryRow = {
   escalation_provenance: Record<string, unknown> | null;
   note: string | null;
   actor_id: string;
+  created_at: string | Date;
+};
+
+type AaliyahDiagnosticsEventRow = {
+  tenant_id: string;
+  event_id: string;
+  actor_id: string;
+  principal_context: AaliyahDiagnosticsEventRecord["principalContext"];
+  active_mode: AaliyahDiagnosticsEventRecord["activeMode"];
+  event_type: AaliyahDiagnosticsEventRecord["eventType"];
+  event_source: AaliyahDiagnosticsEventRecord["eventSource"];
+  signal_key: string;
+  payload: Record<string, unknown>;
   created_at: string | Date;
 };
 
@@ -869,6 +883,21 @@ function mapFollowThroughHistoryEntryRow(row: FollowThroughHistoryEntryRow): Fol
     escalationProvenance: row.escalation_provenance,
     note: row.note,
     actorId: row.actor_id,
+    createdAt: toIsoString(row.created_at)!
+  };
+}
+
+function mapAaliyahDiagnosticsEventRow(row: AaliyahDiagnosticsEventRow): AaliyahDiagnosticsEventRecord {
+  return {
+    tenantId: row.tenant_id,
+    eventId: row.event_id,
+    actorId: row.actor_id,
+    principalContext: row.principal_context,
+    activeMode: row.active_mode,
+    eventType: row.event_type,
+    eventSource: row.event_source,
+    signalKey: row.signal_key,
+    payload: row.payload,
     createdAt: toIsoString(row.created_at)!
   };
 }
@@ -2584,6 +2613,33 @@ export class AgentOsRepository {
     return res.rows.map(mapVoiceCallRow);
   }
 
+  async listVoiceCallRecordsWindow(args: {
+    tenantId: string;
+    since: string;
+    until: string;
+    limit?: number;
+  }): Promise<VoiceCallRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<VoiceCallRow>(
+        `
+        SELECT tenant_id, call_id, external_call_id, source_system, caller_phone_number, caller_display_name,
+               caller_organization_name, transcript, call_summary_text, duration_seconds, intent, urgency,
+               risk_level, company_mode, routing_target, assignment_record_id, run_record_id, outcome,
+               founder_attention_required, escalation_recommended, interruption_class, recommended_next_action,
+               created_at, updated_at
+        FROM voice_call_records
+        WHERE tenant_id = $1
+          AND created_at >= $2
+          AND created_at <= $3
+        ORDER BY created_at DESC
+        LIMIT $4
+        `,
+        [args.tenantId, args.since, args.until, args.limit ?? 500]
+      )
+    );
+    return res.rows.map(mapVoiceCallRow);
+  }
+
   async createEmailAccountConnection(args: {
     tenantId: string;
     accountId: string;
@@ -3006,6 +3062,77 @@ export class AgentOsRepository {
     return mapAaliyahSessionContextRow(res.rows[0]!);
   }
 
+  async createAaliyahDiagnosticsEvent(args: {
+    tenantId: string;
+    actorId: string;
+    principalContext: AaliyahDiagnosticsEventRecord["principalContext"];
+    activeMode: AaliyahDiagnosticsEventRecord["activeMode"];
+    eventType: AaliyahDiagnosticsEventRecord["eventType"];
+    eventSource: AaliyahDiagnosticsEventRecord["eventSource"];
+    signalKey: string;
+    payload: Record<string, unknown>;
+    createdAt?: string;
+  }): Promise<AaliyahDiagnosticsEventRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const eventId = buildScopedId("aaliyah-diagnostics", [args.eventType, createdAt]);
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahDiagnosticsEventRow>(
+        `
+        INSERT INTO aaliyah_diagnostics_events (
+          tenant_id, event_id, actor_id, principal_context, active_mode,
+          event_type, event_source, signal_key, payload, created_at
+        ) VALUES (
+          $1,$2,$3,$4,$5,
+          $6,$7,$8,$9::jsonb,$10
+        )
+        RETURNING tenant_id, event_id, actor_id, principal_context, active_mode,
+                  event_type, event_source, signal_key, payload, created_at
+        `,
+        [
+          args.tenantId,
+          eventId,
+          args.actorId,
+          args.principalContext,
+          args.activeMode,
+          args.eventType,
+          args.eventSource,
+          args.signalKey,
+          JSON.stringify(args.payload),
+          createdAt
+        ]
+      )
+    );
+    return mapAaliyahDiagnosticsEventRow(res.rows[0]!);
+  }
+
+  async listAaliyahDiagnosticsEvents(args: {
+    tenantId: string;
+    actorId: string;
+    principalContext: AaliyahDiagnosticsEventRecord["principalContext"];
+    since: string;
+    until: string;
+    limit?: number;
+  }): Promise<AaliyahDiagnosticsEventRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahDiagnosticsEventRow>(
+        `
+        SELECT tenant_id, event_id, actor_id, principal_context, active_mode,
+               event_type, event_source, signal_key, payload, created_at
+        FROM aaliyah_diagnostics_events
+        WHERE tenant_id = $1
+          AND actor_id = $2
+          AND principal_context = $3
+          AND created_at >= $4
+          AND created_at <= $5
+        ORDER BY created_at DESC
+        LIMIT $6
+        `,
+        [args.tenantId, args.actorId, args.principalContext, args.since, args.until, args.limit ?? 1000]
+      )
+    );
+    return res.rows.map(mapAaliyahDiagnosticsEventRow);
+  }
+
   async getAaliyahFollowThroughRecordBySource(args: {
     tenantId: string;
     actorId: string;
@@ -3217,6 +3344,41 @@ export class AgentOsRepository {
         LIMIT $4
         `,
         [args.tenantId, args.actorId, args.principalContext, args.limit]
+      )
+    );
+
+    return res.rows.map(mapFollowThroughHistoryEntryRow);
+  }
+
+  async listAaliyahFollowThroughHistoryWindow(args: {
+    tenantId: string;
+    actorId: string;
+    principalContext: FollowThroughRecord["principalContext"];
+    since: string;
+    until: string;
+    limit?: number;
+  }): Promise<FollowThroughHistoryEntry[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FollowThroughHistoryEntryRow>(
+        `
+        SELECT h.tenant_id, h.event_id, h.follow_through_id, h.action, h.previous_status,
+               h.resulting_status, h.closure_state, h.closure_reason, h.next_governed_action,
+               h.founder_declared_completion, h.downstream_action_ref, h.escalation_target,
+               h.escalation_class, h.escalation_rationale, h.escalation_provenance, h.note,
+               h.actor_id, h.created_at
+        FROM aaliyah_follow_through_history h
+        JOIN aaliyah_follow_through_records r
+          ON r.tenant_id = h.tenant_id
+         AND r.follow_through_id = h.follow_through_id
+        WHERE h.tenant_id = $1
+          AND r.actor_id = $2
+          AND r.principal_context = $3
+          AND h.created_at >= $4
+          AND h.created_at <= $5
+        ORDER BY h.created_at DESC
+        LIMIT $6
+        `,
+        [args.tenantId, args.actorId, args.principalContext, args.since, args.until, args.limit ?? 1000]
       )
     );
 

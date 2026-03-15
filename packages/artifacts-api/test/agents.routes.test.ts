@@ -38,6 +38,7 @@ import {
   AaliyahReviewQueueDetailResponseSchema,
   AaliyahReviewQueueListResponseSchema,
   AaliyahFollowThroughActionResponseSchema,
+  AaliyahDiagnosticsResponseSchema,
   AaliyahFollowThroughHistoryResponseSchema,
   AaliyahFollowThroughResponseSchema,
   AaliyahSessionResetResponseSchema,
@@ -2381,6 +2382,79 @@ describe("agent routes", () => {
       nextGovernedAction: "select_new_queue_item"
     }))
   };
+  const aaliyahDiagnosticsService = {
+    getSummary: vi.fn(async () => ({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      principalContext: "founder",
+      activeMode: "founder",
+      snapshot: {
+        snapshotId: "aaliyah-diagnostics:1",
+        generatedAt: "2026-03-15T01:00:00.000Z",
+        window: "7d",
+        windowStartedAt: "2026-03-08T01:00:00.000Z",
+        windowEndedAt: "2026-03-15T01:00:00.000Z",
+        nextGovernedActionDistribution: { select_new_queue_item: 2 },
+        followThroughTerminalCounts: { completed: 1, escalated: 1 },
+        reviewQueueLatency: {
+          pendingReviewCount: 1,
+          pendingReviewAgeBuckets: { under1Hour: 0, oneToFourHours: 1, fourToTwentyFourHours: 0, overTwentyFourHours: 0 },
+          oldestPendingReviewAgeSeconds: 7200
+        },
+        closureQuality: {
+          totalTerminalEvents: 2,
+          founderDeclaredCompletionCount: 1,
+          founderDeclaredCompletionRate: 1,
+          downstreamConfirmedCompletionCount: 0,
+          downstreamConfirmedCompletionRate: 0,
+          invalidationCount: 0,
+          invalidationRate: 0,
+          abandonmentCount: 0,
+          abandonmentRate: 0,
+          escalationCount: 1,
+          escalationWithRationaleCount: 1,
+          escalationWithRationaleCompleteness: 1,
+          terminalActionIdempotencyFailureCount: 0
+        },
+        interruptionLoad: {
+          interruptNowCount: 1,
+          sameDayBriefingCount: 1,
+          passiveQueueCount: 0,
+          silentLogCount: 0,
+          highInterruptionConcentrationWindows: []
+        },
+        sessionReset: {
+          softResetCount: 1,
+          hardExpirationCount: 0,
+          disambiguationExpiryCount: 0,
+          staleContextRejectionCount: 0
+        },
+        enforcementTriggers: {
+          deniedDueToScopeCount: 0,
+          deniedDueToModeBoundaryCount: 0,
+          lowConfidenceDeferCount: 1,
+          ambiguityFallbackCount: 0,
+          specialistDelegationCount: 0,
+          invalidActionAttemptCount: 0
+        },
+        founderFriction: {
+          founderDeclaredCompletionCount: 1,
+          manualResetCount: 0,
+          pendingReviewOverTwentyFourHoursCount: 0,
+          staleContextRejectionCount: 0,
+          openCriticalIncidentCount: 1
+        },
+        driftSignals: [],
+        sourceMetadata: {
+          runtimeEventCount: 3,
+          followThroughHistoryCount: 2,
+          voiceCallCount: 2,
+          pendingReviewCount: 1,
+          incidentCount: 1
+        }
+      },
+      attentionFlags: []
+    }))
+  };
   const aaliyahCommandSurfaceService = {
     generateCommandSurface: vi.fn(async ({ tenantId, mode }: { tenantId: string; mode: "founder" | "zbestmedia" }) => ({
       shellId: "shell:1",
@@ -2835,6 +2909,7 @@ describe("agent routes", () => {
         aaliyahCommandSurfaceService: aaliyahCommandSurfaceService as never,
         aaliyahPreferenceService: aaliyahPreferenceService as never,
         aaliyahMemoryBoundaryService: aaliyahMemoryBoundaryService as never,
+        aaliyahDiagnosticsService: aaliyahDiagnosticsService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
         aaliyahFollowThroughService: aaliyahFollowThroughService as never,
         aaliyahSessionService: aaliyahSessionService as never,
@@ -3080,6 +3155,10 @@ describe("agent routes", () => {
       method: "GET",
       url: "/v1/agent-os/aaliyah/follow-through/history"
     });
+    const diagnosticsRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/diagnostics?window=7d"
+    });
     const followThroughActionRes = await app.inject({
       method: "POST",
       url: "/v1/agent-os/aaliyah/follow-through/complete",
@@ -3138,6 +3217,11 @@ describe("agent routes", () => {
     expect(followThroughHistoryRes.statusCode).toBe(200);
     const history = AaliyahFollowThroughHistoryResponseSchema.parse(followThroughHistoryRes.json());
     expect(history.total).toBe(0);
+
+    expect(diagnosticsRes.statusCode).toBe(200);
+    const diagnostics = AaliyahDiagnosticsResponseSchema.parse(diagnosticsRes.json());
+    expect(diagnostics.diagnostics.snapshot.window).toBe("7d");
+    expect(diagnostics.diagnostics.snapshot.enforcementTriggers.lowConfidenceDeferCount).toBe(1);
 
     expect(followThroughActionRes.statusCode).toBe(200);
     const action = AaliyahFollowThroughActionResponseSchema.parse(followThroughActionRes.json());

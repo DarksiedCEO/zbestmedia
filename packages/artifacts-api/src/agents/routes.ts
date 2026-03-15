@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   AgentAdminService,
   AaliyahCommandSurfaceService,
+  AaliyahDiagnosticsService,
   AaliyahFounderBriefingService,
   AaliyahMemoryBoundaryService,
   AaliyahPreferenceService,
@@ -45,6 +46,7 @@ import {
   AaliyahFollowThroughActionResponseSchema,
   AaliyahFollowThroughHistoryResponseSchema,
   AaliyahFollowThroughResponseSchema,
+  AaliyahDiagnosticsQuerySchema,
   AaliyahSessionResetBodySchema,
   AaliyahPreferenceCreateBodySchema,
   AaliyahPreferenceDetailResponseSchema,
@@ -147,6 +149,7 @@ export function agentRoutes(opts: {
   aaliyahCommandSurfaceService: AaliyahCommandSurfaceService;
   aaliyahPreferenceService: AaliyahPreferenceService;
   aaliyahMemoryBoundaryService: AaliyahMemoryBoundaryService;
+  aaliyahDiagnosticsService: AaliyahDiagnosticsService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
   aaliyahFollowThroughService: AaliyahFollowThroughService;
   aaliyahSessionService: AaliyahSessionContextService;
@@ -723,6 +726,26 @@ export function agentRoutes(opts: {
         resourceType: "aaliyah_follow_through_history",
         items,
         total: items.length
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/diagnostics", async (req, reply) => {
+      const query = AaliyahDiagnosticsQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const summary = await opts.aaliyahDiagnosticsService.getSummary({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        window: query.data.window
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_diagnostics",
+        diagnostics: summary
       });
     });
 

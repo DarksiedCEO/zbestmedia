@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { AaliyahMemoryBoundaryService } from "./memory-boundary.js";
+import type { AaliyahDiagnosticsService } from "./diagnostics.js";
 import { AaliyahSessionContextService } from "./session.js";
 import { assertAaliyahSessionIntegrity } from "./session-guards.js";
 import {
@@ -36,7 +37,8 @@ export class AaliyahFollowThroughService {
   constructor(
     private readonly repository: AgentOsRepository,
     private readonly sessions: AaliyahSessionContextService,
-    boundary?: AaliyahMemoryBoundaryService
+    boundary?: AaliyahMemoryBoundaryService,
+    private readonly diagnostics?: AaliyahDiagnosticsService
   ) {
     this.boundary = boundary ?? new AaliyahMemoryBoundaryService();
   }
@@ -86,6 +88,7 @@ export class AaliyahFollowThroughService {
 
     const eligibility = await this.getEligibility({ ...args, generatedAt }, session);
     if (!eligibility.allowed) {
+      await this.recordInvalidAction(args, session, eligibility.reason, generatedAt);
       throw new Error(eligibility.reason);
     }
 
@@ -98,6 +101,7 @@ export class AaliyahFollowThroughService {
     });
     const current = existing ?? this.buildRecord(session, generatedAt);
     if (current.status !== "active") {
+      await this.recordInvalidAction(args, session, "aaliyah_follow_through_terminal_immutable", generatedAt);
       throw new Error("aaliyah_follow_through_terminal_immutable");
     }
 
@@ -238,6 +242,32 @@ export class AaliyahFollowThroughService {
       followThroughId: null,
       nextGovernedAction
     };
+  }
+
+  private async recordInvalidAction(
+    args: FollowThroughActionRequest,
+    session: AaliyahSessionContext,
+    signalKey: string,
+    createdAt: string
+  ): Promise<void> {
+    if (!this.diagnostics) {
+      return;
+    }
+    await this.diagnostics.recordEvent({
+      tenantId: args.tenantId,
+      actorId: args.actorId,
+      principalContext: args.principalContext,
+      activeMode: session.activeModeState.activeMode,
+      eventType: "follow_through_invalid_action",
+      eventSource: "aaliyah_follow_through",
+      signalKey,
+      payload: {
+        action: args.action,
+        queueItemId: args.queueItemId ?? null,
+        closureReason: args.closureReason
+      },
+      createdAt
+    });
   }
 
   private resolveTransition(args: FollowThroughActionRequest): {

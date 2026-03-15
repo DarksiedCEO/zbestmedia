@@ -1635,6 +1635,117 @@ export const AaliyahFollowThroughActionResponseSchema = z.object({
   })
 });
 
+const AaliyahDiagnosticsWindowSchema = z.enum(["24h", "7d", "30d"]);
+
+export const AaliyahDiagnosticsQuerySchema = z.object({
+  window: AaliyahDiagnosticsWindowSchema.default("7d")
+});
+
+const AaliyahDriftSignalSchema = z.object({
+  signalId: z.string().min(1),
+  metric: z.enum([
+    "ambiguity_fallback_rate",
+    "low_confidence_defer_rate",
+    "denied_due_to_scope_rate",
+    "specialist_delegation_rate",
+    "invalid_action_attempt_rate",
+    "escalation_rate"
+  ]),
+  count: z.number().int().nonnegative(),
+  denominator: z.number().int().nonnegative(),
+  rate: z.number().min(0)
+});
+
+const AaliyahDiagnosticsResponseCoreSchema = z.object({
+  tenantId: z.string().uuid(),
+  principalContext: z.enum(["founder", "operator"]),
+  activeMode: z.enum(["founder", "zbestmedia", "mixed"]),
+  snapshot: z.object({
+    snapshotId: z.string().min(1),
+    generatedAt: z.string().datetime(),
+    window: AaliyahDiagnosticsWindowSchema,
+    windowStartedAt: z.string().datetime(),
+    windowEndedAt: z.string().datetime(),
+    nextGovernedActionDistribution: z.record(z.string(), z.number().int().nonnegative()),
+    followThroughTerminalCounts: z.record(z.string(), z.number().int().nonnegative()),
+    reviewQueueLatency: z.object({
+      pendingReviewCount: z.number().int().nonnegative(),
+      pendingReviewAgeBuckets: z.object({
+        under1Hour: z.number().int().nonnegative(),
+        oneToFourHours: z.number().int().nonnegative(),
+        fourToTwentyFourHours: z.number().int().nonnegative(),
+        overTwentyFourHours: z.number().int().nonnegative()
+      }),
+      oldestPendingReviewAgeSeconds: z.number().int().nonnegative().nullable()
+    }),
+    closureQuality: z.object({
+      totalTerminalEvents: z.number().int().nonnegative(),
+      founderDeclaredCompletionCount: z.number().int().nonnegative(),
+      founderDeclaredCompletionRate: z.number().min(0),
+      downstreamConfirmedCompletionCount: z.number().int().nonnegative(),
+      downstreamConfirmedCompletionRate: z.number().min(0),
+      invalidationCount: z.number().int().nonnegative(),
+      invalidationRate: z.number().min(0),
+      abandonmentCount: z.number().int().nonnegative(),
+      abandonmentRate: z.number().min(0),
+      escalationCount: z.number().int().nonnegative(),
+      escalationWithRationaleCount: z.number().int().nonnegative(),
+      escalationWithRationaleCompleteness: z.number().min(0),
+      terminalActionIdempotencyFailureCount: z.number().int().nonnegative()
+    }),
+    interruptionLoad: z.object({
+      interruptNowCount: z.number().int().nonnegative(),
+      sameDayBriefingCount: z.number().int().nonnegative(),
+      passiveQueueCount: z.number().int().nonnegative(),
+      silentLogCount: z.number().int().nonnegative(),
+      highInterruptionConcentrationWindows: z.array(z.object({
+        hourStartedAt: z.string().datetime(),
+        interruptNowCount: z.number().int().positive()
+      }))
+    }),
+    sessionReset: z.object({
+      softResetCount: z.number().int().nonnegative(),
+      hardExpirationCount: z.number().int().nonnegative(),
+      disambiguationExpiryCount: z.number().int().nonnegative(),
+      staleContextRejectionCount: z.number().int().nonnegative()
+    }),
+    enforcementTriggers: z.object({
+      deniedDueToScopeCount: z.number().int().nonnegative(),
+      deniedDueToModeBoundaryCount: z.number().int().nonnegative(),
+      lowConfidenceDeferCount: z.number().int().nonnegative(),
+      ambiguityFallbackCount: z.number().int().nonnegative(),
+      specialistDelegationCount: z.number().int().nonnegative(),
+      invalidActionAttemptCount: z.number().int().nonnegative()
+    }),
+    founderFriction: z.object({
+      founderDeclaredCompletionCount: z.number().int().nonnegative(),
+      manualResetCount: z.number().int().nonnegative(),
+      pendingReviewOverTwentyFourHoursCount: z.number().int().nonnegative(),
+      staleContextRejectionCount: z.number().int().nonnegative(),
+      openCriticalIncidentCount: z.number().int().nonnegative()
+    }),
+    driftSignals: z.array(AaliyahDriftSignalSchema),
+    sourceMetadata: z.object({
+      runtimeEventCount: z.number().int().nonnegative(),
+      followThroughHistoryCount: z.number().int().nonnegative(),
+      voiceCallCount: z.number().int().nonnegative(),
+      pendingReviewCount: z.number().int().nonnegative(),
+      incidentCount: z.number().int().nonnegative()
+    })
+  }),
+  attentionFlags: z.array(z.object({
+    code: z.string().min(1),
+    severity: z.enum(["info", "warning", "critical"]),
+    summary: z.string().min(1)
+  }))
+});
+
+export const AaliyahDiagnosticsResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_diagnostics"),
+  diagnostics: AaliyahDiagnosticsResponseCoreSchema
+});
+
 const AaliyahRuntimeIntentSchema = z.enum([
   "get_founder_briefing",
   "get_founder_command_surface",

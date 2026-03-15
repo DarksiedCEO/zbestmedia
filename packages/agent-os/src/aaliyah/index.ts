@@ -7,6 +7,8 @@ export * from "./briefing-types.js";
 export * from "./briefing.js";
 export * from "./confidence-types.js";
 export * from "./confidence.js";
+export * from "./diagnostics-types.js";
+export * from "./diagnostics.js";
 export type {
   AaliyahPreferenceCategory,
   AaliyahPreferenceSourceType,
