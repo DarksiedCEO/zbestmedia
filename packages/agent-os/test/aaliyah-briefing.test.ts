@@ -165,4 +165,9 @@ describe("Aaliyah founder briefing", () => {
     expect(briefing.activeMode).toBe("zbestmedia");
     expect(briefing.sourceMetadata.aaliyahRegistryVersion).toBe("2026-03-12.aaliyah.v1");
   });
+
+  it("tracks low-confidence signals through the briefing confidence summary", async () => {
+    const briefing = await service.generateBriefing({ tenantId: "tenant", mode: "founder" });
+    expect(briefing.confidenceSummary.lowConfidenceSignals).toBeGreaterThanOrEqual(0);
+  });
 });

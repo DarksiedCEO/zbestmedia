@@ -10,6 +10,7 @@ import type {
   AaliyahFounderCommandSurface,
   AaliyahQuickAction
 } from "./command-surface-types.js";
+import type { AaliyahConfidenceSummary, AaliyahInterruptionSummary } from "./confidence-types.js";
 import type { EmailDraftReviewRecord } from "../email/review-types.js";
 import type { EmailDispatchResult } from "../email/dispatch-types.js";
 import type { AdminRoutingCategoryDescriptor } from "../admin/types.js";
@@ -85,7 +86,9 @@ export type AaliyahRuntimeIntent =
   | "get_pending_voice_escalations"
   | "get_founder_command_surface"
   | "get_quick_actions"
-  | "execute_quick_action";
+  | "execute_quick_action"
+  | "get_interrupt_queue"
+  | "get_confidence_summary";
 
 export type AaliyahRuntimePayloadType =
   | "founder_briefing"
@@ -101,7 +104,9 @@ export type AaliyahRuntimePayloadType =
   | "voice_call_summary"
   | "voice_escalations"
   | "founder_command_surface"
-  | "quick_actions";
+  | "quick_actions"
+  | "interrupt_queue"
+  | "confidence_summary";
 
 export type AaliyahRuntimeRequestInput = {
   intent: string;
@@ -161,7 +166,9 @@ export type AaliyahRuntimeSuccessPayload =
   | { payloadType: "voice_call_summary"; payload: VoiceCallRecord }
   | { payloadType: "voice_escalations"; payload: AaliyahRuntimeVoiceEscalationsPayload }
   | { payloadType: "founder_command_surface"; payload: AaliyahFounderCommandSurface }
-  | { payloadType: "quick_actions"; payload: AaliyahRuntimeQuickActionsPayload };
+  | { payloadType: "quick_actions"; payload: AaliyahRuntimeQuickActionsPayload }
+  | { payloadType: "interrupt_queue"; payload: AaliyahInterruptionSummary }
+  | { payloadType: "confidence_summary"; payload: AaliyahConfidenceSummary };
 
 export type AaliyahRuntimeFallback = {
   outcome: Exclude<AaliyahRuntimeFallbackOutcome, "proceed_with_orchestration">;

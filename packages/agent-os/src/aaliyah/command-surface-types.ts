@@ -1,4 +1,5 @@
 import type { FounderBriefing, FounderBriefingItem, FounderBriefingMode, FounderRecommendedAction } from "./briefing-types.js";
+import type { AaliyahConfidenceSummary, AaliyahInterruptionSummary } from "./confidence-types.js";
 import type { EmailDraftReviewRecord } from "../email/review-types.js";
 import type { IncidentTelemetrySummary, OpsStatusSummary } from "../telemetry/types.js";
 import type { VoiceCallRecord } from "../voice/types.js";
@@ -37,8 +38,9 @@ export type AaliyahQuickAction = {
 
 export type AaliyahCommandSurfaceInterruptSummary = {
   interruptNowCount: number;
-  reviewSoonCount: number;
-  canWaitCount: number;
+  sameDayBriefingCount: number;
+  passiveQueueCount: number;
+  silentLogCount: number;
 };
 
 export type AaliyahCommandSurfaceProvenanceSummary = {
@@ -77,6 +79,8 @@ export type AaliyahFounderCommandSurface = {
   openVoiceEscalations: AaliyahVoiceEscalationSummary;
   recommendedNextActions: FounderRecommendedAction[];
   interruptQueueSummary: AaliyahCommandSurfaceInterruptSummary;
+  confidenceSummary: AaliyahConfidenceSummary;
+  interruptionQueue: AaliyahInterruptionSummary;
   quickActions: AaliyahQuickAction[];
   provenanceSummary: AaliyahCommandSurfaceProvenanceSummary;
 };

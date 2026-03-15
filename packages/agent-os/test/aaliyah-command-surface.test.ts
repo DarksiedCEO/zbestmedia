@@ -239,6 +239,8 @@ describe("Aaliyah command surface", () => {
     expect(shell.openVoiceEscalations.totalPending).toBe(1);
     expect(shell.quickActions.some((action) => action.actionId === "open_approval_queue")).toBe(true);
     expect(shell.whatMattersNow[0]?.itemId).toBe("incident:1");
+    expect(shell.confidenceSummary.overallConfidenceLevel).toBe("high");
+    expect(shell.interruptionQueue.interruptNowCount).toBeGreaterThan(0);
   });
 
   it("marks voice review quick action disabled when there are no pending escalations", () => {

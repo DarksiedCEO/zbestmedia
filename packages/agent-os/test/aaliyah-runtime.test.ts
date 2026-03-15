@@ -121,8 +121,30 @@ describe("Aaliyah runtime agent", () => {
       recommendedNextActions: [],
       interruptQueueSummary: {
         interruptNowCount: 1,
-        reviewSoonCount: 0,
-        canWaitCount: 0
+        sameDayBriefingCount: 0,
+        passiveQueueCount: 0,
+        silentLogCount: 0
+      },
+      confidenceSummary: {
+        generatedAt: "2026-03-14T00:00:00.000Z",
+        activeMode: mode,
+        overallConfidenceLevel: "high",
+        highConfidenceCount: 2,
+        mediumConfidenceCount: 0,
+        lowConfidenceCount: 0,
+        deferredCount: 0,
+        suppressedCount: 0,
+        topReasonCodes: ["data_complete"],
+        items: []
+      },
+      interruptionQueue: {
+        generatedAt: "2026-03-14T00:00:00.000Z",
+        activeMode: mode,
+        items: [],
+        interruptNowCount: 1,
+        sameDayBriefingCount: 0,
+        passiveQueueCount: 0,
+        silentLogCount: 0
       },
       quickActions: [
         {
@@ -161,6 +183,27 @@ describe("Aaliyah runtime agent", () => {
         availabilityReason: null
       }
     ]),
+    getInterruptionQueue: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+      generatedAt: "2026-03-14T00:00:00.000Z",
+      activeMode: mode,
+      items: [],
+      interruptNowCount: 1,
+      sameDayBriefingCount: 0,
+      passiveQueueCount: 0,
+      silentLogCount: 0
+    })),
+    getConfidenceSummary: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+      generatedAt: "2026-03-14T00:00:00.000Z",
+      activeMode: mode,
+      overallConfidenceLevel: "high",
+      highConfidenceCount: 2,
+      mediumConfidenceCount: 0,
+      lowConfidenceCount: 0,
+      deferredCount: 0,
+      suppressedCount: 0,
+      topReasonCodes: ["data_complete"],
+      items: []
+    })),
     getQuickActionById: vi.fn(() => ({
       actionId: "open_approval_queue",
       actionType: "open_approval_queue",
@@ -351,6 +394,30 @@ describe("Aaliyah runtime agent", () => {
 
     expect(result.outcomeType).toBe("completed");
     expect(result.payloadType).toBe("quick_actions");
+  });
+
+  it("returns interrupt queue and confidence summaries through governed runtime", async () => {
+    const interruptions = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_interrupt_queue",
+        mode: "founder"
+      }
+    });
+    const confidence = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_confidence_summary",
+        mode: "zbestmedia"
+      }
+    });
+
+    expect(interruptions.outcomeType).toBe("completed");
+    expect(interruptions.payloadType).toBe("interrupt_queue");
+    expect(confidence.outcomeType).toBe("completed");
+    expect(confidence.payloadType).toBe("confidence_summary");
   });
 
   it("passes review actions through governed email services", async () => {

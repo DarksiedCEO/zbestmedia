@@ -38,7 +38,9 @@ const SUPPORTED_INTENTS = new Set<AaliyahRuntimeIntent>([
   "get_pending_voice_escalations",
   "get_founder_command_surface",
   "get_quick_actions",
-  "execute_quick_action"
+  "execute_quick_action",
+  "get_interrupt_queue",
+  "get_confidence_summary"
 ]);
 
 const DEFAULT_MODE: AaliyahRuntimeMode = "founder";
@@ -165,6 +167,40 @@ export class AaliyahRuntimeService {
           enforcement: enforcement.trace,
           payloadType: "quick_actions",
           payload: { items }
+        });
+      }
+      case "get_interrupt_queue": {
+        const payload = await this.commandSurface.getInterruptionQueue({
+          tenantId: args.tenantId,
+          mode: activeMode
+        });
+        return this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-interruptions",
+          enforcement: enforcement.trace,
+          payloadType: "interrupt_queue",
+          payload
+        });
+      }
+      case "get_confidence_summary": {
+        const payload = await this.commandSurface.getConfidenceSummary({
+          tenantId: args.tenantId,
+          mode: activeMode
+        });
+        return this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-confidence-summary",
+          enforcement: enforcement.trace,
+          payloadType: "confidence_summary",
+          payload
         });
       }
       case "execute_quick_action": {
@@ -561,6 +597,8 @@ export class AaliyahRuntimeService {
       | "founder_briefing"
       | "founder_command_surface"
       | "quick_actions"
+      | "interrupt_queue"
+      | "confidence_summary"
       | "approval_queue"
       | "email_review_queue"
       | "email_review_action"

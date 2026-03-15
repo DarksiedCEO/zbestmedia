@@ -1026,8 +1026,53 @@ const AaliyahQuickActionSchema = z.object({
 
 const AaliyahCommandSurfaceInterruptSummarySchema = z.object({
   interruptNowCount: z.number().int().nonnegative(),
-  reviewSoonCount: z.number().int().nonnegative(),
-  canWaitCount: z.number().int().nonnegative()
+  sameDayBriefingCount: z.number().int().nonnegative(),
+  passiveQueueCount: z.number().int().nonnegative(),
+  silentLogCount: z.number().int().nonnegative()
+});
+
+const AaliyahConfidenceAssessmentSchema = z.object({
+  confidenceId: z.string().min(1),
+  sourceSubsystem: z.string().min(1),
+  assessedItemType: z.string().min(1),
+  confidenceLevel: z.enum(["high", "medium", "low"]),
+  confidenceBand: z.number().min(0).max(1),
+  reasonCodes: z.array(z.string().min(1)),
+  recommendedFallbackAction: z.enum(["proceed", "defer", "escalate", "suppress"])
+});
+
+const AaliyahConfidenceSummarySchema = z.object({
+  generatedAt: z.string().datetime(),
+  activeMode: FounderBriefingModeSchema,
+  overallConfidenceLevel: z.enum(["high", "medium", "low"]),
+  highConfidenceCount: z.number().int().nonnegative(),
+  mediumConfidenceCount: z.number().int().nonnegative(),
+  lowConfidenceCount: z.number().int().nonnegative(),
+  deferredCount: z.number().int().nonnegative(),
+  suppressedCount: z.number().int().nonnegative(),
+  topReasonCodes: z.array(z.string().min(1)),
+  items: z.array(AaliyahConfidenceAssessmentSchema)
+});
+
+const AaliyahInterruptQueueItemSchema = z.object({
+  sourceItemId: z.string().min(1),
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  recommendedAction: z.string().min(1),
+  visibilityAction: z.enum(["interrupt_now", "same_day_briefing", "passive_queue", "silent_log"]),
+  confidenceLevel: z.enum(["high", "medium", "low"]),
+  founderRelevance: z.boolean(),
+  reasonCodes: z.array(z.string().min(1))
+});
+
+const AaliyahInterruptionSummarySchema = z.object({
+  generatedAt: z.string().datetime(),
+  activeMode: FounderBriefingModeSchema,
+  items: z.array(AaliyahInterruptQueueItemSchema),
+  interruptNowCount: z.number().int().nonnegative(),
+  sameDayBriefingCount: z.number().int().nonnegative(),
+  passiveQueueCount: z.number().int().nonnegative(),
+  silentLogCount: z.number().int().nonnegative()
 });
 
 const AaliyahApprovalSummarySchema = z.object({
@@ -1074,6 +1119,8 @@ const AaliyahCommandSurfaceSchema = z.object({
     })
   ),
   interruptQueueSummary: AaliyahCommandSurfaceInterruptSummarySchema,
+  confidenceSummary: AaliyahConfidenceSummarySchema,
+  interruptionQueue: AaliyahInterruptionSummarySchema,
   quickActions: z.array(AaliyahQuickActionSchema),
   provenanceSummary: AaliyahCommandSurfaceProvenanceSummarySchema
 });
@@ -1095,11 +1142,25 @@ export const AaliyahQuickActionsResponseSchema = z.object({
   items: z.array(AaliyahQuickActionSchema)
 });
 
+export const AaliyahInterruptionsResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_interruptions"),
+  summary: AaliyahInterruptionSummarySchema
+});
+
+export const AaliyahConfidenceSummaryResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_confidence_summary"),
+  summary: AaliyahConfidenceSummarySchema
+});
+
 const AaliyahRuntimeIntentSchema = z.enum([
   "get_founder_briefing",
   "get_founder_command_surface",
   "get_quick_actions",
   "execute_quick_action",
+  "get_interrupt_queue",
+  "get_confidence_summary",
   "get_waiting_approvals",
   "get_email_review_queue",
   "approve_email_review_item",
@@ -1229,12 +1290,16 @@ const AaliyahRuntimeSuccessSchema = z.object({
     "voice_call_summary",
     "voice_escalations",
     "founder_command_surface",
-    "quick_actions"
+    "quick_actions",
+    "interrupt_queue",
+    "confidence_summary"
   ]),
   payload: z.union([
     FounderBriefingSchema,
     AaliyahCommandSurfaceSchema,
     AaliyahQuickActionsPayloadSchema,
+    AaliyahInterruptionSummarySchema,
+    AaliyahConfidenceSummarySchema,
     AaliyahApprovalQueuePayloadSchema,
     AaliyahReviewActionPayloadSchema,
     z.object({

@@ -30,6 +30,8 @@ import {
   AdminSummaryResponseSchema,
   AaliyahBriefingResponseSchema,
   AaliyahCommandSurfaceResponseSchema,
+  AaliyahConfidenceSummaryResponseSchema,
+  AaliyahInterruptionsResponseSchema,
   AaliyahQuickActionsResponseSchema,
   AaliyahRuntimeResponseSchema,
   VoiceIntakeResponseSchema,
@@ -2150,8 +2152,30 @@ describe("agent routes", () => {
       ],
       interruptQueueSummary: {
         interruptNowCount: 1,
-        reviewSoonCount: 0,
-        canWaitCount: 0
+        sameDayBriefingCount: 0,
+        passiveQueueCount: 0,
+        silentLogCount: 0
+      },
+      confidenceSummary: {
+        generatedAt: "2026-03-14T00:00:00.000Z",
+        activeMode: mode,
+        overallConfidenceLevel: "high",
+        highConfidenceCount: 2,
+        mediumConfidenceCount: 0,
+        lowConfidenceCount: 0,
+        deferredCount: 0,
+        suppressedCount: 0,
+        topReasonCodes: ["data_complete"],
+        items: []
+      },
+      interruptionQueue: {
+        generatedAt: "2026-03-14T00:00:00.000Z",
+        activeMode: mode,
+        items: [],
+        interruptNowCount: 1,
+        sameDayBriefingCount: 0,
+        passiveQueueCount: 0,
+        silentLogCount: 0
       },
       quickActions: [
         {
@@ -2189,7 +2213,28 @@ describe("agent routes", () => {
         availabilityStatus: "available",
         availabilityReason: null
       }
-    ])
+    ]),
+    getInterruptionQueue: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+      generatedAt: "2026-03-14T00:00:00.000Z",
+      activeMode: mode,
+      items: [],
+      interruptNowCount: 1,
+      sameDayBriefingCount: 0,
+      passiveQueueCount: 0,
+      silentLogCount: 0
+    })),
+    getConfidenceSummary: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+      generatedAt: "2026-03-14T00:00:00.000Z",
+      activeMode: mode,
+      overallConfidenceLevel: "high",
+      highConfidenceCount: 2,
+      mediumConfidenceCount: 0,
+      lowConfidenceCount: 0,
+      deferredCount: 0,
+      suppressedCount: 0,
+      topReasonCodes: ["data_complete"],
+      items: []
+    }))
   };
   const voiceService = {
     processInboundCall: vi.fn(async () => ({
@@ -2688,6 +2733,14 @@ describe("agent routes", () => {
       method: "GET",
       url: "/v1/agent-os/aaliyah/quick-actions?mode=zbestmedia"
     });
+    const interruptionsRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/interruptions?mode=founder"
+    });
+    const confidenceRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/confidence-summary?mode=zbestmedia"
+    });
 
     expect(shellRes.statusCode).toBe(200);
     const shell = AaliyahCommandSurfaceResponseSchema.parse(shellRes.json());
@@ -2698,6 +2751,14 @@ describe("agent routes", () => {
     const quickActions = AaliyahQuickActionsResponseSchema.parse(quickActionsRes.json());
     expect(quickActions.activeMode).toBe("zbestmedia");
     expect(quickActions.items[0]?.targetIntent).toBe("get_waiting_approvals");
+
+    expect(interruptionsRes.statusCode).toBe(200);
+    const interruptions = AaliyahInterruptionsResponseSchema.parse(interruptionsRes.json());
+    expect(interruptions.summary.interruptNowCount).toBe(1);
+
+    expect(confidenceRes.statusCode).toBe(200);
+    const confidence = AaliyahConfidenceSummaryResponseSchema.parse(confidenceRes.json());
+    expect(confidence.summary.overallConfidenceLevel).toBe("high");
   });
 
   it("exposes governed voice intake routes", async () => {

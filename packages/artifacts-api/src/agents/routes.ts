@@ -466,6 +466,42 @@ export function agentRoutes(opts: {
       });
     });
 
+    app.get("/v1/agent-os/aaliyah/interruptions", async (req, reply) => {
+      const query = AaliyahCommandSurfaceQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const summary = await opts.aaliyahCommandSurfaceService.getInterruptionQueue({
+        tenantId: req.auth.tenantId,
+        mode: query.data.mode
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_interruptions",
+        summary
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/confidence-summary", async (req, reply) => {
+      const query = AaliyahCommandSurfaceQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const summary = await opts.aaliyahCommandSurfaceService.getConfidenceSummary({
+        tenantId: req.auth.tenantId,
+        mode: query.data.mode
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_confidence_summary",
+        summary
+      });
+    });
+
     app.post("/v1/agent-os/aaliyah/runtime", async (req, reply) => {
       const body = AaliyahRuntimeRequestBodySchema.safeParse(req.body ?? {});
       if (!body.success) {

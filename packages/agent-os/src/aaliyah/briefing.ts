@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { AALIYAH_REGISTRY_VERSION } from "./registry-types.js";
+import { AaliyahConfidenceControlService } from "./confidence.js";
 import { AaliyahRuntimeEnforcementService } from "./runtime-enforcement.js";
 import type {
   FounderAssignmentSource,
@@ -37,6 +38,7 @@ const INTERRUPT_SCORE: Record<FounderInterruptClass, number> = {
 
 export class AaliyahFounderBriefingService {
   private readonly runtime = new AaliyahRuntimeEnforcementService();
+  private readonly confidence = new AaliyahConfidenceControlService();
 
   constructor(
     private readonly org: AgentOrgService,
@@ -162,6 +164,29 @@ export class AaliyahFounderBriefingService {
     } satisfies FounderRecommendedAction));
 
     const interruptSummary = this.buildInterruptSummary(topPriorities);
+    const confidenceEvaluations = [...waitingOnMe, ...revenueWatch, ...operationsWatch, ...calendarWatch, ...relationshipWatch].map((item) =>
+      this.confidence.evaluate({
+        sourceSubsystem: item.owner.sourceLane === "code-sentinel" ? "ops" : "briefing",
+        assessedItemType: "briefing_item",
+        sourceItemId: item.itemId,
+        urgency: item.urgency,
+        risk: item.urgency === "urgent" ? "critical" : item.urgency === "high" ? "high" : "medium",
+        founderRelevance: item.requiresFounderAttention || item.category === "waiting_on_me" || item.category === "top_priorities",
+        founderApprovalRequired: item.category === "waiting_on_me",
+        releaseBlocking: item.owner.sourceLane === "code-sentinel" && item.requiresFounderAttention,
+        timeSensitivity:
+          item.interruptionClass === "interrupt_now"
+            ? "immediate"
+            : item.interruptionClass === "review_soon"
+              ? "same_day"
+              : "routine",
+        dataComplete: item.summary.trim().length > 0 && item.recommendedAction.trim().length > 0,
+        routingCertain: item.owner.sourceLane !== "aaliyah-founder-review",
+        policyCertain: true,
+        modeCertain: true,
+        sourceReliability: item.owner.sourceLane === "code-sentinel" ? "high" : "medium"
+      })
+    );
 
     return {
       briefingId: `briefing:${randomUUID()}`,
@@ -178,7 +203,7 @@ export class AaliyahFounderBriefingService {
       interruptSummary,
       confidenceSummary: {
         status: ops.status,
-        lowConfidenceSignals: reviewSources.filter((review) => review.confidenceScore < 0.6).length,
+        lowConfidenceSignals: confidenceEvaluations.filter((evaluation) => evaluation.assessment.confidenceLevel === "low").length,
         degradedSurfaces: ops.degradedSurfaces
       },
       sourceMetadata: {

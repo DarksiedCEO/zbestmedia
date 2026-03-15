@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { AALIYAH_REGISTRY_VERSION } from "./registry-types.js";
+import { AaliyahConfidenceControlService } from "./confidence.js";
 import type {
   AaliyahApprovalSummary,
   AaliyahCommandSurfaceContext,
@@ -32,6 +33,8 @@ const INTERRUPT_WEIGHT: Record<FounderBriefingItem["interruptionClass"], number>
 };
 
 export class AaliyahCommandSurfaceService {
+  private readonly confidence = new AaliyahConfidenceControlService();
+
   constructor(
     private readonly org: AgentOrgService,
     private readonly briefing: AaliyahFounderBriefingService,
@@ -61,10 +64,25 @@ export class AaliyahCommandSurfaceService {
       interruptNowCount: voiceEscalations.filter((item) => item.interruptionClass === "interrupt_now").length
     };
 
+    const evaluatedInterruptions = this.buildInterruptions({
+      generatedAt,
+      mode: args.mode,
+      topPriorities: briefing.topPriorities,
+      approvals,
+      voiceEscalations
+    });
+
     const whatMattersNow = [
       ...briefing.topPriorities,
       ...this.voiceEscalationsToItems(voiceEscalations, args.mode)
     ]
+      .filter((item) =>
+        evaluatedInterruptions.summary.items.some(
+          (queueItem: (typeof evaluatedInterruptions.summary.items)[number]) =>
+            queueItem.sourceItemId === item.itemId &&
+            queueItem.visibilityAction !== "silent_log"
+        )
+      )
       .sort((a, b) => this.scoreItem(b) - this.scoreItem(a))
       .slice(0, 6);
 
@@ -81,11 +99,11 @@ export class AaliyahCommandSurfaceService {
       pendingVoiceEscalationCount: voiceEscalations.length
     });
 
-    const interruptQueueSummary = {
-      interruptNowCount: whatMattersNow.filter((item) => item.interruptionClass === "interrupt_now").length,
-      reviewSoonCount: whatMattersNow.filter((item) => item.interruptionClass === "review_soon").length,
-      canWaitCount: whatMattersNow.filter((item) => item.interruptionClass === "can_wait").length
-    };
+    const confidenceSummary = this.confidence.summarizeConfidence({
+      generatedAt,
+      activeMode: args.mode,
+      evaluations: evaluatedInterruptions.evaluations
+    });
 
     return {
       shellId: `aaliyah-shell:${randomUUID()}`,
@@ -100,7 +118,14 @@ export class AaliyahCommandSurfaceService {
       opsStatusSummary,
       openVoiceEscalations,
       recommendedNextActions,
-      interruptQueueSummary,
+      interruptQueueSummary: {
+        interruptNowCount: evaluatedInterruptions.summary.interruptNowCount,
+        sameDayBriefingCount: evaluatedInterruptions.summary.sameDayBriefingCount,
+        passiveQueueCount: evaluatedInterruptions.summary.passiveQueueCount,
+        silentLogCount: evaluatedInterruptions.summary.silentLogCount
+      },
+      confidenceSummary,
+      interruptionQueue: evaluatedInterruptions.summary,
       quickActions,
       provenanceSummary: {
         orgManifestVersion: this.org.getManifestVersion(),
@@ -113,6 +138,30 @@ export class AaliyahCommandSurfaceService {
         }
       }
     };
+  }
+
+  async getConfidenceSummary(args: AaliyahCommandSurfaceContext) {
+    const generatedAt = args.generatedAt ?? new Date().toISOString();
+    const interruptions = await this.buildInterruptionsFromContext({
+      tenantId: args.tenantId,
+      mode: args.mode,
+      generatedAt
+    });
+    return this.confidence.summarizeConfidence({
+      generatedAt,
+      activeMode: args.mode,
+      evaluations: interruptions.evaluations
+    });
+  }
+
+  async getInterruptionQueue(args: AaliyahCommandSurfaceContext) {
+    const generatedAt = args.generatedAt ?? new Date().toISOString();
+    const interruptions = await this.buildInterruptionsFromContext({
+      tenantId: args.tenantId,
+      mode: args.mode,
+      generatedAt
+    });
+    return interruptions.summary;
   }
 
   listQuickActions(
@@ -272,5 +321,159 @@ export class AaliyahCommandSurfaceService {
     if (item.category === "top_priorities") score += 35;
     if (item.owner.sourceLane === "code-sentinel") score += 20;
     return score;
+  }
+
+  private async buildInterruptionsFromContext(args: AaliyahCommandSurfaceContext & { generatedAt: string }) {
+    const [briefing, approvals, voiceEscalations] = await Promise.all([
+      this.briefing.generateBriefing({ tenantId: args.tenantId, mode: args.mode, generatedAt: args.generatedAt }),
+      this.email.listReviewItems({ tenantId: args.tenantId, status: "pending_review", limit: 10 }),
+      this.voice.listPendingEscalations({ tenantId: args.tenantId, limit: 10 })
+    ]);
+
+    return this.buildInterruptions({
+      generatedAt: args.generatedAt,
+      mode: args.mode,
+      topPriorities: briefing.topPriorities,
+      approvals,
+      voiceEscalations
+    });
+  }
+
+  private buildInterruptions(args: {
+    generatedAt: string;
+    mode: FounderBriefingMode;
+    topPriorities: FounderBriefingItem[];
+    approvals: AaliyahApprovalSummary["items"];
+    voiceEscalations: VoiceCallRecord[];
+  }) {
+    const itemEvaluations = args.topPriorities.map((item) => {
+      const evaluation = this.confidence.evaluate({
+        sourceSubsystem: item.owner.sourceLane === "code-sentinel" ? "ops" : "briefing",
+        assessedItemType: "briefing_item",
+        sourceItemId: item.itemId,
+        urgency: item.urgency,
+        risk: item.urgency === "urgent" ? "critical" : item.urgency === "high" ? "high" : "medium",
+        founderRelevance: item.requiresFounderAttention || item.category === "waiting_on_me" || item.category === "top_priorities",
+        founderApprovalRequired: item.category === "waiting_on_me",
+        releaseBlocking: item.owner.sourceLane === "code-sentinel" && item.requiresFounderAttention,
+        timeSensitivity:
+          item.interruptionClass === "interrupt_now"
+            ? "immediate"
+            : item.interruptionClass === "review_soon"
+              ? "same_day"
+              : "routine",
+        dataComplete: item.summary.trim().length > 0 && item.recommendedAction.trim().length > 0,
+        routingCertain: item.owner.sourceLane !== "aaliyah-founder-review",
+        policyCertain: true,
+        modeCertain: true,
+        sourceReliability: item.owner.sourceLane === "code-sentinel" ? "high" : "medium"
+      });
+
+      return {
+        evaluation,
+        queueItem: {
+          sourceItemId: item.itemId,
+          title: item.title,
+          summary: item.summary,
+          recommendedAction: item.recommendedAction,
+          visibilityAction: evaluation.interruption.recommendedVisibilityAction,
+          confidenceLevel: evaluation.assessment.confidenceLevel,
+          founderRelevance: evaluation.interruption.founderRelevance,
+          reasonCodes: evaluation.interruption.reasonCodes
+        }
+      };
+    });
+
+    const approvalEvaluations = args.approvals.map((item) => {
+      const evaluation = this.confidence.evaluate({
+        sourceSubsystem: "email_review_queue",
+        assessedItemType: "email_review",
+        sourceItemId: `review:${item.reviewItemId}`,
+        urgency: item.priority,
+        risk: item.riskLevel,
+        founderRelevance: true,
+        founderApprovalRequired: true,
+        releaseBlocking: false,
+        timeSensitivity: item.priority === "urgent" ? "immediate" : item.priority === "high" ? "same_day" : "routine",
+        dataComplete: item.draftSummary.trim().length > 0 && item.proposedReplySubject.trim().length > 0,
+        routingCertain: !item.escalationRecommended,
+        policyCertain: true,
+        modeCertain: true,
+        sourceReliability: "medium"
+      });
+
+      return {
+        evaluation,
+        queueItem: {
+          sourceItemId: `review:${item.reviewItemId}`,
+          title: item.proposedReplySubject,
+          summary: item.draftSummary,
+          recommendedAction: "Review and decide whether to approve, reject, or request revision.",
+          visibilityAction: evaluation.interruption.recommendedVisibilityAction,
+          confidenceLevel: evaluation.assessment.confidenceLevel,
+          founderRelevance: true,
+          reasonCodes: evaluation.interruption.reasonCodes
+        }
+      };
+    });
+
+    const voiceEvaluations = args.voiceEscalations.map((item) => {
+      const evaluation = this.confidence.evaluate({
+        sourceSubsystem: "voice_intake",
+        assessedItemType: "voice_call",
+        sourceItemId: `voice:${item.callId}`,
+        urgency: item.urgency === "critical" ? "urgent" : item.urgency,
+        risk: item.riskLevel === "moderate" ? "medium" : item.riskLevel,
+        founderRelevance: item.founderAttentionRequired,
+        founderApprovalRequired: false,
+        releaseBlocking: false,
+        timeSensitivity: item.interruptionClass === "interrupt_now" ? "immediate" : item.interruptionClass === "review_soon" ? "same_day" : "routine",
+        dataComplete: item.transcript.trim().length > 0,
+        routingCertain: true,
+        policyCertain: true,
+        modeCertain: args.mode === "founder" || item.companyMode === args.mode,
+        sourceReliability: "medium"
+      });
+
+      return {
+        evaluation,
+        queueItem: {
+          sourceItemId: `voice:${item.callId}`,
+          title: `Voice escalation: ${item.callerDisplayName ?? item.callerPhoneNumber}`,
+          summary: item.callSummaryText ?? item.recommendedNextAction,
+          recommendedAction: item.recommendedNextAction,
+          visibilityAction: evaluation.interruption.recommendedVisibilityAction,
+          confidenceLevel: evaluation.assessment.confidenceLevel,
+          founderRelevance: item.founderAttentionRequired,
+          reasonCodes: evaluation.interruption.reasonCodes
+        }
+      };
+    });
+
+    const evaluations = [...itemEvaluations, ...approvalEvaluations, ...voiceEvaluations];
+
+    return {
+      evaluations: evaluations.map((entry) => entry.evaluation),
+      summary: this.confidence.summarizeInterruptions({
+        generatedAt: args.generatedAt,
+        activeMode: args.mode,
+        items: evaluations
+          .map((entry) => entry.queueItem)
+          .sort((a, b) => this.visibilityWeight(b.visibilityAction) - this.visibilityWeight(a.visibilityAction))
+      })
+    };
+  }
+
+  private visibilityWeight(action: "interrupt_now" | "same_day_briefing" | "passive_queue" | "silent_log") {
+    switch (action) {
+    case "interrupt_now":
+      return 100;
+    case "same_day_briefing":
+      return 60;
+    case "passive_queue":
+      return 30;
+    case "silent_log":
+      return 0;
+    }
   }
 }
