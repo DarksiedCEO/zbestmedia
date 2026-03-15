@@ -6,6 +6,7 @@ import {
   AaliyahFounderBriefingService,
   AaliyahMemoryBoundaryService,
   AaliyahPreferenceService,
+  AaliyahFounderReviewQueueService,
   AaliyahRuntimeService,
   EmailAssistantService,
   EmailAccountConfigurationError,
@@ -35,6 +36,9 @@ import {
   AgentIdParamSchema,
   AaliyahBriefingQuerySchema,
   AaliyahMemoryBoundaryResponseSchema,
+  AaliyahReviewQueueDetailResponseSchema,
+  AaliyahReviewQueueListResponseSchema,
+  AaliyahReviewQueueItemIdParamSchema,
   AaliyahPreferenceCreateBodySchema,
   AaliyahPreferenceDetailResponseSchema,
   AaliyahPreferenceIdParamSchema,
@@ -136,6 +140,7 @@ export function agentRoutes(opts: {
   aaliyahCommandSurfaceService: AaliyahCommandSurfaceService;
   aaliyahPreferenceService: AaliyahPreferenceService;
   aaliyahMemoryBoundaryService: AaliyahMemoryBoundaryService;
+  aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
   aaliyahRuntimeService: AaliyahRuntimeService;
   emailService: EmailAssistantService;
   voiceService: VoiceRuntimeService;
@@ -600,6 +605,51 @@ export function agentRoutes(opts: {
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_memory_boundaries",
         summary
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/review-queue", async (req, reply) => {
+      const query = AaliyahCommandSurfaceQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const queue = await opts.aaliyahReviewQueueService.getQueue({
+        tenantId: req.auth.tenantId,
+        mode: query.data.mode
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_review_queue",
+        queue
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/review-queue/:queueItemId", async (req, reply) => {
+      const path = AaliyahReviewQueueItemIdParamSchema.safeParse(req.params);
+      const query = AaliyahCommandSurfaceQuerySchema.safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const item = await opts.aaliyahReviewQueueService.getQueueItem({
+        tenantId: req.auth.tenantId,
+        mode: query.data.mode,
+        queueItemId: path.data.queueItemId
+      });
+
+      if (!item) {
+        return reply.code(404).send({ error: "founder_queue_item_not_found" });
+      }
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_review_queue_item",
+        item
       });
     });
 

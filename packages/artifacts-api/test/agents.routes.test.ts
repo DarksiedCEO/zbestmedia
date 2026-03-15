@@ -35,6 +35,8 @@ import {
   AaliyahMemoryBoundaryResponseSchema,
   AaliyahPreferenceDetailResponseSchema,
   AaliyahPreferenceListResponseSchema,
+  AaliyahReviewQueueDetailResponseSchema,
+  AaliyahReviewQueueListResponseSchema,
   AaliyahQuickActionsResponseSchema,
   AaliyahRuntimeResponseSchema,
   VoiceIntakeResponseSchema,
@@ -2161,6 +2163,78 @@ describe("agent routes", () => {
       decisions: []
     }))
   };
+  const aaliyahReviewQueueService = {
+    getQueue: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+      queueId: "queue:1",
+      generatedAt: "2026-03-15T00:00:00.000Z",
+      activeMode: mode,
+      manifestVersion: "2026-03-12.v1",
+      itemCountsByType: {
+        approval_required: 1,
+        voice_escalation: 1,
+        incident_attention: 1,
+        dispatch_action: 0,
+        routing_preview_action: 0,
+        founder_recommended_action: 0
+      },
+      itemCountsByInterruptionClass: {
+        interrupt_now: 1,
+        same_day_briefing: 0,
+        passive_queue: 0,
+        silent_log: 0
+      },
+      topActionableItems: [],
+      totalFounderActionableItems: 3,
+      items: [
+        {
+          queueItemId: "queue:item:1",
+          sourceSubsystem: "email_review_queue",
+          sourceItemId: "review:1",
+          itemType: "approval_required",
+          title: "Review founder email",
+          summary: "Founder approval is needed.",
+          urgency: "high",
+          risk: "medium",
+          confidenceLevel: "high",
+          interruptionClass: "same_day_briefing",
+          activeMode: mode,
+          founderAttentionRequired: true,
+          recommendedNextAction: "Review and approve.",
+          allowedNextActions: ["approve_review_item"],
+          provenanceSummary: {
+            manifestVersion: "2026-03-12.v1",
+            references: ["review:1"],
+            contributingSourceItemIds: ["review:1"]
+          },
+          createdAt: "2026-03-15T00:00:00.000Z",
+          updatedAt: "2026-03-15T00:00:00.000Z"
+        }
+      ]
+    })),
+    getQueueItem: vi.fn(async () => ({
+      queueItemId: "queue:item:1",
+      sourceSubsystem: "email_review_queue",
+      sourceItemId: "review:1",
+      itemType: "approval_required",
+      title: "Review founder email",
+      summary: "Founder approval is needed.",
+      urgency: "high",
+      risk: "medium",
+      confidenceLevel: "high",
+      interruptionClass: "same_day_briefing",
+      activeMode: "founder",
+      founderAttentionRequired: true,
+      recommendedNextAction: "Review and approve.",
+      allowedNextActions: ["approve_review_item"],
+      provenanceSummary: {
+        manifestVersion: "2026-03-12.v1",
+        references: ["review:1"],
+        contributingSourceItemIds: ["review:1"]
+      },
+      createdAt: "2026-03-15T00:00:00.000Z",
+      updatedAt: "2026-03-15T00:00:00.000Z"
+    }))
+  };
   const aaliyahCommandSurfaceService = {
     generateCommandSurface: vi.fn(async ({ tenantId, mode }: { tenantId: string; mode: "founder" | "zbestmedia" }) => ({
       shellId: "shell:1",
@@ -2235,6 +2309,28 @@ describe("agent routes", () => {
         sameDayBriefingCount: 0,
         passiveQueueCount: 0,
         silentLogCount: 0
+      },
+      founderReviewQueue: {
+        queueId: "queue:1",
+        generatedAt: "2026-03-15T00:00:00.000Z",
+        activeMode: mode,
+        manifestVersion: "2026-03-12.v1",
+        itemCountsByType: {
+          approval_required: 1,
+          voice_escalation: 1,
+          incident_attention: 1,
+          dispatch_action: 0,
+          routing_preview_action: 0,
+          founder_recommended_action: 0
+        },
+        itemCountsByInterruptionClass: {
+          interrupt_now: 1,
+          same_day_briefing: 0,
+          passive_queue: 0,
+          silent_log: 0
+        },
+        topActionableItems: [],
+        totalFounderActionableItems: 3
       },
       quickActions: [
         {
@@ -2593,6 +2689,7 @@ describe("agent routes", () => {
         aaliyahCommandSurfaceService: aaliyahCommandSurfaceService as never,
         aaliyahPreferenceService: aaliyahPreferenceService as never,
         aaliyahMemoryBoundaryService: aaliyahMemoryBoundaryService as never,
+        aaliyahReviewQueueService: aaliyahReviewQueueService as never,
         aaliyahRuntimeService: aaliyahRuntimeService as never,
         emailService,
         voiceService: voiceService as never,
@@ -2810,6 +2907,14 @@ describe("agent routes", () => {
       method: "GET",
       url: "/v1/agent-os/aaliyah/memory-boundaries?mode=zbestmedia"
     });
+    const queueRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/review-queue?mode=founder"
+    });
+    const queueItemRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/review-queue/queue:item:1?mode=founder"
+    });
 
     expect(shellRes.statusCode).toBe(200);
     const shell = AaliyahCommandSurfaceResponseSchema.parse(shellRes.json());
@@ -2836,6 +2941,14 @@ describe("agent routes", () => {
     expect(boundariesRes.statusCode).toBe(200);
     const boundaries = AaliyahMemoryBoundaryResponseSchema.parse(boundariesRes.json());
     expect(boundaries.summary.activeMode).toBe("zbestmedia");
+
+    expect(queueRes.statusCode).toBe(200);
+    const queue = AaliyahReviewQueueListResponseSchema.parse(queueRes.json());
+    expect(queue.queue.totalFounderActionableItems).toBe(3);
+
+    expect(queueItemRes.statusCode).toBe(200);
+    const queueItem = AaliyahReviewQueueDetailResponseSchema.parse(queueItemRes.json());
+    expect(queueItem.item.itemType).toBe("approval_required");
   });
 
   it("exposes founder preference mutation routes", async () => {

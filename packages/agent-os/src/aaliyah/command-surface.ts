@@ -4,6 +4,7 @@ import { AALIYAH_REGISTRY_VERSION } from "./registry-types.js";
 import { AaliyahConfidenceControlService } from "./confidence.js";
 import { AaliyahMemoryBoundaryService } from "./memory-boundary.js";
 import { AaliyahPreferenceService } from "./preferences.js";
+import { AaliyahFounderReviewQueueService } from "./review-queue.js";
 import type {
   AaliyahApprovalSummary,
   AaliyahCommandSurfaceContext,
@@ -45,6 +46,7 @@ export class AaliyahCommandSurfaceService {
     private readonly email: EmailAssistantService,
     private readonly voice: VoiceRuntimeService,
     private readonly telemetry: AgentTelemetryService,
+    private readonly reviewQueue: AaliyahFounderReviewQueueService,
     private readonly preferences?: AaliyahPreferenceService,
     boundary?: AaliyahMemoryBoundaryService
   ) {
@@ -74,12 +76,13 @@ export class AaliyahCommandSurfaceService {
           modeVisibility: "strict",
           appliedPreferences: []
         };
-    const [briefing, approvals, voiceEscalations, openIncidentSummary, opsStatusSummary] = await Promise.all([
+    const [briefing, approvals, voiceEscalations, openIncidentSummary, opsStatusSummary, founderQueue] = await Promise.all([
       this.briefing.generateBriefing({ tenantId: args.tenantId, mode: args.mode, generatedAt }),
       this.email.listReviewItems({ tenantId: args.tenantId, status: "pending_review", limit: 10 }),
       this.voice.listPendingEscalations({ tenantId: args.tenantId, limit: 10 }),
       this.telemetry.getIncidentSummary({ tenantId: args.tenantId }),
-      this.telemetry.getOpsStatusSummary({ tenantId: args.tenantId })
+      this.telemetry.getOpsStatusSummary({ tenantId: args.tenantId }),
+      this.reviewQueue.getQueue({ tenantId: args.tenantId, mode: args.mode, generatedAt })
     ]);
 
     const visibleApprovals = approvals.filter((item) =>
@@ -105,26 +108,20 @@ export class AaliyahCommandSurfaceService {
       voiceEscalations
     });
 
-    const whatMattersNow = [
-      ...briefing.topPriorities,
-      ...this.voiceEscalationsToItems(voiceEscalations, args.mode)
-    ]
-      .filter((item) =>
-        evaluatedInterruptions.summary.items.some(
-          (queueItem: (typeof evaluatedInterruptions.summary.items)[number]) =>
-            queueItem.sourceItemId === item.itemId &&
-            this.isVisibleUnderTolerance(queueItem.visibilityAction, resolvedPreferences.interruptionTolerance)
-        )
-      )
-      .sort((a, b) => this.scoreItem(b) - this.scoreItem(a))
+    const whatMattersNow = founderQueue.topActionableItems
+      .filter((item) => this.isVisibleUnderTolerance(item.interruptionClass, resolvedPreferences.interruptionTolerance))
+      .map((item) => this.queueItemToBriefingItem(item))
       .slice(0, this.sectionLimit(resolvedPreferences.briefingLength));
 
-    const recommendedNextActions = this.buildRecommendedActions(
-      briefing.recommendedActions,
-      voiceEscalations,
-      args.mode,
-      resolvedPreferences.tonePreference
-    ).slice(0, this.sectionLimit(resolvedPreferences.briefingLength));
+    const recommendedNextActions = founderQueue.topActionableItems
+      .map((item, index) => ({
+        actionId: `queue-action:${index + 1}`,
+        title: item.title,
+        action: this.formatText(item.recommendedNextAction, resolvedPreferences.tonePreference),
+        urgency: item.urgency,
+        sourceItemId: item.queueItemId
+      }))
+      .slice(0, this.sectionLimit(resolvedPreferences.briefingLength));
 
     const quickActions = this.listQuickActions({
       tenantId: args.tenantId,
@@ -160,6 +157,7 @@ export class AaliyahCommandSurfaceService {
       },
       confidenceSummary,
       interruptionQueue: evaluatedInterruptions.summary,
+      founderReviewQueue: founderQueue,
       quickActions,
       provenanceSummary: {
         orgManifestVersion: this.org.getManifestVersion(),
@@ -346,6 +344,32 @@ export class AaliyahCommandSurfaceService {
       ...actions.map((action) => ({ ...action, action: this.formatText(action.action, tonePreference) })),
       ...voiceActions
     ].sort((a, b) => this.scoreAction(b) - this.scoreAction(a));
+  }
+
+  private queueItemToBriefingItem(item: import("./review-queue-types.js").AaliyahFounderQueueItem): FounderBriefingItem {
+    return {
+      itemId: item.queueItemId,
+      category: "top_priorities",
+      title: item.title,
+      summary: item.summary,
+      urgency: item.urgency,
+      owner: {
+        executiveId: null,
+        departmentId: null,
+        leadAgentId: null,
+        subAgentId: null,
+        sourceLane: item.sourceSubsystem
+      },
+      recommendedAction: item.recommendedNextAction,
+      interruptionClass:
+        item.interruptionClass === "same_day_briefing"
+          ? "review_soon"
+          : item.interruptionClass === "passive_queue" || item.interruptionClass === "silent_log"
+            ? "can_wait"
+            : "interrupt_now",
+      requiresFounderAttention: item.founderAttentionRequired,
+      provenanceReferences: item.provenanceSummary.references
+    };
   }
 
   private scoreAction(action: FounderRecommendedAction): number {

@@ -1126,6 +1126,7 @@ const AaliyahCommandSurfaceSchema = z.object({
   interruptQueueSummary: AaliyahCommandSurfaceInterruptSummarySchema,
   confidenceSummary: AaliyahConfidenceSummarySchema,
   interruptionQueue: AaliyahInterruptionSummarySchema,
+  founderReviewQueue: z.lazy(() => AaliyahReviewQueueSummarySchema),
   quickActions: z.array(AaliyahQuickActionSchema),
   provenanceSummary: AaliyahCommandSurfaceProvenanceSummarySchema
 });
@@ -1217,6 +1218,79 @@ const AaliyahMemoryBoundarySummarySchema = z.object({
   decisions: z.array(AaliyahMemoryBoundaryDecisionSchema)
 });
 
+const AaliyahReviewQueueItemSchema = z.object({
+  queueItemId: z.string().min(1),
+  sourceSubsystem: z.enum([
+    "email_review_queue",
+    "email_dispatch_queue",
+    "voice_intake",
+    "incident_pipeline",
+    "founder_briefing"
+  ]),
+  sourceItemId: z.string().min(1),
+  itemType: z.enum([
+    "approval_required",
+    "voice_escalation",
+    "incident_attention",
+    "dispatch_action",
+    "routing_preview_action",
+    "founder_recommended_action"
+  ]),
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  urgency: z.enum(["low", "normal", "high", "urgent"]),
+  risk: z.enum(["low", "medium", "high", "critical"]),
+  confidenceLevel: z.enum(["high", "medium", "low"]),
+  interruptionClass: z.enum(["interrupt_now", "same_day_briefing", "passive_queue", "silent_log"]),
+  activeMode: FounderBriefingModeSchema,
+  founderAttentionRequired: z.boolean(),
+  recommendedNextAction: z.string().min(1),
+  allowedNextActions: z.array(z.enum([
+    "open_review_item",
+    "approve_review_item",
+    "reject_review_item",
+    "request_review_revision",
+    "dispatch_approved_email",
+    "open_voice_escalation",
+    "open_incident",
+    "refresh_founder_briefing"
+  ])),
+  provenanceSummary: z.object({
+    manifestVersion: ManifestVersionSchema,
+    references: z.array(z.string().min(1)),
+    contributingSourceItemIds: z.array(z.string().min(1))
+  }),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+const AaliyahReviewQueueSummarySchema = z.object({
+  queueId: z.string().min(1),
+  generatedAt: z.string().datetime(),
+  activeMode: FounderBriefingModeSchema,
+  manifestVersion: ManifestVersionSchema,
+  itemCountsByType: z.object({
+    approval_required: z.number().int().nonnegative(),
+    voice_escalation: z.number().int().nonnegative(),
+    incident_attention: z.number().int().nonnegative(),
+    dispatch_action: z.number().int().nonnegative(),
+    routing_preview_action: z.number().int().nonnegative(),
+    founder_recommended_action: z.number().int().nonnegative()
+  }),
+  itemCountsByInterruptionClass: z.object({
+    interrupt_now: z.number().int().nonnegative(),
+    same_day_briefing: z.number().int().nonnegative(),
+    passive_queue: z.number().int().nonnegative(),
+    silent_log: z.number().int().nonnegative()
+  }),
+  topActionableItems: z.array(AaliyahReviewQueueItemSchema),
+  totalFounderActionableItems: z.number().int().nonnegative()
+});
+
+const AaliyahReviewQueueSchema = AaliyahReviewQueueSummarySchema.extend({
+  items: z.array(AaliyahReviewQueueItemSchema)
+});
+
 export const AaliyahPreferenceListResponseSchema = z.object({
   manifestVersion: ManifestVersionSchema,
   resourceType: z.literal("aaliyah_preferences"),
@@ -1235,6 +1309,22 @@ export const AaliyahMemoryBoundaryResponseSchema = z.object({
   summary: AaliyahMemoryBoundarySummarySchema
 });
 
+export const AaliyahReviewQueueItemIdParamSchema = z.object({
+  queueItemId: z.string().min(1)
+});
+
+export const AaliyahReviewQueueListResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_review_queue"),
+  queue: AaliyahReviewQueueSchema
+});
+
+export const AaliyahReviewQueueDetailResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_review_queue_item"),
+  item: AaliyahReviewQueueItemSchema
+});
+
 const AaliyahRuntimeIntentSchema = z.enum([
   "get_founder_briefing",
   "get_founder_command_surface",
@@ -1244,6 +1334,9 @@ const AaliyahRuntimeIntentSchema = z.enum([
   "get_confidence_summary",
   "get_founder_preferences",
   "get_memory_boundary_summary",
+  "get_founder_review_queue",
+  "get_founder_queue_item",
+  "get_founder_queue_summary",
   "get_waiting_approvals",
   "get_email_review_queue",
   "approve_email_review_item",
@@ -1377,7 +1470,10 @@ const AaliyahRuntimeSuccessSchema = z.object({
     "interrupt_queue",
     "confidence_summary",
     "founder_preferences",
-    "memory_boundary_summary"
+    "memory_boundary_summary",
+    "founder_review_queue",
+    "founder_queue_item",
+    "founder_queue_summary"
   ]),
   payload: z.union([
     FounderBriefingSchema,
@@ -1387,6 +1483,9 @@ const AaliyahRuntimeSuccessSchema = z.object({
     AaliyahConfidenceSummarySchema,
     AaliyahPreferenceListSchema,
     AaliyahMemoryBoundarySummarySchema,
+    AaliyahReviewQueueSchema,
+    AaliyahReviewQueueItemSchema,
+    AaliyahReviewQueueSummarySchema,
     AaliyahApprovalQueuePayloadSchema,
     AaliyahReviewActionPayloadSchema,
     z.object({

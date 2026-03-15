@@ -5,6 +5,7 @@ import { AaliyahFounderBriefingService } from "./briefing.js";
 import { AaliyahCommandSurfaceService } from "./command-surface.js";
 import { AaliyahMemoryBoundaryService } from "./memory-boundary.js";
 import { AaliyahPreferenceService } from "./preferences.js";
+import { AaliyahFounderReviewQueueService } from "./review-queue.js";
 import { AaliyahRuntimeEnforcementService } from "./runtime-enforcement.js";
 import type {
   AaliyahRuntimeDecisionTrace,
@@ -44,7 +45,10 @@ const SUPPORTED_INTENTS = new Set<AaliyahRuntimeIntent>([
   "get_interrupt_queue",
   "get_confidence_summary",
   "get_founder_preferences",
-  "get_memory_boundary_summary"
+  "get_memory_boundary_summary",
+  "get_founder_review_queue",
+  "get_founder_queue_item",
+  "get_founder_queue_summary"
 ]);
 
 const DEFAULT_MODE: AaliyahRuntimeMode = "founder";
@@ -61,6 +65,7 @@ export class AaliyahRuntimeService {
     private readonly voice: VoiceRuntimeService,
     private readonly telemetry: AgentTelemetryService,
     private readonly admin: AgentAdminService,
+    private readonly reviewQueue: AaliyahFounderReviewQueueService,
     private readonly preferences?: AaliyahPreferenceService,
     boundary?: AaliyahMemoryBoundaryService
   ) {
@@ -246,6 +251,80 @@ export class AaliyahRuntimeService {
           invokedSurface: "aaliyah-memory-boundaries",
           enforcement: enforcement.trace,
           payloadType: "memory_boundary_summary",
+          payload
+        });
+      }
+      case "get_founder_review_queue": {
+        const payload = await this.reviewQueue.getQueue({
+          tenantId: args.tenantId,
+          mode: activeMode,
+          generatedAt
+        });
+        return this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-review-queue",
+          enforcement: enforcement.trace,
+          payloadType: "founder_review_queue",
+          payload
+        });
+      }
+      case "get_founder_queue_item": {
+        const queueItemId = this.requireStringParam(args.request.parameters, "queueItemId", "get_founder_queue_item");
+        const payload = await this.reviewQueue.getQueueItem({
+          tenantId: args.tenantId,
+          mode: activeMode,
+          queueItemId
+        });
+        if (!payload) {
+          return this.buildFallback({
+            runtimeRequestId,
+            activeMode,
+            generatedAt,
+            requestId: args.requestId ?? null,
+            resolvedIntent,
+            invokedSurface: "aaliyah-review-queue",
+            enforcement: {
+              ...enforcement.trace,
+              reason: "founder_queue_item_not_found"
+            },
+            fallback: {
+              outcome: "escalate_for_clarification",
+              reason: "founder_queue_item_not_found",
+              delegateToAgentId: null
+            }
+          });
+        }
+        return this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-review-queue",
+          enforcement: enforcement.trace,
+          payloadType: "founder_queue_item",
+          payload
+        });
+      }
+      case "get_founder_queue_summary": {
+        const payload = await this.reviewQueue.getQueueSummary({
+          tenantId: args.tenantId,
+          mode: activeMode,
+          generatedAt
+        });
+        return this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-review-queue",
+          enforcement: enforcement.trace,
+          payloadType: "founder_queue_summary",
           payload
         });
       }
@@ -656,6 +735,9 @@ export class AaliyahRuntimeService {
       | "confidence_summary"
       | "founder_preferences"
       | "memory_boundary_summary"
+      | "founder_review_queue"
+      | "founder_queue_item"
+      | "founder_queue_summary"
       | "approval_queue"
       | "email_review_queue"
       | "email_review_action"

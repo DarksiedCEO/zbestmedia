@@ -19,6 +19,8 @@ export type {
 } from "./preference-types.js";
 export * from "./preferences.js";
 export * from "./memory-boundary.js";
+export * from "./review-queue-types.js";
+export * from "./review-queue.js";
 export * from "./command-surface-types.js";
 export * from "./command-surface.js";
 export * from "./runtime.js";

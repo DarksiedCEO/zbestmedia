@@ -13,6 +13,7 @@ import type {
 import type { AaliyahConfidenceSummary, AaliyahInterruptionSummary } from "./confidence-types.js";
 import type { AaliyahMemoryBoundarySummary } from "./memory-boundary.js";
 import type { AaliyahPreferenceList } from "./preference-types.js";
+import type { AaliyahFounderReviewQueue, AaliyahFounderReviewQueueSummary, AaliyahFounderQueueItem } from "./review-queue-types.js";
 import type { EmailDraftReviewRecord } from "../email/review-types.js";
 import type { EmailDispatchResult } from "../email/dispatch-types.js";
 import type { AdminRoutingCategoryDescriptor } from "../admin/types.js";
@@ -92,7 +93,10 @@ export type AaliyahRuntimeIntent =
   | "get_interrupt_queue"
   | "get_confidence_summary"
   | "get_founder_preferences"
-  | "get_memory_boundary_summary";
+  | "get_memory_boundary_summary"
+  | "get_founder_review_queue"
+  | "get_founder_queue_item"
+  | "get_founder_queue_summary";
 
 export type AaliyahRuntimePayloadType =
   | "founder_briefing"
@@ -112,7 +116,10 @@ export type AaliyahRuntimePayloadType =
   | "interrupt_queue"
   | "confidence_summary"
   | "founder_preferences"
-  | "memory_boundary_summary";
+  | "memory_boundary_summary"
+  | "founder_review_queue"
+  | "founder_queue_item"
+  | "founder_queue_summary";
 
 export type AaliyahRuntimeRequestInput = {
   intent: string;
@@ -179,7 +186,10 @@ export type AaliyahRuntimeSuccessPayload =
   | { payloadType: "interrupt_queue"; payload: AaliyahInterruptionSummary }
   | { payloadType: "confidence_summary"; payload: AaliyahConfidenceSummary }
   | { payloadType: "founder_preferences"; payload: AaliyahPreferenceList }
-  | { payloadType: "memory_boundary_summary"; payload: AaliyahMemoryBoundarySummary };
+  | { payloadType: "memory_boundary_summary"; payload: AaliyahMemoryBoundarySummary }
+  | { payloadType: "founder_review_queue"; payload: AaliyahFounderReviewQueue }
+  | { payloadType: "founder_queue_item"; payload: AaliyahFounderQueueItem }
+  | { payloadType: "founder_queue_summary"; payload: AaliyahFounderReviewQueueSummary };
 
 export type AaliyahRuntimeFallback = {
   outcome: Exclude<AaliyahRuntimeFallbackOutcome, "proceed_with_orchestration">;

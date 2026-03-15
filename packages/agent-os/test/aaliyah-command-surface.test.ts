@@ -233,6 +233,55 @@ describe("Aaliyah command surface", () => {
     voice,
     telemetry,
     {
+      getQueue: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+        queueId: "queue:1",
+        generatedAt: "2026-03-14T00:00:00.000Z",
+        activeMode: mode,
+        manifestVersion: "2026-03-12.v1",
+        itemCountsByType: {
+          approval_required: 1,
+          voice_escalation: 1,
+          incident_attention: 1,
+          dispatch_action: 0,
+          routing_preview_action: 0,
+          founder_recommended_action: 0
+        },
+        itemCountsByInterruptionClass: {
+          interrupt_now: 1,
+          same_day_briefing: 1,
+          passive_queue: 0,
+          silent_log: 0
+        },
+        topActionableItems: [
+          {
+            queueItemId: "queue:incident:1",
+            sourceSubsystem: "incident_pipeline",
+            sourceItemId: "incident:1",
+            itemType: "incident_attention",
+            title: "Release gate degraded",
+            summary: "Critical ops issue.",
+            urgency: "urgent",
+            risk: "critical",
+            confidenceLevel: "high",
+            interruptionClass: "interrupt_now",
+            activeMode: mode,
+            founderAttentionRequired: true,
+            recommendedNextAction: "Clear release blocker.",
+            allowedNextActions: ["open_incident"],
+            provenanceSummary: {
+              manifestVersion: "2026-03-12.v1",
+              references: ["incident:1"],
+              contributingSourceItemIds: ["incident:1"]
+            },
+            createdAt: "2026-03-14T00:00:00.000Z",
+            updatedAt: "2026-03-14T00:00:00.000Z"
+          }
+        ],
+        totalFounderActionableItems: 3,
+        items: []
+      }))
+    } as never,
+    {
       resolvePreferences: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
         activeMode: mode,
         briefingLength: "compact",
@@ -255,9 +304,10 @@ describe("Aaliyah command surface", () => {
     expect(shell.openApprovals.totalPending).toBe(1);
     expect(shell.openVoiceEscalations.totalPending).toBe(1);
     expect(shell.quickActions.some((action) => action.actionId === "open_approval_queue")).toBe(true);
-    expect(shell.whatMattersNow[0]?.itemId).toBe("incident:1");
+    expect(shell.whatMattersNow[0]?.itemId).toBe("queue:incident:1");
     expect(shell.confidenceSummary.overallConfidenceLevel).toBe("high");
     expect(shell.interruptionQueue.interruptNowCount).toBeGreaterThan(0);
+    expect(shell.founderReviewQueue.totalFounderActionableItems).toBe(3);
   });
 
   it("marks voice review quick action disabled when there are no pending escalations", () => {

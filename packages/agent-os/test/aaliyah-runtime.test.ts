@@ -146,6 +146,28 @@ describe("Aaliyah runtime agent", () => {
         passiveQueueCount: 0,
         silentLogCount: 0
       },
+      founderReviewQueue: {
+        queueId: "queue:1",
+        generatedAt: "2026-03-14T00:00:00.000Z",
+        activeMode: mode,
+        manifestVersion: "2026-03-12.v1",
+        itemCountsByType: {
+          approval_required: 1,
+          voice_escalation: 1,
+          incident_attention: 0,
+          dispatch_action: 0,
+          routing_preview_action: 0,
+          founder_recommended_action: 0
+        },
+        itemCountsByInterruptionClass: {
+          interrupt_now: 1,
+          same_day_briefing: 0,
+          passive_queue: 0,
+          silent_log: 0
+        },
+        topActionableItems: [],
+        totalFounderActionableItems: 2
+      },
       quickActions: [
         {
           actionId: "open_approval_queue",
@@ -378,6 +400,101 @@ describe("Aaliyah runtime agent", () => {
     }))
   } as any;
 
+  const reviewQueueService = {
+    getQueue: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+      queueId: "queue:1",
+      generatedAt: "2026-03-15T00:00:00.000Z",
+      activeMode: mode,
+      manifestVersion: "2026-03-12.v1",
+      itemCountsByType: {
+        approval_required: 1,
+        voice_escalation: 1,
+        incident_attention: 0,
+        dispatch_action: 0,
+        routing_preview_action: 0,
+        founder_recommended_action: 0
+      },
+      itemCountsByInterruptionClass: {
+        interrupt_now: 1,
+        same_day_briefing: 0,
+        passive_queue: 0,
+        silent_log: 0
+      },
+      topActionableItems: [],
+      totalFounderActionableItems: 2,
+      items: [
+        {
+          queueItemId: "queue:item:1",
+          sourceSubsystem: "email_review_queue",
+          sourceItemId: "review:1",
+          itemType: "approval_required",
+          title: "subject",
+          summary: "summary",
+          urgency: "high",
+          risk: "medium",
+          confidenceLevel: "high",
+          interruptionClass: "same_day_briefing",
+          activeMode: mode,
+          founderAttentionRequired: true,
+          recommendedNextAction: "Review it.",
+          allowedNextActions: ["approve_review_item"],
+          provenanceSummary: {
+            manifestVersion: "2026-03-12.v1",
+            references: ["review:1"],
+            contributingSourceItemIds: ["review:1"]
+          },
+          createdAt: "2026-03-15T00:00:00.000Z",
+          updatedAt: "2026-03-15T00:00:00.000Z"
+        }
+      ]
+    })),
+    getQueueItem: vi.fn(async () => ({
+      queueItemId: "queue:item:1",
+      sourceSubsystem: "email_review_queue",
+      sourceItemId: "review:1",
+      itemType: "approval_required",
+      title: "subject",
+      summary: "summary",
+      urgency: "high",
+      risk: "medium",
+      confidenceLevel: "high",
+      interruptionClass: "same_day_briefing",
+      activeMode: "founder",
+      founderAttentionRequired: true,
+      recommendedNextAction: "Review it.",
+      allowedNextActions: ["approve_review_item"],
+      provenanceSummary: {
+        manifestVersion: "2026-03-12.v1",
+        references: ["review:1"],
+        contributingSourceItemIds: ["review:1"]
+      },
+      createdAt: "2026-03-15T00:00:00.000Z",
+      updatedAt: "2026-03-15T00:00:00.000Z"
+    })),
+    getQueueSummary: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+      queueId: "queue:1",
+      generatedAt: "2026-03-15T00:00:00.000Z",
+      activeMode: mode,
+      manifestVersion: "2026-03-12.v1",
+      itemCountsByType: {
+        approval_required: 1,
+        voice_escalation: 1,
+        incident_attention: 0,
+        dispatch_action: 0,
+        routing_preview_action: 0,
+        founder_recommended_action: 0
+      },
+      itemCountsByInterruptionClass: {
+        interrupt_now: 1,
+        same_day_briefing: 0,
+        passive_queue: 0,
+        silent_log: 0
+      },
+      topActionableItems: [],
+      totalFounderActionableItems: 2
+    }))
+  } as any;
+
   const service = new AaliyahRuntimeService(
     new AgentOrgService(),
     briefingService,
@@ -386,6 +503,7 @@ describe("Aaliyah runtime agent", () => {
     voiceService,
     telemetryService,
     adminService,
+    reviewQueueService,
     preferenceService,
     memoryBoundaryService
   );
@@ -482,6 +600,36 @@ describe("Aaliyah runtime agent", () => {
     expect(preferences.payloadType).toBe("founder_preferences");
     expect(boundaries.outcomeType).toBe("completed");
     expect(boundaries.payloadType).toBe("memory_boundary_summary");
+  });
+
+  it("returns unified founder review queue views through governed runtime", async () => {
+    const queue = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_founder_review_queue",
+        mode: "founder"
+      }
+    });
+    const item = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_founder_queue_item",
+        parameters: { queueItemId: "queue:item:1" }
+      }
+    });
+    const summary = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_founder_queue_summary"
+      }
+    });
+
+    expect(queue.payloadType).toBe("founder_review_queue");
+    expect(item.payloadType).toBe("founder_queue_item");
+    expect(summary.payloadType).toBe("founder_queue_summary");
   });
 
   it("passes review actions through governed email services", async () => {
