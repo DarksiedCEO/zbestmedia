@@ -4,6 +4,8 @@ import {
   AgentAdminService,
   AaliyahCommandSurfaceService,
   AaliyahFounderBriefingService,
+  AaliyahMemoryBoundaryService,
+  AaliyahPreferenceService,
   AaliyahRuntimeService,
   EmailAssistantService,
   AgentExecutionService,
@@ -92,19 +94,25 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   );
   const emailService = new EmailAssistantService(agentRepository, ledgerService, incidentService);
   const voiceService = new VoiceRuntimeService(agentRepository, ledgerService, incidentService);
+  const aaliyahPreferenceService = new AaliyahPreferenceService(agentRepository);
+  const aaliyahMemoryBoundaryService = new AaliyahMemoryBoundaryService();
   const aaliyahBriefingService = new AaliyahFounderBriefingService(
     agentOrgService,
     telemetryService,
     incidentService,
     ledgerService,
-    emailService.getReviewQueueService()
+    emailService.getReviewQueueService(),
+    aaliyahPreferenceService,
+    aaliyahMemoryBoundaryService
   );
   const aaliyahCommandSurfaceService = new AaliyahCommandSurfaceService(
     agentOrgService,
     aaliyahBriefingService,
     emailService,
     voiceService,
-    telemetryService
+    telemetryService,
+    aaliyahPreferenceService,
+    aaliyahMemoryBoundaryService
   );
   const aaliyahRuntimeService = new AaliyahRuntimeService(
     agentOrgService,
@@ -113,7 +121,9 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
     emailService,
     voiceService,
     telemetryService,
-    adminService
+    adminService,
+    aaliyahPreferenceService,
+    aaliyahMemoryBoundaryService
   );
   const agentExecutionService = new AgentExecutionService(
     agentRepository,
@@ -170,6 +180,8 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       adminService,
       aaliyahBriefingService,
       aaliyahCommandSurfaceService,
+      aaliyahPreferenceService,
+      aaliyahMemoryBoundaryService,
       aaliyahRuntimeService,
       emailService,
       voiceService,

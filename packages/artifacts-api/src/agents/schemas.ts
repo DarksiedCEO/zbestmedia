@@ -5,9 +5,14 @@ import {
   AgentLifecycleStatusSchema,
   AgentTaskDomainSchema,
   AssignmentRecordSchema,
+  AaliyahFounderPreferenceRecordSchema,
   EmailAccountConnectionRecordSchema,
   EmailDispatchRecordSchema,
   EmailDraftReviewRecordSchema,
+  AaliyahPreferenceCategorySchema,
+  AaliyahPreferenceConfidenceLevelSchema,
+  AaliyahPreferenceScopeSchema,
+  AaliyahPreferenceValueSchema,
   VoiceCallRecordSchema,
   IncidentRecordSchema,
   IncidentSeveritySchema,
@@ -1129,6 +1134,21 @@ export const AaliyahCommandSurfaceQuerySchema = z.object({
   mode: FounderBriefingModeSchema.optional().default("founder")
 });
 
+export const AaliyahPreferenceQuerySchema = z.object({
+  mode: FounderBriefingModeSchema.optional().default("founder")
+});
+
+export const AaliyahPreferenceCreateBodySchema = z.object({
+  category: AaliyahPreferenceCategorySchema,
+  value: AaliyahPreferenceValueSchema,
+  scope: AaliyahPreferenceScopeSchema.partial().optional(),
+  confidenceLevel: AaliyahPreferenceConfidenceLevelSchema.optional()
+});
+
+export const AaliyahPreferenceIdParamSchema = z.object({
+  preferenceId: z.string().min(1)
+});
+
 export const AaliyahCommandSurfaceResponseSchema = z.object({
   manifestVersion: ManifestVersionSchema,
   resourceType: z.literal("aaliyah_command_surface"),
@@ -1154,6 +1174,67 @@ export const AaliyahConfidenceSummaryResponseSchema = z.object({
   summary: AaliyahConfidenceSummarySchema
 });
 
+const AaliyahPreferenceListSchema = z.object({
+  generatedAt: z.string().datetime(),
+  activeMode: FounderBriefingModeSchema,
+  defaults: z.object({
+    activeMode: FounderBriefingModeSchema,
+    briefingLength: z.enum(["compact", "standard", "expanded"]),
+    interruptionTolerance: z.enum(["minimal", "standard", "high"]),
+    approvalVisibility: z.enum(["all_pending", "urgent_only"]),
+    tonePreference: z.enum(["concise", "balanced", "detailed"]),
+    modeVisibility: z.enum(["strict", "founder_summary"]),
+    appliedPreferences: z.array(AaliyahFounderPreferenceRecordSchema)
+  }),
+  items: z.array(AaliyahFounderPreferenceRecordSchema)
+});
+
+const AaliyahMemoryBoundaryDecisionSchema = z.object({
+  decisionId: z.string().min(1),
+  activeMode: FounderBriefingModeSchema,
+  requestedMode: FounderBriefingModeSchema,
+  requestedCompanies: z.array(z.string().min(1)),
+  detailLevel: z.enum(["summary", "detail"]),
+  access: z.enum(["allowed", "allowed_founder_summary_only", "denied"]),
+  founderSummaryOnly: z.boolean(),
+  reasonCodes: z.array(z.enum([
+    "valid_scope",
+    "founder_summary_only",
+    "unsupported_mode",
+    "unscoped_request",
+    "unknown_company_scope",
+    "cross_company_detail_denied",
+    "company_detail_scope_denied"
+  ]))
+});
+
+const AaliyahMemoryBoundarySummarySchema = z.object({
+  generatedAt: z.string().datetime(),
+  activeMode: FounderBriefingModeSchema,
+  supportedModes: z.array(FounderBriefingModeSchema),
+  supportedCompanies: z.array(z.string().min(1)),
+  founderAggregationRule: z.literal("single_company_detail_allowed_multi_company_summary_only"),
+  decisions: z.array(AaliyahMemoryBoundaryDecisionSchema)
+});
+
+export const AaliyahPreferenceListResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_preferences"),
+  preferences: AaliyahPreferenceListSchema
+});
+
+export const AaliyahPreferenceDetailResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_preference_detail"),
+  preference: AaliyahFounderPreferenceRecordSchema
+});
+
+export const AaliyahMemoryBoundaryResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_memory_boundaries"),
+  summary: AaliyahMemoryBoundarySummarySchema
+});
+
 const AaliyahRuntimeIntentSchema = z.enum([
   "get_founder_briefing",
   "get_founder_command_surface",
@@ -1161,6 +1242,8 @@ const AaliyahRuntimeIntentSchema = z.enum([
   "execute_quick_action",
   "get_interrupt_queue",
   "get_confidence_summary",
+  "get_founder_preferences",
+  "get_memory_boundary_summary",
   "get_waiting_approvals",
   "get_email_review_queue",
   "approve_email_review_item",
@@ -1292,7 +1375,9 @@ const AaliyahRuntimeSuccessSchema = z.object({
     "founder_command_surface",
     "quick_actions",
     "interrupt_queue",
-    "confidence_summary"
+    "confidence_summary",
+    "founder_preferences",
+    "memory_boundary_summary"
   ]),
   payload: z.union([
     FounderBriefingSchema,
@@ -1300,6 +1385,8 @@ const AaliyahRuntimeSuccessSchema = z.object({
     AaliyahQuickActionsPayloadSchema,
     AaliyahInterruptionSummarySchema,
     AaliyahConfidenceSummarySchema,
+    AaliyahPreferenceListSchema,
+    AaliyahMemoryBoundarySummarySchema,
     AaliyahApprovalQueuePayloadSchema,
     AaliyahReviewActionPayloadSchema,
     z.object({

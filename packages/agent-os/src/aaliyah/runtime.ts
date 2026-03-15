@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { AALIYAH_REGISTRY_VERSION } from "./registry-types.js";
 import { AaliyahFounderBriefingService } from "./briefing.js";
 import { AaliyahCommandSurfaceService } from "./command-surface.js";
+import { AaliyahMemoryBoundaryService } from "./memory-boundary.js";
+import { AaliyahPreferenceService } from "./preferences.js";
 import { AaliyahRuntimeEnforcementService } from "./runtime-enforcement.js";
 import type {
   AaliyahRuntimeDecisionTrace,
@@ -40,13 +42,16 @@ const SUPPORTED_INTENTS = new Set<AaliyahRuntimeIntent>([
   "get_quick_actions",
   "execute_quick_action",
   "get_interrupt_queue",
-  "get_confidence_summary"
+  "get_confidence_summary",
+  "get_founder_preferences",
+  "get_memory_boundary_summary"
 ]);
 
 const DEFAULT_MODE: AaliyahRuntimeMode = "founder";
 
 export class AaliyahRuntimeService {
   private readonly runtime = new AaliyahRuntimeEnforcementService();
+  private readonly boundary: AaliyahMemoryBoundaryService;
 
   constructor(
     private readonly org: AgentOrgService,
@@ -55,8 +60,12 @@ export class AaliyahRuntimeService {
     private readonly email: EmailAssistantService,
     private readonly voice: VoiceRuntimeService,
     private readonly telemetry: AgentTelemetryService,
-    private readonly admin: AgentAdminService
-  ) {}
+    private readonly admin: AgentAdminService,
+    private readonly preferences?: AaliyahPreferenceService,
+    boundary?: AaliyahMemoryBoundaryService
+  ) {
+    this.boundary = boundary ?? new AaliyahMemoryBoundaryService();
+  }
 
   async execute(args: AaliyahRuntimeRequestContext & { request: AaliyahRuntimeRequestInput }): Promise<AaliyahRuntimeResult> {
     const runtimeRequestId = `aaliyah-runtime:${randomUUID()}`;
@@ -200,6 +209,43 @@ export class AaliyahRuntimeService {
           invokedSurface: "aaliyah-confidence-summary",
           enforcement: enforcement.trace,
           payloadType: "confidence_summary",
+          payload
+        });
+      }
+      case "get_founder_preferences": {
+        if (!this.preferences) {
+          throw new Error("aaliyah_runtime_preferences_unavailable");
+        }
+        const payload = await this.preferences.listPreferences({
+          tenantId: args.tenantId,
+          mode: activeMode
+        });
+        return this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-preferences",
+          enforcement: enforcement.trace,
+          payloadType: "founder_preferences",
+          payload
+        });
+      }
+      case "get_memory_boundary_summary": {
+        const payload = this.boundary.getSummary({
+          activeMode,
+          generatedAt
+        });
+        return this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-memory-boundaries",
+          enforcement: enforcement.trace,
+          payloadType: "memory_boundary_summary",
           payload
         });
       }
@@ -411,6 +457,15 @@ export class AaliyahRuntimeService {
       }
       case "switch_mode": {
         const targetMode = this.requireModeParam(args.request.parameters, activeMode);
+        const boundaryDecision = this.boundary.validate({
+          activeMode,
+          requestedMode: targetMode,
+          requestedCompanies: [targetMode === "founder" ? "zbestmedia" : targetMode],
+          detailLevel: targetMode === "founder" ? "summary" : "detail"
+        });
+        if (boundaryDecision.access === "denied") {
+          throw new Error("aaliyah_runtime_invalid_target_mode");
+        }
         return this.buildSuccess({
           runtimeRequestId,
           activeMode: targetMode,
@@ -599,6 +654,8 @@ export class AaliyahRuntimeService {
       | "quick_actions"
       | "interrupt_queue"
       | "confidence_summary"
+      | "founder_preferences"
+      | "memory_boundary_summary"
       | "approval_queue"
       | "email_review_queue"
       | "email_review_action"

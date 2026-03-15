@@ -340,6 +340,44 @@ describe("Aaliyah runtime agent", () => {
     }))
   } as any;
 
+  const preferenceService = {
+    listPreferences: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+      generatedAt: "2026-03-15T00:00:00.000Z",
+      activeMode: mode,
+      defaults: {
+        activeMode: mode,
+        briefingLength: "standard",
+        interruptionTolerance: "standard",
+        approvalVisibility: "all_pending",
+        tonePreference: "balanced",
+        modeVisibility: "strict",
+        appliedPreferences: []
+      },
+      items: []
+    }))
+  } as any;
+
+  const memoryBoundaryService = {
+    getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
+      generatedAt: "2026-03-15T00:00:00.000Z",
+      activeMode,
+      supportedModes: ["founder", "zbestmedia"],
+      supportedCompanies: ["zbestmedia"],
+      founderAggregationRule: "single_company_detail_allowed_multi_company_summary_only",
+      decisions: []
+    })),
+    validate: vi.fn(({ activeMode, requestedMode }: { activeMode: "founder" | "zbestmedia"; requestedMode: "founder" | "zbestmedia" }) => ({
+      decisionId: "boundary:1",
+      activeMode,
+      requestedMode,
+      requestedCompanies: [requestedMode === "founder" ? "zbestmedia" : requestedMode],
+      detailLevel: requestedMode === "founder" ? "summary" : "detail",
+      access: "allowed",
+      founderSummaryOnly: false,
+      reasonCodes: ["valid_scope"]
+    }))
+  } as any;
+
   const service = new AaliyahRuntimeService(
     new AgentOrgService(),
     briefingService,
@@ -347,7 +385,9 @@ describe("Aaliyah runtime agent", () => {
     emailService,
     voiceService,
     telemetryService,
-    adminService
+    adminService,
+    preferenceService,
+    memoryBoundaryService
   );
 
   it("returns founder briefing payloads", async () => {
@@ -418,6 +458,30 @@ describe("Aaliyah runtime agent", () => {
     expect(interruptions.payloadType).toBe("interrupt_queue");
     expect(confidence.outcomeType).toBe("completed");
     expect(confidence.payloadType).toBe("confidence_summary");
+  });
+
+  it("returns founder preferences and memory-boundary summaries through governed runtime", async () => {
+    const preferences = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_founder_preferences",
+        mode: "founder"
+      }
+    });
+    const boundaries = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_memory_boundary_summary",
+        mode: "zbestmedia"
+      }
+    });
+
+    expect(preferences.outcomeType).toBe("completed");
+    expect(preferences.payloadType).toBe("founder_preferences");
+    expect(boundaries.outcomeType).toBe("completed");
+    expect(boundaries.payloadType).toBe("memory_boundary_summary");
   });
 
   it("passes review actions through governed email services", async () => {

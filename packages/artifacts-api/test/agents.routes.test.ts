@@ -32,6 +32,9 @@ import {
   AaliyahCommandSurfaceResponseSchema,
   AaliyahConfidenceSummaryResponseSchema,
   AaliyahInterruptionsResponseSchema,
+  AaliyahMemoryBoundaryResponseSchema,
+  AaliyahPreferenceDetailResponseSchema,
+  AaliyahPreferenceListResponseSchema,
   AaliyahQuickActionsResponseSchema,
   AaliyahRuntimeResponseSchema,
   VoiceIntakeResponseSchema,
@@ -2102,6 +2105,62 @@ describe("agent routes", () => {
           : null
     }))
   };
+  const aaliyahPreferenceService = {
+    listPreferences: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+      generatedAt: "2026-03-15T00:00:00.000Z",
+      activeMode: mode,
+      defaults: {
+        activeMode: mode,
+        briefingLength: "standard",
+        interruptionTolerance: "standard",
+        approvalVisibility: "all_pending",
+        tonePreference: "balanced",
+        modeVisibility: "strict",
+        appliedPreferences: []
+      },
+      items: []
+    })),
+    createExplicitPreference: vi.fn(async () => ({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      preferenceId: "pref:1",
+      category: "briefing_length",
+      value: "compact",
+      scope: { mode: "founder", company: "all", founderOnly: true },
+      sourceType: "explicit",
+      confidenceLevel: "high",
+      active: true,
+      createdAt: "2026-03-15T00:00:00.000Z",
+      updatedAt: "2026-03-15T00:00:00.000Z",
+      deactivatedAt: null,
+      createdBy: "actor-1",
+      deactivatedBy: null
+    })),
+    deactivatePreference: vi.fn(async () => ({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      preferenceId: "pref:1",
+      category: "briefing_length",
+      value: "compact",
+      scope: { mode: "founder", company: "all", founderOnly: true },
+      sourceType: "explicit",
+      confidenceLevel: "high",
+      active: false,
+      createdAt: "2026-03-15T00:00:00.000Z",
+      updatedAt: "2026-03-15T01:00:00.000Z",
+      deactivatedAt: "2026-03-15T01:00:00.000Z",
+      createdBy: "actor-1",
+      deactivatedBy: "actor-1"
+    }))
+  };
+  const aaliyahMemoryBoundaryService = {
+    getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
+      generatedAt: "2026-03-15T00:00:00.000Z",
+      activeMode,
+      supportedModes: ["founder", "zbestmedia"],
+      supportedCompanies: ["zbestmedia"],
+      founderAggregationRule: "single_company_detail_allowed_multi_company_summary_only",
+      decisions: []
+    }))
+  };
   const aaliyahCommandSurfaceService = {
     generateCommandSurface: vi.fn(async ({ tenantId, mode }: { tenantId: string; mode: "founder" | "zbestmedia" }) => ({
       shellId: "shell:1",
@@ -2532,6 +2591,8 @@ describe("agent routes", () => {
         adminService: adminService as never,
         aaliyahBriefingService: aaliyahBriefingService as never,
         aaliyahCommandSurfaceService: aaliyahCommandSurfaceService as never,
+        aaliyahPreferenceService: aaliyahPreferenceService as never,
+        aaliyahMemoryBoundaryService: aaliyahMemoryBoundaryService as never,
         aaliyahRuntimeService: aaliyahRuntimeService as never,
         emailService,
         voiceService: voiceService as never,
@@ -2741,6 +2802,14 @@ describe("agent routes", () => {
       method: "GET",
       url: "/v1/agent-os/aaliyah/confidence-summary?mode=zbestmedia"
     });
+    const preferencesRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/preferences?mode=founder"
+    });
+    const boundariesRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/memory-boundaries?mode=zbestmedia"
+    });
 
     expect(shellRes.statusCode).toBe(200);
     const shell = AaliyahCommandSurfaceResponseSchema.parse(shellRes.json());
@@ -2759,6 +2828,43 @@ describe("agent routes", () => {
     expect(confidenceRes.statusCode).toBe(200);
     const confidence = AaliyahConfidenceSummaryResponseSchema.parse(confidenceRes.json());
     expect(confidence.summary.overallConfidenceLevel).toBe("high");
+
+    expect(preferencesRes.statusCode).toBe(200);
+    const preferences = AaliyahPreferenceListResponseSchema.parse(preferencesRes.json());
+    expect(preferences.preferences.activeMode).toBe("founder");
+
+    expect(boundariesRes.statusCode).toBe(200);
+    const boundaries = AaliyahMemoryBoundaryResponseSchema.parse(boundariesRes.json());
+    expect(boundaries.summary.activeMode).toBe("zbestmedia");
+  });
+
+  it("exposes founder preference mutation routes", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/preferences",
+      payload: {
+        category: "briefing_length",
+        value: "compact",
+        scope: {
+          mode: "founder",
+          company: "all",
+          founderOnly: true
+        }
+      }
+    });
+
+    expect(createRes.statusCode).toBe(201);
+    const created = AaliyahPreferenceDetailResponseSchema.parse(createRes.json());
+    expect(created.preference.category).toBe("briefing_length");
+
+    const deactivateRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/preferences/pref:1/deactivate"
+    });
+
+    expect(deactivateRes.statusCode).toBe(200);
+    const deactivated = AaliyahPreferenceDetailResponseSchema.parse(deactivateRes.json());
+    expect(deactivated.preference.active).toBe(false);
   });
 
   it("exposes governed voice intake routes", async () => {

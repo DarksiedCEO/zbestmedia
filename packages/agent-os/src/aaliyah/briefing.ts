@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { AALIYAH_REGISTRY_VERSION } from "./registry-types.js";
 import { AaliyahConfidenceControlService } from "./confidence.js";
+import { AaliyahMemoryBoundaryService } from "./memory-boundary.js";
+import { AaliyahPreferenceService } from "./preferences.js";
 import { AaliyahRuntimeEnforcementService } from "./runtime-enforcement.js";
 import type {
   FounderAssignmentSource,
@@ -15,6 +17,7 @@ import type {
   FounderRecommendedAction,
   FounderInterruptClass
 } from "./briefing-types.js";
+import type { AaliyahResolvedPreferences } from "./preference-types.js";
 import type { DepartmentId, ExecutiveId, LeadAgentId, SubAgentId } from "../org/types.js";
 import type { EmailPriority } from "../email/types.js";
 import type { AgentExecutionLedgerService } from "../execution/ledger.js";
@@ -39,19 +42,45 @@ const INTERRUPT_SCORE: Record<FounderInterruptClass, number> = {
 export class AaliyahFounderBriefingService {
   private readonly runtime = new AaliyahRuntimeEnforcementService();
   private readonly confidence = new AaliyahConfidenceControlService();
+  private readonly boundary: AaliyahMemoryBoundaryService;
 
   constructor(
     private readonly org: AgentOrgService,
     private readonly telemetry: AgentTelemetryService,
     private readonly incidents: AgentIncidentService,
     private readonly ledger: AgentExecutionLedgerService,
-    private readonly reviews: EmailDraftReviewService
-  ) {}
+    private readonly reviews: EmailDraftReviewService,
+    private readonly preferences?: AaliyahPreferenceService,
+    boundary?: AaliyahMemoryBoundaryService
+  ) {
+    this.boundary = boundary ?? new AaliyahMemoryBoundaryService();
+  }
 
   async generateBriefing(args: FounderBriefingContext): Promise<FounderBriefing> {
     this.assertRuntimeBoundary(args.mode);
 
     const generatedAt = args.generatedAt ?? new Date().toISOString();
+    const boundaryDecision = this.boundary.validate({
+      activeMode: args.mode,
+      requestedMode: args.mode,
+      requestedCompanies: [args.mode === "founder" ? "zbestmedia" : args.mode],
+      detailLevel: args.mode === "founder" ? "summary" : "detail"
+    });
+    if (boundaryDecision.access === "denied") {
+      throw new Error(`aaliyah_memory_boundary_denied:${boundaryDecision.reasonCodes.join(",")}`);
+    }
+
+    const resolvedPreferences: AaliyahResolvedPreferences = this.preferences
+      ? await this.preferences.resolvePreferences({ tenantId: args.tenantId, mode: args.mode })
+      : {
+          activeMode: args.mode,
+          briefingLength: "standard",
+          interruptionTolerance: "standard",
+          approvalVisibility: "all_pending",
+          tonePreference: "balanced",
+          modeVisibility: "strict",
+          appliedPreferences: []
+        };
     const [ops, openIncidents, pendingReviews, recentRuns, assignmentRecords] = await Promise.all([
       this.telemetry.getOpsStatusSummary({ tenantId: args.tenantId }),
       this.incidents.listIncidents({ tenantId: args.tenantId, status: "open", limit: 50 }),
@@ -109,6 +138,7 @@ export class AaliyahFounderBriefingService {
 
     const waitingOnMe = reviewSources
       .map((review) => this.reviewToBriefingItem(review, "waiting_on_me"))
+      .filter((item) => resolvedPreferences.approvalVisibility === "all_pending" || item.urgency === "high" || item.urgency === "urgent")
       .sort((a, b) => this.scoreItem(b) - this.scoreItem(a));
 
     const revenueWatch = reviewSources
@@ -153,12 +183,12 @@ export class AaliyahFounderBriefingService {
 
     const topPriorities = [...waitingOnMe, ...revenueWatch, ...operationsWatch, ...calendarWatch, ...relationshipWatch]
       .sort((a, b) => this.scoreItem(b) - this.scoreItem(a))
-      .slice(0, 5);
+      .slice(0, this.sectionLimit(resolvedPreferences.briefingLength));
 
-    const recommendedActions = topPriorities.slice(0, 5).map((item, index) => ({
+    const recommendedActions = topPriorities.slice(0, this.sectionLimit(resolvedPreferences.briefingLength)).map((item, index) => ({
       actionId: `briefing-action:${index + 1}`,
       title: item.title,
-      action: item.recommendedAction,
+      action: this.formatText(item.recommendedAction, resolvedPreferences.tonePreference),
       urgency: item.urgency,
       sourceItemId: item.itemId
     } satisfies FounderRecommendedAction));
@@ -194,11 +224,11 @@ export class AaliyahFounderBriefingService {
       activeMode: args.mode,
       manifestVersion: this.org.getManifestVersion(),
       topPriorities,
-      waitingOnMe: waitingOnMe.slice(0, 5),
-      revenueWatch: revenueWatch.slice(0, 5),
-      operationsWatch: operationsWatch.slice(0, 5),
-      calendarWatch: calendarWatch.slice(0, 5),
-      relationshipWatch: relationshipWatch.slice(0, 5),
+      waitingOnMe: waitingOnMe.slice(0, this.sectionLimit(resolvedPreferences.briefingLength)),
+      revenueWatch: revenueWatch.slice(0, this.sectionLimit(resolvedPreferences.briefingLength)),
+      operationsWatch: operationsWatch.slice(0, this.sectionLimit(resolvedPreferences.briefingLength)),
+      calendarWatch: calendarWatch.slice(0, this.sectionLimit(resolvedPreferences.briefingLength)),
+      relationshipWatch: relationshipWatch.slice(0, this.sectionLimit(resolvedPreferences.briefingLength)),
       recommendedActions,
       interruptSummary,
       confidenceSummary: {
@@ -332,6 +362,23 @@ export class AaliyahFounderBriefingService {
     if (item.category === "relationship_watch") score += 20;
     if (item.category === "calendar_watch") score += 10;
     return score;
+  }
+
+  private sectionLimit(length: "compact" | "standard" | "expanded"): number {
+    if (length === "compact") return 3;
+    if (length === "expanded") return 7;
+    return 5;
+  }
+
+  private formatText(text: string, tone: "concise" | "balanced" | "detailed"): string {
+    if (tone === "detailed") {
+      return text;
+    }
+    const maxLength = tone === "concise" ? 90 : 160;
+    if (text.length <= maxLength) {
+      return text;
+    }
+    return `${text.slice(0, maxLength - 1).trimEnd()}…`;
   }
 
   private buildInterruptSummary(items: FounderBriefingItem[]) {

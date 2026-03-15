@@ -11,6 +11,8 @@ import type {
   AaliyahQuickAction
 } from "./command-surface-types.js";
 import type { AaliyahConfidenceSummary, AaliyahInterruptionSummary } from "./confidence-types.js";
+import type { AaliyahMemoryBoundarySummary } from "./memory-boundary.js";
+import type { AaliyahPreferenceList } from "./preference-types.js";
 import type { EmailDraftReviewRecord } from "../email/review-types.js";
 import type { EmailDispatchResult } from "../email/dispatch-types.js";
 import type { AdminRoutingCategoryDescriptor } from "../admin/types.js";
@@ -88,7 +90,9 @@ export type AaliyahRuntimeIntent =
   | "get_quick_actions"
   | "execute_quick_action"
   | "get_interrupt_queue"
-  | "get_confidence_summary";
+  | "get_confidence_summary"
+  | "get_founder_preferences"
+  | "get_memory_boundary_summary";
 
 export type AaliyahRuntimePayloadType =
   | "founder_briefing"
@@ -106,7 +110,9 @@ export type AaliyahRuntimePayloadType =
   | "founder_command_surface"
   | "quick_actions"
   | "interrupt_queue"
-  | "confidence_summary";
+  | "confidence_summary"
+  | "founder_preferences"
+  | "memory_boundary_summary";
 
 export type AaliyahRuntimeRequestInput = {
   intent: string;
@@ -152,6 +158,9 @@ export type AaliyahRuntimeQuickActionsPayload = {
   items: AaliyahQuickAction[];
 };
 
+export type AaliyahRuntimeFounderPreferencesPayload = AaliyahPreferenceList;
+export type AaliyahRuntimeMemoryBoundaryPayload = AaliyahMemoryBoundarySummary;
+
 export type AaliyahRuntimeSuccessPayload =
   | { payloadType: "founder_briefing"; payload: FounderBriefing }
   | { payloadType: "approval_queue"; payload: AaliyahRuntimeApprovalQueuePayload }
@@ -168,7 +177,9 @@ export type AaliyahRuntimeSuccessPayload =
   | { payloadType: "founder_command_surface"; payload: AaliyahFounderCommandSurface }
   | { payloadType: "quick_actions"; payload: AaliyahRuntimeQuickActionsPayload }
   | { payloadType: "interrupt_queue"; payload: AaliyahInterruptionSummary }
-  | { payloadType: "confidence_summary"; payload: AaliyahConfidenceSummary };
+  | { payloadType: "confidence_summary"; payload: AaliyahConfidenceSummary }
+  | { payloadType: "founder_preferences"; payload: AaliyahPreferenceList }
+  | { payloadType: "memory_boundary_summary"; payload: AaliyahMemoryBoundarySummary };
 
 export type AaliyahRuntimeFallback = {
   outcome: Exclude<AaliyahRuntimeFallbackOutcome, "proceed_with_orchestration">;

@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { AALIYAH_REGISTRY_VERSION } from "./registry-types.js";
 import { AaliyahConfidenceControlService } from "./confidence.js";
+import { AaliyahMemoryBoundaryService } from "./memory-boundary.js";
+import { AaliyahPreferenceService } from "./preferences.js";
 import type {
   AaliyahApprovalSummary,
   AaliyahCommandSurfaceContext,
@@ -11,6 +13,7 @@ import type {
   AaliyahVoiceEscalationSummary
 } from "./command-surface-types.js";
 import type { FounderBriefingItem, FounderBriefingMode, FounderRecommendedAction } from "./briefing-types.js";
+import type { AaliyahResolvedPreferences } from "./preference-types.js";
 import { AaliyahFounderBriefingService } from "./briefing.js";
 import { AgentOrgService } from "../org/service.js";
 import type { DepartmentId, ExecutiveId, LeadAgentId, SubAgentId } from "../org/types.js";
@@ -34,17 +37,43 @@ const INTERRUPT_WEIGHT: Record<FounderBriefingItem["interruptionClass"], number>
 
 export class AaliyahCommandSurfaceService {
   private readonly confidence = new AaliyahConfidenceControlService();
+  private readonly boundary: AaliyahMemoryBoundaryService;
 
   constructor(
     private readonly org: AgentOrgService,
     private readonly briefing: AaliyahFounderBriefingService,
     private readonly email: EmailAssistantService,
     private readonly voice: VoiceRuntimeService,
-    private readonly telemetry: AgentTelemetryService
-  ) {}
+    private readonly telemetry: AgentTelemetryService,
+    private readonly preferences?: AaliyahPreferenceService,
+    boundary?: AaliyahMemoryBoundaryService
+  ) {
+    this.boundary = boundary ?? new AaliyahMemoryBoundaryService();
+  }
 
   async generateCommandSurface(args: AaliyahCommandSurfaceContext): Promise<AaliyahFounderCommandSurface> {
     const generatedAt = args.generatedAt ?? new Date().toISOString();
+    const boundaryDecision = this.boundary.validate({
+      activeMode: args.mode,
+      requestedMode: args.mode,
+      requestedCompanies: [args.mode === "founder" ? "zbestmedia" : args.mode],
+      detailLevel: args.mode === "founder" ? "summary" : "detail"
+    });
+    if (boundaryDecision.access === "denied") {
+      throw new Error(`aaliyah_memory_boundary_denied:${boundaryDecision.reasonCodes.join(",")}`);
+    }
+
+    const resolvedPreferences: AaliyahResolvedPreferences = this.preferences
+      ? await this.preferences.resolvePreferences({ tenantId: args.tenantId, mode: args.mode })
+      : {
+          activeMode: args.mode,
+          briefingLength: "standard",
+          interruptionTolerance: "standard",
+          approvalVisibility: "all_pending",
+          tonePreference: "balanced",
+          modeVisibility: "strict",
+          appliedPreferences: []
+        };
     const [briefing, approvals, voiceEscalations, openIncidentSummary, opsStatusSummary] = await Promise.all([
       this.briefing.generateBriefing({ tenantId: args.tenantId, mode: args.mode, generatedAt }),
       this.email.listReviewItems({ tenantId: args.tenantId, status: "pending_review", limit: 10 }),
@@ -53,9 +82,13 @@ export class AaliyahCommandSurfaceService {
       this.telemetry.getOpsStatusSummary({ tenantId: args.tenantId })
     ]);
 
+    const visibleApprovals = approvals.filter((item) =>
+      resolvedPreferences.approvalVisibility === "all_pending" || item.priority === "high" || item.priority === "urgent"
+    );
+
     const openApprovals: AaliyahApprovalSummary = {
-      totalPending: approvals.length,
-      items: approvals
+      totalPending: visibleApprovals.length,
+      items: visibleApprovals
     };
 
     const openVoiceEscalations: AaliyahVoiceEscalationSummary = {
@@ -68,7 +101,7 @@ export class AaliyahCommandSurfaceService {
       generatedAt,
       mode: args.mode,
       topPriorities: briefing.topPriorities,
-      approvals,
+      approvals: visibleApprovals,
       voiceEscalations
     });
 
@@ -80,17 +113,18 @@ export class AaliyahCommandSurfaceService {
         evaluatedInterruptions.summary.items.some(
           (queueItem: (typeof evaluatedInterruptions.summary.items)[number]) =>
             queueItem.sourceItemId === item.itemId &&
-            queueItem.visibilityAction !== "silent_log"
+            this.isVisibleUnderTolerance(queueItem.visibilityAction, resolvedPreferences.interruptionTolerance)
         )
       )
       .sort((a, b) => this.scoreItem(b) - this.scoreItem(a))
-      .slice(0, 6);
+      .slice(0, this.sectionLimit(resolvedPreferences.briefingLength));
 
     const recommendedNextActions = this.buildRecommendedActions(
       briefing.recommendedActions,
       voiceEscalations,
-      args.mode
-    ).slice(0, 6);
+      args.mode,
+      resolvedPreferences.tonePreference
+    ).slice(0, this.sectionLimit(resolvedPreferences.briefingLength));
 
     const quickActions = this.listQuickActions({
       tenantId: args.tenantId,
@@ -131,7 +165,7 @@ export class AaliyahCommandSurfaceService {
         orgManifestVersion: this.org.getManifestVersion(),
         aaliyahRegistryVersion: AALIYAH_REGISTRY_VERSION,
         generatedFrom: {
-          pendingApprovalCount: approvals.length,
+          pendingApprovalCount: visibleApprovals.length,
           pendingVoiceEscalationCount: voiceEscalations.length,
           releaseBlockingIncidentCount: openIncidentSummary.releaseBlockingOpenCount,
           degradedSurfaceCount: opsStatusSummary.degradedSurfaces.length
@@ -295,19 +329,23 @@ export class AaliyahCommandSurfaceService {
   private buildRecommendedActions(
     actions: FounderRecommendedAction[],
     voiceEscalations: VoiceCallRecord[],
-    mode: FounderBriefingMode
+    mode: FounderBriefingMode,
+    tonePreference: "concise" | "balanced" | "detailed"
   ): FounderRecommendedAction[] {
     const voiceActions = voiceEscalations
       .filter((call) => call.founderAttentionRequired)
       .map((call, index) => ({
         actionId: `voice-action:${index + 1}`,
         title: `Review voice escalation from ${call.callerDisplayName ?? call.callerPhoneNumber}`,
-        action: call.recommendedNextAction,
+        action: this.formatText(call.recommendedNextAction, tonePreference),
         urgency: call.urgency === "critical" ? "urgent" : call.urgency === "high" ? "high" : "normal",
         sourceItemId: `voice:${call.callId}`
       } satisfies FounderRecommendedAction));
 
-    return [...actions, ...voiceActions].sort((a, b) => this.scoreAction(b) - this.scoreAction(a));
+    return [
+      ...actions.map((action) => ({ ...action, action: this.formatText(action.action, tonePreference) })),
+      ...voiceActions
+    ].sort((a, b) => this.scoreAction(b) - this.scoreAction(a));
   }
 
   private scoreAction(action: FounderRecommendedAction): number {
@@ -475,5 +513,28 @@ export class AaliyahCommandSurfaceService {
     case "silent_log":
       return 0;
     }
+  }
+
+  private sectionLimit(length: "compact" | "standard" | "expanded"): number {
+    if (length === "compact") return 4;
+    if (length === "expanded") return 8;
+    return 6;
+  }
+
+  private isVisibleUnderTolerance(
+    visibilityAction: "interrupt_now" | "same_day_briefing" | "passive_queue" | "silent_log",
+    tolerance: "minimal" | "standard" | "high"
+  ): boolean {
+    if (visibilityAction === "interrupt_now") return true;
+    if (tolerance === "minimal") return false;
+    if (tolerance === "standard") return visibilityAction === "same_day_briefing";
+    return visibilityAction !== "silent_log";
+  }
+
+  private formatText(text: string, tone: "concise" | "balanced" | "detailed"): string {
+    if (tone === "detailed") return text;
+    const maxLength = tone === "concise" ? 90 : 150;
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, maxLength - 1).trimEnd()}…`;
   }
 }

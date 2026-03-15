@@ -13,6 +13,7 @@ import {
 import { AGENT_EVAL_PROFILES } from "../evals/specs.js";
 import type {
   AgentLifecycleEventRecord,
+  AaliyahFounderPreferenceRecord,
   AgentRecord,
   AssignmentRecord,
   ApprovalDecision,
@@ -311,6 +312,22 @@ type VoiceCallRow = {
   recommended_next_action: string;
   created_at: string | Date;
   updated_at: string | Date;
+};
+
+type AaliyahFounderPreferenceRow = {
+  tenant_id: string;
+  preference_id: string;
+  category: AaliyahFounderPreferenceRecord["category"];
+  value: AaliyahFounderPreferenceRecord["value"];
+  scope: AaliyahFounderPreferenceRecord["scope"];
+  source_type: AaliyahFounderPreferenceRecord["sourceType"];
+  confidence_level: AaliyahFounderPreferenceRecord["confidenceLevel"];
+  active: boolean;
+  created_at: string | Date;
+  updated_at: string | Date;
+  deactivated_at: string | Date | null;
+  created_by: string;
+  deactivated_by: string | null;
 };
 
 type EvalRunRow = {
@@ -678,6 +695,24 @@ function mapVoiceCallRow(row: VoiceCallRow): VoiceCallRecord {
     recommendedNextAction: row.recommended_next_action,
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at)
+  };
+}
+
+function mapAaliyahFounderPreferenceRow(row: AaliyahFounderPreferenceRow): AaliyahFounderPreferenceRecord {
+  return {
+    tenantId: row.tenant_id,
+    preferenceId: row.preference_id,
+    category: row.category,
+    value: row.value,
+    scope: row.scope,
+    sourceType: row.source_type,
+    confidenceLevel: row.confidence_level,
+    active: row.active,
+    createdAt: toIsoString(row.created_at)!,
+    updatedAt: toIsoString(row.updated_at)!,
+    deactivatedAt: row.deactivated_at ? toIsoString(row.deactivated_at)! : null,
+    createdBy: row.created_by,
+    deactivatedBy: row.deactivated_by
   };
 }
 
@@ -2597,6 +2632,138 @@ export class AgentOsRepository {
       )
     );
     return res.rows.map(mapEmailAccountConnectionRow);
+  }
+
+  async createAaliyahFounderPreference(args: {
+    tenantId: string;
+    category: AaliyahFounderPreferenceRecord["category"];
+    value: AaliyahFounderPreferenceRecord["value"];
+    scope: AaliyahFounderPreferenceRecord["scope"];
+    sourceType: AaliyahFounderPreferenceRecord["sourceType"];
+    confidenceLevel: AaliyahFounderPreferenceRecord["confidenceLevel"];
+    active: boolean;
+    createdAt?: string;
+    createdBy: string;
+  }): Promise<AaliyahFounderPreferenceRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const preferenceId = buildScopedId("aaliyah-pref", [args.category, createdAt]);
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahFounderPreferenceRow>(
+        `
+        INSERT INTO aaliyah_founder_preferences (
+          tenant_id, preference_id, category, value, scope, source_type,
+          confidence_level, active, created_at, updated_at, deactivated_at,
+          created_by, deactivated_by
+        ) VALUES (
+          $1,$2,$3,$4,$5::jsonb,$6,
+          $7,$8,$9,$9,NULL,
+          $10,NULL
+        )
+        RETURNING tenant_id, preference_id, category, value, scope, source_type,
+                  confidence_level, active, created_at, updated_at, deactivated_at,
+                  created_by, deactivated_by
+        `,
+        [
+          args.tenantId,
+          preferenceId,
+          args.category,
+          args.value,
+          JSON.stringify(args.scope),
+          args.sourceType,
+          args.confidenceLevel,
+          args.active,
+          createdAt,
+          args.createdBy
+        ]
+      )
+    );
+    return mapAaliyahFounderPreferenceRow(res.rows[0]!);
+  }
+
+  async listAaliyahFounderPreferences(args: {
+    tenantId: string;
+    activeOnly?: boolean;
+    limit?: number;
+  }): Promise<AaliyahFounderPreferenceRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahFounderPreferenceRow>(
+        `
+        SELECT tenant_id, preference_id, category, value, scope, source_type,
+               confidence_level, active, created_at, updated_at, deactivated_at,
+               created_by, deactivated_by
+        FROM aaliyah_founder_preferences
+        WHERE tenant_id = $1
+          AND ($2::boolean = false OR active = true)
+        ORDER BY created_at DESC
+        LIMIT $3
+        `,
+        [args.tenantId, args.activeOnly ?? false, args.limit ?? 100]
+      )
+    );
+    return res.rows.map(mapAaliyahFounderPreferenceRow);
+  }
+
+  async deactivateAaliyahFounderPreference(args: {
+    tenantId: string;
+    preferenceId: string;
+    deactivatedBy: string;
+    deactivatedAt?: string;
+  }): Promise<AaliyahFounderPreferenceRecord> {
+    const deactivatedAt = args.deactivatedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahFounderPreferenceRow>(
+        `
+        UPDATE aaliyah_founder_preferences
+        SET active = false,
+            deactivated_at = $4,
+            deactivated_by = $3,
+            updated_at = $4
+        WHERE tenant_id = $1
+          AND preference_id = $2
+          AND active = true
+        RETURNING tenant_id, preference_id, category, value, scope, source_type,
+                  confidence_level, active, created_at, updated_at, deactivated_at,
+                  created_by, deactivated_by
+        `,
+        [args.tenantId, args.preferenceId, args.deactivatedBy, deactivatedAt]
+      )
+    );
+    if (!res.rows[0]) {
+      throw new Error("aaliyah_preference_not_found");
+    }
+    return mapAaliyahFounderPreferenceRow(res.rows[0]);
+  }
+
+  async deactivateAaliyahFounderPreferencesByCategory(args: {
+    tenantId: string;
+    category: AaliyahFounderPreferenceRecord["category"];
+    scope: AaliyahFounderPreferenceRecord["scope"];
+    deactivatedBy: string;
+    deactivatedAt?: string;
+  }): Promise<void> {
+    const deactivatedAt = args.deactivatedAt ?? new Date().toISOString();
+    await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query(
+        `
+        UPDATE aaliyah_founder_preferences
+        SET active = false,
+            deactivated_at = $5,
+            deactivated_by = $4,
+            updated_at = $5
+        WHERE tenant_id = $1
+          AND category = $2
+          AND active = true
+          AND scope = $3::jsonb
+        `,
+        [
+          args.tenantId,
+          args.category,
+          JSON.stringify(args.scope),
+          args.deactivatedBy,
+          deactivatedAt
+        ]
+      )
+    );
   }
 
   async listIncidentRecords(args: {

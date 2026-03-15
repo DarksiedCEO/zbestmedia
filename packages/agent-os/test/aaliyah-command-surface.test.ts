@@ -226,7 +226,24 @@ describe("Aaliyah command surface", () => {
     }))
   } as any;
 
-  const service = new AaliyahCommandSurfaceService(org, briefing, email, voice, telemetry);
+  const service = new AaliyahCommandSurfaceService(
+    org,
+    briefing,
+    email,
+    voice,
+    telemetry,
+    {
+      resolvePreferences: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+        activeMode: mode,
+        briefingLength: "compact",
+        interruptionTolerance: "minimal",
+        approvalVisibility: "urgent_only",
+        tonePreference: "concise",
+        modeVisibility: "strict",
+        appliedPreferences: []
+      }))
+    } as never
+  );
 
   it("composes a founder command surface from governed subsystems", async () => {
     const shell = await service.generateCommandSurface({
@@ -256,5 +273,16 @@ describe("Aaliyah command surface", () => {
     expect(actions.find((action) => action.actionType === "switch_mode")?.defaultParameters).toEqual({
       targetMode: "founder"
     });
+  });
+
+  it("uses founder preferences to reduce noise in the shell", async () => {
+    const shell = await service.generateCommandSurface({
+      tenantId: "tenant",
+      mode: "founder"
+    });
+
+    expect(shell.openApprovals.totalPending).toBe(1);
+    expect(shell.whatMattersNow.length).toBeLessThanOrEqual(2);
+    expect(shell.recommendedNextActions[0]?.action.length).toBeLessThanOrEqual(90);
   });
 });

@@ -27,6 +27,14 @@ import {
 } from "../execution/records.js";
 import type { AgentId } from "../agents/registry.js";
 import type {
+  AaliyahFounderPreferenceRecord as AaliyahFounderPreferenceRecordShape,
+  AaliyahPreferenceCategory,
+  AaliyahPreferenceConfidenceLevel,
+  AaliyahPreferenceScope,
+  AaliyahPreferenceSourceType,
+  AaliyahPreferenceValue
+} from "../aaliyah/preference-types.js";
+import type {
   AssignmentPolicyDecision,
   AssignmentRecord,
   ExecutionRunRecord,
@@ -471,6 +479,61 @@ export const VoiceCallRecordSchema = z.object({
   updatedAt: z.string().datetime()
 }) satisfies z.ZodType<VoiceCallRecordShape>;
 export type VoiceCallRecord = z.infer<typeof VoiceCallRecordSchema>;
+
+export const AaliyahPreferenceCategorySchema = z.enum([
+  "briefing_length",
+  "interruption_tolerance",
+  "approval_visibility",
+  "tone_preference",
+  "mode_visibility"
+]);
+export type { AaliyahPreferenceCategory };
+
+export const AaliyahPreferenceValueSchema = z.enum([
+  "compact",
+  "standard",
+  "expanded",
+  "minimal",
+  "high",
+  "all_pending",
+  "urgent_only",
+  "concise",
+  "balanced",
+  "detailed",
+  "strict",
+  "founder_summary"
+]);
+export type { AaliyahPreferenceValue };
+
+export const AaliyahPreferenceScopeSchema = z.object({
+  mode: z.enum(["founder", "zbestmedia", "all"]),
+  company: z.enum(["zbestmedia", "all"]),
+  founderOnly: z.boolean()
+}) satisfies z.ZodType<AaliyahPreferenceScope>;
+export type { AaliyahPreferenceScope };
+
+export const AaliyahPreferenceSourceTypeSchema = z.enum(["explicit", "validated_inference"]);
+export type { AaliyahPreferenceSourceType };
+
+export const AaliyahPreferenceConfidenceLevelSchema = z.enum(["high", "medium", "low"]);
+export type { AaliyahPreferenceConfidenceLevel };
+
+export const AaliyahFounderPreferenceRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  preferenceId: z.string().min(1),
+  category: AaliyahPreferenceCategorySchema,
+  value: AaliyahPreferenceValueSchema,
+  scope: AaliyahPreferenceScopeSchema,
+  sourceType: AaliyahPreferenceSourceTypeSchema,
+  confidenceLevel: AaliyahPreferenceConfidenceLevelSchema,
+  active: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  deactivatedAt: z.string().datetime().nullable(),
+  createdBy: z.string().min(1),
+  deactivatedBy: z.string().nullable()
+}) satisfies z.ZodType<AaliyahFounderPreferenceRecordShape>;
+export type AaliyahFounderPreferenceRecord = z.infer<typeof AaliyahFounderPreferenceRecordSchema>;
 
 export const MemoryEntryRecordSchema = z.object({
   tenantId: z.string().uuid(),

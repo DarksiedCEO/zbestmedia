@@ -4,6 +4,8 @@ import {
   AgentAdminService,
   AaliyahCommandSurfaceService,
   AaliyahFounderBriefingService,
+  AaliyahMemoryBoundaryService,
+  AaliyahPreferenceService,
   AaliyahRuntimeService,
   EmailAssistantService,
   EmailAccountConfigurationError,
@@ -32,6 +34,12 @@ import {
 import {
   AgentIdParamSchema,
   AaliyahBriefingQuerySchema,
+  AaliyahMemoryBoundaryResponseSchema,
+  AaliyahPreferenceCreateBodySchema,
+  AaliyahPreferenceDetailResponseSchema,
+  AaliyahPreferenceIdParamSchema,
+  AaliyahPreferenceListResponseSchema,
+  AaliyahPreferenceQuerySchema,
   AaliyahCommandSurfaceQuerySchema,
   AaliyahRuntimeRequestBodySchema,
   AssignmentRecordIdParamSchema,
@@ -126,6 +134,8 @@ export function agentRoutes(opts: {
   adminService: AgentAdminService;
   aaliyahBriefingService: AaliyahFounderBriefingService;
   aaliyahCommandSurfaceService: AaliyahCommandSurfaceService;
+  aaliyahPreferenceService: AaliyahPreferenceService;
+  aaliyahMemoryBoundaryService: AaliyahMemoryBoundaryService;
   aaliyahRuntimeService: AaliyahRuntimeService;
   emailService: EmailAssistantService;
   voiceService: VoiceRuntimeService;
@@ -198,6 +208,16 @@ export function agentRoutes(opts: {
       }
       if (error instanceof Error && error.message === "agent_not_found") {
         return reply.code(404).send({ error: "agent_not_found" });
+      }
+      if (
+        error instanceof Error &&
+        (
+          error.message === "aaliyah_preference_not_found" ||
+          error.message.startsWith("aaliyah_invalid_preference_value") ||
+          error.message.startsWith("aaliyah_memory_boundary_denied")
+        )
+      ) {
+        return reply.code(error.message === "aaliyah_preference_not_found" ? 404 : 400).send({ error: error.message });
       }
       throw error;
     }
@@ -498,6 +518,87 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_confidence_summary",
+        summary
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/preferences", async (req, reply) => {
+      const query = AaliyahPreferenceQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const preferences = await opts.aaliyahPreferenceService.listPreferences({
+        tenantId: req.auth.tenantId,
+        mode: query.data.mode
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_preferences",
+        preferences
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/preferences", async (req, reply) => {
+      const body = AaliyahPreferenceCreateBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      try {
+        const preference = await opts.aaliyahPreferenceService.createExplicitPreference({
+          tenantId: req.auth.tenantId,
+          actorId: req.auth.actorId,
+          input: body.data
+        });
+
+        return reply.code(201).send({
+          manifestVersion: orgManifestVersion,
+          resourceType: "aaliyah_preference_detail",
+          preference
+        });
+      } catch (error) {
+        return handleAgentError(reply, error);
+      }
+    });
+
+    app.post("/v1/agent-os/aaliyah/preferences/:preferenceId/deactivate", async (req, reply) => {
+      const path = AaliyahPreferenceIdParamSchema.safeParse(req.params);
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+
+      try {
+        const preference = await opts.aaliyahPreferenceService.deactivatePreference({
+          tenantId: req.auth.tenantId,
+          preferenceId: path.data.preferenceId,
+          actorId: req.auth.actorId
+        });
+
+        return reply.send({
+          manifestVersion: orgManifestVersion,
+          resourceType: "aaliyah_preference_detail",
+          preference
+        });
+      } catch (error) {
+        return handleAgentError(reply, error);
+      }
+    });
+
+    app.get("/v1/agent-os/aaliyah/memory-boundaries", async (req, reply) => {
+      const query = AaliyahPreferenceQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const summary = opts.aaliyahMemoryBoundaryService.getSummary({
+        activeMode: query.data.mode
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_memory_boundaries",
         summary
       });
     });

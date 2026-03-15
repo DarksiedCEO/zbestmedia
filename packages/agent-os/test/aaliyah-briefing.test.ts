@@ -142,6 +142,17 @@ describe("Aaliyah founder briefing", () => {
           escalationRecommended: false
         }
       ])
+    } as never,
+    {
+      resolvePreferences: vi.fn(async ({ mode }: { mode: "founder" | "zbestmedia" }) => ({
+        activeMode: mode,
+        briefingLength: mode === "founder" ? "compact" : "standard",
+        interruptionTolerance: "standard",
+        approvalVisibility: "all_pending",
+        tonePreference: "concise",
+        modeVisibility: "strict",
+        appliedPreferences: []
+      }))
     } as never
   );
 
@@ -169,5 +180,11 @@ describe("Aaliyah founder briefing", () => {
   it("tracks low-confidence signals through the briefing confidence summary", async () => {
     const briefing = await service.generateBriefing({ tenantId: "tenant", mode: "founder" });
     expect(briefing.confidenceSummary.lowConfidenceSignals).toBeGreaterThanOrEqual(0);
+  });
+
+  it("applies allowed founder preferences to briefing presentation", async () => {
+    const briefing = await service.generateBriefing({ tenantId: "tenant", mode: "founder" });
+    expect(briefing.topPriorities.length).toBeLessThanOrEqual(3);
+    expect(briefing.recommendedActions[0]?.action.length).toBeLessThanOrEqual(90);
   });
 });
