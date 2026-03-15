@@ -31,7 +31,7 @@ export default function DashboardPage() {
           >
             <div style={{ fontWeight: 650 }}>Today</div>
             <div style={{ marginTop: 6, color: tokens.colors.muted, fontSize: 13 }}>
-              Scheduler, approvals, and live streams will populate here next.
+              Aaliyah is now the primary founder console. Use the Aaliyah route for approvals, interruptions, queue actions, and session context.
             </div>
           </div>
         </div>

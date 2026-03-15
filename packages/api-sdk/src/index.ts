@@ -15,6 +15,347 @@ export type GovernanceSnapshot = {
   };
 };
 
+export type AaliyahMode = "founder" | "zbestmedia";
+export type AaliyahUrgency = "low" | "normal" | "high" | "urgent";
+export type AaliyahRisk = "low" | "medium" | "high" | "critical";
+export type AaliyahConfidenceLevel = "high" | "medium" | "low";
+export type AaliyahInterruptionClass = "interrupt_now" | "same_day_briefing" | "passive_queue" | "silent_log";
+
+export type AaliyahBriefingItem = {
+  itemId: string;
+  category: string;
+  title: string;
+  summary: string;
+  urgency: AaliyahUrgency;
+  recommendedAction: string;
+  interruptionClass: "interrupt_now" | "review_soon" | "can_wait";
+  requiresFounderAttention: boolean;
+  provenanceReferences: string[];
+  owner: {
+    executiveId: string | null;
+    departmentId: string | null;
+    leadAgentId: string | null;
+    subAgentId: string | null;
+    sourceLane: string;
+  };
+};
+
+export type AaliyahRecommendedAction = {
+  actionId: string;
+  title: string;
+  action: string;
+  urgency: AaliyahUrgency;
+  sourceItemId: string;
+};
+
+export type AaliyahQuickAction = {
+  actionId: string;
+  actionType: string;
+  label: string;
+  targetIntent: string;
+  allowedParameters: string[];
+  defaultParameters: Record<string, unknown>;
+  approvalRequired: boolean;
+  availabilityStatus: "available" | "requires_parameters" | "disabled";
+  availabilityReason: string | null;
+};
+
+export type AaliyahEmailReviewItem = {
+  reviewItemId: string;
+  draftId: string;
+  emailAccountId: string;
+  threadId: string;
+  reviewStatus: "pending_review" | "approved" | "rejected" | "revision_requested";
+  intentCategory: string;
+  priority: string;
+  riskLevel: string;
+  summary: string;
+  proposedSubject: string;
+  proposedBody: string;
+  confidenceScore: number;
+  riskScore: number;
+  escalationRecommended: boolean;
+  blockedAutoSend: boolean;
+  requiredApproval: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AaliyahVoiceCall = {
+  callId: string;
+  callerPhoneNumber: string;
+  callerDisplayName: string | null;
+  intent: string;
+  urgency: "low" | "normal" | "high" | "critical";
+  riskLevel: "low" | "moderate" | "high";
+  companyMode: AaliyahMode;
+  routingTarget: string;
+  callSummaryText: string | null;
+  recommendedNextAction: string;
+  founderAttentionRequired: boolean;
+  interruptionClass: AaliyahInterruptionClass | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AaliyahReviewQueueItem = {
+  queueItemId: string;
+  sourceSubsystem: string;
+  sourceItemId: string;
+  itemType:
+    | "approval_required"
+    | "voice_escalation"
+    | "incident_attention"
+    | "dispatch_action"
+    | "routing_preview_action"
+    | "founder_recommended_action";
+  title: string;
+  summary: string;
+  urgency: AaliyahUrgency;
+  risk: AaliyahRisk;
+  confidenceLevel: AaliyahConfidenceLevel;
+  interruptionClass: AaliyahInterruptionClass;
+  activeMode: AaliyahMode;
+  founderAttentionRequired: boolean;
+  recommendedNextAction: string;
+  allowedNextActions: string[];
+  provenanceSummary: {
+    manifestVersion: string;
+    references: string[];
+    contributingSourceItemIds: string[];
+  };
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AaliyahReviewQueueSummary = {
+  queueId: string;
+  generatedAt: string;
+  activeMode: AaliyahMode;
+  manifestVersion: string;
+  itemCountsByType: Record<string, number>;
+  itemCountsByInterruptionClass: Record<string, number>;
+  topActionableItems: AaliyahReviewQueueItem[];
+  totalFounderActionableItems: number;
+};
+
+export type AaliyahReviewQueue = AaliyahReviewQueueSummary & {
+  items: AaliyahReviewQueueItem[];
+};
+
+export type AaliyahInterruptionItem = {
+  sourceItemId: string;
+  title: string;
+  summary: string;
+  recommendedAction: string;
+  visibilityAction: AaliyahInterruptionClass;
+  confidenceLevel: AaliyahConfidenceLevel;
+  founderRelevance: boolean;
+  reasonCodes: string[];
+};
+
+export type AaliyahInterruptionSummary = {
+  generatedAt: string;
+  activeMode: AaliyahMode;
+  items: AaliyahInterruptionItem[];
+  interruptNowCount: number;
+  sameDayBriefingCount: number;
+  passiveQueueCount: number;
+  silentLogCount: number;
+};
+
+export type AaliyahConfidenceAssessment = {
+  confidenceId: string;
+  sourceSubsystem: string;
+  assessedItemType: string;
+  confidenceLevel: AaliyahConfidenceLevel;
+  confidenceBand: number;
+  reasonCodes: string[];
+  recommendedFallbackAction: "proceed" | "defer" | "escalate" | "suppress";
+};
+
+export type AaliyahConfidenceSummary = {
+  generatedAt: string;
+  activeMode: AaliyahMode;
+  overallConfidenceLevel: AaliyahConfidenceLevel;
+  highConfidenceCount: number;
+  mediumConfidenceCount: number;
+  lowConfidenceCount: number;
+  deferredCount: number;
+  suppressedCount: number;
+  topReasonCodes: string[];
+  items: AaliyahConfidenceAssessment[];
+};
+
+export type AaliyahCommandSurface = {
+  shellId: string;
+  generatedAt: string;
+  activeMode: AaliyahMode;
+  manifestVersion: string;
+  founderBriefingSummary: {
+    briefingId: string;
+    generatedAt: string;
+    activeMode: AaliyahMode;
+    manifestVersion: string;
+    topPriorities: AaliyahBriefingItem[];
+    waitingOnMe: AaliyahBriefingItem[];
+    revenueWatch: AaliyahBriefingItem[];
+    operationsWatch: AaliyahBriefingItem[];
+    calendarWatch: AaliyahBriefingItem[];
+    relationshipWatch: AaliyahBriefingItem[];
+    recommendedActions: AaliyahRecommendedAction[];
+  };
+  whatMattersNow: AaliyahBriefingItem[];
+  waitingOnMe: AaliyahBriefingItem[];
+  openApprovals: {
+    totalPending: number;
+    items: AaliyahEmailReviewItem[];
+  };
+  openIncidentSummary: {
+    statusLevel: "healthy" | "warning" | "critical";
+    openIncidentCountsBySeverity: Record<string, number>;
+    releaseBlockingIncidentCount: number;
+    degradedSurfaces: string[];
+  };
+  opsStatusSummary: {
+    statusLevel: "healthy" | "warning" | "critical";
+    degradedSurfaces: string[];
+    routingFailureCount: number;
+    policyRejectionCount: number;
+  };
+  openVoiceEscalations: {
+    totalPending: number;
+    items: AaliyahVoiceCall[];
+    interruptNowCount: number;
+  };
+  recommendedNextActions: AaliyahRecommendedAction[];
+  interruptQueueSummary: {
+    interruptNowCount: number;
+    sameDayBriefingCount: number;
+    passiveQueueCount: number;
+    silentLogCount: number;
+  };
+  confidenceSummary: AaliyahConfidenceSummary;
+  interruptionQueue: AaliyahInterruptionSummary;
+  founderReviewQueue: AaliyahReviewQueueSummary;
+  quickActions: AaliyahQuickAction[];
+  provenanceSummary: {
+    orgManifestVersion: string;
+    aaliyahRegistryVersion: string;
+    generatedFrom: {
+      pendingApprovalCount: number;
+      pendingVoiceEscalationCount: number;
+      releaseBlockingIncidentCount: number;
+      degradedSurfaceCount: number;
+    };
+  };
+};
+
+export type AaliyahSessionSnapshot = {
+  sessionId: string;
+  tenantId: string;
+  actorId: string;
+  principalContext: "founder" | "operator";
+  activeModeState: {
+    activeMode: AaliyahMode;
+    previousMode: AaliyahMode | null;
+    switchedAt: string;
+    switchReason: string;
+    boundaryDecisionId: string | null;
+  };
+  interactionState: {
+    lastInteractionAt: string | null;
+    lastIntent: string | null;
+    lastResolvedIntent: string | null;
+    intentTrail: Array<{
+      entryId: string;
+      requestedIntent: string;
+      resolvedIntent: string | null;
+      outcomeType: "completed" | "fallback";
+      activeMode: AaliyahMode;
+      confidenceLevel: AaliyahConfidenceLevel;
+      createdAt: string;
+    }>;
+    currentWorkingItem: {
+      contextId: string;
+      workingItemType: string;
+      sourceSubsystem: string;
+      sourceItemId: string;
+      queueItemId: string | null;
+      reviewItemId: string | null;
+      callId: string | null;
+      title: string;
+      summary: string;
+      closureState: "open" | "completed" | "abandoned" | "escalated" | "invalidated" | "reset";
+      closureReason: string | null;
+      closedAt: string | null;
+    } | null;
+    activeReviewContext: {
+      reviewItemId: string;
+      reviewStatus: "pending_review" | "approved" | "rejected" | "revision_requested";
+      dispatchReady: boolean;
+      invalidatedAt: string | null;
+      invalidationReason: string | null;
+    } | null;
+    pendingDisambiguation: {
+      reason: string;
+      requestedIntent: string | null;
+      createdAt: string;
+    } | null;
+  };
+  retentionPolicy: {
+    intentTrailMaxEntries: number;
+    idleTtlSeconds: number;
+    hardTtlSeconds: number;
+    snapshotIntentTrailEntries: number;
+  };
+  expiresAt: string;
+  hardExpiresAt: string;
+  lastResetAt: string | null;
+  lastResetReason: string | null;
+  updatedAt: string;
+  version: number;
+};
+
+export type AaliyahRuntimeResponse = {
+  manifestVersion: string;
+  resourceType: "aaliyah_runtime_result";
+  result:
+    | {
+        runtimeRequestId: string;
+        resolvedIntent: string;
+        outcomeType: "completed";
+        activeMode: AaliyahMode;
+        payloadType: string;
+        payload: unknown;
+        provenance: {
+          requestId: string | null;
+          generatedAt: string;
+          invokedSurface: string;
+        };
+        fallback: null;
+      }
+    | {
+        runtimeRequestId: string;
+        resolvedIntent: string | null;
+        outcomeType: "fallback";
+        activeMode: AaliyahMode;
+        payloadType: null;
+        payload: null;
+        provenance: {
+          requestId: string | null;
+          generatedAt: string;
+          invokedSurface: string;
+        };
+        fallback: {
+          outcome: string;
+          reason: string;
+          delegateToAgentId: string | null;
+        };
+      };
+};
+
 export type ApiEnv = {
   VITE_POLICY_BASE_URL: string;
   VITE_POLICY_BEARER: string;
@@ -147,5 +488,85 @@ export async function getDossierExportStatus(args: {
   return args.fetchClient<{ job_id: string; status: "queued" | "running" | "complete" | "failed"; artifact_url?: string; error?: string }>({
     url: `${args.baseUrl.replace(/\/+$/, "")}/v1/research/dossier-export/${args.jobId}`,
     bearer: args.bearer
+  });
+}
+
+function withQuery(url: string, params: Record<string, string | undefined>) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) {
+      search.set(key, value);
+    }
+  }
+  const query = search.toString();
+  return query ? `${url}?${query}` : url;
+}
+
+export async function getAaliyahCommandSurface(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+}): Promise<{ manifestVersion: string; resourceType: "aaliyah_command_surface"; shell: AaliyahCommandSurface }> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/command-surface`, { mode: args.mode }),
+    bearer: args.bearer,
+  });
+}
+
+export async function getAaliyahReviewQueue(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+}): Promise<{ manifestVersion: string; resourceType: "aaliyah_review_queue"; queue: AaliyahReviewQueue }> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/review-queue`, { mode: args.mode }),
+    bearer: args.bearer,
+  });
+}
+
+export async function getAaliyahSessionSnapshot(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+}): Promise<{ manifestVersion: string; resourceType: "aaliyah_session_snapshot"; session: AaliyahSessionSnapshot }> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/session`,
+    bearer: args.bearer,
+  });
+}
+
+export async function resetAaliyahSession(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  scope?: "soft" | "hard";
+}): Promise<{ manifestVersion: string; resourceType: "aaliyah_session_reset"; reset: { session: AaliyahSessionSnapshot; resetReason: string } }> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/session/reset`,
+    method: "POST",
+    bearer: args.bearer,
+    body: { scope: args.scope ?? "soft" },
+  });
+}
+
+export async function runAaliyahRuntime(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  intent: string;
+  mode?: AaliyahMode;
+  parameters?: Record<string, unknown>;
+}): Promise<AaliyahRuntimeResponse> {
+  return args.fetchClient<AaliyahRuntimeResponse>({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/runtime`,
+    method: "POST",
+    bearer: args.bearer,
+    body: {
+      intent: args.intent,
+      mode: args.mode,
+      parameters: args.parameters ?? {},
+    },
   });
 }

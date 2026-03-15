@@ -1,5 +1,6 @@
 import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import AaliyahPage from "./AaliyahPage";
 import ContentPage from "./ContentPage";
 import DashboardPage from "./DashboardPage";
 import GovernancePage from "./GovernancePage";
@@ -9,7 +10,8 @@ import SchedulerPage from "./SchedulerPage";
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
+      <Route path="/" element={<Navigate to="/app/aaliyah" replace />} />
+      <Route path="/app/aaliyah" element={<AaliyahPage />} />
       <Route path="/app/dashboard" element={<DashboardPage />} />
       <Route path="/app/scheduler" element={<SchedulerPage />} />
       <Route path="/app/content" element={<ContentPage />} />

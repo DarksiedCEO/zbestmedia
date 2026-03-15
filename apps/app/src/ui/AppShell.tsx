@@ -34,6 +34,7 @@ export function AppShell({
           <div style={{ color: tokens.colors.muted, marginTop: 6, fontSize: 12 }}>Command Center</div>
 
           <nav style={{ marginTop: 18, display: "grid", gap: 10, fontSize: 14 }}>
+            <NavLink to="/app/aaliyah" label="Aaliyah" active={location.pathname === "/app/aaliyah"} />
             <NavLink to="/app/dashboard" label="Dashboard" active={location.pathname === "/app/dashboard"} />
             <NavLink to="/app/scheduler" label="Scheduler" active={location.pathname === "/app/scheduler"} />
             <NavLink to="/app/content" label="Content" active={location.pathname === "/app/content"} />
