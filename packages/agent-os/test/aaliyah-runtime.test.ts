@@ -660,6 +660,75 @@ describe("Aaliyah runtime agent", () => {
     }))
   } as any;
 
+  const followThroughService = {
+    getActiveFollowThrough: vi.fn(async () => null),
+    getFollowThroughHistory: vi.fn(async () => []),
+    applyAction: vi.fn(async () => ({
+      record: {
+        tenantId: "tenant",
+        followThroughId: "follow-through:1",
+        sessionId: "session:1",
+        actorId: "actor-1",
+        principalContext: "founder",
+        activeMode: "founder",
+        companyScope: "zbestmedia",
+        workingItemType: "founder_queue_item",
+        sourceSubsystem: "email_review_queue",
+        sourceItemId: "review:1",
+        queueItemId: "queue:1",
+        reviewItemId: "review:1",
+        callId: null,
+        incidentId: null,
+        dispatchId: null,
+        title: "Review founder email",
+        summary: "Founder approval is needed.",
+        status: "completed",
+        closureState: "completed",
+        closureReason: "founder_declared_completed",
+        nextGovernedAction: "select_new_queue_item",
+        founderDeclaredCompletion: true,
+        downstreamActionRef: null,
+        escalationTarget: null,
+        escalationClass: null,
+        escalationRationale: null,
+        escalationProvenance: null,
+        note: null,
+        provenance: {
+          queueItemId: "queue:1",
+          reviewItemId: "review:1",
+          callId: null,
+          incidentId: null,
+          dispatchId: null,
+          sessionVersion: 1
+        },
+        createdAt: "2026-03-15T00:00:00.000Z",
+        updatedAt: "2026-03-15T00:05:00.000Z",
+        closedAt: "2026-03-15T00:05:00.000Z"
+      },
+      historyEntry: {
+        tenantId: "tenant",
+        eventId: "follow-through-event:1",
+        followThroughId: "follow-through:1",
+        action: "complete",
+        previousStatus: "active",
+        resultingStatus: "completed",
+        closureState: "completed",
+        closureReason: "founder_declared_completed",
+        nextGovernedAction: "select_new_queue_item",
+        founderDeclaredCompletion: true,
+        downstreamActionRef: null,
+        escalationTarget: null,
+        escalationClass: null,
+        escalationRationale: null,
+        escalationProvenance: null,
+        note: null,
+        actorId: "actor-1",
+        createdAt: "2026-03-15T00:05:00.000Z"
+      },
+      nextGovernedAction: "select_new_queue_item"
+    }))
+  } as any;
+
   const service = new AaliyahRuntimeService(
     new AgentOrgService(),
     briefingService,
@@ -670,6 +739,7 @@ describe("Aaliyah runtime agent", () => {
     adminService,
     reviewQueueService,
     sessionService,
+    followThroughService,
     preferenceService,
     memoryBoundaryService
   );
@@ -718,6 +788,44 @@ describe("Aaliyah runtime agent", () => {
 
     expect(result.outcomeType).toBe("completed");
     expect(result.payloadType).toBe("quick_actions");
+  });
+
+  it("returns active follow-through payloads", async () => {
+    const result = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "get_active_follow_through"
+      }
+    });
+
+    expect(result.outcomeType).toBe("completed");
+    expect(result.payloadType).toBe("follow_through_active");
+    expect(followThroughService.getActiveFollowThrough).toHaveBeenCalled();
+  });
+
+  it("applies explicit closure actions through the follow-through service", async () => {
+    const result = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      request: {
+        intent: "complete_active_item",
+        parameters: {
+          closureReason: "founder_declared_completed",
+          founderDeclaredCompletion: true
+        }
+      }
+    });
+
+    expect(result.outcomeType).toBe("completed");
+    expect(result.payloadType).toBe("follow_through_action");
+    expect(followThroughService.applyAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "complete",
+        closureReason: "founder_declared_completed",
+        founderDeclaredCompletion: true
+      })
+    );
   });
 
   it("returns interrupt queue and confidence summaries through governed runtime", async () => {

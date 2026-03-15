@@ -47,6 +47,16 @@ import type {
   AaliyahWorkingItemContext as AaliyahWorkingItemContextShape
 } from "../aaliyah/session-types.js";
 import type {
+  FollowThroughActionType,
+  FollowThroughEscalationClass,
+  FollowThroughHistoryEntry as FollowThroughHistoryEntryShape,
+  FollowThroughRecord as FollowThroughRecordShape,
+  FollowThroughStatus as FollowThroughStatusShape,
+  NextGovernedAction as NextGovernedActionShape,
+  WorkingItemClosureReason as WorkingItemClosureReasonShape,
+  WorkingItemClosureState as WorkingItemClosureStateShape
+} from "../aaliyah/follow-through-types.js";
+import type {
   AssignmentPolicyDecision,
   AssignmentRecord,
   ExecutionRunRecord,
@@ -745,6 +755,149 @@ export const AaliyahSessionSnapshotViewSchema = z.object({
   version: z.number().int().positive()
 }) satisfies z.ZodType<AaliyahSessionSnapshotViewShape>;
 type AaliyahSessionSnapshotViewRecord = z.infer<typeof AaliyahSessionSnapshotViewSchema>;
+
+export const FollowThroughStatusSchema = z.enum([
+  "active",
+  "completed",
+  "abandoned",
+  "escalated",
+  "invalidated",
+  "reset"
+]);
+export type FollowThroughStatus = z.infer<typeof FollowThroughStatusSchema>;
+
+export const WorkingItemClosureStateSchema = z.enum([
+  "active",
+  "completed",
+  "abandoned",
+  "escalated",
+  "invalidated",
+  "reset"
+]) satisfies z.ZodType<WorkingItemClosureStateShape>;
+type WorkingItemClosureStateRecord = z.infer<typeof WorkingItemClosureStateSchema>;
+
+export const WorkingItemClosureReasonSchema = z.enum([
+  "review_approved",
+  "review_rejected",
+  "revision_requested",
+  "email_dispatched",
+  "mode_switched",
+  "expired",
+  "manual_reset",
+  "boundary_denied",
+  "ambiguity",
+  "item_not_found",
+  "cleared_by_runtime",
+  "founder_declared_completed",
+  "founder_declared_abandoned",
+  "founder_declared_escalated",
+  "founder_declared_invalidated",
+  "dispatch_confirmed",
+  "review_completed",
+  "voice_escalated",
+  "incident_acknowledged",
+  "incident_resolved"
+]) satisfies z.ZodType<WorkingItemClosureReasonShape>;
+type WorkingItemClosureReasonRecord = z.infer<typeof WorkingItemClosureReasonSchema>;
+
+export const NextGovernedActionSchema = z.enum([
+  "none_terminal",
+  "await_founder_review",
+  "dispatch_approved_email",
+  "open_voice_escalation",
+  "refresh_briefing",
+  "select_new_queue_item",
+  "resolve_disambiguation"
+]) satisfies z.ZodType<NextGovernedActionShape>;
+type NextGovernedActionRecord = z.infer<typeof NextGovernedActionSchema>;
+
+export const FollowThroughEscalationClassSchema = z.enum([
+  "founder_attention",
+  "operator_review",
+  "incident_response",
+  "specialist_handoff"
+]) satisfies z.ZodType<FollowThroughEscalationClass>;
+type FollowThroughEscalationClassRecord = z.infer<typeof FollowThroughEscalationClassSchema>;
+
+export const FollowThroughActionTypeSchema = z.enum([
+  "complete",
+  "abandon",
+  "escalate",
+  "invalidate"
+]) satisfies z.ZodType<FollowThroughActionType>;
+type FollowThroughActionTypeRecord = z.infer<typeof FollowThroughActionTypeSchema>;
+
+export const FollowThroughRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  followThroughId: z.string().min(1),
+  sessionId: z.string().min(1),
+  actorId: z.string().min(1),
+  principalContext: z.enum(["founder", "operator"]),
+  activeMode: z.enum(["founder", "zbestmedia"]),
+  companyScope: z.literal("zbestmedia"),
+  workingItemType: z.enum([
+    "founder_queue_item",
+    "email_review_item",
+    "voice_call",
+    "incident",
+    "dispatch_candidate",
+    "routing_preview"
+  ]),
+  sourceSubsystem: z.string().min(1),
+  sourceItemId: z.string().min(1),
+  queueItemId: z.string().min(1).nullable(),
+  reviewItemId: z.string().min(1).nullable(),
+  callId: z.string().min(1).nullable(),
+  incidentId: z.string().min(1).nullable(),
+  dispatchId: z.string().min(1).nullable(),
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  status: FollowThroughStatusSchema,
+  closureState: WorkingItemClosureStateSchema,
+  closureReason: WorkingItemClosureReasonSchema.nullable(),
+  nextGovernedAction: NextGovernedActionSchema,
+  founderDeclaredCompletion: z.boolean(),
+  downstreamActionRef: z.string().min(1).nullable(),
+  escalationTarget: z.string().min(1).nullable(),
+  escalationClass: FollowThroughEscalationClassSchema.nullable(),
+  escalationRationale: z.string().min(1).nullable(),
+  escalationProvenance: z.record(z.string(), z.unknown()).nullable(),
+  note: z.string().min(1).nullable(),
+  provenance: z.object({
+    queueItemId: z.string().min(1).nullable(),
+    reviewItemId: z.string().min(1).nullable(),
+    callId: z.string().min(1).nullable(),
+    incidentId: z.string().min(1).nullable(),
+    dispatchId: z.string().min(1).nullable(),
+    sessionVersion: z.number().int().positive()
+  }),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  closedAt: z.string().datetime().nullable()
+}) satisfies z.ZodType<FollowThroughRecordShape>;
+export type FollowThroughRecord = z.infer<typeof FollowThroughRecordSchema>;
+
+export const FollowThroughHistoryEntrySchema = z.object({
+  tenantId: z.string().uuid(),
+  eventId: z.string().min(1),
+  followThroughId: z.string().min(1),
+  action: FollowThroughActionTypeSchema,
+  previousStatus: FollowThroughStatusSchema,
+  resultingStatus: FollowThroughStatusSchema,
+  closureState: WorkingItemClosureStateSchema,
+  closureReason: WorkingItemClosureReasonSchema,
+  nextGovernedAction: NextGovernedActionSchema,
+  founderDeclaredCompletion: z.boolean(),
+  downstreamActionRef: z.string().min(1).nullable(),
+  escalationTarget: z.string().min(1).nullable(),
+  escalationClass: FollowThroughEscalationClassSchema.nullable(),
+  escalationRationale: z.string().min(1).nullable(),
+  escalationProvenance: z.record(z.string(), z.unknown()).nullable(),
+  note: z.string().min(1).nullable(),
+  actorId: z.string().min(1),
+  createdAt: z.string().datetime()
+}) satisfies z.ZodType<FollowThroughHistoryEntryShape>;
+export type FollowThroughHistoryEntry = z.infer<typeof FollowThroughHistoryEntrySchema>;
 
 export const MemoryEntryRecordSchema = z.object({
   tenantId: z.string().uuid(),

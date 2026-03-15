@@ -1496,6 +1496,145 @@ export const AaliyahSessionResetResponseSchema = z.object({
   })
 });
 
+const AaliyahFollowThroughRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  followThroughId: z.string().min(1),
+  sessionId: z.string().min(1),
+  actorId: z.string().min(1),
+  principalContext: z.enum(["founder", "operator"]),
+  activeMode: FounderBriefingModeSchema,
+  companyScope: z.literal("zbestmedia"),
+  workingItemType: z.enum([
+    "founder_queue_item",
+    "email_review_item",
+    "voice_call",
+    "incident",
+    "dispatch_candidate",
+    "routing_preview"
+  ]),
+  sourceSubsystem: z.string().min(1),
+  sourceItemId: z.string().min(1),
+  queueItemId: z.string().min(1).nullable(),
+  reviewItemId: z.string().min(1).nullable(),
+  callId: z.string().min(1).nullable(),
+  incidentId: z.string().min(1).nullable(),
+  dispatchId: z.string().min(1).nullable(),
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  status: z.enum(["active", "completed", "abandoned", "escalated", "invalidated", "reset"]),
+  closureState: z.enum(["active", "completed", "abandoned", "escalated", "invalidated", "reset"]),
+  closureReason: z.enum([
+    "review_approved",
+    "review_rejected",
+    "revision_requested",
+    "email_dispatched",
+    "mode_switched",
+    "expired",
+    "manual_reset",
+    "boundary_denied",
+    "ambiguity",
+    "item_not_found",
+    "cleared_by_runtime",
+    "founder_declared_completed",
+    "founder_declared_abandoned",
+    "founder_declared_escalated",
+    "founder_declared_invalidated",
+    "dispatch_confirmed",
+    "review_completed",
+    "voice_escalated",
+    "incident_acknowledged",
+    "incident_resolved"
+  ]).nullable(),
+  nextGovernedAction: z.enum([
+    "none_terminal",
+    "await_founder_review",
+    "dispatch_approved_email",
+    "open_voice_escalation",
+    "refresh_briefing",
+    "select_new_queue_item",
+    "resolve_disambiguation"
+  ]),
+  founderDeclaredCompletion: z.boolean(),
+  downstreamActionRef: z.string().min(1).nullable(),
+  escalationTarget: z.string().min(1).nullable(),
+  escalationClass: z.enum([
+    "founder_attention",
+    "operator_review",
+    "incident_response",
+    "specialist_handoff"
+  ]).nullable(),
+  escalationRationale: z.string().min(1).nullable(),
+  escalationProvenance: z.record(z.string(), z.unknown()).nullable(),
+  note: z.string().min(1).nullable(),
+  provenance: z.object({
+    queueItemId: z.string().min(1).nullable(),
+    reviewItemId: z.string().min(1).nullable(),
+    callId: z.string().min(1).nullable(),
+    incidentId: z.string().min(1).nullable(),
+    dispatchId: z.string().min(1).nullable(),
+    sessionVersion: z.number().int().positive()
+  }),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  closedAt: z.string().datetime().nullable()
+});
+
+const AaliyahFollowThroughHistoryEntrySchema = z.object({
+  tenantId: z.string().uuid(),
+  eventId: z.string().min(1),
+  followThroughId: z.string().min(1),
+  action: z.enum(["complete", "abandon", "escalate", "invalidate"]),
+  previousStatus: z.enum(["active", "completed", "abandoned", "escalated", "invalidated", "reset"]),
+  resultingStatus: z.enum(["active", "completed", "abandoned", "escalated", "invalidated", "reset"]),
+  closureState: z.enum(["active", "completed", "abandoned", "escalated", "invalidated", "reset"]),
+  closureReason: AaliyahFollowThroughRecordSchema.shape.closureReason.unwrap(),
+  nextGovernedAction: AaliyahFollowThroughRecordSchema.shape.nextGovernedAction,
+  founderDeclaredCompletion: z.boolean(),
+  downstreamActionRef: z.string().min(1).nullable(),
+  escalationTarget: z.string().min(1).nullable(),
+  escalationClass: AaliyahFollowThroughRecordSchema.shape.escalationClass,
+  escalationRationale: z.string().min(1).nullable(),
+  escalationProvenance: z.record(z.string(), z.unknown()).nullable(),
+  note: z.string().min(1).nullable(),
+  actorId: z.string().min(1),
+  createdAt: z.string().datetime()
+});
+
+export const AaliyahFollowThroughActionBodySchema = z.object({
+  queueItemId: z.string().min(1).optional(),
+  closureReason: AaliyahFollowThroughHistoryEntrySchema.shape.closureReason,
+  closureNote: z.string().min(1).optional(),
+  founderDeclaredCompletion: z.boolean().optional(),
+  downstreamActionRef: z.string().min(1).optional(),
+  escalationTarget: z.string().min(1).optional(),
+  escalationClass: AaliyahFollowThroughRecordSchema.shape.escalationClass.optional(),
+  escalationRationale: z.string().min(1).optional(),
+  escalationProvenance: z.record(z.string(), z.unknown()).optional()
+});
+
+export const AaliyahFollowThroughResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_follow_through"),
+  record: AaliyahFollowThroughRecordSchema.nullable()
+});
+
+export const AaliyahFollowThroughHistoryResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_follow_through_history"),
+  items: z.array(AaliyahFollowThroughHistoryEntrySchema),
+  total: z.number().int().nonnegative()
+});
+
+export const AaliyahFollowThroughActionResponseSchema = z.object({
+  manifestVersion: ManifestVersionSchema,
+  resourceType: z.literal("aaliyah_follow_through_action"),
+  result: z.object({
+    record: AaliyahFollowThroughRecordSchema,
+    historyEntry: AaliyahFollowThroughHistoryEntrySchema,
+    nextGovernedAction: AaliyahFollowThroughRecordSchema.shape.nextGovernedAction
+  })
+});
+
 const AaliyahRuntimeIntentSchema = z.enum([
   "get_founder_briefing",
   "get_founder_command_surface",
@@ -1510,6 +1649,12 @@ const AaliyahRuntimeIntentSchema = z.enum([
   "get_founder_queue_summary",
   "get_session_snapshot",
   "reset_session_context",
+  "complete_active_item",
+  "abandon_active_item",
+  "escalate_active_item",
+  "invalidate_active_item",
+  "get_active_follow_through",
+  "get_follow_through_history",
   "get_waiting_approvals",
   "get_email_review_queue",
   "approve_email_review_item",
@@ -1648,7 +1793,10 @@ const AaliyahRuntimeSuccessSchema = z.object({
     "founder_queue_item",
     "founder_queue_summary",
     "session_snapshot",
-    "session_reset"
+    "session_reset",
+    "follow_through_active",
+    "follow_through_action",
+    "follow_through_history"
   ]),
   payload: z.union([
     FounderBriefingSchema,
@@ -1663,6 +1811,9 @@ const AaliyahRuntimeSuccessSchema = z.object({
     AaliyahReviewQueueSummarySchema,
     AaliyahSessionSnapshotSchema,
     AaliyahSessionResetResponseSchema.shape.reset,
+    AaliyahFollowThroughRecordSchema.nullable(),
+    AaliyahFollowThroughActionResponseSchema.shape.result,
+    AaliyahFollowThroughHistoryResponseSchema.pick({ items: true, total: true }),
     AaliyahApprovalQueuePayloadSchema,
     AaliyahReviewActionPayloadSchema,
     z.object({

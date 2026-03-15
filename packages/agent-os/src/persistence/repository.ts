@@ -15,6 +15,8 @@ import type {
   AgentLifecycleEventRecord,
   AaliyahSessionContextRecord,
   AaliyahFounderPreferenceRecord,
+  FollowThroughHistoryEntry,
+  FollowThroughRecord,
   AgentRecord,
   AssignmentRecord,
   ApprovalDecision,
@@ -347,6 +349,62 @@ type AaliyahSessionContextRow = {
   last_reset_at: string | Date | null;
   last_reset_reason: AaliyahSessionContextRecord["lastResetReason"];
   version: number;
+};
+
+type FollowThroughRecordRow = {
+  tenant_id: string;
+  follow_through_id: string;
+  session_id: string;
+  actor_id: string;
+  principal_context: FollowThroughRecord["principalContext"];
+  active_mode: FollowThroughRecord["activeMode"];
+  company_scope: FollowThroughRecord["companyScope"];
+  working_item_type: FollowThroughRecord["workingItemType"];
+  source_subsystem: string;
+  source_item_id: string;
+  queue_item_id: string | null;
+  review_item_id: string | null;
+  call_id: string | null;
+  incident_id: string | null;
+  dispatch_id: string | null;
+  title: string;
+  summary: string;
+  status: FollowThroughRecord["status"];
+  closure_state: FollowThroughRecord["closureState"];
+  closure_reason: FollowThroughRecord["closureReason"];
+  next_governed_action: FollowThroughRecord["nextGovernedAction"];
+  founder_declared_completion: boolean;
+  downstream_action_ref: string | null;
+  escalation_target: string | null;
+  escalation_class: FollowThroughRecord["escalationClass"];
+  escalation_rationale: string | null;
+  escalation_provenance: Record<string, unknown> | null;
+  note: string | null;
+  provenance: FollowThroughRecord["provenance"];
+  created_at: string | Date;
+  updated_at: string | Date;
+  closed_at: string | Date | null;
+};
+
+type FollowThroughHistoryEntryRow = {
+  tenant_id: string;
+  event_id: string;
+  follow_through_id: string;
+  action: FollowThroughHistoryEntry["action"];
+  previous_status: FollowThroughHistoryEntry["previousStatus"];
+  resulting_status: FollowThroughHistoryEntry["resultingStatus"];
+  closure_state: FollowThroughHistoryEntry["closureState"];
+  closure_reason: FollowThroughHistoryEntry["closureReason"];
+  next_governed_action: FollowThroughHistoryEntry["nextGovernedAction"];
+  founder_declared_completion: boolean;
+  downstream_action_ref: string | null;
+  escalation_target: string | null;
+  escalation_class: FollowThroughHistoryEntry["escalationClass"];
+  escalation_rationale: string | null;
+  escalation_provenance: Record<string, unknown> | null;
+  note: string | null;
+  actor_id: string;
+  created_at: string | Date;
 };
 
 type EvalRunRow = {
@@ -752,6 +810,66 @@ function mapAaliyahSessionContextRow(row: AaliyahSessionContextRow): AaliyahSess
     lastResetAt: row.last_reset_at ? toIsoString(row.last_reset_at)! : null,
     lastResetReason: row.last_reset_reason,
     version: row.version
+  };
+}
+
+function mapFollowThroughRecordRow(row: FollowThroughRecordRow): FollowThroughRecord {
+  return {
+    tenantId: row.tenant_id,
+    followThroughId: row.follow_through_id,
+    sessionId: row.session_id,
+    actorId: row.actor_id,
+    principalContext: row.principal_context,
+    activeMode: row.active_mode,
+    companyScope: row.company_scope,
+    workingItemType: row.working_item_type,
+    sourceSubsystem: row.source_subsystem,
+    sourceItemId: row.source_item_id,
+    queueItemId: row.queue_item_id,
+    reviewItemId: row.review_item_id,
+    callId: row.call_id,
+    incidentId: row.incident_id,
+    dispatchId: row.dispatch_id,
+    title: row.title,
+    summary: row.summary,
+    status: row.status,
+    closureState: row.closure_state,
+    closureReason: row.closure_reason,
+    nextGovernedAction: row.next_governed_action,
+    founderDeclaredCompletion: row.founder_declared_completion,
+    downstreamActionRef: row.downstream_action_ref,
+    escalationTarget: row.escalation_target,
+    escalationClass: row.escalation_class,
+    escalationRationale: row.escalation_rationale,
+    escalationProvenance: row.escalation_provenance,
+    note: row.note,
+    provenance: row.provenance,
+    createdAt: toIsoString(row.created_at)!,
+    updatedAt: toIsoString(row.updated_at)!,
+    closedAt: row.closed_at ? toIsoString(row.closed_at)! : null
+  };
+}
+
+function mapFollowThroughHistoryEntryRow(row: FollowThroughHistoryEntryRow): FollowThroughHistoryEntry {
+  return {
+    tenantId: row.tenant_id,
+    eventId: row.event_id,
+    followThroughId: row.follow_through_id,
+    action: row.action,
+    previousStatus: row.previous_status,
+    resultingStatus: row.resulting_status,
+    closureState: row.closure_state,
+    closureReason: row.closure_reason,
+    nextGovernedAction: row.next_governed_action,
+    founderDeclaredCompletion: row.founder_declared_completion,
+    downstreamActionRef: row.downstream_action_ref,
+    escalationTarget: row.escalation_target,
+    escalationClass: row.escalation_class,
+    escalationRationale: row.escalation_rationale,
+    escalationProvenance: row.escalation_provenance,
+    note: row.note,
+    actorId: row.actor_id,
+    createdAt: toIsoString(row.created_at)!
   };
 }
 
@@ -2886,6 +3004,223 @@ export class AgentOsRepository {
     );
 
     return mapAaliyahSessionContextRow(res.rows[0]!);
+  }
+
+  async getAaliyahFollowThroughRecordBySource(args: {
+    tenantId: string;
+    actorId: string;
+    principalContext: FollowThroughRecord["principalContext"];
+    sourceItemId: string;
+  }): Promise<FollowThroughRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FollowThroughRecordRow>(
+        `
+        SELECT tenant_id, follow_through_id, session_id, actor_id, principal_context,
+               active_mode, company_scope, working_item_type, source_subsystem, source_item_id,
+               queue_item_id, review_item_id, call_id, incident_id, dispatch_id,
+               title, summary, status, closure_state, closure_reason, next_governed_action,
+               founder_declared_completion, downstream_action_ref, escalation_target,
+               escalation_class, escalation_rationale, escalation_provenance, note,
+               provenance, created_at, updated_at, closed_at
+        FROM aaliyah_follow_through_records
+        WHERE tenant_id = $1
+          AND actor_id = $2
+          AND principal_context = $3
+          AND source_item_id = $4
+        ORDER BY updated_at DESC
+        LIMIT 1
+        `,
+        [args.tenantId, args.actorId, args.principalContext, args.sourceItemId]
+      )
+    );
+
+    return res.rows[0] ? mapFollowThroughRecordRow(res.rows[0]) : null;
+  }
+
+  async upsertAaliyahFollowThroughRecord(args: {
+    record: FollowThroughRecord;
+  }): Promise<FollowThroughRecord> {
+    const record = args.record;
+    const res = await this.runWithTenant(this.pool, record.tenantId, (client) =>
+      client.query<FollowThroughRecordRow>(
+        `
+        INSERT INTO aaliyah_follow_through_records (
+          tenant_id, follow_through_id, session_id, actor_id, principal_context,
+          active_mode, company_scope, working_item_type, source_subsystem, source_item_id,
+          queue_item_id, review_item_id, call_id, incident_id, dispatch_id,
+          title, summary, status, closure_state, closure_reason, next_governed_action,
+          founder_declared_completion, downstream_action_ref, escalation_target,
+          escalation_class, escalation_rationale, escalation_provenance, note,
+          provenance, created_at, updated_at, closed_at
+        ) VALUES (
+          $1,$2,$3,$4,$5,
+          $6,$7,$8,$9,$10,
+          $11,$12,$13,$14,$15,
+          $16,$17,$18,$19,$20,$21,
+          $22,$23,$24,
+          $25,$26,$27::jsonb,$28,
+          $29::jsonb,$30,$31,$32
+        )
+        ON CONFLICT (tenant_id, follow_through_id)
+        DO UPDATE SET
+          session_id = EXCLUDED.session_id,
+          actor_id = EXCLUDED.actor_id,
+          principal_context = EXCLUDED.principal_context,
+          active_mode = EXCLUDED.active_mode,
+          company_scope = EXCLUDED.company_scope,
+          working_item_type = EXCLUDED.working_item_type,
+          source_subsystem = EXCLUDED.source_subsystem,
+          source_item_id = EXCLUDED.source_item_id,
+          queue_item_id = EXCLUDED.queue_item_id,
+          review_item_id = EXCLUDED.review_item_id,
+          call_id = EXCLUDED.call_id,
+          incident_id = EXCLUDED.incident_id,
+          dispatch_id = EXCLUDED.dispatch_id,
+          title = EXCLUDED.title,
+          summary = EXCLUDED.summary,
+          status = EXCLUDED.status,
+          closure_state = EXCLUDED.closure_state,
+          closure_reason = EXCLUDED.closure_reason,
+          next_governed_action = EXCLUDED.next_governed_action,
+          founder_declared_completion = EXCLUDED.founder_declared_completion,
+          downstream_action_ref = EXCLUDED.downstream_action_ref,
+          escalation_target = EXCLUDED.escalation_target,
+          escalation_class = EXCLUDED.escalation_class,
+          escalation_rationale = EXCLUDED.escalation_rationale,
+          escalation_provenance = EXCLUDED.escalation_provenance,
+          note = EXCLUDED.note,
+          provenance = EXCLUDED.provenance,
+          updated_at = EXCLUDED.updated_at,
+          closed_at = EXCLUDED.closed_at
+        RETURNING tenant_id, follow_through_id, session_id, actor_id, principal_context,
+                  active_mode, company_scope, working_item_type, source_subsystem, source_item_id,
+                  queue_item_id, review_item_id, call_id, incident_id, dispatch_id,
+                  title, summary, status, closure_state, closure_reason, next_governed_action,
+                  founder_declared_completion, downstream_action_ref, escalation_target,
+                  escalation_class, escalation_rationale, escalation_provenance, note,
+                  provenance, created_at, updated_at, closed_at
+        `,
+        [
+          record.tenantId,
+          record.followThroughId,
+          record.sessionId,
+          record.actorId,
+          record.principalContext,
+          record.activeMode,
+          record.companyScope,
+          record.workingItemType,
+          record.sourceSubsystem,
+          record.sourceItemId,
+          record.queueItemId,
+          record.reviewItemId,
+          record.callId,
+          record.incidentId,
+          record.dispatchId,
+          record.title,
+          record.summary,
+          record.status,
+          record.closureState,
+          record.closureReason,
+          record.nextGovernedAction,
+          record.founderDeclaredCompletion,
+          record.downstreamActionRef,
+          record.escalationTarget,
+          record.escalationClass,
+          record.escalationRationale,
+          JSON.stringify(record.escalationProvenance ?? {}),
+          record.note,
+          JSON.stringify(record.provenance),
+          record.createdAt,
+          record.updatedAt,
+          record.closedAt
+        ]
+      )
+    );
+
+    return mapFollowThroughRecordRow(res.rows[0]!);
+  }
+
+  async createAaliyahFollowThroughHistoryEntry(args: {
+    entry: FollowThroughHistoryEntry;
+  }): Promise<FollowThroughHistoryEntry> {
+    const entry = args.entry;
+    const query = await this.runWithTenant(this.pool, entry.tenantId, (client) =>
+      client.query<FollowThroughHistoryEntryRow>(
+        `
+        INSERT INTO aaliyah_follow_through_history (
+          tenant_id, event_id, follow_through_id, action, previous_status,
+          resulting_status, closure_state, closure_reason, next_governed_action,
+          founder_declared_completion, downstream_action_ref, escalation_target,
+          escalation_class, escalation_rationale, escalation_provenance, note,
+          actor_id, created_at
+        ) VALUES (
+          $1,$2,$3,$4,$5,
+          $6,$7,$8,$9,
+          $10,$11,$12,
+          $13,$14,$15::jsonb,$16,
+          $17,$18
+        )
+        RETURNING tenant_id, event_id, follow_through_id, action, previous_status,
+                  resulting_status, closure_state, closure_reason, next_governed_action,
+                  founder_declared_completion, downstream_action_ref, escalation_target,
+                  escalation_class, escalation_rationale, escalation_provenance, note,
+                  actor_id, created_at
+        `,
+        [
+          entry.tenantId,
+          entry.eventId,
+          entry.followThroughId,
+          entry.action,
+          entry.previousStatus,
+          entry.resultingStatus,
+          entry.closureState,
+          entry.closureReason,
+          entry.nextGovernedAction,
+          entry.founderDeclaredCompletion,
+          entry.downstreamActionRef,
+          entry.escalationTarget,
+          entry.escalationClass,
+          entry.escalationRationale,
+          JSON.stringify(entry.escalationProvenance ?? {}),
+          entry.note,
+          entry.actorId,
+          entry.createdAt
+        ]
+      )
+    );
+
+    return mapFollowThroughHistoryEntryRow(query.rows[0]!);
+  }
+
+  async listAaliyahFollowThroughHistory(args: {
+    tenantId: string;
+    actorId: string;
+    principalContext: FollowThroughRecord["principalContext"];
+    limit: number;
+  }): Promise<FollowThroughHistoryEntry[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FollowThroughHistoryEntryRow>(
+        `
+        SELECT h.tenant_id, h.event_id, h.follow_through_id, h.action, h.previous_status,
+               h.resulting_status, h.closure_state, h.closure_reason, h.next_governed_action,
+               h.founder_declared_completion, h.downstream_action_ref, h.escalation_target,
+               h.escalation_class, h.escalation_rationale, h.escalation_provenance, h.note,
+               h.actor_id, h.created_at
+        FROM aaliyah_follow_through_history h
+        JOIN aaliyah_follow_through_records r
+          ON r.tenant_id = h.tenant_id
+         AND r.follow_through_id = h.follow_through_id
+        WHERE h.tenant_id = $1
+          AND r.actor_id = $2
+          AND r.principal_context = $3
+        ORDER BY h.created_at DESC
+        LIMIT $4
+        `,
+        [args.tenantId, args.actorId, args.principalContext, args.limit]
+      )
+    );
+
+    return res.rows.map(mapFollowThroughHistoryEntryRow);
   }
 
   async listIncidentRecords(args: {

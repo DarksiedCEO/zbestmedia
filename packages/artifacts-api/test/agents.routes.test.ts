@@ -37,6 +37,9 @@ import {
   AaliyahPreferenceListResponseSchema,
   AaliyahReviewQueueDetailResponseSchema,
   AaliyahReviewQueueListResponseSchema,
+  AaliyahFollowThroughActionResponseSchema,
+  AaliyahFollowThroughHistoryResponseSchema,
+  AaliyahFollowThroughResponseSchema,
   AaliyahSessionResetResponseSchema,
   AaliyahSessionSnapshotResponseSchema,
   AaliyahQuickActionsResponseSchema,
@@ -2310,6 +2313,74 @@ describe("agent routes", () => {
       }
     }))
   };
+  const aaliyahFollowThroughService = {
+    getActiveFollowThrough: vi.fn(async () => null),
+    getFollowThroughHistory: vi.fn(async () => []),
+    applyAction: vi.fn(async () => ({
+      record: {
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        followThroughId: "follow-through:1",
+        sessionId: "aaliyah-session:1",
+        actorId: "actor-1",
+        principalContext: "founder",
+        activeMode: "founder",
+        companyScope: "zbestmedia",
+        workingItemType: "founder_queue_item",
+        sourceSubsystem: "email_review_queue",
+        sourceItemId: "review:1",
+        queueItemId: "queue:item:1",
+        reviewItemId: "review:1",
+        callId: null,
+        incidentId: null,
+        dispatchId: null,
+        title: "Review founder email",
+        summary: "Founder approval is needed.",
+        status: "completed",
+        closureState: "completed",
+        closureReason: "founder_declared_completed",
+        nextGovernedAction: "select_new_queue_item",
+        founderDeclaredCompletion: true,
+        downstreamActionRef: null,
+        escalationTarget: null,
+        escalationClass: null,
+        escalationRationale: null,
+        escalationProvenance: null,
+        note: null,
+        provenance: {
+          queueItemId: "queue:item:1",
+          reviewItemId: "review:1",
+          callId: null,
+          incidentId: null,
+          dispatchId: null,
+          sessionVersion: 2
+        },
+        createdAt: "2026-03-15T00:00:00.000Z",
+        updatedAt: "2026-03-15T00:05:00.000Z",
+        closedAt: "2026-03-15T00:05:00.000Z"
+      },
+      historyEntry: {
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        eventId: "follow-through-event:1",
+        followThroughId: "follow-through:1",
+        action: "complete",
+        previousStatus: "active",
+        resultingStatus: "completed",
+        closureState: "completed",
+        closureReason: "founder_declared_completed",
+        nextGovernedAction: "select_new_queue_item",
+        founderDeclaredCompletion: true,
+        downstreamActionRef: null,
+        escalationTarget: null,
+        escalationClass: null,
+        escalationRationale: null,
+        escalationProvenance: null,
+        note: null,
+        actorId: "actor-1",
+        createdAt: "2026-03-15T00:05:00.000Z"
+      },
+      nextGovernedAction: "select_new_queue_item"
+    }))
+  };
   const aaliyahCommandSurfaceService = {
     generateCommandSurface: vi.fn(async ({ tenantId, mode }: { tenantId: string; mode: "founder" | "zbestmedia" }) => ({
       shellId: "shell:1",
@@ -2765,6 +2836,7 @@ describe("agent routes", () => {
         aaliyahPreferenceService: aaliyahPreferenceService as never,
         aaliyahMemoryBoundaryService: aaliyahMemoryBoundaryService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
+        aaliyahFollowThroughService: aaliyahFollowThroughService as never,
         aaliyahSessionService: aaliyahSessionService as never,
         aaliyahRuntimeService: aaliyahRuntimeService as never,
         emailService,
@@ -3000,6 +3072,22 @@ describe("agent routes", () => {
       url: "/v1/agent-os/aaliyah/session/reset",
       payload: { scope: "hard" }
     });
+    const followThroughRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/follow-through"
+    });
+    const followThroughHistoryRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/follow-through/history"
+    });
+    const followThroughActionRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/follow-through/complete",
+      payload: {
+        closureReason: "founder_declared_completed",
+        founderDeclaredCompletion: true
+      }
+    });
 
     expect(shellRes.statusCode).toBe(200);
     const shell = AaliyahCommandSurfaceResponseSchema.parse(shellRes.json());
@@ -3042,6 +3130,18 @@ describe("agent routes", () => {
     expect(resetRes.statusCode).toBe(200);
     const reset = AaliyahSessionResetResponseSchema.parse(resetRes.json());
     expect(reset.reset.resetReason).toBe("manual_reset");
+
+    expect(followThroughRes.statusCode).toBe(200);
+    const followThrough = AaliyahFollowThroughResponseSchema.parse(followThroughRes.json());
+    expect(followThrough.record).toBeNull();
+
+    expect(followThroughHistoryRes.statusCode).toBe(200);
+    const history = AaliyahFollowThroughHistoryResponseSchema.parse(followThroughHistoryRes.json());
+    expect(history.total).toBe(0);
+
+    expect(followThroughActionRes.statusCode).toBe(200);
+    const action = AaliyahFollowThroughActionResponseSchema.parse(followThroughActionRes.json());
+    expect(action.result.record.status).toBe("completed");
   });
 
   it("exposes founder preference mutation routes", async () => {

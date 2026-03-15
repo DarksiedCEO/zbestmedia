@@ -7,6 +7,7 @@ import { AaliyahMemoryBoundaryService } from "./memory-boundary.js";
 import { AaliyahPreferenceService } from "./preferences.js";
 import { AaliyahFounderReviewQueueService } from "./review-queue.js";
 import { AaliyahSessionContextService } from "./session.js";
+import { AaliyahFollowThroughService } from "./follow-through.js";
 import { AaliyahRuntimeEnforcementService } from "./runtime-enforcement.js";
 import type {
   AaliyahRuntimeDecisionTrace,
@@ -51,7 +52,13 @@ const SUPPORTED_INTENTS = new Set<AaliyahRuntimeIntent>([
   "get_founder_queue_item",
   "get_founder_queue_summary",
   "get_session_snapshot",
-  "reset_session_context"
+  "reset_session_context",
+  "complete_active_item",
+  "abandon_active_item",
+  "escalate_active_item",
+  "invalidate_active_item",
+  "get_active_follow_through",
+  "get_follow_through_history"
 ]);
 
 const DEFAULT_MODE: AaliyahRuntimeMode = "founder";
@@ -70,6 +77,7 @@ export class AaliyahRuntimeService {
     private readonly admin: AgentAdminService,
     private readonly reviewQueue: AaliyahFounderReviewQueueService,
     private readonly sessions: AaliyahSessionContextService,
+    private readonly followThrough: AaliyahFollowThroughService,
     private readonly preferences?: AaliyahPreferenceService,
     boundary?: AaliyahMemoryBoundaryService
   ) {
@@ -436,6 +444,91 @@ export class AaliyahRuntimeService {
           invokedSurface: "aaliyah-session",
           enforcement: enforcement.trace,
           payloadType: "session_reset",
+          payload
+        });
+        break;
+      }
+      case "get_active_follow_through": {
+        const payload = await this.followThrough.getActiveFollowThrough({
+          tenantId: args.tenantId,
+          actorId: args.actorId,
+          principalContext: args.principalContext ?? "founder",
+          generatedAt
+        });
+        result = this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-follow-through",
+          enforcement: enforcement.trace,
+          payloadType: "follow_through_active",
+          payload
+        });
+        break;
+      }
+      case "get_follow_through_history": {
+        const limit = this.readOptionalLimit(args.request.parameters?.limit) ?? 25;
+        const items = await this.followThrough.getFollowThroughHistory({
+          tenantId: args.tenantId,
+          actorId: args.actorId,
+          principalContext: args.principalContext ?? "founder",
+          limit
+        });
+        result = this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-follow-through",
+          enforcement: enforcement.trace,
+          payloadType: "follow_through_history",
+          payload: {
+            items,
+            total: items.length
+          }
+        });
+        break;
+      }
+      case "complete_active_item":
+      case "abandon_active_item":
+      case "escalate_active_item":
+      case "invalidate_active_item": {
+        const payload = await this.followThrough.applyAction({
+          tenantId: args.tenantId,
+          actorId: args.actorId,
+          principalContext: args.principalContext ?? "founder",
+          mode: activeMode,
+          action:
+            resolvedIntent === "complete_active_item"
+              ? "complete"
+              : resolvedIntent === "abandon_active_item"
+                ? "abandon"
+                : resolvedIntent === "escalate_active_item"
+                  ? "escalate"
+                  : "invalidate",
+          generatedAt,
+          queueItemId: this.readOptionalString(args.request.parameters, "queueItemId"),
+          founderDeclaredCompletion: args.request.parameters?.founderDeclaredCompletion === true,
+          closureReason: this.requireStringParam(args.request.parameters, "closureReason", resolvedIntent) as never,
+          closureNote: this.readOptionalString(args.request.parameters, "closureNote"),
+          downstreamActionRef: this.readOptionalString(args.request.parameters, "downstreamActionRef"),
+          escalationTarget: this.readOptionalString(args.request.parameters, "escalationTarget"),
+          escalationClass: this.readOptionalString(args.request.parameters, "escalationClass") as never,
+          escalationRationale: this.readOptionalString(args.request.parameters, "escalationRationale"),
+          escalationProvenance: this.readOptionalRecord(args.request.parameters, "escalationProvenance")
+        });
+        result = this.buildSuccess({
+          runtimeRequestId,
+          activeMode,
+          resolvedIntent,
+          generatedAt,
+          requestId: args.requestId ?? null,
+          invokedSurface: "aaliyah-follow-through",
+          enforcement: enforcement.trace,
+          payloadType: "follow_through_action",
           payload
         });
         break;
@@ -966,6 +1059,9 @@ export class AaliyahRuntimeService {
       | "founder_queue_summary"
       | "session_snapshot"
       | "session_reset"
+      | "follow_through_active"
+      | "follow_through_action"
+      | "follow_through_history"
       | "approval_queue"
       | "email_review_queue"
       | "email_review_action"
@@ -1053,6 +1149,11 @@ export class AaliyahRuntimeService {
   private readOptionalString(parameters: Record<string, unknown> | undefined, key: string): string | undefined {
     const value = parameters?.[key];
     return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  }
+
+  private readOptionalRecord(parameters: Record<string, unknown> | undefined, key: string): Record<string, unknown> | undefined {
+    const value = parameters?.[key];
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
   }
 
   private readOptionalLimit(value: unknown): number | undefined {

@@ -15,6 +15,7 @@ import type { AaliyahMemoryBoundarySummary } from "./memory-boundary.js";
 import type { AaliyahPreferenceList } from "./preference-types.js";
 import type { AaliyahFounderReviewQueue, AaliyahFounderReviewQueueSummary, AaliyahFounderQueueItem } from "./review-queue-types.js";
 import type { AaliyahSessionResetResult, AaliyahSessionSnapshotView } from "./session-types.js";
+import type { FollowThroughActionResult, FollowThroughHistoryEntry, FollowThroughRecord } from "./follow-through-types.js";
 import type { EmailDraftReviewRecord } from "../email/review-types.js";
 import type { EmailDispatchResult } from "../email/dispatch-types.js";
 import type { AdminRoutingCategoryDescriptor } from "../admin/types.js";
@@ -99,7 +100,13 @@ export type AaliyahRuntimeIntent =
   | "get_founder_queue_item"
   | "get_founder_queue_summary"
   | "get_session_snapshot"
-  | "reset_session_context";
+  | "reset_session_context"
+  | "complete_active_item"
+  | "abandon_active_item"
+  | "escalate_active_item"
+  | "invalidate_active_item"
+  | "get_active_follow_through"
+  | "get_follow_through_history";
 
 export type AaliyahRuntimePayloadType =
   | "founder_briefing"
@@ -124,7 +131,10 @@ export type AaliyahRuntimePayloadType =
   | "founder_queue_item"
   | "founder_queue_summary"
   | "session_snapshot"
-  | "session_reset";
+  | "session_reset"
+  | "follow_through_active"
+  | "follow_through_action"
+  | "follow_through_history";
 
 export type AaliyahRuntimeRequestInput = {
   intent: string;
@@ -196,7 +206,10 @@ export type AaliyahRuntimeSuccessPayload =
   | { payloadType: "founder_queue_item"; payload: AaliyahFounderQueueItem }
   | { payloadType: "founder_queue_summary"; payload: AaliyahFounderReviewQueueSummary }
   | { payloadType: "session_snapshot"; payload: AaliyahSessionSnapshotView }
-  | { payloadType: "session_reset"; payload: AaliyahSessionResetResult };
+  | { payloadType: "session_reset"; payload: AaliyahSessionResetResult }
+  | { payloadType: "follow_through_active"; payload: FollowThroughRecord | null }
+  | { payloadType: "follow_through_action"; payload: FollowThroughActionResult }
+  | { payloadType: "follow_through_history"; payload: { items: FollowThroughHistoryEntry[]; total: number } };
 
 export type AaliyahRuntimeFallback = {
   outcome: Exclude<AaliyahRuntimeFallbackOutcome, "proceed_with_orchestration">;

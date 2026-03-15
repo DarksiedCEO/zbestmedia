@@ -7,6 +7,7 @@ import {
   AaliyahMemoryBoundaryService,
   AaliyahPreferenceService,
   AaliyahFounderReviewQueueService,
+  AaliyahFollowThroughService,
   AaliyahSessionContextService,
   AaliyahRuntimeService,
   EmailAssistantService,
@@ -40,6 +41,10 @@ import {
   AaliyahReviewQueueDetailResponseSchema,
   AaliyahReviewQueueListResponseSchema,
   AaliyahReviewQueueItemIdParamSchema,
+  AaliyahFollowThroughActionBodySchema,
+  AaliyahFollowThroughActionResponseSchema,
+  AaliyahFollowThroughHistoryResponseSchema,
+  AaliyahFollowThroughResponseSchema,
   AaliyahSessionResetBodySchema,
   AaliyahPreferenceCreateBodySchema,
   AaliyahPreferenceDetailResponseSchema,
@@ -143,6 +148,7 @@ export function agentRoutes(opts: {
   aaliyahPreferenceService: AaliyahPreferenceService;
   aaliyahMemoryBoundaryService: AaliyahMemoryBoundaryService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
+  aaliyahFollowThroughService: AaliyahFollowThroughService;
   aaliyahSessionService: AaliyahSessionContextService;
   aaliyahRuntimeService: AaliyahRuntimeService;
   emailService: EmailAssistantService;
@@ -690,6 +696,81 @@ export function agentRoutes(opts: {
         reset
       });
     });
+
+    app.get("/v1/agent-os/aaliyah/follow-through", async (req, reply) => {
+      const record = await opts.aaliyahFollowThroughService.getActiveFollowThrough({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder"
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_follow_through",
+        record
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/follow-through/history", async (req, reply) => {
+      const items = await opts.aaliyahFollowThroughService.getFollowThroughHistory({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder"
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_follow_through_history",
+        items,
+        total: items.length
+      });
+    });
+
+    async function handleFollowThroughAction(
+      req: { body?: unknown; query?: unknown; auth: { tenantId: string; actorId: string } },
+      reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown }; send: (payload: unknown) => unknown },
+      action: "complete" | "abandon" | "escalate" | "invalidate"
+    ) {
+      const body = AaliyahFollowThroughActionBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      try {
+        const result = await opts.aaliyahFollowThroughService.applyAction({
+          tenantId: req.auth.tenantId,
+          actorId: req.auth.actorId,
+          principalContext: "founder",
+          mode: (req.query as { mode?: "founder" | "zbestmedia" } | undefined)?.mode ?? "founder",
+          action,
+          queueItemId: body.data.queueItemId,
+          closureReason: body.data.closureReason,
+          closureNote: body.data.closureNote,
+          founderDeclaredCompletion: body.data.founderDeclaredCompletion,
+          downstreamActionRef: body.data.downstreamActionRef,
+          escalationTarget: body.data.escalationTarget,
+          escalationClass: body.data.escalationClass,
+          escalationRationale: body.data.escalationRationale,
+          escalationProvenance: body.data.escalationProvenance
+        });
+
+        return reply.send({
+          manifestVersion: orgManifestVersion,
+          resourceType: "aaliyah_follow_through_action",
+          result
+        });
+      } catch (error) {
+        const message = (error as Error).message;
+        return reply.code(message.includes("missing") || message.includes("requires") || message.includes("mismatch") || message.includes("boundary") ? 400 : 409).send({
+          error: message
+        });
+      }
+    }
+
+    app.post("/v1/agent-os/aaliyah/follow-through/complete", async (req, reply) => handleFollowThroughAction(req, reply, "complete"));
+    app.post("/v1/agent-os/aaliyah/follow-through/abandon", async (req, reply) => handleFollowThroughAction(req, reply, "abandon"));
+    app.post("/v1/agent-os/aaliyah/follow-through/escalate", async (req, reply) => handleFollowThroughAction(req, reply, "escalate"));
+    app.post("/v1/agent-os/aaliyah/follow-through/invalidate", async (req, reply) => handleFollowThroughAction(req, reply, "invalidate"));
 
     app.post("/v1/agent-os/aaliyah/runtime", async (req, reply) => {
       const body = AaliyahRuntimeRequestBodySchema.safeParse(req.body ?? {});
