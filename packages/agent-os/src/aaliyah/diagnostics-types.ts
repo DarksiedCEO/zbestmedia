@@ -15,7 +15,15 @@ export type AaliyahDiagnosticsEventType =
   | "workspace_calendar_event_requested"
   | "workspace_calendar_event_denied"
   | "workspace_calendar_event_created"
-  | "workspace_calendar_event_failed";
+  | "workspace_calendar_event_failed"
+  | "crm_contact_created"
+  | "crm_contact_updated"
+  | "crm_account_created"
+  | "crm_account_updated"
+  | "crm_note_created"
+  | "crm_context_requested"
+  | "crm_denied"
+  | "crm_failed";
 
 export type AaliyahDiagnosticsEvent = {
   tenantId: string;

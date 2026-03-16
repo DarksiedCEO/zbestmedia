@@ -13,6 +13,9 @@ import {
 import { AGENT_EVAL_PROFILES } from "../evals/specs.js";
 import type {
   AgentLifecycleEventRecord,
+  AaliyahCrmAccountRecord,
+  AaliyahCrmContactRecord,
+  AaliyahCrmNoteRecord,
   AaliyahDiagnosticsEventRecord,
   AaliyahMutationIdempotencyRecord,
   AaliyahSessionContextRecord,
@@ -268,6 +271,47 @@ type EmailAccountConnectionRow = {
   last_error: string | null;
   created_at: string | Date;
   updated_at: string | Date;
+};
+
+type AaliyahCrmContactRow = {
+  contact_id: string;
+  tenant_id: string;
+  principal_id: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  account_id: string | null;
+  role_title: string | null;
+  phone: string | null;
+  status: AaliyahCrmContactRecord["status"];
+  relationship_stage: AaliyahCrmContactRecord["relationshipStage"];
+  last_touched_at: string | Date | null;
+  next_action_at: string | Date | null;
+  notes_summary: string | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+};
+
+type AaliyahCrmAccountRow = {
+  account_id: string;
+  tenant_id: string;
+  name: string;
+  website: string | null;
+  industry: string | null;
+  status: AaliyahCrmAccountRecord["status"];
+  notes_summary: string | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+};
+
+type AaliyahCrmNoteRow = {
+  note_id: string;
+  tenant_id: string;
+  contact_id: string | null;
+  account_id: string | null;
+  author_principal_id: string;
+  note: string;
+  created_at: string | Date;
 };
 
 type EmailDispatchRow = {
@@ -750,6 +794,53 @@ function mapEmailAccountConnectionRow(row: EmailAccountConnectionRow): EmailAcco
     lastError: row.last_error,
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at)
+  };
+}
+
+function mapAaliyahCrmContactRow(row: AaliyahCrmContactRow): AaliyahCrmContactRecord {
+  return {
+    id: row.contact_id,
+    tenantId: row.tenant_id,
+    principalId: row.principal_id,
+    email: row.email,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    accountId: row.account_id,
+    roleTitle: row.role_title,
+    phone: row.phone,
+    status: row.status,
+    relationshipStage: row.relationship_stage,
+    lastTouchedAt: row.last_touched_at ? toIsoString(row.last_touched_at) : null,
+    nextActionAt: row.next_action_at ? toIsoString(row.next_action_at) : null,
+    notesSummary: row.notes_summary,
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at)
+  };
+}
+
+function mapAaliyahCrmAccountRow(row: AaliyahCrmAccountRow): AaliyahCrmAccountRecord {
+  return {
+    id: row.account_id,
+    tenantId: row.tenant_id,
+    name: row.name,
+    website: row.website,
+    industry: row.industry,
+    status: row.status,
+    notesSummary: row.notes_summary,
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at)
+  };
+}
+
+function mapAaliyahCrmNoteRow(row: AaliyahCrmNoteRow): AaliyahCrmNoteRecord {
+  return {
+    id: row.note_id,
+    tenantId: row.tenant_id,
+    contactId: row.contact_id,
+    accountId: row.account_id,
+    authorPrincipalId: row.author_principal_id,
+    note: row.note,
+    createdAt: toIsoString(row.created_at)
   };
 }
 
@@ -2930,6 +3021,292 @@ export class AgentOsRepository {
       )
     );
     return res.rows[0] ? mapEmailAccountConnectionRow(res.rows[0]) : null;
+  }
+
+  async createAaliyahCrmContact(args: {
+    tenantId: string;
+    contactId: string;
+    principalId: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    accountId: string | null;
+    roleTitle: string | null;
+    phone: string | null;
+    status: AaliyahCrmContactRecord["status"];
+    relationshipStage: AaliyahCrmContactRecord["relationshipStage"];
+    lastTouchedAt: string | null;
+    nextActionAt: string | null;
+    notesSummary: string | null;
+    createdAt?: string;
+  }): Promise<AaliyahCrmContactRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    try {
+      const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+        client.query<AaliyahCrmContactRow>(
+          `
+          INSERT INTO aaliyah_crm_contacts (
+            tenant_id, contact_id, principal_id, email, first_name, last_name, account_id,
+            role_title, phone, status, relationship_stage, last_touched_at, next_action_at,
+            notes_summary, created_at, updated_at
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7,
+            $8, $9, $10, $11, $12, $13,
+            $14, $15, $15
+          )
+          RETURNING contact_id, tenant_id, principal_id, email, first_name, last_name, account_id,
+                    role_title, phone, status, relationship_stage, last_touched_at, next_action_at,
+                    notes_summary, created_at, updated_at
+          `,
+          [
+            args.tenantId,
+            args.contactId,
+            args.principalId,
+            args.email,
+            args.firstName,
+            args.lastName,
+            args.accountId,
+            args.roleTitle,
+            args.phone,
+            args.status,
+            args.relationshipStage,
+            args.lastTouchedAt,
+            args.nextActionAt,
+            args.notesSummary,
+            createdAt
+          ]
+        )
+      );
+      return mapAaliyahCrmContactRow(res.rows[0]!);
+    } catch (error) {
+      if ((error as { code?: string }).code === "23505") {
+        throw new Error("aaliyah_crm_contact_conflict");
+      }
+      throw error;
+    }
+  }
+
+  async updateAaliyahCrmContact(args: {
+    tenantId: string;
+    contactId: string;
+    email?: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    accountId?: string | null;
+    roleTitle?: string | null;
+    phone?: string | null;
+    status?: AaliyahCrmContactRecord["status"];
+    relationshipStage?: AaliyahCrmContactRecord["relationshipStage"];
+    lastTouchedAt?: string | null;
+    nextActionAt?: string | null;
+    notesSummary?: string | null;
+    updatedAt?: string;
+  }): Promise<AaliyahCrmContactRecord> {
+    const updatedAt = args.updatedAt ?? new Date().toISOString();
+    try {
+      const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+        client.query<AaliyahCrmContactRow>(
+          `
+          UPDATE aaliyah_crm_contacts
+          SET email = COALESCE($3, email),
+              first_name = COALESCE($4, first_name),
+              last_name = COALESCE($5, last_name),
+              account_id = $6,
+              role_title = COALESCE($7, role_title),
+              phone = COALESCE($8, phone),
+              status = COALESCE($9, status),
+              relationship_stage = COALESCE($10, relationship_stage),
+              last_touched_at = $11,
+              next_action_at = $12,
+              notes_summary = $13,
+              updated_at = $14
+          WHERE tenant_id = $1 AND contact_id = $2
+          RETURNING contact_id, tenant_id, principal_id, email, first_name, last_name, account_id,
+                    role_title, phone, status, relationship_stage, last_touched_at, next_action_at,
+                    notes_summary, created_at, updated_at
+          `,
+          [
+            args.tenantId,
+            args.contactId,
+            args.email ?? null,
+            args.firstName ?? null,
+            args.lastName ?? null,
+            args.accountId ?? null,
+            args.roleTitle ?? null,
+            args.phone ?? null,
+            args.status ?? null,
+            args.relationshipStage ?? null,
+            args.lastTouchedAt ?? null,
+            args.nextActionAt ?? null,
+            args.notesSummary ?? null,
+            updatedAt
+          ]
+        )
+      );
+      if (!res.rows[0]) {
+        throw new Error("aaliyah_crm_contact_not_found");
+      }
+      return mapAaliyahCrmContactRow(res.rows[0]);
+    } catch (error) {
+      if ((error as { code?: string }).code === "23505") {
+        throw new Error("aaliyah_crm_contact_conflict");
+      }
+      throw error;
+    }
+  }
+
+  async getAaliyahCrmContactById(args: { tenantId: string; contactId: string }): Promise<AaliyahCrmContactRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahCrmContactRow>(
+        `
+        SELECT contact_id, tenant_id, principal_id, email, first_name, last_name, account_id,
+               role_title, phone, status, relationship_stage, last_touched_at, next_action_at,
+               notes_summary, created_at, updated_at
+        FROM aaliyah_crm_contacts
+        WHERE tenant_id = $1 AND contact_id = $2
+        `,
+        [args.tenantId, args.contactId]
+      )
+    );
+    return res.rows[0] ? mapAaliyahCrmContactRow(res.rows[0]) : null;
+  }
+
+  async getAaliyahCrmContactByEmail(args: { tenantId: string; email: string }): Promise<AaliyahCrmContactRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahCrmContactRow>(
+        `
+        SELECT contact_id, tenant_id, principal_id, email, first_name, last_name, account_id,
+               role_title, phone, status, relationship_stage, last_touched_at, next_action_at,
+               notes_summary, created_at, updated_at
+        FROM aaliyah_crm_contacts
+        WHERE tenant_id = $1 AND email = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.email]
+      )
+    );
+    return res.rows[0] ? mapAaliyahCrmContactRow(res.rows[0]) : null;
+  }
+
+  async createAaliyahCrmAccount(args: {
+    tenantId: string;
+    accountId: string;
+    name: string;
+    website: string | null;
+    industry: string | null;
+    status: AaliyahCrmAccountRecord["status"];
+    notesSummary: string | null;
+    createdAt?: string;
+  }): Promise<AaliyahCrmAccountRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahCrmAccountRow>(
+        `
+        INSERT INTO aaliyah_crm_accounts (
+          tenant_id, account_id, name, website, industry, status, notes_summary, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+        RETURNING account_id, tenant_id, name, website, industry, status, notes_summary, created_at, updated_at
+        `,
+        [args.tenantId, args.accountId, args.name, args.website, args.industry, args.status, args.notesSummary, createdAt]
+      )
+    );
+    return mapAaliyahCrmAccountRow(res.rows[0]!);
+  }
+
+  async updateAaliyahCrmAccount(args: {
+    tenantId: string;
+    accountId: string;
+    name?: string;
+    website?: string | null;
+    industry?: string | null;
+    status?: AaliyahCrmAccountRecord["status"];
+    notesSummary?: string | null;
+    updatedAt?: string;
+  }): Promise<AaliyahCrmAccountRecord> {
+    const updatedAt = args.updatedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahCrmAccountRow>(
+        `
+        UPDATE aaliyah_crm_accounts
+        SET name = COALESCE($3, name),
+            website = $4,
+            industry = $5,
+            status = COALESCE($6, status),
+            notes_summary = $7,
+            updated_at = $8
+        WHERE tenant_id = $1 AND account_id = $2
+        RETURNING account_id, tenant_id, name, website, industry, status, notes_summary, created_at, updated_at
+        `,
+        [args.tenantId, args.accountId, args.name ?? null, args.website ?? null, args.industry ?? null, args.status ?? null, args.notesSummary ?? null, updatedAt]
+      )
+    );
+    if (!res.rows[0]) {
+      throw new Error("aaliyah_crm_account_not_found");
+    }
+    return mapAaliyahCrmAccountRow(res.rows[0]);
+  }
+
+  async getAaliyahCrmAccountById(args: { tenantId: string; accountId: string }): Promise<AaliyahCrmAccountRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahCrmAccountRow>(
+        `
+        SELECT account_id, tenant_id, name, website, industry, status, notes_summary, created_at, updated_at
+        FROM aaliyah_crm_accounts
+        WHERE tenant_id = $1 AND account_id = $2
+        `,
+        [args.tenantId, args.accountId]
+      )
+    );
+    return res.rows[0] ? mapAaliyahCrmAccountRow(res.rows[0]) : null;
+  }
+
+  async createAaliyahCrmNote(args: {
+    tenantId: string;
+    noteId: string;
+    contactId: string | null;
+    accountId: string | null;
+    authorPrincipalId: string;
+    note: string;
+    createdAt?: string;
+  }): Promise<AaliyahCrmNoteRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahCrmNoteRow>(
+        `
+        INSERT INTO aaliyah_crm_notes (
+          tenant_id, note_id, contact_id, account_id, author_principal_id, note, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING note_id, tenant_id, contact_id, account_id, author_principal_id, note, created_at
+        `,
+        [args.tenantId, args.noteId, args.contactId, args.accountId, args.authorPrincipalId, args.note, createdAt]
+      )
+    );
+    return mapAaliyahCrmNoteRow(res.rows[0]!);
+  }
+
+  async listAaliyahCrmNotesForContext(args: {
+    tenantId: string;
+    contactId?: string | null;
+    accountId?: string | null;
+    limit?: number;
+  }): Promise<AaliyahCrmNoteRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahCrmNoteRow>(
+        `
+        SELECT note_id, tenant_id, contact_id, account_id, author_principal_id, note, created_at
+        FROM aaliyah_crm_notes
+        WHERE tenant_id = $1
+          AND (
+            ($2::text IS NOT NULL AND contact_id = $2)
+            OR ($3::text IS NOT NULL AND account_id = $3)
+          )
+        ORDER BY created_at DESC
+        LIMIT $4
+        `,
+        [args.tenantId, args.contactId ?? null, args.accountId ?? null, args.limit ?? 10]
+      )
+    );
+    return res.rows.map(mapAaliyahCrmNoteRow);
   }
 
   async createAaliyahFounderPreference(args: {

@@ -76,6 +76,14 @@ import type {
   AaliyahSessionResetSignal as AaliyahSessionResetSignalShape
 } from "../aaliyah/diagnostics-types.js";
 import type {
+  AaliyahCrmAccount as AaliyahCrmAccountShape,
+  AaliyahCrmAccountStatus,
+  AaliyahCrmContact as AaliyahCrmContactShape,
+  AaliyahCrmContactStatus,
+  AaliyahCrmNote as AaliyahCrmNoteShape,
+  AaliyahCrmRelationshipStage
+} from "../aaliyah/crm-types.js";
+import type {
   AssignmentPolicyDecision,
   AssignmentRecord,
   ExecutionRunRecord,
@@ -305,6 +313,67 @@ export const EmailAccountConnectionRecordSchema = z.object({
   updatedAt: z.string().datetime()
 }) satisfies z.ZodType<EmailAccountConnectionRecordShape>;
 export type EmailAccountConnectionRecord = z.infer<typeof EmailAccountConnectionRecordSchema>;
+
+export const AaliyahCrmContactStatusSchema = z.enum(["lead", "active", "inactive", "blocked"]) satisfies z.ZodType<AaliyahCrmContactStatus>;
+export type AaliyahCrmContactStatusRecord = z.infer<typeof AaliyahCrmContactStatusSchema>;
+
+export const AaliyahCrmRelationshipStageSchema = z.enum([
+  "new",
+  "contacted",
+  "qualified",
+  "proposal",
+  "client",
+  "follow_up",
+  "dormant"
+]) satisfies z.ZodType<AaliyahCrmRelationshipStage>;
+export type AaliyahCrmRelationshipStageRecord = z.infer<typeof AaliyahCrmRelationshipStageSchema>;
+
+export const AaliyahCrmAccountStatusSchema = z.enum(["active", "inactive"]) satisfies z.ZodType<AaliyahCrmAccountStatus>;
+export type AaliyahCrmAccountStatusRecord = z.infer<typeof AaliyahCrmAccountStatusSchema>;
+
+export const AaliyahCrmContactSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  principalId: z.string().min(1),
+  email: z.string().email(),
+  firstName: z.string().nullable(),
+  lastName: z.string().nullable(),
+  accountId: z.string().min(1).nullable(),
+  roleTitle: z.string().nullable(),
+  phone: z.string().nullable(),
+  status: AaliyahCrmContactStatusSchema,
+  relationshipStage: AaliyahCrmRelationshipStageSchema,
+  lastTouchedAt: z.string().datetime().nullable(),
+  nextActionAt: z.string().datetime().nullable(),
+  notesSummary: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+}) satisfies z.ZodType<AaliyahCrmContactShape>;
+export type AaliyahCrmContactRecord = z.infer<typeof AaliyahCrmContactSchema>;
+
+export const AaliyahCrmAccountSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  name: z.string().min(1),
+  website: z.string().nullable(),
+  industry: z.string().nullable(),
+  status: AaliyahCrmAccountStatusSchema,
+  notesSummary: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+}) satisfies z.ZodType<AaliyahCrmAccountShape>;
+export type AaliyahCrmAccountRecord = z.infer<typeof AaliyahCrmAccountSchema>;
+
+export const AaliyahCrmNoteSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  contactId: z.string().min(1).nullable(),
+  accountId: z.string().min(1).nullable(),
+  authorPrincipalId: z.string().min(1),
+  note: z.string().min(1),
+  createdAt: z.string().datetime()
+}) satisfies z.ZodType<AaliyahCrmNoteShape>;
+export type AaliyahCrmNoteRecord = z.infer<typeof AaliyahCrmNoteSchema>;
 
 
 const EmailRoutingTargetSchema = z.union([
@@ -968,7 +1037,15 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "workspace_calendar_event_requested",
   "workspace_calendar_event_denied",
   "workspace_calendar_event_created",
-  "workspace_calendar_event_failed"
+  "workspace_calendar_event_failed",
+  "crm_contact_created",
+  "crm_contact_updated",
+  "crm_account_created",
+  "crm_account_updated",
+  "crm_note_created",
+  "crm_context_requested",
+  "crm_denied",
+  "crm_failed"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 

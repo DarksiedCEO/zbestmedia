@@ -7,6 +7,7 @@ import {
   AaliyahFounderBriefingService,
   AaliyahFounderInboxTriageService,
   AaliyahCalendarService,
+  AaliyahCrmService,
   AaliyahMemoryBoundaryService,
   AaliyahPreferenceService,
   AaliyahWorkspaceService,
@@ -63,6 +64,16 @@ import {
   AaliyahCommandSurfaceQuerySchema,
   AaliyahCalendarAvailabilityBodySchema,
   AaliyahCalendarEventBodySchema,
+  AaliyahCrmAccountCreateBodySchema,
+  AaliyahCrmAccountIdParamSchema,
+  AaliyahCrmAccountResponseSchema,
+  AaliyahCrmContactCreateBodySchema,
+  AaliyahCrmContactByEmailQuerySchema,
+  AaliyahCrmContactIdParamSchema,
+  AaliyahCrmContactResponseSchema,
+  AaliyahCrmContextResponseSchema,
+  AaliyahCrmNoteCreateBodySchema,
+  AaliyahCrmNoteResponseSchema,
   AaliyahWorkspaceGmailDraftBodySchema,
   AaliyahRuntimeRequestBodySchema,
   AssignmentRecordIdParamSchema,
@@ -163,6 +174,7 @@ export function agentRoutes(opts: {
   aaliyahDiagnosticsService: AaliyahDiagnosticsService;
   aaliyahWorkspaceService: AaliyahWorkspaceService;
   aaliyahCalendarService: AaliyahCalendarService;
+  aaliyahCrmService: AaliyahCrmService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
   aaliyahTriageService: AaliyahFounderInboxTriageService;
   aaliyahFollowThroughService: AaliyahFollowThroughService;
@@ -1024,6 +1036,210 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_workspace_calendar_event_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/crm/contacts", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = AaliyahCrmContactCreateBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahCrmService.createContact({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        input: {
+          email: body.data.email,
+          firstName: body.data.firstName,
+          lastName: body.data.lastName,
+          accountId: body.data.accountId,
+          roleTitle: body.data.roleTitle,
+          phone: body.data.phone,
+          status: body.data.status,
+          relationshipStage: body.data.relationshipStage,
+          lastTouchedAt: body.data.lastTouchedAt,
+          nextActionAt: body.data.nextActionAt,
+          notesSummary: body.data.notesSummary
+        }
+      });
+
+      return reply.code(201).send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_crm_contact_result",
+        result
+      });
+    });
+
+    app.patch("/v1/agent-os/aaliyah/crm/contacts/:contactId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = AaliyahCrmContactIdParamSchema.safeParse(req.params ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      const body = AaliyahCrmContactCreateBodySchema.partial().extend({ mode: AaliyahCrmContactCreateBodySchema.shape.mode }).safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahCrmService.updateContact({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        contactId: path.data.contactId,
+        input: {
+          email: body.data.email,
+          firstName: body.data.firstName,
+          lastName: body.data.lastName,
+          accountId: body.data.accountId,
+          roleTitle: body.data.roleTitle,
+          phone: body.data.phone,
+          status: body.data.status,
+          relationshipStage: body.data.relationshipStage,
+          lastTouchedAt: body.data.lastTouchedAt,
+          nextActionAt: body.data.nextActionAt,
+          notesSummary: body.data.notesSummary
+        }
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_crm_contact_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/crm/contacts/by-email", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = AaliyahCrmContactByEmailQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahCrmService.getContactByEmail({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        email: query.data.email
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_crm_contact_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/crm/accounts", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = AaliyahCrmAccountCreateBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahCrmService.createAccount({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        input: {
+          name: body.data.name,
+          website: body.data.website,
+          industry: body.data.industry,
+          status: body.data.status,
+          notesSummary: body.data.notesSummary
+        }
+      });
+
+      return reply.code(201).send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_crm_account_result",
+        result
+      });
+    });
+
+    app.patch("/v1/agent-os/aaliyah/crm/accounts/:accountId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = AaliyahCrmAccountIdParamSchema.safeParse(req.params ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      const body = AaliyahCrmAccountCreateBodySchema.partial().extend({ mode: AaliyahCrmAccountCreateBodySchema.shape.mode }).safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahCrmService.updateAccount({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        accountId: path.data.accountId,
+        input: {
+          name: body.data.name,
+          website: body.data.website,
+          industry: body.data.industry,
+          status: body.data.status,
+          notesSummary: body.data.notesSummary
+        }
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_crm_account_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/crm/notes", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = AaliyahCrmNoteCreateBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahCrmService.addNote({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        input: {
+          contactId: body.data.contactId,
+          accountId: body.data.accountId,
+          note: body.data.note
+        }
+      });
+
+      return reply.code(201).send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_crm_note_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/crm/context/by-email", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = AaliyahCrmContactByEmailQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahCrmService.getContextByEmail({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        email: query.data.email
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_crm_context_result",
         result
       });
     });

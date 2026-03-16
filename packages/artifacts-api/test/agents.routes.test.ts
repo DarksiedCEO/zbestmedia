@@ -34,6 +34,10 @@ import {
   AaliyahInterruptionsResponseSchema,
   AaliyahCalendarAvailabilityResponseSchema,
   AaliyahCalendarEventResponseSchema,
+  AaliyahCrmAccountResponseSchema,
+  AaliyahCrmContactResponseSchema,
+  AaliyahCrmContextResponseSchema,
+  AaliyahCrmNoteResponseSchema,
   AaliyahWorkspaceGmailDraftResponseSchema,
   AaliyahMemoryBoundaryResponseSchema,
   AaliyahInboxItemResponseSchema,
@@ -2227,6 +2231,164 @@ describe("agent routes", () => {
       message: input.dryRun === false ? "Calendar event created successfully." : "Calendar event simulated successfully."
     }))
   };
+  const aaliyahCrmService: any = {
+    createContact: vi.fn(async ({ input }: { input: { email: string } }) => ({
+      ok: true,
+      contact: {
+        id: "crm-contact:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        principalId: "actor-1",
+        email: input.email.toLowerCase(),
+        firstName: "John",
+        lastName: "Smith",
+        accountId: "crm-account:1",
+        roleTitle: "CEO",
+        phone: null,
+        status: "lead",
+        relationshipStage: "follow_up",
+        lastTouchedAt: "2026-03-15T00:00:00.000Z",
+        nextActionAt: "2026-03-20T00:00:00.000Z",
+        notesSummary: "Waiting on proposal revision",
+        createdAt: "2026-03-15T00:00:00.000Z",
+        updatedAt: "2026-03-15T00:00:00.000Z"
+      },
+      message: "CRM contact created successfully."
+    })),
+    updateContact: vi.fn(async () => ({
+      ok: true,
+      contact: {
+        id: "crm-contact:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        principalId: "actor-1",
+        email: "john@acme.com",
+        firstName: "John",
+        lastName: "Smith",
+        accountId: "crm-account:1",
+        roleTitle: "CEO",
+        phone: null,
+        status: "active",
+        relationshipStage: "follow_up",
+        lastTouchedAt: "2026-03-15T00:00:00.000Z",
+        nextActionAt: "2026-03-20T00:00:00.000Z",
+        notesSummary: "Waiting on proposal revision",
+        createdAt: "2026-03-15T00:00:00.000Z",
+        updatedAt: "2026-03-16T00:00:00.000Z"
+      },
+      message: "CRM contact updated successfully."
+    })),
+    getContactByEmail: vi.fn(async () => ({
+      ok: true,
+      contact: {
+        id: "crm-contact:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        principalId: "actor-1",
+        email: "john@acme.com",
+        firstName: "John",
+        lastName: "Smith",
+        accountId: "crm-account:1",
+        roleTitle: "CEO",
+        phone: null,
+        status: "lead",
+        relationshipStage: "follow_up",
+        lastTouchedAt: "2026-03-15T00:00:00.000Z",
+        nextActionAt: "2026-03-20T00:00:00.000Z",
+        notesSummary: "Waiting on proposal revision",
+        createdAt: "2026-03-15T00:00:00.000Z",
+        updatedAt: "2026-03-15T00:00:00.000Z"
+      },
+      message: "CRM contact loaded successfully."
+    })),
+    createAccount: vi.fn(async () => ({
+      ok: true,
+      account: {
+        id: "crm-account:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        name: "ACME Corp",
+        website: "https://acme.example/",
+        industry: "Media",
+        status: "active",
+        notesSummary: "Important client",
+        createdAt: "2026-03-15T00:00:00.000Z",
+        updatedAt: "2026-03-15T00:00:00.000Z"
+      },
+      message: "CRM account created successfully."
+    })),
+    updateAccount: vi.fn(async () => ({
+      ok: true,
+      account: {
+        id: "crm-account:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        name: "ACME Corp",
+        website: "https://acme.example/",
+        industry: "Media",
+        status: "active",
+        notesSummary: "Important client",
+        createdAt: "2026-03-15T00:00:00.000Z",
+        updatedAt: "2026-03-16T00:00:00.000Z"
+      },
+      message: "CRM account updated successfully."
+    })),
+    addNote: vi.fn(async () => ({
+      ok: true,
+      note: {
+        id: "crm-note:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        contactId: "crm-contact:1",
+        accountId: "crm-account:1",
+        authorPrincipalId: "actor-1",
+        note: "Waiting on proposal revision",
+        createdAt: "2026-03-15T00:00:00.000Z"
+      },
+      message: "CRM note created successfully."
+    })),
+    getContextByEmail: vi.fn(async () => ({
+      ok: true,
+      context: {
+        contact: {
+          id: "crm-contact:1",
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          principalId: "actor-1",
+          email: "john@acme.com",
+          firstName: "John",
+          lastName: "Smith",
+          accountId: "crm-account:1",
+          roleTitle: "CEO",
+          phone: null,
+          status: "lead",
+          relationshipStage: "follow_up",
+          lastTouchedAt: "2026-03-15T00:00:00.000Z",
+          nextActionAt: "2026-03-20T00:00:00.000Z",
+          notesSummary: "Waiting on proposal revision",
+          createdAt: "2026-03-15T00:00:00.000Z",
+          updatedAt: "2026-03-15T00:00:00.000Z"
+        },
+        account: {
+          id: "crm-account:1",
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          name: "ACME Corp",
+          website: "https://acme.example/",
+          industry: "Media",
+          status: "active",
+          notesSummary: "Important client",
+          createdAt: "2026-03-15T00:00:00.000Z",
+          updatedAt: "2026-03-15T00:00:00.000Z"
+        },
+        recentNotes: [
+          {
+            id: "crm-note:1",
+            tenantId: "11111111-1111-4111-8111-111111111111",
+            contactId: "crm-contact:1",
+            accountId: "crm-account:1",
+            authorPrincipalId: "actor-1",
+            note: "Waiting on proposal revision",
+            createdAt: "2026-03-15T00:00:00.000Z"
+          }
+        ],
+        summary: "John Smith is in follow_up stage at ACME Corp."
+      },
+      message: "CRM context loaded successfully."
+    }))
+  };
   const aaliyahMemoryBoundaryService = {
     getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
       generatedAt: "2026-03-15T00:00:00.000Z",
@@ -3161,6 +3323,7 @@ describe("agent routes", () => {
         aaliyahDiagnosticsService: aaliyahDiagnosticsService as never,
         aaliyahWorkspaceService: aaliyahWorkspaceService as never,
         aaliyahCalendarService: aaliyahCalendarService as never,
+        aaliyahCrmService: aaliyahCrmService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
         aaliyahFollowThroughService: aaliyahFollowThroughService as never,
@@ -3695,6 +3858,114 @@ describe("agent routes", () => {
       expect(result.result.errorCode).toBe("PROVIDER_UNAVAILABLE");
       expect(result.result.message).toBe("Calendar provider is unavailable.");
     }
+  });
+
+  it("supports founder-safe CRM routes", async () => {
+    const createContactRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/crm/contacts",
+      payload: {
+        mode: "founder",
+        email: "John@Acme.com",
+        firstName: "John",
+        accountId: "crm-account:1"
+      }
+    });
+
+    expect(createContactRes.statusCode).toBe(201);
+    const createContact = AaliyahCrmContactResponseSchema.parse(createContactRes.json());
+    expect(createContact.result.ok).toBe(true);
+    expect(aaliyahCrmService.createContact).toHaveBeenCalledWith({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      actorId: "actor-1",
+      principalContext: "founder",
+      mode: "founder",
+      input: {
+        email: "John@Acme.com",
+        firstName: "John",
+        lastName: undefined,
+        accountId: "crm-account:1",
+        roleTitle: undefined,
+        phone: undefined,
+        status: undefined,
+        relationshipStage: undefined,
+        lastTouchedAt: undefined,
+        nextActionAt: undefined,
+        notesSummary: undefined
+      }
+    });
+
+    const createAccountRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/crm/accounts",
+      payload: {
+        mode: "founder",
+        name: "ACME Corp",
+        website: "acme.example"
+      }
+    });
+    expect(createAccountRes.statusCode).toBe(201);
+    AaliyahCrmAccountResponseSchema.parse(createAccountRes.json());
+
+    const noteRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/crm/notes",
+      payload: {
+        mode: "founder",
+        contactId: "crm-contact:1",
+        note: "Waiting on proposal revision"
+      }
+    });
+    expect(noteRes.statusCode).toBe(201);
+    AaliyahCrmNoteResponseSchema.parse(noteRes.json());
+
+    const contextRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/crm/context/by-email?mode=founder&email=john%40acme.com"
+    });
+    expect(contextRes.statusCode).toBe(200);
+    const context = AaliyahCrmContextResponseSchema.parse(contextRes.json());
+    expect(context.result.ok).toBe(true);
+  });
+
+  it("normalizes CRM route conflicts without leaking internals", async () => {
+    aaliyahCrmService.createContact.mockResolvedValueOnce({
+      ok: false,
+      denialCode: null,
+      errorCode: "CONFLICT",
+      retryable: false,
+      message: "CRM contact already exists for this email."
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/crm/contacts",
+      payload: {
+        mode: "founder",
+        email: "john@acme.com"
+      }
+    });
+
+    expect(res.statusCode).toBe(201);
+    const result = AaliyahCrmContactResponseSchema.parse(res.json());
+    expect(result.result.ok).toBe(false);
+    if (!result.result.ok) {
+      expect(result.result.errorCode).toBe("CONFLICT");
+      expect(result.result.message).toBe("CRM contact already exists for this email.");
+    }
+  });
+
+  it("rejects CRM routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahCrmService.getContextByEmail.mockClear();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/crm/context/by-email?mode=founder&email=john%40acme.com"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahCrmService.getContextByEmail).not.toHaveBeenCalled();
   });
 
   it("exposes founder preference mutation routes", async () => {

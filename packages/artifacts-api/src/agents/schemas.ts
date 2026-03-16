@@ -5,6 +5,9 @@ import {
   AgentLifecycleStatusSchema,
   AgentTaskDomainSchema,
   AssignmentRecordSchema,
+  AaliyahCrmAccountSchema,
+  AaliyahCrmContactSchema,
+  AaliyahCrmNoteSchema,
   AaliyahFounderPreferenceRecordSchema,
   EmailAccountConnectionRecordSchema,
   EmailDispatchRecordSchema,
@@ -365,6 +368,113 @@ export const AaliyahCalendarEventResponseSchema = z.object({
     AaliyahCalendarEventSuccessSchema,
     AaliyahCalendarEventFailureSchema
   ])
+});
+
+export const AaliyahCrmContactCreateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]),
+  email: z.string().email(),
+  firstName: z.string().min(1).optional(),
+  lastName: z.string().min(1).optional(),
+  accountId: z.string().min(1).optional(),
+  roleTitle: z.string().min(1).optional(),
+  phone: z.string().min(1).optional(),
+  status: z.enum(["lead", "active", "inactive", "blocked"]).optional(),
+  relationshipStage: z.enum(["new", "contacted", "qualified", "proposal", "client", "follow_up", "dormant"]).optional(),
+  lastTouchedAt: z.string().datetime().optional(),
+  nextActionAt: z.string().datetime().optional(),
+  notesSummary: z.string().min(1).optional()
+});
+
+export const AaliyahCrmAccountCreateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]),
+  name: z.string().min(1),
+  website: z.string().min(1).optional(),
+  industry: z.string().min(1).optional(),
+  status: z.enum(["active", "inactive"]).optional(),
+  notesSummary: z.string().min(1).optional()
+});
+
+export const AaliyahCrmNoteCreateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]),
+  contactId: z.string().min(1).optional(),
+  accountId: z.string().min(1).optional(),
+  note: z.string().min(1)
+});
+
+export const AaliyahCrmContactIdParamSchema = z.object({
+  contactId: z.string().min(1)
+});
+
+export const AaliyahCrmAccountIdParamSchema = z.object({
+  accountId: z.string().min(1)
+});
+
+export const AaliyahCrmContactByEmailQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  email: z.string().email()
+});
+
+const AaliyahCrmFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const AaliyahCrmContactSuccessSchema = z.object({
+  ok: z.literal(true),
+  contact: AaliyahCrmContactSchema,
+  message: z.string().min(1)
+});
+
+const AaliyahCrmAccountSuccessSchema = z.object({
+  ok: z.literal(true),
+  account: AaliyahCrmAccountSchema,
+  message: z.string().min(1)
+});
+
+const AaliyahCrmNoteSuccessSchema = z.object({
+  ok: z.literal(true),
+  note: AaliyahCrmNoteSchema,
+  message: z.string().min(1)
+});
+
+const AaliyahCrmContextSummarySchema = z.object({
+  contact: AaliyahCrmContactSchema.nullable(),
+  account: AaliyahCrmAccountSchema.nullable(),
+  recentNotes: z.array(AaliyahCrmNoteSchema),
+  summary: z.string()
+});
+
+const AaliyahCrmContextSuccessSchema = z.object({
+  ok: z.literal(true),
+  context: AaliyahCrmContextSummarySchema,
+  message: z.string().min(1)
+});
+
+export const AaliyahCrmContactResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_crm_contact_result"),
+  result: z.discriminatedUnion("ok", [AaliyahCrmContactSuccessSchema, AaliyahCrmFailureSchema])
+});
+
+export const AaliyahCrmAccountResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_crm_account_result"),
+  result: z.discriminatedUnion("ok", [AaliyahCrmAccountSuccessSchema, AaliyahCrmFailureSchema])
+});
+
+export const AaliyahCrmNoteResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_crm_note_result"),
+  result: z.discriminatedUnion("ok", [AaliyahCrmNoteSuccessSchema, AaliyahCrmFailureSchema])
+});
+
+export const AaliyahCrmContextResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_crm_context_result"),
+  result: z.discriminatedUnion("ok", [AaliyahCrmContextSuccessSchema, AaliyahCrmFailureSchema])
 });
 
 export const BrandPipelineAdvanceBodySchema = z.object({
