@@ -185,7 +185,10 @@ function buildRepository() {
       principalId: "principal-1",
       accountEmailAddress: args.accountEmailAddress ?? "ops@zbestmedia.com",
       connectionStatus: args.connectionStatus ?? "connected",
-      grantedScopes: args.grantedScopes ?? ["https://www.googleapis.com/auth/gmail.readonly"],
+      grantedScopes: args.grantedScopes ?? [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.compose"
+      ],
       tokenReference: args.tokenReference ?? "secret:gmail:ops",
       externalAccountId: args.externalAccountId ?? "gmail-user-1",
       draftOnlyMode: true,
@@ -207,7 +210,10 @@ function buildRepository() {
       principalId: "principal-1",
       accountEmailAddress: "ops@zbestmedia.com",
       connectionStatus: "connected",
-      grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+      grantedScopes: [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.compose"
+      ],
       tokenReference: "secret:gmail:ops",
       externalAccountId: "gmail-user-1",
       draftOnlyMode: true,
@@ -257,12 +263,18 @@ function buildGmailRuntime(thread: NormalizedEmailThread): GmailRuntimeGateway {
       authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth?client_id=test",
       state,
       redirectUri: "https://example.com/oauth/callback",
-      scopes: ["https://www.googleapis.com/auth/gmail.readonly"]
+      scopes: [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.compose"
+      ]
     })),
     exchangeAuthorizationCode: vi.fn(async () => ({
       providerAccountId: "gmail-user-1",
       accountEmailAddress: "ops@zbestmedia.com",
-      grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+      grantedScopes: [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.compose"
+      ],
       tokenReference: "secret:gmail:ops",
       refreshTokenStored: true,
       accessTokenExpiresAt: null
@@ -495,7 +507,10 @@ describe("email assistant service", () => {
       principalId: "principal-1",
       accountEmailAddress: "ops@zbestmedia.com",
       connectionStatus: "connected",
-      grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+      grantedScopes: [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.compose"
+      ],
       tokenReference: "secret:gmail:ops",
       externalAccountId: "gmail-user-1",
       draftOnlyMode: true,

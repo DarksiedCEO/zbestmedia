@@ -59,7 +59,10 @@ function buildAccount(overrides: Record<string, unknown> = {}) {
     principalId: "principal-1",
     accountEmailAddress: "ops@zbestmedia.com",
     connectionStatus: "connected",
-    grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+    grantedScopes: [
+      "https://www.googleapis.com/auth/gmail.readonly",
+      "https://www.googleapis.com/auth/gmail.compose"
+    ],
     tokenReference: "secret:gmail:ops",
     externalAccountId: "gmail-user-1",
     draftOnlyMode: true,

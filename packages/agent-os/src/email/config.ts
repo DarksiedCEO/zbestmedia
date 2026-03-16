@@ -2,7 +2,10 @@ import { z } from "zod";
 
 import type { EmailConnectionMode, EmailProvider } from "./types.js";
 
-export const DEFAULT_GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"] as const;
+export const DEFAULT_GMAIL_SCOPES = [
+  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/gmail.compose"
+] as const;
 export const DEFAULT_GMAIL_ALLOWED_LABEL_IDS = ["INBOX", "UNREAD"] as const;
 
 export const GmailProcessingModeSchema = z.enum(["poll", "watch"]);

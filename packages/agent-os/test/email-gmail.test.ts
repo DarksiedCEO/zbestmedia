@@ -19,7 +19,10 @@ describe("gmail connector scaffold", () => {
           clientId: "client-id",
           clientSecretReference: "secret:gmail-client",
           redirectUri: "https://example.com/oauth",
-          grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+          grantedScopes: [
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/gmail.compose"
+          ],
           tokenReference: "secret:gmail:ops"
         })
     ).toThrowError(GmailConnectorNotConfiguredError);
@@ -33,7 +36,10 @@ describe("gmail connector scaffold", () => {
       clientId: "client-id",
       clientSecretReference: "secret:gmail-client",
       redirectUri: "https://example.com/oauth",
-      grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+      grantedScopes: [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.compose"
+      ],
       tokenReference: "secret:gmail:ops"
     });
 
@@ -71,6 +77,10 @@ describe("gmail connector scaffold", () => {
     });
 
     expect(start.authorizationUrl).toContain("accounts.google.com");
+    expect(start.scopes).toEqual([
+      "https://www.googleapis.com/auth/gmail.readonly",
+      "https://www.googleapis.com/auth/gmail.compose"
+    ]);
     expect(start.redirectUri).toBe("https://example.com/oauth/callback");
   });
 
