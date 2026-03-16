@@ -172,9 +172,23 @@ export class GmailRuntimeScaffold implements GmailRuntimeGateway {
     };
   }
 
-  async exchangeAuthorizationCode(_args: GmailOAuthExchangeArgs): Promise<GmailOAuthExchangeResult> {
-    this.requireOauthConfig();
-    throw new GmailConnectorNotConfiguredError("gmail_oauth_exchange_not_implemented");
+  async exchangeAuthorizationCode(args: GmailOAuthExchangeArgs): Promise<GmailOAuthExchangeResult> {
+    const oauth = this.requireOauthConfig();
+    const tokenData = await exchangeOauthCode({
+      clientId: oauth.clientId,
+      clientSecret: oauth.clientSecretReference,
+      redirectUri: oauth.redirectUri,
+      code: args.code,
+    });
+    const profile = await fetchGmailProfile(tokenData.accessToken);
+    return {
+      providerAccountId: profile.emailAddress,
+      accountEmailAddress: profile.emailAddress,
+      grantedScopes: tokenData.scopes,
+      tokenReference: tokenData.refreshToken,
+      refreshTokenStored: Boolean(tokenData.refreshToken),
+      accessTokenExpiresAt: tokenData.accessTokenExpiresAt,
+    };
   }
 
   validateGrantedScopes(grantedScopes: string[]): void {
@@ -185,9 +199,23 @@ export class GmailRuntimeScaffold implements GmailRuntimeGateway {
     }
   }
 
-  async revokeConnection(_args: { accountId: string; tokenReference: string | null }): Promise<void> {
+  async revokeConnection(args: { accountId: string; tokenReference: string | null }): Promise<void> {
     this.requireOauthConfig();
-    throw new GmailConnectorNotConfiguredError("gmail_oauth_revoke_not_implemented");
+    if (!args.tokenReference) {
+      return;
+    }
+    const res = await fetch("https://oauth2.googleapis.com/revoke", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded"
+      },
+      body: new URLSearchParams({
+        token: args.tokenReference
+      })
+    });
+    if (!res.ok) {
+      throw new GmailConnectorNotConfiguredError(`gmail_oauth_revoke_failed:${res.status}`);
+    }
   }
 
   async createConnector(args: GmailConnectorFactoryArgs): Promise<GmailConnector> {
@@ -248,7 +276,49 @@ export class GmailConnectorScaffold implements GmailConnector {
   }
 
   async createDraft(_args: GmailCreateDraftArgs): Promise<GmailCreateDraftResult> {
-    throw new GmailConnectorNotConfiguredError("gmail_create_draft_not_implemented");
+    const accessToken = await refreshAccessToken({
+      clientId: this.config.clientId,
+      clientSecret: this.config.clientSecretReference,
+      refreshToken: this.config.tokenReference ?? null
+    });
+    const encodedMessage = encodeDraftMessage({
+      from: this.config.accountEmailAddress,
+      to: _args.to,
+      cc: _args.cc,
+      bcc: _args.bcc,
+      subject: _args.subject,
+      bodyText: _args.bodyText,
+      bodyHtml: _args.bodyHtml ?? null
+    });
+    const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/drafts", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        message: {
+          raw: encodedMessage,
+          threadId: _args.threadId ?? undefined
+        }
+      })
+    });
+    if (!res.ok) {
+      const body = await safeReadText(res);
+      throw new GmailConnectorNotConfiguredError(`gmail_create_draft_failed:${res.status}:${body}`);
+    }
+    const payload = (await res.json()) as {
+      id?: string;
+      message?: { threadId?: string | null };
+    };
+    if (!payload.id) {
+      throw new GmailConnectorNotConfiguredError("gmail_create_draft_missing_id");
+    }
+    return {
+      providerDraftId: payload.id,
+      providerThreadId: payload.message?.threadId ?? null,
+      createdAt: new Date().toISOString()
+    };
   }
 
   async sendApprovedDraft(_args: GmailSendDraftArgs): Promise<GmailSendDraftResult> {
@@ -258,4 +328,170 @@ export class GmailConnectorScaffold implements GmailConnector {
 
 export function buildGmailOauthState(): string {
   return `gmail-oauth:${randomUUID()}`;
+}
+
+type GoogleTokenResponse = {
+  access_token?: string;
+  expires_in?: number;
+  refresh_token?: string;
+  scope?: string;
+  token_type?: string;
+  error?: string;
+  error_description?: string;
+};
+
+type GmailProfileResponse = {
+  emailAddress?: string;
+};
+
+async function exchangeOauthCode(args: {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  code: string;
+}): Promise<{
+  accessToken: string;
+  refreshToken: string | null;
+  scopes: string[];
+  accessTokenExpiresAt: string | null;
+}> {
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams({
+      client_id: args.clientId,
+      client_secret: args.clientSecret,
+      code: args.code,
+      grant_type: "authorization_code",
+      redirect_uri: args.redirectUri
+    })
+  });
+  const payload = (await safeReadJson(res)) as GoogleTokenResponse;
+  if (!res.ok || !payload.access_token) {
+    throw new GmailConnectorNotConfiguredError(
+      `gmail_oauth_exchange_failed:${payload.error ?? res.status}:${payload.error_description ?? "unknown"}`
+    );
+  }
+  return {
+    accessToken: payload.access_token,
+    refreshToken: payload.refresh_token ?? null,
+    scopes: parseScopeList(payload.scope),
+    accessTokenExpiresAt: payload.expires_in ? new Date(Date.now() + payload.expires_in * 1000).toISOString() : null
+  };
+}
+
+async function refreshAccessToken(args: {
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string | null;
+}): Promise<string> {
+  if (!args.refreshToken) {
+    throw new GmailConnectorNotConfiguredError("gmail_refresh_token_missing");
+  }
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams({
+      client_id: args.clientId,
+      client_secret: args.clientSecret,
+      refresh_token: args.refreshToken,
+      grant_type: "refresh_token"
+    })
+  });
+  const payload = (await safeReadJson(res)) as GoogleTokenResponse;
+  if (!res.ok || !payload.access_token) {
+    throw new GmailConnectorNotConfiguredError(
+      `gmail_refresh_access_token_failed:${payload.error ?? res.status}:${payload.error_description ?? "unknown"}`
+    );
+  }
+  return payload.access_token;
+}
+
+async function fetchGmailProfile(accessToken: string): Promise<{ emailAddress: string }> {
+  const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+    headers: {
+      authorization: `Bearer ${accessToken}`
+    }
+  });
+  const payload = (await safeReadJson(res)) as GmailProfileResponse;
+  if (!res.ok || !payload.emailAddress) {
+    throw new GmailConnectorNotConfiguredError("gmail_profile_lookup_failed");
+  }
+  return {
+    emailAddress: payload.emailAddress
+  };
+}
+
+function parseScopeList(scopeValue: string | undefined): string[] {
+  if (!scopeValue) {
+    return [];
+  }
+  return scopeValue
+    .split(" ")
+    .map((scope) => scope.trim())
+    .filter((scope) => scope.length > 0);
+}
+
+function encodeDraftMessage(args: {
+  from: string;
+  to: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject: string;
+  bodyText: string;
+  bodyHtml: string | null;
+}): string {
+  const boundary = `aaliyah-${randomUUID()}`;
+  const headers = [
+    `From: ${args.from}`,
+    `To: ${args.to.join(", ")}`,
+    args.cc && args.cc.length > 0 ? `Cc: ${args.cc.join(", ")}` : null,
+    args.bcc && args.bcc.length > 0 ? `Bcc: ${args.bcc.join(", ")}` : null,
+    `Subject: ${args.subject}`,
+    "MIME-Version: 1.0",
+    args.bodyHtml
+      ? `Content-Type: multipart/alternative; boundary=\"${boundary}\"`
+      : "Content-Type: text/plain; charset=UTF-8"
+  ].filter(Boolean);
+
+  const body = args.bodyHtml
+    ? [
+        "",
+        `--${boundary}`,
+        "Content-Type: text/plain; charset=UTF-8",
+        "",
+        args.bodyText,
+        `--${boundary}`,
+        "Content-Type: text/html; charset=UTF-8",
+        "",
+        args.bodyHtml,
+        `--${boundary}--`
+      ].join("\r\n")
+    : `\r\n\r\n${args.bodyText}`;
+
+  return Buffer.from(`${headers.join("\r\n")}${body}`, "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+async function safeReadJson(res: Response): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+async function safeReadText(res: Response): Promise<string> {
+  try {
+    return await res.text();
+  } catch {
+    return "";
+  }
 }

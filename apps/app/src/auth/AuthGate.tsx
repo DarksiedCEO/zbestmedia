@@ -2,10 +2,13 @@ import React from "react";
 import { tokens } from "@zbest/ui";
 
 const SESSION_KEY = "zbest.auth.ok";
+const AUTH_BYPASS_PATHS = ["/oauth/google/callback"];
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const requiredCode = String(import.meta.env.VITE_APP_ACCESS_CODE ?? "").trim();
   const isProd = Boolean(import.meta.env.PROD);
+  const pathname = typeof window === "undefined" ? "" : window.location.pathname;
+  const bypassAuth = AUTH_BYPASS_PATHS.some((path) => pathname.startsWith(path));
   const [input, setInput] = React.useState("");
   const [authorized, setAuthorized] = React.useState<boolean>(() => {
     if (typeof window === "undefined") {
@@ -20,6 +23,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         <BlockedGate message="Access gate is required in production. Set VITE_APP_ACCESS_CODE." />
       );
     }
+    return <>{children}</>;
+  }
+
+  if (bypassAuth) {
     return <>{children}</>;
   }
 
