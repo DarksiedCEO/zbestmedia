@@ -38,6 +38,8 @@ import {
   AaliyahCrmContactResponseSchema,
   AaliyahCrmContextResponseSchema,
   AaliyahCrmNoteResponseSchema,
+  FollowThroughEngineListResponseSchema,
+  FollowThroughEngineResponseSchema,
   FounderCommandListResponseSchema,
   FounderCommandResponseSchema,
   AaliyahTaskListResponseSchema,
@@ -2597,6 +2599,76 @@ describe("agent routes", () => {
       message: "Founder commands loaded successfully."
     }))
   };
+  const aaliyahFollowThroughEngineService: any = {
+    evaluateSource: vi.fn(async ({ source }: { source: { sourceType: string; sourceId: string } }) => ({
+      ok: true,
+      record: {
+        id: "follow-through-engine:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        source,
+        policyKey: "FT-001-approved-draft-next-step",
+        decisionType: "create_task",
+        status: "eligible",
+        reason: "Approved draft command requires tracked follow-through.",
+        summary: "Created follow-up task after approved draft command.",
+        idempotencyKey: "ft:FT-001-approved-draft-next-step:founder_command:founder-command:1:abc",
+        createdArtifactIds: ["task:follow-through:1"],
+        auditEventId: "aaliyah-diagnostics:event-2",
+        metadata: {},
+        createdAt: "2026-03-16T18:05:00.000Z",
+        evaluatedAtIso: "2026-03-16T18:05:00.000Z"
+      },
+      message: "Created follow-up task after approved draft command."
+    })),
+    getRecordById: vi.fn(async ({ recordId }: { recordId: string }) => ({
+      ok: true,
+      record: {
+        id: recordId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        source: {
+          sourceType: "founder_command",
+          sourceId: "founder-command:1"
+        },
+        policyKey: "FT-001-approved-draft-next-step",
+        decisionType: "create_task",
+        status: "eligible",
+        reason: "Approved draft command requires tracked follow-through.",
+        summary: "Created follow-up task after approved draft command.",
+        idempotencyKey: "ft:FT-001-approved-draft-next-step:founder_command:founder-command:1:abc",
+        createdArtifactIds: ["task:follow-through:1"],
+        auditEventId: "aaliyah-diagnostics:event-2",
+        metadata: {},
+        createdAt: "2026-03-16T18:05:00.000Z",
+        evaluatedAtIso: "2026-03-16T18:05:00.000Z"
+      },
+      message: "Follow-through record loaded successfully."
+    })),
+    listRecords: vi.fn(async () => ({
+      ok: true,
+      records: [
+        {
+          id: "follow-through-engine:1",
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          source: {
+            sourceType: "founder_command",
+            sourceId: "founder-command:1"
+          },
+          policyKey: "FT-001-approved-draft-next-step",
+          decisionType: "create_task",
+          status: "eligible",
+          reason: "Approved draft command requires tracked follow-through.",
+          summary: "Created follow-up task after approved draft command.",
+          idempotencyKey: "ft:FT-001-approved-draft-next-step:founder_command:founder-command:1:abc",
+          createdArtifactIds: ["task:follow-through:1"],
+          auditEventId: "aaliyah-diagnostics:event-2",
+          metadata: {},
+          createdAt: "2026-03-16T18:05:00.000Z",
+          evaluatedAtIso: "2026-03-16T18:05:00.000Z"
+        }
+      ],
+      message: "Follow-through record loaded successfully."
+    }))
+  };
   const aaliyahMemoryBoundaryService = {
     getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
       generatedAt: "2026-03-15T00:00:00.000Z",
@@ -3534,6 +3606,7 @@ describe("agent routes", () => {
         aaliyahCrmService: aaliyahCrmService as never,
         aaliyahTasksService: aaliyahTasksService as never,
         aaliyahFounderCommandService: aaliyahFounderCommandService as never,
+        aaliyahFollowThroughEngineService: aaliyahFollowThroughEngineService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
         aaliyahFollowThroughService: aaliyahFollowThroughService as never,
@@ -4403,6 +4476,61 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(403);
     expect(aaliyahFounderCommandService.listCommands).not.toHaveBeenCalled();
+  });
+
+  it("exposes follow-through engine routes", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/follow-through/engine/evaluate",
+      payload: {
+        mode: "founder",
+        source: {
+          sourceType: "founder_command",
+          sourceId: "founder-command:1"
+        }
+      }
+    });
+
+    expect(createRes.statusCode).toBe(201);
+    const created = FollowThroughEngineResponseSchema.parse(createRes.json());
+    expect(created.result.ok).toBe(true);
+    expect(aaliyahFollowThroughEngineService.evaluateSource).toHaveBeenCalledWith({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      actorId: "actor-1",
+      principalContext: "founder",
+      mode: "founder",
+      source: {
+        sourceType: "founder_command",
+        sourceId: "founder-command:1"
+      }
+    });
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/follow-through/engine/follow-through-engine:1?mode=founder"
+    });
+    expect(detailRes.statusCode).toBe(200);
+    FollowThroughEngineResponseSchema.parse(detailRes.json());
+
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/follow-through/engine?mode=founder&limit=10"
+    });
+    expect(listRes.statusCode).toBe(200);
+    FollowThroughEngineListResponseSchema.parse(listRes.json());
+  });
+
+  it("rejects follow-through engine routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahFollowThroughEngineService.listRecords.mockClear();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/follow-through/engine?mode=founder&limit=10"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahFollowThroughEngineService.listRecords).not.toHaveBeenCalled();
   });
 
   it("exposes founder preference mutation routes", async () => {

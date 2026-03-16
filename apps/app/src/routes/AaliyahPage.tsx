@@ -4,6 +4,7 @@ import {
   createFetchClient,
   executeFounderCommand,
   getAaliyahCommandSurface,
+  getAaliyahFollowThroughEngineRecords,
   getAaliyahInbox,
   getAaliyahOpenTasks,
   getAaliyahSessionSnapshot,
@@ -14,6 +15,7 @@ import {
   runAaliyahRuntime,
   type AaliyahInboxItem,
   type AaliyahCommandSurface,
+  type AaliyahFollowThroughEngineRecord,
   type AaliyahMode,
   type AaliyahQuickAction,
   type AaliyahRuntimeResponse,
@@ -107,7 +109,7 @@ export default function AaliyahPage() {
 
   const activeMode = sessionQuery.data?.session.activeModeState.activeMode ?? "founder";
 
-  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery] = useQueries({
+  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery] = useQueries({
     queries: [
       {
         queryKey: ["aaliyah", "command-surface", activeMode],
@@ -155,6 +157,19 @@ export default function AaliyahPage() {
             fetchClient,
             mode: activeMode,
             limit: 20,
+          }),
+        refetchInterval: 20_000,
+      },
+      {
+        queryKey: ["aaliyah", "follow-through-engine", activeMode],
+        enabled: Boolean(envData.env && envData.appApiBaseUrl),
+        queryFn: async () =>
+          getAaliyahFollowThroughEngineRecords({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            mode: activeMode,
+            limit: 30,
           }),
         refetchInterval: 20_000,
       },
@@ -250,8 +265,8 @@ export default function AaliyahPage() {
     },
   });
 
-  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading;
-  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError;
+  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading;
+  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError;
   const errorMessage =
     envData.error ??
     (sessionQuery.error as Error | undefined)?.message ??
@@ -259,6 +274,7 @@ export default function AaliyahPage() {
     (inboxQuery.error as Error | undefined)?.message ??
     (tasksQuery.error as Error | undefined)?.message ??
     (commandHistoryQuery.error as Error | undefined)?.message ??
+    (followThroughEngineQuery.error as Error | undefined)?.message ??
     null;
 
   const shell = shellQuery.data?.shell;
@@ -266,6 +282,7 @@ export default function AaliyahPage() {
   const session = sessionQuery.data?.session;
   const tasks = tasksQuery.data?.result.ok ? tasksQuery.data.result.tasks : [];
   const commandHistory = commandHistoryQuery.data?.result.ok ? commandHistoryQuery.data.result.commands : [];
+  const followThroughRecords = followThroughEngineQuery.data?.result.ok ? followThroughEngineQuery.data.result.records : [];
 
   async function executeIntent(intent: string, parameters?: Record<string, unknown>, mode?: AaliyahMode) {
     await runtimeMutation.mutateAsync({ intent, parameters, mode });
@@ -569,6 +586,8 @@ export default function AaliyahPage() {
                   <WorkflowTriggerPanel busy={founderCommandMutation.isPending} onTrigger={(workflowName) => void triggerWorkflow(workflowName)} />
 
                   <CommandHistoryPanel commands={commandHistory} />
+
+                  <FollowThroughEnginePanel records={followThroughRecords} />
                 </div>
               </Section>
             </div>
@@ -1106,6 +1125,73 @@ function CommandHistoryPanel({ commands }: { commands: FounderCommandRecord[] })
       )}
     </div>
   );
+}
+
+function FollowThroughEnginePanel({ records }: { records: AaliyahFollowThroughEngineRecord[] }) {
+  const suggested = records.filter((record) => record.decisionType === "create_task");
+  const stale = records.filter((record) => record.status === "stale");
+  const needsReview = records.filter((record) => record.status === "blocked" || record.decisionType === "queue_founder_review");
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ fontWeight: 700 }}>Follow-Through Engine</div>
+      {records.length === 0 ? (
+        <EmptyState text="No follow-through records have been generated yet." />
+      ) : (
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+            <MetricMini label="Suggested next actions" value={suggested.length} />
+            <MetricMini label="Stale items" value={stale.length} />
+            <MetricMini label="Needs founder review" value={needsReview.length} />
+            <MetricMini label="Total records" value={records.length} />
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {records.map((record) => (
+              <div key={record.id} style={compactPanelStyle}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontWeight: 650 }}>{record.summary}</div>
+                    <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>{record.reason}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <Tag label={followThroughStatusLabel(record)} tone={followThroughTone(record)} />
+                    <Tag label={record.policyKey} tone="outline" />
+                    <Tag label={record.source.sourceType.replaceAll("_", " ")} tone="outline" />
+                  </div>
+                </div>
+                <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                  <DataBlock label="Source" value={shortId(record.source.sourceId)} />
+                  <DataBlock label="Created task" value={record.createdArtifactIds[0] ? shortId(record.createdArtifactIds[0]) : "None"} />
+                  <DataBlock label="Audit" value={shortId(record.auditEventId)} />
+                  <DataBlock label="Evaluated" value={new Date(record.evaluatedAtIso).toLocaleString()} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function followThroughStatusLabel(record: AaliyahFollowThroughEngineRecord) {
+  if (record.decisionType === "create_task") {
+    return "Created task";
+  }
+  if (record.status === "stale") {
+    return "Flagged stale";
+  }
+  if (record.status === "blocked") {
+    return "Needs review";
+  }
+  return "No action";
+}
+
+function followThroughTone(record: AaliyahFollowThroughEngineRecord): "filled" | "outline" {
+  if (record.status === "blocked" || record.status === "stale") {
+    return "filled";
+  }
+  return "outline";
 }
 
 function DataRow({ label, value }: { label: string; value: string }) {

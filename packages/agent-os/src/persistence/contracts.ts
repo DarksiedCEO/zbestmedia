@@ -96,6 +96,13 @@ import type {
   FounderCommandType
 } from "../aaliyah/founder-command-types.js";
 import type {
+  FollowThroughDecisionType,
+  FollowThroughEngineRecord as FollowThroughEngineRecordShape,
+  FollowThroughEvaluationStatus,
+  FollowThroughPolicyKey,
+  FollowThroughSourceType
+} from "../aaliyah/follow-through-engine-types.js";
+import type {
   AssignmentPolicyDecision,
   AssignmentRecord,
   ExecutionRunRecord,
@@ -467,6 +474,63 @@ export const AaliyahFounderCommandRecordSchema = z.object({
   executedAt: z.string().datetime().nullable()
 }) satisfies z.ZodType<FounderCommandRecordShape>;
 export type AaliyahFounderCommandRecord = z.infer<typeof AaliyahFounderCommandRecordSchema>;
+
+export const FollowThroughSourceTypeSchema = z.enum([
+  "founder_command",
+  "task",
+  "gmail_draft",
+  "calendar_event",
+  "contact",
+  "account"
+]) satisfies z.ZodType<FollowThroughSourceType>;
+export type FollowThroughSourceTypeRecord = z.infer<typeof FollowThroughSourceTypeSchema>;
+
+export const FollowThroughPolicyKeySchema = z.enum([
+  "FT-001-approved-draft-next-step",
+  "FT-002-workflow-dependency-next-step",
+  "FT-003-overdue-task-stale",
+  "FT-004-event-linked-recap",
+  "FT-005-rejected-intent-context"
+]) satisfies z.ZodType<FollowThroughPolicyKey>;
+export type FollowThroughPolicyKeyRecord = z.infer<typeof FollowThroughPolicyKeySchema>;
+
+export const FollowThroughDecisionTypeSchema = z.enum([
+  "create_task",
+  "queue_founder_review",
+  "flag_stale",
+  "record_blocked",
+  "noop"
+]) satisfies z.ZodType<FollowThroughDecisionType>;
+export type FollowThroughDecisionTypeRecord = z.infer<typeof FollowThroughDecisionTypeSchema>;
+
+export const FollowThroughEvaluationStatusSchema = z.enum([
+  "eligible",
+  "blocked",
+  "stale",
+  "noop"
+]) satisfies z.ZodType<FollowThroughEvaluationStatus>;
+export type FollowThroughEvaluationStatusRecord = z.infer<typeof FollowThroughEvaluationStatusSchema>;
+
+export const AaliyahFollowThroughEngineRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  source: z.object({
+    sourceType: FollowThroughSourceTypeSchema,
+    sourceId: z.string().min(1)
+  }),
+  policyKey: FollowThroughPolicyKeySchema,
+  decisionType: FollowThroughDecisionTypeSchema,
+  status: FollowThroughEvaluationStatusSchema,
+  reason: z.string().min(1),
+  summary: z.string().min(1),
+  idempotencyKey: z.string().min(1),
+  createdArtifactIds: z.array(z.string().min(1)),
+  auditEventId: z.string().min(1).nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime(),
+  evaluatedAtIso: z.string().datetime()
+}) satisfies z.ZodType<FollowThroughEngineRecordShape>;
+export type AaliyahFollowThroughEngineRecord = z.infer<typeof AaliyahFollowThroughEngineRecordSchema>;
 
 
 const EmailRoutingTargetSchema = z.union([
@@ -1149,7 +1213,11 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "tasks_failed",
   "founder_command_executed",
   "founder_command_rejected",
-  "founder_command_noop"
+  "founder_command_noop",
+  "follow_through_engine_executed",
+  "follow_through_engine_blocked",
+  "follow_through_engine_stale",
+  "follow_through_engine_noop"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 

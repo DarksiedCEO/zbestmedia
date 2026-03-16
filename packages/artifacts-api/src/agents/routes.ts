@@ -7,6 +7,7 @@ import {
   AaliyahFounderBriefingService,
   AaliyahFounderInboxTriageService,
   AaliyahFounderCommandService,
+  AaliyahFollowThroughEngineService,
   AaliyahCalendarService,
   AaliyahCrmService,
   AaliyahTasksService,
@@ -88,6 +89,11 @@ import {
   FounderCommandListQuerySchema,
   FounderCommandListResponseSchema,
   FounderCommandResponseSchema,
+  FollowThroughEngineEvaluateBodySchema,
+  FollowThroughEngineListQuerySchema,
+  FollowThroughEngineListResponseSchema,
+  FollowThroughEngineRecordIdParamSchema,
+  FollowThroughEngineResponseSchema,
   AaliyahTaskUpdateBodySchema,
   AaliyahWorkspaceGmailDraftBodySchema,
   AaliyahRuntimeRequestBodySchema,
@@ -192,6 +198,7 @@ export function agentRoutes(opts: {
   aaliyahCrmService: AaliyahCrmService;
   aaliyahTasksService: AaliyahTasksService;
   aaliyahFounderCommandService: AaliyahFounderCommandService;
+  aaliyahFollowThroughEngineService: AaliyahFollowThroughEngineService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
   aaliyahTriageService: AaliyahFounderInboxTriageService;
   aaliyahFollowThroughService: AaliyahFollowThroughService;
@@ -1506,6 +1513,76 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_founder_command_list_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/follow-through/engine/evaluate", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = FollowThroughEngineEvaluateBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahFollowThroughEngineService.evaluateSource({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        source: body.data.source
+      });
+
+      return reply.code(201).send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_follow_through_engine_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/follow-through/engine/:recordId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = FollowThroughEngineRecordIdParamSchema.safeParse(req.params ?? {});
+      const query = FollowThroughEngineListQuerySchema.partial({ limit: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahFollowThroughEngineService.getRecordById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        recordId: path.data.recordId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_follow_through_engine_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/follow-through/engine", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = FollowThroughEngineListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahFollowThroughEngineService.listRecords({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        limit: query.data.limit
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_follow_through_engine_list_result",
         result
       });
     });

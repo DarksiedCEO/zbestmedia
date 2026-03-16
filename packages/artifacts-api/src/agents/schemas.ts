@@ -7,6 +7,7 @@ import {
   AssignmentRecordSchema,
   AaliyahCrmAccountSchema,
   AaliyahCrmContactSchema,
+  AaliyahFollowThroughEngineRecordSchema,
   AaliyahCrmNoteSchema,
   AaliyahFounderCommandRecordSchema,
   AaliyahTaskSchema,
@@ -612,6 +613,55 @@ export const FounderCommandListResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_founder_command_list_result"),
   result: z.discriminatedUnion("ok", [FounderCommandListSuccessSchema, FounderCommandFailureSchema])
+});
+
+export const FollowThroughEngineEvaluateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]),
+  source: z.object({
+    sourceType: z.enum(["founder_command", "task", "gmail_draft", "calendar_event", "contact", "account"]),
+    sourceId: z.string().min(1)
+  })
+});
+
+export const FollowThroughEngineRecordIdParamSchema = z.object({
+  recordId: z.string().min(1)
+});
+
+export const FollowThroughEngineListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  limit: z.coerce.number().int().positive().max(100).default(50)
+});
+
+const FollowThroughEngineFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const FollowThroughEngineSuccessSchema = z.object({
+  ok: z.literal(true),
+  record: AaliyahFollowThroughEngineRecordSchema,
+  message: z.string().min(1)
+});
+
+const FollowThroughEngineListSuccessSchema = z.object({
+  ok: z.literal(true),
+  records: z.array(AaliyahFollowThroughEngineRecordSchema),
+  message: z.string().min(1)
+});
+
+export const FollowThroughEngineResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_follow_through_engine_result"),
+  result: z.discriminatedUnion("ok", [FollowThroughEngineSuccessSchema, FollowThroughEngineFailureSchema])
+});
+
+export const FollowThroughEngineListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_follow_through_engine_list_result"),
+  result: z.discriminatedUnion("ok", [FollowThroughEngineListSuccessSchema, FollowThroughEngineFailureSchema])
 });
 
 export const BrandPipelineAdvanceBodySchema = z.object({

@@ -17,6 +17,7 @@ import type {
   AaliyahCrmContactRecord,
   AaliyahCrmNoteRecord,
   AaliyahDiagnosticsEventRecord,
+  AaliyahFollowThroughEngineRecord,
   AaliyahFounderCommandRecord,
   AaliyahTaskRecord,
   AaliyahMutationIdempotencyRecord,
@@ -356,6 +357,24 @@ type FounderCommandRow = {
   metadata_json: Record<string, unknown>;
   created_at: string | Date;
   executed_at: string | Date | null;
+};
+
+type FollowThroughEngineRow = {
+  record_id: string;
+  tenant_id: string;
+  source_type: AaliyahFollowThroughEngineRecord["source"]["sourceType"];
+  source_id: string;
+  policy_key: AaliyahFollowThroughEngineRecord["policyKey"];
+  decision_type: AaliyahFollowThroughEngineRecord["decisionType"];
+  evaluation_status: AaliyahFollowThroughEngineRecord["status"];
+  reason_text: string;
+  summary_text: string;
+  idempotency_key: string;
+  created_artifact_ids_json: string[];
+  audit_event_id: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string | Date;
+  evaluated_at: string | Date;
 };
 
 type EmailDispatchRow = {
@@ -931,6 +950,28 @@ function mapFounderCommandRow(row: FounderCommandRow): AaliyahFounderCommandReco
     metadata: row.metadata_json as Record<string, unknown>,
     createdAt: toIsoString(row.created_at),
     executedAt: row.executed_at ? toIsoString(row.executed_at) : null
+  };
+}
+
+function mapFollowThroughEngineRow(row: FollowThroughEngineRow): AaliyahFollowThroughEngineRecord {
+  return {
+    id: row.record_id,
+    tenantId: row.tenant_id,
+    source: {
+      sourceType: row.source_type,
+      sourceId: row.source_id
+    },
+    policyKey: row.policy_key,
+    decisionType: row.decision_type,
+    status: row.evaluation_status,
+    reason: row.reason_text,
+    summary: row.summary_text,
+    idempotencyKey: row.idempotency_key,
+    createdArtifactIds: Array.isArray(row.created_artifact_ids_json) ? row.created_artifact_ids_json : [],
+    auditEventId: row.audit_event_id,
+    metadata: row.metadata_json as Record<string, unknown>,
+    createdAt: toIsoString(row.created_at),
+    evaluatedAtIso: toIsoString(row.evaluated_at)
   };
 }
 
@@ -3716,6 +3757,146 @@ export class AgentOsRepository {
       )
     );
     return res.rows.map(mapFounderCommandRow);
+  }
+
+  async createFollowThroughEngineRecord(args: {
+    tenantId: string;
+    recordId: string;
+    sourceType: AaliyahFollowThroughEngineRecord["source"]["sourceType"];
+    sourceId: string;
+    policyKey: AaliyahFollowThroughEngineRecord["policyKey"];
+    decisionType: AaliyahFollowThroughEngineRecord["decisionType"];
+    evaluationStatus: AaliyahFollowThroughEngineRecord["status"];
+    reason: string;
+    summary: string;
+    idempotencyKey: string;
+    createdArtifactIds: string[];
+    auditEventId: string | null;
+    metadata?: Record<string, unknown>;
+    createdAt?: string;
+    evaluatedAt?: string;
+  }): Promise<AaliyahFollowThroughEngineRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FollowThroughEngineRow>(
+        `
+        INSERT INTO aaliyah_follow_through_engine_records (
+          record_id, tenant_id, source_type, source_id, policy_key,
+          decision_type, evaluation_status, reason_text, summary_text, idempotency_key,
+          created_artifact_ids_json, audit_event_id, metadata_json, created_at, evaluated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9, $10,
+          $11::jsonb, $12, $13::jsonb, $14, $15
+        )
+        RETURNING record_id, tenant_id, source_type, source_id, policy_key,
+                  decision_type, evaluation_status, reason_text, summary_text, idempotency_key,
+                  created_artifact_ids_json, audit_event_id, metadata_json, created_at, evaluated_at
+        `,
+        [
+          args.recordId,
+          args.tenantId,
+          args.sourceType,
+          args.sourceId,
+          args.policyKey,
+          args.decisionType,
+          args.evaluationStatus,
+          args.reason,
+          args.summary,
+          args.idempotencyKey,
+          JSON.stringify(args.createdArtifactIds),
+          args.auditEventId,
+          JSON.stringify(args.metadata ?? {}),
+          createdAt,
+          args.evaluatedAt ?? createdAt
+        ]
+      )
+    );
+    return mapFollowThroughEngineRow(res.rows[0]!);
+  }
+
+  async getFollowThroughEngineRecordById(args: {
+    tenantId: string;
+    recordId: string;
+  }): Promise<AaliyahFollowThroughEngineRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FollowThroughEngineRow>(
+        `
+        SELECT record_id, tenant_id, source_type, source_id, policy_key,
+               decision_type, evaluation_status, reason_text, summary_text, idempotency_key,
+               created_artifact_ids_json, audit_event_id, metadata_json, created_at, evaluated_at
+        FROM aaliyah_follow_through_engine_records
+        WHERE tenant_id = $1 AND record_id = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.recordId]
+      )
+    );
+    return res.rows[0] ? mapFollowThroughEngineRow(res.rows[0]) : null;
+  }
+
+  async getFollowThroughEngineRecordByIdempotencyKey(args: {
+    tenantId: string;
+    idempotencyKey: string;
+  }): Promise<AaliyahFollowThroughEngineRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FollowThroughEngineRow>(
+        `
+        SELECT record_id, tenant_id, source_type, source_id, policy_key,
+               decision_type, evaluation_status, reason_text, summary_text, idempotency_key,
+               created_artifact_ids_json, audit_event_id, metadata_json, created_at, evaluated_at
+        FROM aaliyah_follow_through_engine_records
+        WHERE tenant_id = $1 AND idempotency_key = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.idempotencyKey]
+      )
+    );
+    return res.rows[0] ? mapFollowThroughEngineRow(res.rows[0]) : null;
+  }
+
+  async listFollowThroughEngineRecords(args: {
+    tenantId: string;
+    limit?: number;
+  }): Promise<AaliyahFollowThroughEngineRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FollowThroughEngineRow>(
+        `
+        SELECT record_id, tenant_id, source_type, source_id, policy_key,
+               decision_type, evaluation_status, reason_text, summary_text, idempotency_key,
+               created_artifact_ids_json, audit_event_id, metadata_json, created_at, evaluated_at
+        FROM aaliyah_follow_through_engine_records
+        WHERE tenant_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+        `,
+        [args.tenantId, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapFollowThroughEngineRow);
+  }
+
+  async listFollowThroughEngineRecordsBySource(args: {
+    tenantId: string;
+    sourceType: AaliyahFollowThroughEngineRecord["source"]["sourceType"];
+    sourceId: string;
+    limit?: number;
+  }): Promise<AaliyahFollowThroughEngineRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FollowThroughEngineRow>(
+        `
+        SELECT record_id, tenant_id, source_type, source_id, policy_key,
+               decision_type, evaluation_status, reason_text, summary_text, idempotency_key,
+               created_artifact_ids_json, audit_event_id, metadata_json, created_at, evaluated_at
+        FROM aaliyah_follow_through_engine_records
+        WHERE tenant_id = $1 AND source_type = $2 AND source_id = $3
+        ORDER BY created_at DESC
+        LIMIT $4
+        `,
+        [args.tenantId, args.sourceType, args.sourceId, args.limit ?? 25]
+      )
+    );
+    return res.rows.map(mapFollowThroughEngineRow);
   }
 
   async createAaliyahFounderPreference(args: {

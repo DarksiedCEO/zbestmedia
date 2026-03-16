@@ -253,6 +253,31 @@ export type FounderCommandRecord = {
   executedAt: string | null;
 };
 
+export type AaliyahFollowThroughEngineRecord = {
+  id: string;
+  tenantId: string;
+  source: {
+    sourceType: "founder_command" | "task" | "gmail_draft" | "calendar_event" | "contact" | "account";
+    sourceId: string;
+  };
+  policyKey:
+    | "FT-001-approved-draft-next-step"
+    | "FT-002-workflow-dependency-next-step"
+    | "FT-003-overdue-task-stale"
+    | "FT-004-event-linked-recap"
+    | "FT-005-rejected-intent-context";
+  decisionType: "create_task" | "queue_founder_review" | "flag_stale" | "record_blocked" | "noop";
+  status: "eligible" | "blocked" | "stale" | "noop";
+  reason: string;
+  summary: string;
+  idempotencyKey: string;
+  createdArtifactIds: string[];
+  auditEventId: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  evaluatedAtIso: string;
+};
+
 export type FounderCommandRequest = {
   mode: AaliyahMode;
   commandType: FounderCommandType;
@@ -766,6 +791,38 @@ export async function getFounderCommandHistory(args: {
 }> {
   return args.fetchClient({
     url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/founder/commands`, {
+      mode: args.mode,
+      limit: args.limit ? String(args.limit) : undefined,
+    }),
+    bearer: args.bearer,
+  });
+}
+
+export async function getAaliyahFollowThroughEngineRecords(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  limit?: number;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_follow_through_engine_list_result";
+  result:
+    | {
+        ok: true;
+        records: AaliyahFollowThroughEngineRecord[];
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/follow-through/engine`, {
       mode: args.mode,
       limit: args.limit ? String(args.limit) : undefined,
     }),
