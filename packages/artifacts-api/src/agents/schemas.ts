@@ -8,6 +8,7 @@ import {
   AaliyahCrmAccountSchema,
   AaliyahCrmContactSchema,
   AaliyahCrmNoteSchema,
+  AaliyahFounderCommandRecordSchema,
   AaliyahTaskSchema,
   AaliyahFounderPreferenceRecordSchema,
   EmailAccountConnectionRecordSchema,
@@ -551,6 +552,66 @@ export const AaliyahTaskListResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_task_list_result"),
   result: z.discriminatedUnion("ok", [AaliyahTaskListSuccessSchema, AaliyahTaskFailureSchema])
+});
+
+export const FounderCommandBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]),
+  commandType: z.enum(["approve_draft", "create_follow_up", "escalate_task", "override_schedule", "trigger_workflow"]),
+  target: z.object({
+    targetType: z.enum(["gmail_draft", "task", "calendar_event", "contact", "account", "workflow"]),
+    targetId: z.string().min(1)
+  }),
+  payload: z.record(z.string(), z.unknown()).default({}),
+  idempotencyKey: z.string().min(1)
+});
+
+export const FounderCommandIdParamSchema = z.object({
+  commandId: z.string().min(1)
+});
+
+export const FounderCommandListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  limit: z.coerce.number().int().positive().max(100).default(50)
+});
+
+const FounderCommandFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const FounderCommandSuccessSchema = z.object({
+  ok: z.literal(true),
+  commandId: z.string().min(1),
+  commandType: z.enum(["approve_draft", "create_follow_up", "escalate_task", "override_schedule", "trigger_workflow"]),
+  target: z.object({
+    targetType: z.enum(["gmail_draft", "task", "calendar_event", "contact", "account", "workflow"]),
+    targetId: z.string().min(1)
+  }),
+  status: z.enum(["executed", "noop"]),
+  summary: z.string().min(1),
+  auditEventId: z.string().min(1).nullable(),
+  executedAtIso: z.string().datetime()
+});
+
+const FounderCommandListSuccessSchema = z.object({
+  ok: z.literal(true),
+  commands: z.array(AaliyahFounderCommandRecordSchema),
+  message: z.string().min(1)
+});
+
+export const FounderCommandResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_founder_command_result"),
+  result: z.discriminatedUnion("ok", [FounderCommandSuccessSchema, FounderCommandFailureSchema])
+});
+
+export const FounderCommandListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_founder_command_list_result"),
+  result: z.discriminatedUnion("ok", [FounderCommandListSuccessSchema, FounderCommandFailureSchema])
 });
 
 export const BrandPipelineAdvanceBodySchema = z.object({

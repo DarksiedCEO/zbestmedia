@@ -6,6 +6,7 @@ import {
   AaliyahCalendarService,
   AaliyahCrmService,
   AaliyahDiagnosticsService,
+  AaliyahFounderCommandService,
   AaliyahFounderBriefingService,
   AaliyahFounderInboxTriageService,
   AaliyahTasksService,
@@ -108,6 +109,14 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const aaliyahCalendarService = new AaliyahCalendarService(agentRepository, aaliyahDiagnosticsService);
   const aaliyahCrmService = new AaliyahCrmService(agentRepository, aaliyahDiagnosticsService);
   const aaliyahTasksService = new AaliyahTasksService(agentRepository, aaliyahDiagnosticsService);
+  const aaliyahFounderCommandService = new AaliyahFounderCommandService(
+    agentRepository,
+    emailService,
+    aaliyahTasksService,
+    aaliyahCrmService,
+    aaliyahCalendarService,
+    aaliyahDiagnosticsService
+  );
   const aaliyahPreferenceService = new AaliyahPreferenceService(agentRepository);
   const aaliyahMemoryBoundaryService = new AaliyahMemoryBoundaryService();
   const aaliyahSessionService = new AaliyahSessionContextService(agentRepository, aaliyahMemoryBoundaryService, aaliyahDiagnosticsService);
@@ -223,10 +232,11 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       aaliyahMemoryBoundaryService,
       aaliyahDiagnosticsService,
       aaliyahWorkspaceService,
-      aaliyahCalendarService,
-      aaliyahCrmService,
-      aaliyahTasksService,
-      aaliyahReviewQueueService,
+        aaliyahCalendarService,
+        aaliyahCrmService,
+        aaliyahTasksService,
+        aaliyahFounderCommandService,
+        aaliyahReviewQueueService,
       aaliyahTriageService,
       aaliyahFollowThroughService,
       aaliyahSessionService,

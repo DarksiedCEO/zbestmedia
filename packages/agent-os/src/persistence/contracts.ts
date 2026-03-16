@@ -90,6 +90,12 @@ import type {
   AaliyahTaskStatus
 } from "../aaliyah/tasks-types.js";
 import type {
+  FounderCommandExecutionStatus,
+  FounderCommandRecord as FounderCommandRecordShape,
+  FounderCommandTargetType,
+  FounderCommandType
+} from "../aaliyah/founder-command-types.js";
+import type {
   AssignmentPolicyDecision,
   AssignmentRecord,
   ExecutionRunRecord,
@@ -419,6 +425,48 @@ export const AaliyahTaskSchema = z.object({
   completedAt: z.string().datetime().nullable()
 }) satisfies z.ZodType<AaliyahTaskShape>;
 export type AaliyahTaskRecord = z.infer<typeof AaliyahTaskSchema>;
+
+export const FounderCommandTypeSchema = z.enum([
+  "approve_draft",
+  "create_follow_up",
+  "escalate_task",
+  "override_schedule",
+  "trigger_workflow"
+]) satisfies z.ZodType<FounderCommandType>;
+export type FounderCommandTypeRecord = z.infer<typeof FounderCommandTypeSchema>;
+
+export const FounderCommandTargetTypeSchema = z.enum([
+  "gmail_draft",
+  "task",
+  "calendar_event",
+  "contact",
+  "account",
+  "workflow"
+]) satisfies z.ZodType<FounderCommandTargetType>;
+export type FounderCommandTargetTypeRecord = z.infer<typeof FounderCommandTargetTypeSchema>;
+
+export const FounderCommandExecutionStatusSchema = z.enum(["executed", "noop"]) satisfies z.ZodType<FounderCommandExecutionStatus>;
+export type FounderCommandExecutionStatusRecord = z.infer<typeof FounderCommandExecutionStatusSchema>;
+
+export const AaliyahFounderCommandRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  requestId: z.string().min(1),
+  actorUserId: z.string().min(1),
+  actorRole: z.literal("founder"),
+  commandType: FounderCommandTypeSchema,
+  targetType: FounderCommandTargetTypeSchema,
+  targetId: z.string().min(1),
+  payload: z.record(z.string(), z.unknown()),
+  idempotencyKey: z.string().min(1),
+  executionStatus: FounderCommandExecutionStatusSchema,
+  summary: z.string().min(1),
+  auditEventId: z.string().min(1).nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime(),
+  executedAt: z.string().datetime().nullable()
+}) satisfies z.ZodType<FounderCommandRecordShape>;
+export type AaliyahFounderCommandRecord = z.infer<typeof AaliyahFounderCommandRecordSchema>;
 
 
 const EmailRoutingTargetSchema = z.union([
@@ -1098,7 +1146,10 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "tasks_requested",
   "tasks_list_requested",
   "tasks_denied",
-  "tasks_failed"
+  "tasks_failed",
+  "founder_command_executed",
+  "founder_command_rejected",
+  "founder_command_noop"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 

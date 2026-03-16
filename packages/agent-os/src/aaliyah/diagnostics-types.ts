@@ -31,7 +31,10 @@ export type AaliyahDiagnosticsEventType =
   | "tasks_requested"
   | "tasks_list_requested"
   | "tasks_denied"
-  | "tasks_failed";
+  | "tasks_failed"
+  | "founder_command_executed"
+  | "founder_command_rejected"
+  | "founder_command_noop";
 
 export type AaliyahDiagnosticsEvent = {
   tenantId: string;

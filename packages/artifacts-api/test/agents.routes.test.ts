@@ -38,6 +38,8 @@ import {
   AaliyahCrmContactResponseSchema,
   AaliyahCrmContextResponseSchema,
   AaliyahCrmNoteResponseSchema,
+  FounderCommandListResponseSchema,
+  FounderCommandResponseSchema,
   AaliyahTaskListResponseSchema,
   AaliyahTaskResponseSchema,
   AaliyahWorkspaceGmailDraftResponseSchema,
@@ -2549,6 +2551,52 @@ describe("agent routes", () => {
       message: "Tasks loaded successfully."
     }))
   };
+  const aaliyahFounderCommandService: any = {
+    executeCommand: vi.fn(async ({ request }: { request: { commandType: string; target: { targetType: string; targetId: string } } }) => ({
+      ok: true,
+      commandId: "founder-command:1",
+      commandType: request.commandType,
+      target: request.target,
+      status: "executed",
+      summary: "Draft approved for send readiness and audit logged.",
+      auditEventId: "aaliyah-diagnostics:event-1",
+      executedAtIso: "2026-03-16T18:00:00.000Z"
+    })),
+    getCommandById: vi.fn(async ({ commandId }: { commandId: string }) => ({
+      ok: true,
+      commandId,
+      commandType: "approve_draft",
+      target: { targetType: "gmail_draft", targetId: "email-review:1" },
+      status: "executed",
+      summary: "Draft approved for send readiness and audit logged.",
+      auditEventId: "aaliyah-diagnostics:event-1",
+      executedAtIso: "2026-03-16T18:00:00.000Z"
+    })),
+    listCommands: vi.fn(async () => ({
+      ok: true,
+      commands: [
+        {
+          id: "founder-command:1",
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          requestId: "req-1",
+          actorUserId: "actor-1",
+          actorRole: "founder",
+          commandType: "approve_draft",
+          targetType: "gmail_draft",
+          targetId: "email-review:1",
+          payload: { approvalMode: "approved_for_send" },
+          idempotencyKey: "founder-command-1",
+          executionStatus: "executed",
+          summary: "Draft approved for send readiness and audit logged.",
+          auditEventId: "aaliyah-diagnostics:event-1",
+          metadata: {},
+          createdAt: "2026-03-16T18:00:00.000Z",
+          executedAt: "2026-03-16T18:00:00.000Z"
+        }
+      ],
+      message: "Founder commands loaded successfully."
+    }))
+  };
   const aaliyahMemoryBoundaryService = {
     getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
       generatedAt: "2026-03-15T00:00:00.000Z",
@@ -3485,6 +3533,7 @@ describe("agent routes", () => {
         aaliyahCalendarService: aaliyahCalendarService as never,
         aaliyahCrmService: aaliyahCrmService as never,
         aaliyahTasksService: aaliyahTasksService as never,
+        aaliyahFounderCommandService: aaliyahFounderCommandService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
         aaliyahFollowThroughService: aaliyahFollowThroughService as never,
@@ -4244,6 +4293,116 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(403);
     expect(aaliyahTasksService.listOpenTasks).not.toHaveBeenCalled();
+  });
+
+  it("supports founder command routes", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/founder/commands",
+      payload: {
+        mode: "founder",
+        commandType: "approve_draft",
+        target: {
+          targetType: "gmail_draft",
+          targetId: "email-review:1"
+        },
+        payload: {
+          approvalMode: "approved_for_send"
+        },
+        idempotencyKey: "founder-command-1"
+      }
+    });
+
+    expect(createRes.statusCode).toBe(201);
+    const created = FounderCommandResponseSchema.parse(createRes.json());
+    expect(created.result.ok).toBe(true);
+    expect(aaliyahFounderCommandService.executeCommand).toHaveBeenCalledWith({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      actorId: "actor-1",
+      principalContext: "founder",
+      mode: "founder",
+      request: {
+        commandType: "approve_draft",
+        actor: {
+          actorUserId: "actor-1",
+          actorRole: "founder",
+          requestId: expect.any(String),
+          issuedAtIso: expect.any(String)
+        },
+        target: {
+          targetType: "gmail_draft",
+          targetId: "email-review:1"
+        },
+        payload: {
+          approvalMode: "approved_for_send"
+        },
+        idempotencyKey: "founder-command-1"
+      }
+    });
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/founder/commands/founder-command:1?mode=founder"
+    });
+    expect(detailRes.statusCode).toBe(200);
+    FounderCommandResponseSchema.parse(detailRes.json());
+
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/founder/commands?mode=founder&limit=10"
+    });
+    expect(listRes.statusCode).toBe(200);
+    FounderCommandListResponseSchema.parse(listRes.json());
+  });
+
+  it("normalizes founder command errors without leaking internals", async () => {
+    aaliyahFounderCommandService.executeCommand.mockResolvedValueOnce({
+      ok: false,
+      denialCode: null,
+      errorCode: "CONFLICT",
+      retryable: false,
+      message: "Founder command cannot mutate a terminal task."
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/founder/commands",
+      payload: {
+        mode: "founder",
+        commandType: "escalate_task",
+        target: {
+          targetType: "task",
+          targetId: "task:1"
+        },
+        payload: {
+          escalationReason: "blocked",
+          priority: "critical",
+          notes: "Waiting on client"
+        },
+        idempotencyKey: "founder-command-2"
+      }
+    });
+
+    expect(res.statusCode).toBe(201);
+    const result = FounderCommandResponseSchema.parse(res.json());
+    expect(result.result.ok).toBe(false);
+    if (!result.result.ok) {
+      expect(result.result.errorCode).toBe("CONFLICT");
+      expect(result.result.message).toBe("Founder command cannot mutate a terminal task.");
+    }
+  });
+
+  it("rejects founder command routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahFounderCommandService.listCommands.mockClear();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/founder/commands?mode=founder&limit=10"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahFounderCommandService.listCommands).not.toHaveBeenCalled();
   });
 
   it("exposes founder preference mutation routes", async () => {

@@ -17,6 +17,7 @@ import type {
   AaliyahCrmContactRecord,
   AaliyahCrmNoteRecord,
   AaliyahDiagnosticsEventRecord,
+  AaliyahFounderCommandRecord,
   AaliyahTaskRecord,
   AaliyahMutationIdempotencyRecord,
   AaliyahSessionContextRecord,
@@ -336,6 +337,25 @@ type AaliyahTaskRow = {
   created_at: string | Date;
   updated_at: string | Date;
   completed_at: string | Date | null;
+};
+
+type FounderCommandRow = {
+  command_id: string;
+  tenant_id: string;
+  request_id: string;
+  actor_user_id: string;
+  actor_role: AaliyahFounderCommandRecord["actorRole"];
+  command_type: AaliyahFounderCommandRecord["commandType"];
+  target_type: AaliyahFounderCommandRecord["targetType"];
+  target_id: string;
+  payload_json: Record<string, unknown>;
+  idempotency_key: string;
+  execution_status: AaliyahFounderCommandRecord["executionStatus"];
+  summary_text: string;
+  audit_event_id: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string | Date;
+  executed_at: string | Date | null;
 };
 
 type EmailDispatchRow = {
@@ -890,6 +910,27 @@ function mapAaliyahTaskRow(row: AaliyahTaskRow): AaliyahTaskRecord {
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at),
     completedAt: row.completed_at ? toIsoString(row.completed_at) : null
+  };
+}
+
+function mapFounderCommandRow(row: FounderCommandRow): AaliyahFounderCommandRecord {
+  return {
+    id: row.command_id,
+    tenantId: row.tenant_id,
+    requestId: row.request_id,
+    actorUserId: row.actor_user_id,
+    actorRole: row.actor_role,
+    commandType: row.command_type,
+    targetType: row.target_type,
+    targetId: row.target_id,
+    payload: row.payload_json as Record<string, unknown>,
+    idempotencyKey: row.idempotency_key,
+    executionStatus: row.execution_status,
+    summary: row.summary_text,
+    auditEventId: row.audit_event_id,
+    metadata: row.metadata_json as Record<string, unknown>,
+    createdAt: toIsoString(row.created_at),
+    executedAt: row.executed_at ? toIsoString(row.executed_at) : null
   };
 }
 
@@ -3565,6 +3606,116 @@ export class AgentOsRepository {
       )
     );
     return res.rows.map(mapAaliyahTaskRow);
+  }
+
+  async createFounderCommand(args: {
+    tenantId: string;
+    requestId: string;
+    actorUserId: string;
+    actorRole: AaliyahFounderCommandRecord["actorRole"];
+    commandType: AaliyahFounderCommandRecord["commandType"];
+    targetType: AaliyahFounderCommandRecord["targetType"];
+    targetId: string;
+    payload: Record<string, unknown>;
+    idempotencyKey: string;
+    executionStatus: AaliyahFounderCommandRecord["executionStatus"];
+    summary: string;
+    auditEventId: string | null;
+    metadata?: Record<string, unknown>;
+    createdAt?: string;
+    executedAt?: string | null;
+  }): Promise<AaliyahFounderCommandRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const commandId = buildScopedId("founder-command", [args.commandType, args.targetId, createdAt]);
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FounderCommandRow>(
+        `
+        INSERT INTO aaliyah_founder_commands (
+          command_id, tenant_id, request_id, actor_user_id, actor_role,
+          command_type, target_type, target_id, payload_json, idempotency_key,
+          execution_status, summary_text, audit_event_id, metadata_json, created_at, executed_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9::jsonb, $10,
+          $11, $12, $13, $14::jsonb, $15, $16
+        )
+        RETURNING command_id, tenant_id, request_id, actor_user_id, actor_role,
+                  command_type, target_type, target_id, payload_json, idempotency_key,
+                  execution_status, summary_text, audit_event_id, metadata_json, created_at, executed_at
+        `,
+        [
+          commandId,
+          args.tenantId,
+          args.requestId,
+          args.actorUserId,
+          args.actorRole,
+          args.commandType,
+          args.targetType,
+          args.targetId,
+          JSON.stringify(args.payload),
+          args.idempotencyKey,
+          args.executionStatus,
+          args.summary,
+          args.auditEventId,
+          JSON.stringify(args.metadata ?? {}),
+          createdAt,
+          args.executedAt ?? createdAt
+        ]
+      )
+    );
+    return mapFounderCommandRow(res.rows[0]!);
+  }
+
+  async getFounderCommandById(args: { tenantId: string; commandId: string }): Promise<AaliyahFounderCommandRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FounderCommandRow>(
+        `
+        SELECT command_id, tenant_id, request_id, actor_user_id, actor_role,
+               command_type, target_type, target_id, payload_json, idempotency_key,
+               execution_status, summary_text, audit_event_id, metadata_json, created_at, executed_at
+        FROM aaliyah_founder_commands
+        WHERE tenant_id = $1 AND command_id = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.commandId]
+      )
+    );
+    return res.rows[0] ? mapFounderCommandRow(res.rows[0]) : null;
+  }
+
+  async getFounderCommandByIdempotencyKey(args: { tenantId: string; idempotencyKey: string }): Promise<AaliyahFounderCommandRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FounderCommandRow>(
+        `
+        SELECT command_id, tenant_id, request_id, actor_user_id, actor_role,
+               command_type, target_type, target_id, payload_json, idempotency_key,
+               execution_status, summary_text, audit_event_id, metadata_json, created_at, executed_at
+        FROM aaliyah_founder_commands
+        WHERE tenant_id = $1 AND idempotency_key = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.idempotencyKey]
+      )
+    );
+    return res.rows[0] ? mapFounderCommandRow(res.rows[0]) : null;
+  }
+
+  async listFounderCommands(args: { tenantId: string; limit?: number }): Promise<AaliyahFounderCommandRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FounderCommandRow>(
+        `
+        SELECT command_id, tenant_id, request_id, actor_user_id, actor_role,
+               command_type, target_type, target_id, payload_json, idempotency_key,
+               execution_status, summary_text, audit_event_id, metadata_json, created_at, executed_at
+        FROM aaliyah_founder_commands
+        WHERE tenant_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+        `,
+        [args.tenantId, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapFounderCommandRow);
   }
 
   async createAaliyahFounderPreference(args: {

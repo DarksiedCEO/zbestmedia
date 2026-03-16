@@ -6,6 +6,7 @@ import {
   AaliyahDiagnosticsService,
   AaliyahFounderBriefingService,
   AaliyahFounderInboxTriageService,
+  AaliyahFounderCommandService,
   AaliyahCalendarService,
   AaliyahCrmService,
   AaliyahTasksService,
@@ -82,6 +83,11 @@ import {
   AaliyahTaskListQuerySchema,
   AaliyahTaskListResponseSchema,
   AaliyahTaskResponseSchema,
+  FounderCommandBodySchema,
+  FounderCommandIdParamSchema,
+  FounderCommandListQuerySchema,
+  FounderCommandListResponseSchema,
+  FounderCommandResponseSchema,
   AaliyahTaskUpdateBodySchema,
   AaliyahWorkspaceGmailDraftBodySchema,
   AaliyahRuntimeRequestBodySchema,
@@ -185,6 +191,7 @@ export function agentRoutes(opts: {
   aaliyahCalendarService: AaliyahCalendarService;
   aaliyahCrmService: AaliyahCrmService;
   aaliyahTasksService: AaliyahTasksService;
+  aaliyahFounderCommandService: AaliyahFounderCommandService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
   aaliyahTriageService: AaliyahFounderInboxTriageService;
   aaliyahFollowThroughService: AaliyahFollowThroughService;
@@ -1418,6 +1425,87 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_task_list_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/founder/commands", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = FounderCommandBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahFounderCommandService.executeCommand({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        request: {
+          commandType: body.data.commandType,
+          actor: {
+            actorUserId: req.auth.actorId,
+            actorRole: "founder",
+            requestId: req.id,
+            issuedAtIso: new Date().toISOString()
+          },
+          target: body.data.target,
+          payload: body.data.payload,
+          idempotencyKey: body.data.idempotencyKey
+        }
+      });
+
+      return reply.code(201).send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_founder_command_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/founder/commands/:commandId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = FounderCommandIdParamSchema.safeParse(req.params ?? {});
+      const query = FounderCommandListQuerySchema.partial({ limit: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahFounderCommandService.getCommandById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        commandId: path.data.commandId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_founder_command_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/founder/commands", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = FounderCommandListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahFounderCommandService.listCommands({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        limit: query.data.limit
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_founder_command_list_result",
         result
       });
     });
