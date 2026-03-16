@@ -12,6 +12,10 @@ function correlationId() {
   return crypto.randomUUID();
 }
 
+function buildAttemptKey(code: string, oauthState: string) {
+  return `gmail-oauth-callback:${oauthState}:${code}`;
+}
+
 export default function GmailOAuthCallbackPage() {
   const fetchClient = React.useMemo(() => createFetchClient({ correlationId }), []);
   const [state, setState] = React.useState<CallbackState>({
@@ -65,6 +69,17 @@ export default function GmailOAuthCallbackPage() {
       return;
     }
 
+    const attemptKey = buildAttemptKey(code, oauthState);
+    if (window.sessionStorage.getItem(attemptKey) === "done") {
+      setState({
+        status: "success",
+        message: "Gmail account connected successfully.",
+        accountEmailAddress: null,
+        grantedScopes: [],
+      });
+      return;
+    }
+
     let cancelled = false;
 
     void fetchClient<{
@@ -86,6 +101,7 @@ export default function GmailOAuthCallbackPage() {
         if (cancelled) {
           return;
         }
+        window.sessionStorage.setItem(attemptKey, "done");
         setState({
           status: "success",
           message: "Gmail account connected successfully.",

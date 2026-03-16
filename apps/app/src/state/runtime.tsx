@@ -25,6 +25,8 @@ function correlationId() {
 
 export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   const [target, setTarget] = React.useState<string>(DEFAULT_TARGETS[0]);
+  const pathname = typeof window === "undefined" ? "" : window.location.pathname;
+  const bypassRuntimeFetch = pathname.startsWith("/oauth/google/callback");
   const envResult = React.useMemo(() => {
     try {
       return { env: readApiEnv(import.meta.env as Record<string, unknown>), error: null as string | null };
@@ -36,7 +38,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   const fetchClient = React.useMemo(() => createFetchClient({ correlationId }), []);
   const query = useQuery({
     queryKey: ["governance-snapshot", target],
-    enabled: Boolean(envResult.env),
+    enabled: Boolean(envResult.env) && !bypassRuntimeFetch,
     queryFn: async () =>
       fetchGovernanceSnapshot({
         baseUrl: envResult.env!.VITE_POLICY_BASE_URL,
