@@ -32,6 +32,8 @@ import {
   AaliyahCommandSurfaceResponseSchema,
   AaliyahConfidenceSummaryResponseSchema,
   AaliyahInterruptionsResponseSchema,
+  AaliyahCalendarAvailabilityResponseSchema,
+  AaliyahCalendarEventResponseSchema,
   AaliyahWorkspaceGmailDraftResponseSchema,
   AaliyahMemoryBoundaryResponseSchema,
   AaliyahInboxItemResponseSchema,
@@ -538,7 +540,12 @@ describe("agent routes", () => {
         principalId: "principal-1",
         accountEmailAddress: "ops@zbestmedia.com",
         connectionStatus: "connected",
-        grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+        grantedScopes: [
+          "https://www.googleapis.com/auth/gmail.readonly",
+          "https://www.googleapis.com/auth/gmail.compose",
+          "https://www.googleapis.com/auth/calendar.readonly",
+          "https://www.googleapis.com/auth/calendar.events"
+        ],
         tokenReference: "secret:gmail:ops",
         externalAccountId: "gmail-user-1",
         draftOnlyMode: true,
@@ -561,7 +568,12 @@ describe("agent routes", () => {
       principalId: "principal-1",
       accountEmailAddress: "ops@zbestmedia.com",
       connectionStatus: "connected",
-      grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+      grantedScopes: [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.compose",
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/calendar.events"
+      ],
       tokenReference: "secret:gmail:ops",
       externalAccountId: "gmail-user-1",
       draftOnlyMode: true,
@@ -602,7 +614,12 @@ describe("agent routes", () => {
       authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth?client_id=test",
       state: "gmail-oauth:1",
       redirectUri: "https://example.com/oauth/callback",
-      scopes: ["https://www.googleapis.com/auth/gmail.readonly"]
+      scopes: [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.compose",
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/calendar.events"
+      ]
     })),
     completeGmailOAuthConnection: vi.fn(async () => ({
       tenantId: "11111111-1111-4111-8111-111111111111",
@@ -611,7 +628,12 @@ describe("agent routes", () => {
       principalId: "principal-1",
       accountEmailAddress: "ops@zbestmedia.com",
       connectionStatus: "connected",
-      grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+      grantedScopes: [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.compose",
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/calendar.events"
+      ],
       tokenReference: "secret:gmail:ops",
       externalAccountId: "gmail-user-1",
       draftOnlyMode: true,
@@ -634,7 +656,12 @@ describe("agent routes", () => {
         principalId: "principal-1",
         accountEmailAddress: "ops@zbestmedia.com",
         connectionStatus: "connected",
-        grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+        grantedScopes: [
+          "https://www.googleapis.com/auth/gmail.readonly",
+          "https://www.googleapis.com/auth/gmail.compose",
+          "https://www.googleapis.com/auth/calendar.readonly",
+          "https://www.googleapis.com/auth/calendar.events"
+        ],
         tokenReference: "secret:gmail:ops",
         externalAccountId: "gmail-user-1",
         draftOnlyMode: true,
@@ -672,7 +699,12 @@ describe("agent routes", () => {
         principalId: "principal-1",
         accountEmailAddress: "ops@zbestmedia.com",
         connectionStatus: "connected",
-        grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+        grantedScopes: [
+          "https://www.googleapis.com/auth/gmail.readonly",
+          "https://www.googleapis.com/auth/gmail.compose",
+          "https://www.googleapis.com/auth/calendar.readonly",
+          "https://www.googleapis.com/auth/calendar.events"
+        ],
         tokenReference: "secret:gmail:ops",
         externalAccountId: "gmail-user-1",
         draftOnlyMode: true,
@@ -2173,6 +2205,28 @@ describe("agent routes", () => {
       message: input.dryRun === false ? "Draft created successfully." : "Draft simulated successfully."
     }))
   };
+  const aaliyahCalendarService: any = {
+    getAvailability: vi.fn(async ({ input }: { input: { dryRun?: boolean } }) => ({
+      ok: true,
+      provider: "google_calendar",
+      dryRun: input.dryRun ?? true,
+      slots: [
+        {
+          startIso: "2026-03-18T17:00:00.000Z",
+          endIso: "2026-03-18T17:30:00.000Z"
+        }
+      ],
+      message: input.dryRun === false ? "Availability resolved successfully." : "Availability simulated successfully."
+    })),
+    createEvent: vi.fn(async ({ input }: { input: { dryRun?: boolean } }) => ({
+      ok: true,
+      provider: "google_calendar",
+      dryRun: input.dryRun ?? true,
+      eventId: "calendar-event:1",
+      externalId: "calendar-event-link:1",
+      message: input.dryRun === false ? "Calendar event created successfully." : "Calendar event simulated successfully."
+    }))
+  };
   const aaliyahMemoryBoundaryService = {
     getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
       generatedAt: "2026-03-15T00:00:00.000Z",
@@ -3106,6 +3160,7 @@ describe("agent routes", () => {
         aaliyahMemoryBoundaryService: aaliyahMemoryBoundaryService as never,
         aaliyahDiagnosticsService: aaliyahDiagnosticsService as never,
         aaliyahWorkspaceService: aaliyahWorkspaceService as never,
+        aaliyahCalendarService: aaliyahCalendarService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
         aaliyahFollowThroughService: aaliyahFollowThroughService as never,
@@ -3540,6 +3595,105 @@ describe("agent routes", () => {
       expect(result.result.errorCode).toBe("PROVIDER_REJECTED");
       expect(result.result.message).toBe("Gmail drafting provider rejected the request.");
       expect(result.result.message).not.toContain("gmail_create_draft_not_implemented");
+    }
+  });
+
+  it("supports founder-safe calendar availability and event creation routes", async () => {
+    const availabilityRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/workspace/calendar/availability",
+      payload: {
+        mode: "founder",
+        startIso: "2026-03-18T16:00:00.000Z",
+        endIso: "2026-03-19T00:00:00.000Z",
+        timezone: "America/Los_Angeles",
+        durationMinutes: 30,
+        dryRun: true
+      }
+    });
+
+    expect(availabilityRes.statusCode).toBe(200);
+    const availability = AaliyahCalendarAvailabilityResponseSchema.parse(availabilityRes.json());
+    expect(availability.result.ok).toBe(true);
+    expect(aaliyahCalendarService.getAvailability).toHaveBeenCalledWith({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      actorId: "actor-1",
+      principalContext: "founder",
+      mode: "founder",
+      input: {
+        startIso: "2026-03-18T16:00:00.000Z",
+        endIso: "2026-03-19T00:00:00.000Z",
+        timezone: "America/Los_Angeles",
+        durationMinutes: 30,
+        dryRun: true
+      }
+    });
+
+    const eventRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/workspace/calendar/events",
+      payload: {
+        mode: "founder",
+        title: "Client sync",
+        startIso: "2026-03-20T17:00:00.000Z",
+        endIso: "2026-03-20T17:30:00.000Z",
+        timezone: "America/Los_Angeles",
+        attendees: ["founder@zbestmedia.com"],
+        dryRun: true
+      }
+    });
+
+    expect(eventRes.statusCode).toBe(200);
+    const eventResult = AaliyahCalendarEventResponseSchema.parse(eventRes.json());
+    expect(eventResult.result.ok).toBe(true);
+    expect(aaliyahCalendarService.createEvent).toHaveBeenCalledWith({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      actorId: "actor-1",
+      principalContext: "founder",
+      mode: "founder",
+      input: {
+        title: "Client sync",
+        description: undefined,
+        location: undefined,
+        startIso: "2026-03-20T17:00:00.000Z",
+        endIso: "2026-03-20T17:30:00.000Z",
+        timezone: "America/Los_Angeles",
+        attendees: ["founder@zbestmedia.com"],
+        dryRun: true
+      }
+    });
+  });
+
+  it("normalizes calendar route failures without leaking provider internals", async () => {
+    aaliyahCalendarService.createEvent.mockResolvedValueOnce({
+      ok: false,
+      provider: "google_calendar",
+      dryRun: false,
+      denialCode: null,
+      errorCode: "PROVIDER_UNAVAILABLE",
+      retryable: false,
+      message: "Calendar provider is unavailable."
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/workspace/calendar/events",
+      payload: {
+        mode: "founder",
+        title: "Client sync",
+        startIso: "2026-03-20T17:00:00.000Z",
+        endIso: "2026-03-20T17:30:00.000Z",
+        timezone: "America/Los_Angeles",
+        dryRun: false
+      }
+    });
+
+    expect(res.statusCode).toBe(200);
+    const result = AaliyahCalendarEventResponseSchema.parse(res.json());
+    expect(result.result.ok).toBe(false);
+    if (!result.result.ok) {
+      expect(result.result.errorCode).toBe("PROVIDER_UNAVAILABLE");
+      expect(result.result.message).toBe("Calendar provider is unavailable.");
     }
   });
 

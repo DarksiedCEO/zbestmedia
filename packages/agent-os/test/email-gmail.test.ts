@@ -25,7 +25,9 @@ describe("gmail connector scaffold", () => {
           redirectUri: "https://example.com/oauth",
           grantedScopes: [
             "https://www.googleapis.com/auth/gmail.readonly",
-            "https://www.googleapis.com/auth/gmail.compose"
+            "https://www.googleapis.com/auth/gmail.compose",
+            "https://www.googleapis.com/auth/calendar.readonly",
+            "https://www.googleapis.com/auth/calendar.events"
           ],
           tokenReference: "secret:gmail:ops"
         })
@@ -42,7 +44,9 @@ describe("gmail connector scaffold", () => {
       redirectUri: "https://example.com/oauth",
       grantedScopes: [
         "https://www.googleapis.com/auth/gmail.readonly",
-        "https://www.googleapis.com/auth/gmail.compose"
+        "https://www.googleapis.com/auth/gmail.compose",
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/calendar.events"
       ],
       tokenReference: "refresh-token"
     });
@@ -54,7 +58,8 @@ describe("gmail connector scaffold", () => {
           JSON.stringify({
             access_token: "oauth-access-token",
             refresh_token: "oauth-refresh-token",
-            scope: "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose",
+            scope:
+              "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events",
             expires_in: 3600
           }),
           { status: 200, headers: { "content-type": "application/json" } }
@@ -104,7 +109,9 @@ describe("gmail connector scaffold", () => {
     expect(exchanged.tokenReference).toBe("oauth-refresh-token");
     expect(exchanged.grantedScopes).toEqual([
       "https://www.googleapis.com/auth/gmail.readonly",
-      "https://www.googleapis.com/auth/gmail.compose"
+      "https://www.googleapis.com/auth/gmail.compose",
+      "https://www.googleapis.com/auth/calendar.readonly",
+      "https://www.googleapis.com/auth/calendar.events"
     ]);
 
     const draft = await connector.createDraft({
@@ -145,7 +152,9 @@ describe("gmail connector scaffold", () => {
     expect(start.authorizationUrl).toContain("accounts.google.com");
     expect(start.scopes).toEqual([
       "https://www.googleapis.com/auth/gmail.readonly",
-      "https://www.googleapis.com/auth/gmail.compose"
+      "https://www.googleapis.com/auth/gmail.compose",
+      "https://www.googleapis.com/auth/calendar.readonly",
+      "https://www.googleapis.com/auth/calendar.events"
     ]);
     expect(start.redirectUri).toBe("https://example.com/oauth/callback");
   });

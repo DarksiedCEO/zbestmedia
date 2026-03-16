@@ -3,6 +3,7 @@ import rateLimit from "@fastify/rate-limit";
 import {
   AgentAdminService,
   AaliyahCommandSurfaceService,
+  AaliyahCalendarService,
   AaliyahDiagnosticsService,
   AaliyahFounderBriefingService,
   AaliyahFounderInboxTriageService,
@@ -102,6 +103,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const voiceService = new VoiceRuntimeService(agentRepository, ledgerService, incidentService);
   const aaliyahDiagnosticsService = new AaliyahDiagnosticsService(agentRepository);
   const aaliyahWorkspaceService = new AaliyahWorkspaceService(agentRepository, aaliyahDiagnosticsService);
+  const aaliyahCalendarService = new AaliyahCalendarService(agentRepository, aaliyahDiagnosticsService);
   const aaliyahPreferenceService = new AaliyahPreferenceService(agentRepository);
   const aaliyahMemoryBoundaryService = new AaliyahMemoryBoundaryService();
   const aaliyahSessionService = new AaliyahSessionContextService(agentRepository, aaliyahMemoryBoundaryService, aaliyahDiagnosticsService);
@@ -217,6 +219,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       aaliyahMemoryBoundaryService,
       aaliyahDiagnosticsService,
       aaliyahWorkspaceService,
+      aaliyahCalendarService,
       aaliyahReviewQueueService,
       aaliyahTriageService,
       aaliyahFollowThroughService,

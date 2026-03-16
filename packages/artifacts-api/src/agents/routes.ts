@@ -6,6 +6,7 @@ import {
   AaliyahDiagnosticsService,
   AaliyahFounderBriefingService,
   AaliyahFounderInboxTriageService,
+  AaliyahCalendarService,
   AaliyahMemoryBoundaryService,
   AaliyahPreferenceService,
   AaliyahWorkspaceService,
@@ -60,6 +61,8 @@ import {
   AaliyahPreferenceListResponseSchema,
   AaliyahPreferenceQuerySchema,
   AaliyahCommandSurfaceQuerySchema,
+  AaliyahCalendarAvailabilityBodySchema,
+  AaliyahCalendarEventBodySchema,
   AaliyahWorkspaceGmailDraftBodySchema,
   AaliyahRuntimeRequestBodySchema,
   AssignmentRecordIdParamSchema,
@@ -159,6 +162,7 @@ export function agentRoutes(opts: {
   aaliyahMemoryBoundaryService: AaliyahMemoryBoundaryService;
   aaliyahDiagnosticsService: AaliyahDiagnosticsService;
   aaliyahWorkspaceService: AaliyahWorkspaceService;
+  aaliyahCalendarService: AaliyahCalendarService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
   aaliyahTriageService: AaliyahFounderInboxTriageService;
   aaliyahFollowThroughService: AaliyahFollowThroughService;
@@ -961,6 +965,65 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_workspace_gmail_draft_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/workspace/calendar/availability", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = AaliyahCalendarAvailabilityBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahCalendarService.getAvailability({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        input: {
+          startIso: body.data.startIso,
+          endIso: body.data.endIso,
+          timezone: body.data.timezone,
+          durationMinutes: body.data.durationMinutes,
+          dryRun: body.data.dryRun
+        }
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_workspace_calendar_availability_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/workspace/calendar/events", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = AaliyahCalendarEventBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahCalendarService.createEvent({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        input: {
+          title: body.data.title,
+          description: body.data.description,
+          location: body.data.location,
+          startIso: body.data.startIso,
+          endIso: body.data.endIso,
+          timezone: body.data.timezone,
+          attendees: body.data.attendees,
+          dryRun: body.data.dryRun
+        }
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_workspace_calendar_event_result",
         result
       });
     });

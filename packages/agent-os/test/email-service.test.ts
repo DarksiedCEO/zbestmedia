@@ -187,7 +187,9 @@ function buildRepository() {
       connectionStatus: args.connectionStatus ?? "connected",
       grantedScopes: args.grantedScopes ?? [
         "https://www.googleapis.com/auth/gmail.readonly",
-        "https://www.googleapis.com/auth/gmail.compose"
+        "https://www.googleapis.com/auth/gmail.compose",
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/calendar.events"
       ],
       tokenReference: args.tokenReference ?? "secret:gmail:ops",
       externalAccountId: args.externalAccountId ?? "gmail-user-1",
@@ -212,7 +214,9 @@ function buildRepository() {
       connectionStatus: "connected",
       grantedScopes: [
         "https://www.googleapis.com/auth/gmail.readonly",
-        "https://www.googleapis.com/auth/gmail.compose"
+        "https://www.googleapis.com/auth/gmail.compose",
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/calendar.events"
       ],
       tokenReference: "secret:gmail:ops",
       externalAccountId: "gmail-user-1",
@@ -265,7 +269,9 @@ function buildGmailRuntime(thread: NormalizedEmailThread): GmailRuntimeGateway {
       redirectUri: "https://example.com/oauth/callback",
       scopes: [
         "https://www.googleapis.com/auth/gmail.readonly",
-        "https://www.googleapis.com/auth/gmail.compose"
+        "https://www.googleapis.com/auth/gmail.compose",
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/calendar.events"
       ]
     })),
     exchangeAuthorizationCode: vi.fn(async () => ({
@@ -273,7 +279,9 @@ function buildGmailRuntime(thread: NormalizedEmailThread): GmailRuntimeGateway {
       accountEmailAddress: "ops@zbestmedia.com",
       grantedScopes: [
         "https://www.googleapis.com/auth/gmail.readonly",
-        "https://www.googleapis.com/auth/gmail.compose"
+        "https://www.googleapis.com/auth/gmail.compose",
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/calendar.events"
       ],
       tokenReference: "secret:gmail:ops",
       refreshTokenStored: true,
@@ -509,7 +517,9 @@ describe("email assistant service", () => {
       connectionStatus: "connected",
       grantedScopes: [
         "https://www.googleapis.com/auth/gmail.readonly",
-        "https://www.googleapis.com/auth/gmail.compose"
+        "https://www.googleapis.com/auth/gmail.compose",
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/calendar.events"
       ],
       tokenReference: "secret:gmail:ops",
       externalAccountId: "gmail-user-1",

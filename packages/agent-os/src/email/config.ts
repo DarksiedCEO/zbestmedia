@@ -4,7 +4,9 @@ import type { EmailConnectionMode, EmailProvider } from "./types.js";
 
 export const DEFAULT_GMAIL_SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
-  "https://www.googleapis.com/auth/gmail.compose"
+  "https://www.googleapis.com/auth/gmail.compose",
+  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/calendar.events"
 ] as const;
 export const DEFAULT_GMAIL_ALLOWED_LABEL_IDS = ["INBOX", "UNREAD"] as const;
 

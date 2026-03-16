@@ -7,7 +7,15 @@ export type AaliyahDiagnosticsEventType =
   | "workspace_draft_requested"
   | "workspace_draft_denied"
   | "workspace_draft_created"
-  | "workspace_draft_failed";
+  | "workspace_draft_failed"
+  | "workspace_calendar_availability_requested"
+  | "workspace_calendar_availability_denied"
+  | "workspace_calendar_availability_failed"
+  | "workspace_calendar_availability_resolved"
+  | "workspace_calendar_event_requested"
+  | "workspace_calendar_event_denied"
+  | "workspace_calendar_event_created"
+  | "workspace_calendar_event_failed";
 
 export type AaliyahDiagnosticsEvent = {
   tenantId: string;

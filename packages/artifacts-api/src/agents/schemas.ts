@@ -286,6 +286,87 @@ export const AaliyahWorkspaceGmailDraftResponseSchema = z.object({
   ])
 });
 
+export const AaliyahCalendarAvailabilityBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]),
+  startIso: z.string().datetime(),
+  endIso: z.string().datetime(),
+  timezone: z.string().min(1),
+  durationMinutes: z.number().int().positive().optional(),
+  dryRun: z.boolean().optional()
+});
+
+const AaliyahCalendarSlotSchema = z.object({
+  startIso: z.string().datetime(),
+  endIso: z.string().datetime()
+});
+
+const AaliyahCalendarAvailabilitySuccessSchema = z.object({
+  ok: z.literal(true),
+  provider: z.literal("google_calendar"),
+  dryRun: z.boolean(),
+  slots: z.array(AaliyahCalendarSlotSchema),
+  message: z.string().min(1)
+});
+
+const AaliyahCalendarAvailabilityFailureSchema = z.object({
+  ok: z.literal(false),
+  provider: z.literal("google_calendar"),
+  dryRun: z.boolean(),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE", "PROVIDER_DISABLED"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "PROVIDER_UNAVAILABLE", "PROVIDER_REJECTED", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+export const AaliyahCalendarAvailabilityResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_workspace_calendar_availability_result"),
+  result: z.discriminatedUnion("ok", [
+    AaliyahCalendarAvailabilitySuccessSchema,
+    AaliyahCalendarAvailabilityFailureSchema
+  ])
+});
+
+export const AaliyahCalendarEventBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]),
+  title: z.string().min(1),
+  description: z.string().min(1).optional(),
+  location: z.string().min(1).optional(),
+  startIso: z.string().datetime(),
+  endIso: z.string().datetime(),
+  timezone: z.string().min(1),
+  attendees: z.array(z.string().email()).optional(),
+  dryRun: z.boolean().optional()
+});
+
+const AaliyahCalendarEventSuccessSchema = z.object({
+  ok: z.literal(true),
+  provider: z.literal("google_calendar"),
+  dryRun: z.boolean(),
+  eventId: z.string().min(1),
+  externalId: z.string().min(1).nullable(),
+  message: z.string().min(1)
+});
+
+const AaliyahCalendarEventFailureSchema = z.object({
+  ok: z.literal(false),
+  provider: z.literal("google_calendar"),
+  dryRun: z.boolean(),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE", "PROVIDER_DISABLED"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "PROVIDER_UNAVAILABLE", "PROVIDER_REJECTED", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+export const AaliyahCalendarEventResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_workspace_calendar_event_result"),
+  result: z.discriminatedUnion("ok", [
+    AaliyahCalendarEventSuccessSchema,
+    AaliyahCalendarEventFailureSchema
+  ])
+});
+
 export const BrandPipelineAdvanceBodySchema = z.object({
   subjectId: z.string().min(1),
   completedSteps: z.array(BrandPipelineStepSchema),
@@ -493,6 +574,8 @@ const ResourceTypeSchema = z.enum([
   "email_account_process_batch",
   "email_account_process_single",
   "aaliyah_workspace_gmail_draft_result",
+  "aaliyah_workspace_calendar_availability_result",
+  "aaliyah_workspace_calendar_event_result",
   "aaliyah_founder_briefing",
   "aaliyah_runtime_result",
   "voice_intake_result",
