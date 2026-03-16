@@ -9,6 +9,7 @@
     "app:preview": "pnpm --filter @zbest/app preview --host 0.0.0.0 --port $PORT",
     "api:build": "pnpm --filter @zbest/artifacts-api typecheck",
     "api:start": "node --import tsx packages/artifacts-api/src/main.ts",
+    "api:start:local": "tsx scripts/api/start-local.ts",
     "api:db:migrate": "pnpm --filter @zbest/artifacts-api db:migrate",
     "agent-os:worker:run-once": "tsx scripts/agent-os/worker-runner.ts",
     "agent-os:worker:loop": "tsx scripts/agent-os/worker-loop.ts",
