@@ -246,6 +246,46 @@ export const EmailDispatchDetailResponseSchema = z.object({
   dispatch: EmailDispatchRecordSchema
 });
 
+export const AaliyahWorkspaceGmailDraftBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]),
+  to: z.array(z.string().email()).min(1),
+  cc: z.array(z.string().email()).optional(),
+  bcc: z.array(z.string().email()).optional(),
+  subject: z.string().min(1),
+  bodyText: z.string().min(1),
+  bodyHtml: z.string().min(1).optional(),
+  threadId: z.string().min(1).optional(),
+  dryRun: z.boolean().optional()
+});
+
+const AaliyahWorkspaceGmailDraftSuccessSchema = z.object({
+  ok: z.literal(true),
+  provider: z.literal("gmail"),
+  draftId: z.string().min(1),
+  externalId: z.string().min(1).nullable(),
+  dryRun: z.boolean(),
+  message: z.string().min(1)
+});
+
+const AaliyahWorkspaceGmailDraftFailureSchema = z.object({
+  ok: z.literal(false),
+  provider: z.literal("gmail"),
+  dryRun: z.boolean(),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE", "PROVIDER_DISABLED"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "PROVIDER_UNAVAILABLE", "PROVIDER_REJECTED", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+export const AaliyahWorkspaceGmailDraftResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_workspace_gmail_draft_result"),
+  result: z.discriminatedUnion("ok", [
+    AaliyahWorkspaceGmailDraftSuccessSchema,
+    AaliyahWorkspaceGmailDraftFailureSchema
+  ])
+});
+
 export const BrandPipelineAdvanceBodySchema = z.object({
   subjectId: z.string().min(1),
   completedSteps: z.array(BrandPipelineStepSchema),
@@ -452,6 +492,7 @@ const ResourceTypeSchema = z.enum([
   "gmail_oauth_callback",
   "email_account_process_batch",
   "email_account_process_single",
+  "aaliyah_workspace_gmail_draft_result",
   "aaliyah_founder_briefing",
   "aaliyah_runtime_result",
   "voice_intake_result",

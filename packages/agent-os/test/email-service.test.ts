@@ -274,6 +274,11 @@ function buildGmailRuntime(thread: NormalizedEmailThread): GmailRuntimeGateway {
       getThread: vi.fn(async () => thread),
       normalizeMessage: vi.fn(),
       registerWatch: vi.fn(),
+      createDraft: vi.fn(async () => ({
+        providerDraftId: "gmail-draft-1",
+        providerThreadId: thread.providerThreadId,
+        createdAt: "2026-03-12T00:01:00.000Z"
+      })),
       sendApprovedDraft: vi.fn(async () => ({
         providerMessageId: "gmail-message-1",
         providerThreadId: thread.providerThreadId,

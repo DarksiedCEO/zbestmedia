@@ -2905,6 +2905,33 @@ export class AgentOsRepository {
     return res.rows.map(mapEmailAccountConnectionRow);
   }
 
+  async getLatestConnectedEmailAccountByPrincipal(args: {
+    tenantId: string;
+    principalId: string;
+    provider?: EmailAccountConnectionRecord["provider"];
+  }): Promise<EmailAccountConnectionRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EmailAccountConnectionRow>(
+        `
+        SELECT tenant_id, account_id, provider, principal_id, account_email_address,
+               connection_status, granted_scopes, token_reference, external_account_id,
+               draft_only_mode, processing_enabled, processing_mode, max_batch_threads,
+               allowed_label_ids, oauth_state, oauth_state_expires_at, last_processed_at,
+               last_error, created_at, updated_at
+        FROM email_account_connections
+        WHERE tenant_id = $1
+          AND principal_id = $2
+          AND provider = $3
+          AND connection_status = 'connected'
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT 1
+        `,
+        [args.tenantId, args.principalId, args.provider ?? "gmail"]
+      )
+    );
+    return res.rows[0] ? mapEmailAccountConnectionRow(res.rows[0]) : null;
+  }
+
   async createAaliyahFounderPreference(args: {
     tenantId: string;
     category: AaliyahFounderPreferenceRecord["category"];

@@ -32,6 +32,7 @@ import {
   AaliyahCommandSurfaceResponseSchema,
   AaliyahConfidenceSummaryResponseSchema,
   AaliyahInterruptionsResponseSchema,
+  AaliyahWorkspaceGmailDraftResponseSchema,
   AaliyahMemoryBoundaryResponseSchema,
   AaliyahInboxItemResponseSchema,
   AaliyahInboxListResponseSchema,
@@ -2162,6 +2163,16 @@ describe("agent routes", () => {
       deactivatedBy: "actor-1"
     }))
   };
+  const aaliyahWorkspaceService: any = {
+    createGmailDraft: vi.fn(async ({ input }: { input: { dryRun?: boolean } }) => ({
+      ok: true,
+      provider: "gmail",
+      draftId: "gmail-draft:1",
+      externalId: "gmail-thread:1",
+      dryRun: input.dryRun ?? true,
+      message: input.dryRun === false ? "Draft created successfully." : "Draft simulated successfully."
+    }))
+  };
   const aaliyahMemoryBoundaryService = {
     getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
       generatedAt: "2026-03-15T00:00:00.000Z",
@@ -3094,6 +3105,7 @@ describe("agent routes", () => {
         aaliyahPreferenceService: aaliyahPreferenceService as never,
         aaliyahMemoryBoundaryService: aaliyahMemoryBoundaryService as never,
         aaliyahDiagnosticsService: aaliyahDiagnosticsService as never,
+        aaliyahWorkspaceService: aaliyahWorkspaceService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
         aaliyahFollowThroughService: aaliyahFollowThroughService as never,
@@ -3381,6 +3393,17 @@ describe("agent routes", () => {
       method: "GET",
       url: "/v1/agent-os/aaliyah/diagnostics?window=7d"
     });
+    const workspaceDraftRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/workspace/gmail/drafts",
+      payload: {
+        mode: "founder",
+        to: ["founder@zbestmedia.com"],
+        subject: "Follow-up",
+        bodyText: "Draft body",
+        dryRun: true
+      }
+    });
     const followThroughActionRes = await app.inject({
       method: "POST",
       url: "/v1/agent-os/aaliyah/follow-through/complete",
@@ -3462,9 +3485,62 @@ describe("agent routes", () => {
     expect(diagnostics.diagnostics.snapshot.window).toBe("7d");
     expect(diagnostics.diagnostics.snapshot.enforcementTriggers.lowConfidenceDeferCount).toBe(1);
 
+    expect(workspaceDraftRes.statusCode).toBe(200);
+    const workspaceDraft = AaliyahWorkspaceGmailDraftResponseSchema.parse(workspaceDraftRes.json());
+    expect(workspaceDraft.result.ok).toBe(true);
+    expect(aaliyahWorkspaceService.createGmailDraft).toHaveBeenCalledWith({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      actorId: "actor-1",
+      principalContext: "founder",
+      mode: "founder",
+      input: {
+        to: ["founder@zbestmedia.com"],
+        cc: undefined,
+        bcc: undefined,
+        subject: "Follow-up",
+        bodyText: "Draft body",
+        bodyHtml: undefined,
+        threadId: undefined,
+        dryRun: true
+      }
+    });
+
     expect(followThroughActionRes.statusCode).toBe(200);
     const action = AaliyahFollowThroughActionResponseSchema.parse(followThroughActionRes.json());
     expect(action.result.record.status).toBe("completed");
+  });
+
+  it("normalizes workspace route failures without leaking provider internals", async () => {
+    aaliyahWorkspaceService.createGmailDraft.mockResolvedValueOnce({
+      ok: false,
+      provider: "gmail",
+      dryRun: false,
+      denialCode: null,
+      errorCode: "PROVIDER_REJECTED",
+      retryable: false,
+      message: "Gmail drafting provider rejected the request."
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/workspace/gmail/drafts",
+      payload: {
+        mode: "founder",
+        to: ["founder@zbestmedia.com"],
+        subject: "Follow-up",
+        bodyText: "Draft body",
+        dryRun: false
+      }
+    });
+
+    expect(res.statusCode).toBe(200);
+    const result = AaliyahWorkspaceGmailDraftResponseSchema.parse(res.json());
+    expect(result.result.ok).toBe(false);
+    if (!result.result.ok) {
+      expect(result.result.errorCode).toBe("PROVIDER_REJECTED");
+      expect(result.result.message).toBe("Gmail drafting provider rejected the request.");
+      expect(result.result.message).not.toContain("gmail_create_draft_not_implemented");
+    }
   });
 
   it("exposes founder preference mutation routes", async () => {

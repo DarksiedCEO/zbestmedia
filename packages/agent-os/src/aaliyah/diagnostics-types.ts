@@ -1,6 +1,13 @@
 export type AaliyahDiagnosticsWindow = "24h" | "7d" | "30d";
 
-export type AaliyahDiagnosticsEventType = "runtime_result" | "session_reset" | "follow_through_invalid_action";
+export type AaliyahDiagnosticsEventType =
+  | "runtime_result"
+  | "session_reset"
+  | "follow_through_invalid_action"
+  | "workspace_draft_requested"
+  | "workspace_draft_denied"
+  | "workspace_draft_created"
+  | "workspace_draft_failed";
 
 export type AaliyahDiagnosticsEvent = {
   tenantId: string;
@@ -9,7 +16,7 @@ export type AaliyahDiagnosticsEvent = {
   principalContext: "founder" | "operator";
   activeMode: "founder" | "zbestmedia";
   eventType: AaliyahDiagnosticsEventType;
-  eventSource: "aaliyah_runtime" | "aaliyah_session" | "aaliyah_follow_through";
+  eventSource: "aaliyah_runtime" | "aaliyah_session" | "aaliyah_follow_through" | "aaliyah_workspace";
   signalKey: string;
   payload: Record<string, unknown>;
   createdAt: string;

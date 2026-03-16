@@ -8,6 +8,7 @@ import {
   AaliyahFounderInboxTriageService,
   AaliyahMemoryBoundaryService,
   AaliyahPreferenceService,
+  AaliyahWorkspaceService,
   AaliyahFounderReviewQueueService,
   AaliyahFollowThroughService,
   AaliyahSessionContextService,
@@ -59,6 +60,7 @@ import {
   AaliyahPreferenceListResponseSchema,
   AaliyahPreferenceQuerySchema,
   AaliyahCommandSurfaceQuerySchema,
+  AaliyahWorkspaceGmailDraftBodySchema,
   AaliyahRuntimeRequestBodySchema,
   AssignmentRecordIdParamSchema,
   AssignmentRecordListQuerySchema,
@@ -156,6 +158,7 @@ export function agentRoutes(opts: {
   aaliyahPreferenceService: AaliyahPreferenceService;
   aaliyahMemoryBoundaryService: AaliyahMemoryBoundaryService;
   aaliyahDiagnosticsService: AaliyahDiagnosticsService;
+  aaliyahWorkspaceService: AaliyahWorkspaceService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
   aaliyahTriageService: AaliyahFounderInboxTriageService;
   aaliyahFollowThroughService: AaliyahFollowThroughService;
@@ -928,6 +931,37 @@ export function agentRoutes(opts: {
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_diagnostics",
         diagnostics: summary
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/workspace/gmail/drafts", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = AaliyahWorkspaceGmailDraftBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahWorkspaceService.createGmailDraft({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        input: {
+          to: body.data.to,
+          cc: body.data.cc,
+          bcc: body.data.bcc,
+          subject: body.data.subject,
+          bodyText: body.data.bodyText,
+          bodyHtml: body.data.bodyHtml,
+          threadId: body.data.threadId,
+          dryRun: body.data.dryRun
+        }
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_workspace_gmail_draft_result",
+        result
       });
     });
 

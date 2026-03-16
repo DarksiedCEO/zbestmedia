@@ -8,6 +8,7 @@ import {
   AaliyahFounderInboxTriageService,
   AaliyahMemoryBoundaryService,
   AaliyahPreferenceService,
+  AaliyahWorkspaceService,
   AaliyahFounderReviewQueueService,
   AaliyahFollowThroughService,
   AaliyahSessionContextService,
@@ -100,6 +101,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const emailService = new EmailAssistantService(agentRepository, ledgerService, incidentService);
   const voiceService = new VoiceRuntimeService(agentRepository, ledgerService, incidentService);
   const aaliyahDiagnosticsService = new AaliyahDiagnosticsService(agentRepository);
+  const aaliyahWorkspaceService = new AaliyahWorkspaceService(agentRepository, aaliyahDiagnosticsService);
   const aaliyahPreferenceService = new AaliyahPreferenceService(agentRepository);
   const aaliyahMemoryBoundaryService = new AaliyahMemoryBoundaryService();
   const aaliyahSessionService = new AaliyahSessionContextService(agentRepository, aaliyahMemoryBoundaryService, aaliyahDiagnosticsService);
@@ -214,6 +216,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       aaliyahPreferenceService,
       aaliyahMemoryBoundaryService,
       aaliyahDiagnosticsService,
+      aaliyahWorkspaceService,
       aaliyahReviewQueueService,
       aaliyahTriageService,
       aaliyahFollowThroughService,

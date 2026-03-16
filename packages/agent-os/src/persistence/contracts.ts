@@ -956,7 +956,11 @@ export type AaliyahDiagnosticsWindowRecord = z.infer<typeof AaliyahDiagnosticsWi
 export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "runtime_result",
   "session_reset",
-  "follow_through_invalid_action"
+  "follow_through_invalid_action",
+  "workspace_draft_requested",
+  "workspace_draft_denied",
+  "workspace_draft_created",
+  "workspace_draft_failed"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 
@@ -967,7 +971,7 @@ export const AaliyahDiagnosticsEventSchema = z.object({
   principalContext: z.enum(["founder", "operator"]),
   activeMode: z.enum(["founder", "zbestmedia"]),
   eventType: AaliyahDiagnosticsEventTypeSchema,
-  eventSource: z.enum(["aaliyah_runtime", "aaliyah_session", "aaliyah_follow_through"]),
+  eventSource: z.enum(["aaliyah_runtime", "aaliyah_session", "aaliyah_follow_through", "aaliyah_workspace"]),
   signalKey: z.string().min(1),
   payload: z.record(z.string(), z.unknown()),
   createdAt: z.string().datetime()
