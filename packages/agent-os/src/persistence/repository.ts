@@ -17,6 +17,7 @@ import type {
   AaliyahCrmContactRecord,
   AaliyahCrmNoteRecord,
   AaliyahDiagnosticsEventRecord,
+  AaliyahTaskRecord,
   AaliyahMutationIdempotencyRecord,
   AaliyahSessionContextRecord,
   AaliyahFounderPreferenceRecord,
@@ -312,6 +313,29 @@ type AaliyahCrmNoteRow = {
   author_principal_id: string;
   note: string;
   created_at: string | Date;
+};
+
+type AaliyahTaskRow = {
+  task_id: string;
+  tenant_id: string;
+  principal_id: string;
+  title: string;
+  description: string | null;
+  status: AaliyahTaskRecord["status"];
+  priority: AaliyahTaskRecord["priority"];
+  source: AaliyahTaskRecord["source"];
+  contact_id: string | null;
+  account_id: string | null;
+  related_email_draft_id: string | null;
+  related_calendar_event_id: string | null;
+  due_at: string | Date | null;
+  remind_at: string | Date | null;
+  blocked_reason: string | null;
+  completion_note: string | null;
+  next_step_summary: string | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+  completed_at: string | Date | null;
 };
 
 type EmailDispatchRow = {
@@ -841,6 +865,31 @@ function mapAaliyahCrmNoteRow(row: AaliyahCrmNoteRow): AaliyahCrmNoteRecord {
     authorPrincipalId: row.author_principal_id,
     note: row.note,
     createdAt: toIsoString(row.created_at)
+  };
+}
+
+function mapAaliyahTaskRow(row: AaliyahTaskRow): AaliyahTaskRecord {
+  return {
+    id: row.task_id,
+    tenantId: row.tenant_id,
+    principalId: row.principal_id,
+    title: row.title,
+    description: row.description,
+    status: row.status,
+    priority: row.priority,
+    source: row.source,
+    contactId: row.contact_id,
+    accountId: row.account_id,
+    relatedEmailDraftId: row.related_email_draft_id,
+    relatedCalendarEventId: row.related_calendar_event_id,
+    dueAt: row.due_at ? toIsoString(row.due_at) : null,
+    remindAt: row.remind_at ? toIsoString(row.remind_at) : null,
+    blockedReason: row.blocked_reason,
+    completionNote: row.completion_note,
+    nextStepSummary: row.next_step_summary,
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at),
+    completedAt: row.completed_at ? toIsoString(row.completed_at) : null
   };
 }
 
@@ -3307,6 +3356,215 @@ export class AgentOsRepository {
       )
     );
     return res.rows.map(mapAaliyahCrmNoteRow);
+  }
+
+  async createAaliyahTask(args: {
+    tenantId: string;
+    taskId: string;
+    principalId: string;
+    title: string;
+    description: string | null;
+    status: AaliyahTaskRecord["status"];
+    priority: AaliyahTaskRecord["priority"];
+    source: AaliyahTaskRecord["source"];
+    contactId: string | null;
+    accountId: string | null;
+    relatedEmailDraftId: string | null;
+    relatedCalendarEventId: string | null;
+    dueAt: string | null;
+    remindAt: string | null;
+    blockedReason: string | null;
+    completionNote: string | null;
+    nextStepSummary: string | null;
+    completedAt: string | null;
+    createdAt?: string;
+  }): Promise<AaliyahTaskRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahTaskRow>(
+        `
+        INSERT INTO aaliyah_tasks (
+          tenant_id, task_id, principal_id, title, description, status, priority, source,
+          contact_id, account_id, related_email_draft_id, related_calendar_event_id,
+          due_at, remind_at, blocked_reason, completion_note, next_step_summary,
+          created_at, updated_at, completed_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8,
+          $9, $10, $11, $12,
+          $13, $14, $15, $16, $17,
+          $18, $18, $19
+        )
+        RETURNING task_id, tenant_id, principal_id, title, description, status, priority, source,
+                  contact_id, account_id, related_email_draft_id, related_calendar_event_id,
+                  due_at, remind_at, blocked_reason, completion_note, next_step_summary,
+                  created_at, updated_at, completed_at
+        `,
+        [
+          args.tenantId,
+          args.taskId,
+          args.principalId,
+          args.title,
+          args.description,
+          args.status,
+          args.priority,
+          args.source,
+          args.contactId,
+          args.accountId,
+          args.relatedEmailDraftId,
+          args.relatedCalendarEventId,
+          args.dueAt,
+          args.remindAt,
+          args.blockedReason,
+          args.completionNote,
+          args.nextStepSummary,
+          createdAt,
+          args.completedAt
+        ]
+      )
+    );
+    return mapAaliyahTaskRow(res.rows[0]!);
+  }
+
+  async updateAaliyahTask(args: {
+    tenantId: string;
+    taskId: string;
+    title: string;
+    description: string | null;
+    status: AaliyahTaskRecord["status"];
+    priority: AaliyahTaskRecord["priority"];
+    dueAt: string | null;
+    remindAt: string | null;
+    blockedReason: string | null;
+    completionNote: string | null;
+    nextStepSummary: string | null;
+    completedAt: string | null;
+    updatedAt?: string;
+  }): Promise<AaliyahTaskRecord> {
+    const updatedAt = args.updatedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahTaskRow>(
+        `
+        UPDATE aaliyah_tasks
+        SET title = $3,
+            description = $4,
+            status = $5,
+            priority = $6,
+            due_at = $7,
+            remind_at = $8,
+            blocked_reason = $9,
+            completion_note = $10,
+            next_step_summary = $11,
+            completed_at = $12,
+            updated_at = $13
+        WHERE tenant_id = $1 AND task_id = $2
+        RETURNING task_id, tenant_id, principal_id, title, description, status, priority, source,
+                  contact_id, account_id, related_email_draft_id, related_calendar_event_id,
+                  due_at, remind_at, blocked_reason, completion_note, next_step_summary,
+                  created_at, updated_at, completed_at
+        `,
+        [
+          args.tenantId,
+          args.taskId,
+          args.title,
+          args.description,
+          args.status,
+          args.priority,
+          args.dueAt,
+          args.remindAt,
+          args.blockedReason,
+          args.completionNote,
+          args.nextStepSummary,
+          args.completedAt,
+          updatedAt
+        ]
+      )
+    );
+    if (!res.rows[0]) {
+      throw new Error("aaliyah_task_not_found");
+    }
+    return mapAaliyahTaskRow(res.rows[0]);
+  }
+
+  async getAaliyahTaskById(args: { tenantId: string; taskId: string }): Promise<AaliyahTaskRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahTaskRow>(
+        `
+        SELECT task_id, tenant_id, principal_id, title, description, status, priority, source,
+               contact_id, account_id, related_email_draft_id, related_calendar_event_id,
+               due_at, remind_at, blocked_reason, completion_note, next_step_summary,
+               created_at, updated_at, completed_at
+        FROM aaliyah_tasks
+        WHERE tenant_id = $1 AND task_id = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.taskId]
+      )
+    );
+    return res.rows[0] ? mapAaliyahTaskRow(res.rows[0]) : null;
+  }
+
+  async listAaliyahOpenTasks(args: { tenantId: string; principalId: string }): Promise<AaliyahTaskRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahTaskRow>(
+        `
+        SELECT task_id, tenant_id, principal_id, title, description, status, priority, source,
+               contact_id, account_id, related_email_draft_id, related_calendar_event_id,
+               due_at, remind_at, blocked_reason, completion_note, next_step_summary,
+               created_at, updated_at, completed_at
+        FROM aaliyah_tasks
+        WHERE tenant_id = $1
+          AND principal_id = $2
+          AND status IN ('open', 'in_progress', 'blocked')
+        ORDER BY
+          CASE priority
+            WHEN 'critical' THEN 1
+            WHEN 'high' THEN 2
+            WHEN 'normal' THEN 3
+            ELSE 4
+          END,
+          due_at NULLS LAST,
+          created_at DESC
+        `,
+        [args.tenantId, args.principalId]
+      )
+    );
+    return res.rows.map(mapAaliyahTaskRow);
+  }
+
+  async listAaliyahTasksByContactId(args: { tenantId: string; contactId: string }): Promise<AaliyahTaskRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahTaskRow>(
+        `
+        SELECT task_id, tenant_id, principal_id, title, description, status, priority, source,
+               contact_id, account_id, related_email_draft_id, related_calendar_event_id,
+               due_at, remind_at, blocked_reason, completion_note, next_step_summary,
+               created_at, updated_at, completed_at
+        FROM aaliyah_tasks
+        WHERE tenant_id = $1 AND contact_id = $2
+        ORDER BY created_at DESC
+        `,
+        [args.tenantId, args.contactId]
+      )
+    );
+    return res.rows.map(mapAaliyahTaskRow);
+  }
+
+  async listAaliyahTasksByAccountId(args: { tenantId: string; accountId: string }): Promise<AaliyahTaskRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahTaskRow>(
+        `
+        SELECT task_id, tenant_id, principal_id, title, description, status, priority, source,
+               contact_id, account_id, related_email_draft_id, related_calendar_event_id,
+               due_at, remind_at, blocked_reason, completion_note, next_step_summary,
+               created_at, updated_at, completed_at
+        FROM aaliyah_tasks
+        WHERE tenant_id = $1 AND account_id = $2
+        ORDER BY created_at DESC
+        `,
+        [args.tenantId, args.accountId]
+      )
+    );
+    return res.rows.map(mapAaliyahTaskRow);
   }
 
   async createAaliyahFounderPreference(args: {

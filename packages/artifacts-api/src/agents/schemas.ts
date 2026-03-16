@@ -8,6 +8,7 @@ import {
   AaliyahCrmAccountSchema,
   AaliyahCrmContactSchema,
   AaliyahCrmNoteSchema,
+  AaliyahTaskSchema,
   AaliyahFounderPreferenceRecordSchema,
   EmailAccountConnectionRecordSchema,
   EmailDispatchRecordSchema,
@@ -475,6 +476,81 @@ export const AaliyahCrmContextResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_crm_context_result"),
   result: z.discriminatedUnion("ok", [AaliyahCrmContextSuccessSchema, AaliyahCrmFailureSchema])
+});
+
+export const AaliyahTaskCreateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]),
+  title: z.string().min(1),
+  description: z.string().min(1).optional(),
+  priority: z.enum(["low", "normal", "high", "critical"]).optional(),
+  source: z.enum(["manual", "crm_follow_up", "calendar_follow_up", "email_follow_up", "system"]).optional(),
+  contactId: z.string().min(1).optional(),
+  accountId: z.string().min(1).optional(),
+  relatedEmailDraftId: z.string().min(1).optional(),
+  relatedCalendarEventId: z.string().min(1).optional(),
+  dueAt: z.string().datetime().optional(),
+  remindAt: z.string().datetime().optional()
+});
+
+export const AaliyahTaskUpdateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]),
+  title: z.string().min(1).optional(),
+  description: z.string().min(1).optional(),
+  status: z.enum(["open", "in_progress", "blocked", "completed", "cancelled"]).optional(),
+  priority: z.enum(["low", "normal", "high", "critical"]).optional(),
+  dueAt: z.string().datetime().optional(),
+  remindAt: z.string().datetime().optional(),
+  blockedReason: z.string().min(1).optional(),
+  completionNote: z.string().min(1).optional()
+});
+
+export const AaliyahTaskIdParamSchema = z.object({
+  taskId: z.string().min(1)
+});
+
+export const AaliyahTaskByContactIdParamSchema = z.object({
+  contactId: z.string().min(1)
+});
+
+export const AaliyahTaskByAccountIdParamSchema = z.object({
+  accountId: z.string().min(1)
+});
+
+export const AaliyahTaskListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  status: z.literal("open").default("open")
+});
+
+const AaliyahTaskFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const AaliyahTaskSuccessSchema = z.object({
+  ok: z.literal(true),
+  task: AaliyahTaskSchema,
+  message: z.string().min(1)
+});
+
+const AaliyahTaskListSuccessSchema = z.object({
+  ok: z.literal(true),
+  tasks: z.array(AaliyahTaskSchema),
+  message: z.string().min(1)
+});
+
+export const AaliyahTaskResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_task_result"),
+  result: z.discriminatedUnion("ok", [AaliyahTaskSuccessSchema, AaliyahTaskFailureSchema])
+});
+
+export const AaliyahTaskListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_task_list_result"),
+  result: z.discriminatedUnion("ok", [AaliyahTaskListSuccessSchema, AaliyahTaskFailureSchema])
 });
 
 export const BrandPipelineAdvanceBodySchema = z.object({

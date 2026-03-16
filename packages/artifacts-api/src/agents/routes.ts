@@ -8,6 +8,7 @@ import {
   AaliyahFounderInboxTriageService,
   AaliyahCalendarService,
   AaliyahCrmService,
+  AaliyahTasksService,
   AaliyahMemoryBoundaryService,
   AaliyahPreferenceService,
   AaliyahWorkspaceService,
@@ -74,6 +75,14 @@ import {
   AaliyahCrmContextResponseSchema,
   AaliyahCrmNoteCreateBodySchema,
   AaliyahCrmNoteResponseSchema,
+  AaliyahTaskByAccountIdParamSchema,
+  AaliyahTaskByContactIdParamSchema,
+  AaliyahTaskCreateBodySchema,
+  AaliyahTaskIdParamSchema,
+  AaliyahTaskListQuerySchema,
+  AaliyahTaskListResponseSchema,
+  AaliyahTaskResponseSchema,
+  AaliyahTaskUpdateBodySchema,
   AaliyahWorkspaceGmailDraftBodySchema,
   AaliyahRuntimeRequestBodySchema,
   AssignmentRecordIdParamSchema,
@@ -175,6 +184,7 @@ export function agentRoutes(opts: {
   aaliyahWorkspaceService: AaliyahWorkspaceService;
   aaliyahCalendarService: AaliyahCalendarService;
   aaliyahCrmService: AaliyahCrmService;
+  aaliyahTasksService: AaliyahTasksService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
   aaliyahTriageService: AaliyahFounderInboxTriageService;
   aaliyahFollowThroughService: AaliyahFollowThroughService;
@@ -1240,6 +1250,174 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_crm_context_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/tasks", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = AaliyahTaskCreateBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahTasksService.createTask({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        input: {
+          title: body.data.title,
+          description: body.data.description,
+          priority: body.data.priority,
+          source: body.data.source,
+          contactId: body.data.contactId,
+          accountId: body.data.accountId,
+          relatedEmailDraftId: body.data.relatedEmailDraftId,
+          relatedCalendarEventId: body.data.relatedCalendarEventId,
+          dueAt: body.data.dueAt,
+          remindAt: body.data.remindAt
+        }
+      });
+
+      return reply.code(201).send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_task_result",
+        result
+      });
+    });
+
+    app.patch("/v1/agent-os/aaliyah/tasks/:taskId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = AaliyahTaskIdParamSchema.safeParse(req.params ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      const body = AaliyahTaskUpdateBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahTasksService.updateTask({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        taskId: path.data.taskId,
+        input: {
+          title: body.data.title,
+          description: body.data.description,
+          status: body.data.status,
+          priority: body.data.priority,
+          dueAt: body.data.dueAt,
+          remindAt: body.data.remindAt,
+          blockedReason: body.data.blockedReason,
+          completionNote: body.data.completionNote
+        }
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_task_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/tasks/:taskId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = AaliyahTaskIdParamSchema.safeParse(req.params ?? {});
+      const query = AaliyahTaskListQuerySchema.safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahTasksService.getTaskById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        taskId: path.data.taskId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_task_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/tasks", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = AaliyahTaskListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahTasksService.listOpenTasks({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_task_list_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/tasks/by-contact/:contactId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = AaliyahTaskByContactIdParamSchema.safeParse(req.params ?? {});
+      const query = AaliyahTaskListQuerySchema.partial({ status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahTasksService.listTasksByContactId({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        contactId: path.data.contactId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_task_list_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/tasks/by-account/:accountId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = AaliyahTaskByAccountIdParamSchema.safeParse(req.params ?? {});
+      const query = AaliyahTaskListQuerySchema.partial({ status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahTasksService.listTasksByAccountId({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        accountId: path.data.accountId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_task_list_result",
         result
       });
     });

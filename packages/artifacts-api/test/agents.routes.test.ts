@@ -38,6 +38,8 @@ import {
   AaliyahCrmContactResponseSchema,
   AaliyahCrmContextResponseSchema,
   AaliyahCrmNoteResponseSchema,
+  AaliyahTaskListResponseSchema,
+  AaliyahTaskResponseSchema,
   AaliyahWorkspaceGmailDraftResponseSchema,
   AaliyahMemoryBoundaryResponseSchema,
   AaliyahInboxItemResponseSchema,
@@ -2389,6 +2391,164 @@ describe("agent routes", () => {
       message: "CRM context loaded successfully."
     }))
   };
+  const aaliyahTasksService: any = {
+    createTask: vi.fn(async ({ input }: { input: { title: string; contactId?: string; accountId?: string } }) => ({
+      ok: true,
+      task: {
+        id: "task:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        principalId: "actor-1",
+        title: input.title.trim(),
+        description: "Send proposal follow-up before 3 PM",
+        status: "open",
+        priority: "high",
+        source: "crm_follow_up",
+        contactId: input.contactId ?? "crm-contact:1",
+        accountId: input.accountId ?? "crm-account:1",
+        relatedEmailDraftId: "draft:1",
+        relatedCalendarEventId: null,
+        dueAt: "2026-03-20T22:00:00.000Z",
+        remindAt: "2026-03-20T18:00:00.000Z",
+        blockedReason: null,
+        completionNote: null,
+        nextStepSummary: "Task is open, high priority. Linked to John Smith at ACME Corp.",
+        createdAt: "2026-03-16T00:00:00.000Z",
+        updatedAt: "2026-03-16T00:00:00.000Z",
+        completedAt: null
+      },
+      message: "Task created successfully."
+    })),
+    updateTask: vi.fn(async () => ({
+      ok: true,
+      task: {
+        id: "task:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        principalId: "actor-1",
+        title: "Follow up with John",
+        description: "Send proposal follow-up before 3 PM",
+        status: "completed",
+        priority: "high",
+        source: "crm_follow_up",
+        contactId: "crm-contact:1",
+        accountId: "crm-account:1",
+        relatedEmailDraftId: "draft:1",
+        relatedCalendarEventId: null,
+        dueAt: "2026-03-20T22:00:00.000Z",
+        remindAt: "2026-03-20T18:00:00.000Z",
+        blockedReason: null,
+        completionNote: "Email sent",
+        nextStepSummary: "Task is completed, high priority. Completed: Email sent.",
+        createdAt: "2026-03-16T00:00:00.000Z",
+        updatedAt: "2026-03-16T12:00:00.000Z",
+        completedAt: "2026-03-16T12:00:00.000Z"
+      },
+      message: "Task updated successfully."
+    })),
+    getTaskById: vi.fn(async () => ({
+      ok: true,
+      task: {
+        id: "task:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        principalId: "actor-1",
+        title: "Follow up with John",
+        description: "Send proposal follow-up before 3 PM",
+        status: "open",
+        priority: "high",
+        source: "crm_follow_up",
+        contactId: "crm-contact:1",
+        accountId: "crm-account:1",
+        relatedEmailDraftId: "draft:1",
+        relatedCalendarEventId: null,
+        dueAt: "2026-03-20T22:00:00.000Z",
+        remindAt: "2026-03-20T18:00:00.000Z",
+        blockedReason: null,
+        completionNote: null,
+        nextStepSummary: "Task is open, high priority. Linked to John Smith at ACME Corp.",
+        createdAt: "2026-03-16T00:00:00.000Z",
+        updatedAt: "2026-03-16T00:00:00.000Z",
+        completedAt: null
+      },
+      message: "Task loaded successfully."
+    })),
+    listOpenTasks: vi.fn(async () => ({
+      ok: true,
+      tasks: [{
+        id: "task:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        principalId: "actor-1",
+        title: "Follow up with John",
+        description: "Send proposal follow-up before 3 PM",
+        status: "open",
+        priority: "high",
+        source: "crm_follow_up",
+        contactId: "crm-contact:1",
+        accountId: "crm-account:1",
+        relatedEmailDraftId: "draft:1",
+        relatedCalendarEventId: null,
+        dueAt: "2026-03-20T22:00:00.000Z",
+        remindAt: "2026-03-20T18:00:00.000Z",
+        blockedReason: null,
+        completionNote: null,
+        nextStepSummary: "Task is open, high priority. Linked to John Smith at ACME Corp.",
+        createdAt: "2026-03-16T00:00:00.000Z",
+        updatedAt: "2026-03-16T00:00:00.000Z",
+        completedAt: null
+      }],
+      message: "Tasks loaded successfully."
+    })),
+    listTasksByContactId: vi.fn(async () => ({
+      ok: true,
+      tasks: [{
+        id: "task:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        principalId: "actor-1",
+        title: "Follow up with John",
+        description: "Send proposal follow-up before 3 PM",
+        status: "open",
+        priority: "high",
+        source: "crm_follow_up",
+        contactId: "crm-contact:1",
+        accountId: "crm-account:1",
+        relatedEmailDraftId: "draft:1",
+        relatedCalendarEventId: null,
+        dueAt: "2026-03-20T22:00:00.000Z",
+        remindAt: "2026-03-20T18:00:00.000Z",
+        blockedReason: null,
+        completionNote: null,
+        nextStepSummary: "Task is open, high priority. Linked to John Smith at ACME Corp.",
+        createdAt: "2026-03-16T00:00:00.000Z",
+        updatedAt: "2026-03-16T00:00:00.000Z",
+        completedAt: null
+      }],
+      message: "Tasks loaded successfully."
+    })),
+    listTasksByAccountId: vi.fn(async () => ({
+      ok: true,
+      tasks: [{
+        id: "task:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        principalId: "actor-1",
+        title: "Follow up with John",
+        description: "Send proposal follow-up before 3 PM",
+        status: "open",
+        priority: "high",
+        source: "crm_follow_up",
+        contactId: "crm-contact:1",
+        accountId: "crm-account:1",
+        relatedEmailDraftId: "draft:1",
+        relatedCalendarEventId: null,
+        dueAt: "2026-03-20T22:00:00.000Z",
+        remindAt: "2026-03-20T18:00:00.000Z",
+        blockedReason: null,
+        completionNote: null,
+        nextStepSummary: "Task is open, high priority. Linked to John Smith at ACME Corp.",
+        createdAt: "2026-03-16T00:00:00.000Z",
+        updatedAt: "2026-03-16T00:00:00.000Z",
+        completedAt: null
+      }],
+      message: "Tasks loaded successfully."
+    }))
+  };
   const aaliyahMemoryBoundaryService = {
     getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
       generatedAt: "2026-03-15T00:00:00.000Z",
@@ -3324,6 +3484,7 @@ describe("agent routes", () => {
         aaliyahWorkspaceService: aaliyahWorkspaceService as never,
         aaliyahCalendarService: aaliyahCalendarService as never,
         aaliyahCrmService: aaliyahCrmService as never,
+        aaliyahTasksService: aaliyahTasksService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
         aaliyahFollowThroughService: aaliyahFollowThroughService as never,
@@ -3966,6 +4127,123 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(403);
     expect(aaliyahCrmService.getContextByEmail).not.toHaveBeenCalled();
+  });
+
+  it("supports founder-safe task routes", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/tasks",
+      payload: {
+        mode: "founder",
+        title: "Follow up with John",
+        priority: "high",
+        source: "crm_follow_up",
+        contactId: "crm-contact:1",
+        accountId: "crm-account:1"
+      }
+    });
+
+    expect(createRes.statusCode).toBe(201);
+    const created = AaliyahTaskResponseSchema.parse(createRes.json());
+    expect(created.result.ok).toBe(true);
+    expect(aaliyahTasksService.createTask).toHaveBeenCalledWith({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      actorId: "actor-1",
+      principalContext: "founder",
+      mode: "founder",
+      input: {
+        title: "Follow up with John",
+        description: undefined,
+        priority: "high",
+        source: "crm_follow_up",
+        contactId: "crm-contact:1",
+        accountId: "crm-account:1",
+        relatedEmailDraftId: undefined,
+        relatedCalendarEventId: undefined,
+        dueAt: undefined,
+        remindAt: undefined
+      }
+    });
+
+    const updateRes = await app.inject({
+      method: "PATCH",
+      url: "/v1/agent-os/aaliyah/tasks/task:1",
+      payload: {
+        mode: "founder",
+        status: "completed",
+        completionNote: "Email sent"
+      }
+    });
+    expect(updateRes.statusCode).toBe(200);
+    AaliyahTaskResponseSchema.parse(updateRes.json());
+
+    const getRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/tasks/task:1?mode=founder&status=open"
+    });
+    expect(getRes.statusCode).toBe(200);
+    AaliyahTaskResponseSchema.parse(getRes.json());
+
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/tasks?mode=founder&status=open"
+    });
+    expect(listRes.statusCode).toBe(200);
+    AaliyahTaskListResponseSchema.parse(listRes.json());
+
+    const byContactRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/tasks/by-contact/crm-contact:1?mode=founder"
+    });
+    expect(byContactRes.statusCode).toBe(200);
+    AaliyahTaskListResponseSchema.parse(byContactRes.json());
+
+    const byAccountRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/tasks/by-account/crm-account:1?mode=founder"
+    });
+    expect(byAccountRes.statusCode).toBe(200);
+    AaliyahTaskListResponseSchema.parse(byAccountRes.json());
+  });
+
+  it("normalizes task route conflicts without leaking internals", async () => {
+    aaliyahTasksService.updateTask.mockResolvedValueOnce({
+      ok: false,
+      denialCode: null,
+      errorCode: "CONFLICT",
+      retryable: false,
+      message: "Terminal task states cannot be reopened in this pack."
+    });
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/v1/agent-os/aaliyah/tasks/task:1",
+      payload: {
+        mode: "founder",
+        status: "open"
+      }
+    });
+
+    expect(res.statusCode).toBe(200);
+    const result = AaliyahTaskResponseSchema.parse(res.json());
+    expect(result.result.ok).toBe(false);
+    if (!result.result.ok) {
+      expect(result.result.errorCode).toBe("CONFLICT");
+      expect(result.result.message).toBe("Terminal task states cannot be reopened in this pack.");
+    }
+  });
+
+  it("rejects task routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahTasksService.listOpenTasks.mockClear();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/tasks?mode=founder&status=open"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahTasksService.listOpenTasks).not.toHaveBeenCalled();
   });
 
   it("exposes founder preference mutation routes", async () => {

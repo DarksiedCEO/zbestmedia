@@ -23,7 +23,15 @@ export type AaliyahDiagnosticsEventType =
   | "crm_note_created"
   | "crm_context_requested"
   | "crm_denied"
-  | "crm_failed";
+  | "crm_failed"
+  | "tasks_created"
+  | "tasks_updated"
+  | "tasks_completed"
+  | "tasks_blocked"
+  | "tasks_requested"
+  | "tasks_list_requested"
+  | "tasks_denied"
+  | "tasks_failed";
 
 export type AaliyahDiagnosticsEvent = {
   tenantId: string;

@@ -84,6 +84,12 @@ import type {
   AaliyahCrmRelationshipStage
 } from "../aaliyah/crm-types.js";
 import type {
+  AaliyahTask as AaliyahTaskShape,
+  AaliyahTaskPriority,
+  AaliyahTaskSource,
+  AaliyahTaskStatus
+} from "../aaliyah/tasks-types.js";
+import type {
   AssignmentPolicyDecision,
   AssignmentRecord,
   ExecutionRunRecord,
@@ -374,6 +380,45 @@ export const AaliyahCrmNoteSchema = z.object({
   createdAt: z.string().datetime()
 }) satisfies z.ZodType<AaliyahCrmNoteShape>;
 export type AaliyahCrmNoteRecord = z.infer<typeof AaliyahCrmNoteSchema>;
+
+export const AaliyahTaskStatusSchema = z.enum(["open", "in_progress", "blocked", "completed", "cancelled"]) satisfies z.ZodType<AaliyahTaskStatus>;
+export type AaliyahTaskStatusRecord = z.infer<typeof AaliyahTaskStatusSchema>;
+
+export const AaliyahTaskPrioritySchema = z.enum(["low", "normal", "high", "critical"]) satisfies z.ZodType<AaliyahTaskPriority>;
+export type AaliyahTaskPriorityRecord = z.infer<typeof AaliyahTaskPrioritySchema>;
+
+export const AaliyahTaskSourceSchema = z.enum([
+  "manual",
+  "crm_follow_up",
+  "calendar_follow_up",
+  "email_follow_up",
+  "system"
+]) satisfies z.ZodType<AaliyahTaskSource>;
+export type AaliyahTaskSourceRecord = z.infer<typeof AaliyahTaskSourceSchema>;
+
+export const AaliyahTaskSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  principalId: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().nullable(),
+  status: AaliyahTaskStatusSchema,
+  priority: AaliyahTaskPrioritySchema,
+  source: AaliyahTaskSourceSchema,
+  contactId: z.string().min(1).nullable(),
+  accountId: z.string().min(1).nullable(),
+  relatedEmailDraftId: z.string().min(1).nullable(),
+  relatedCalendarEventId: z.string().min(1).nullable(),
+  dueAt: z.string().datetime().nullable(),
+  remindAt: z.string().datetime().nullable(),
+  blockedReason: z.string().nullable(),
+  completionNote: z.string().nullable(),
+  nextStepSummary: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  completedAt: z.string().datetime().nullable()
+}) satisfies z.ZodType<AaliyahTaskShape>;
+export type AaliyahTaskRecord = z.infer<typeof AaliyahTaskSchema>;
 
 
 const EmailRoutingTargetSchema = z.union([
@@ -1045,7 +1090,15 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "crm_note_created",
   "crm_context_requested",
   "crm_denied",
-  "crm_failed"
+  "crm_failed",
+  "tasks_created",
+  "tasks_updated",
+  "tasks_completed",
+  "tasks_blocked",
+  "tasks_requested",
+  "tasks_list_requested",
+  "tasks_denied",
+  "tasks_failed"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 
