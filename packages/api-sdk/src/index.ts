@@ -196,6 +196,96 @@ export type AaliyahInboxItem = {
   updatedAt: string;
 };
 
+export type AaliyahTask = {
+  id: string;
+  tenantId: string;
+  principalId: string;
+  title: string;
+  description: string | null;
+  status: "open" | "in_progress" | "blocked" | "completed" | "cancelled";
+  priority: "low" | "normal" | "high" | "critical";
+  source: "manual" | "crm_follow_up" | "calendar_follow_up" | "email_follow_up" | "system";
+  contactId: string | null;
+  accountId: string | null;
+  relatedEmailDraftId: string | null;
+  relatedCalendarEventId: string | null;
+  dueAt: string | null;
+  remindAt: string | null;
+  blockedReason: string | null;
+  completionNote: string | null;
+  nextStepSummary: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+};
+
+export type FounderCommandType =
+  | "approve_draft"
+  | "create_follow_up"
+  | "escalate_task"
+  | "override_schedule"
+  | "trigger_workflow";
+
+export type FounderCommandTargetType =
+  | "gmail_draft"
+  | "task"
+  | "calendar_event"
+  | "contact"
+  | "account"
+  | "workflow";
+
+export type FounderCommandRecord = {
+  id: string;
+  tenantId: string;
+  requestId: string;
+  actorUserId: string;
+  actorRole: "founder";
+  commandType: FounderCommandType;
+  targetType: FounderCommandTargetType;
+  targetId: string;
+  payload: Record<string, unknown>;
+  idempotencyKey: string;
+  executionStatus: "executed" | "noop";
+  summary: string;
+  auditEventId: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  executedAt: string | null;
+};
+
+export type FounderCommandRequest = {
+  mode: AaliyahMode;
+  commandType: FounderCommandType;
+  target: {
+    targetType: FounderCommandTargetType;
+    targetId: string;
+  };
+  payload: Record<string, unknown>;
+  idempotencyKey: string;
+};
+
+export type FounderCommandResult =
+  | {
+      ok: true;
+      commandId: string;
+      commandType: FounderCommandType;
+      target: {
+        targetType: FounderCommandTargetType;
+        targetId: string;
+      };
+      status: "executed" | "noop";
+      summary: string;
+      auditEventId: string | null;
+      executedAtIso: string;
+    }
+  | {
+      ok: false;
+      denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+      errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+      retryable: boolean;
+      message: string;
+    };
+
 export type AaliyahInboxSummary = {
   inboxId: string;
   generatedAt: string;
@@ -601,6 +691,84 @@ export async function getAaliyahInbox(args: {
 }): Promise<{ manifestVersion: string; resourceType: "aaliyah_inbox"; inbox: AaliyahInboxSummary }> {
   return args.fetchClient({
     url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/inbox`, { mode: args.mode }),
+    bearer: args.bearer,
+  });
+}
+
+export async function getAaliyahOpenTasks(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_task_list_result";
+  result:
+    | {
+        ok: true;
+        tasks: AaliyahTask[];
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/tasks`, { mode: args.mode, status: "open" }),
+    bearer: args.bearer,
+  });
+}
+
+export async function executeFounderCommand(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  request: FounderCommandRequest;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_founder_command_result";
+  result: FounderCommandResult;
+}> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/founder/commands`,
+    method: "POST",
+    bearer: args.bearer,
+    body: args.request,
+  });
+}
+
+export async function getFounderCommandHistory(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  limit?: number;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_founder_command_list_result";
+  result:
+    | {
+        ok: true;
+        commands: FounderCommandRecord[];
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/founder/commands`, {
+      mode: args.mode,
+      limit: args.limit ? String(args.limit) : undefined,
+    }),
     bearer: args.bearer,
   });
 }

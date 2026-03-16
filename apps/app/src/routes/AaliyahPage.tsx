@@ -2,9 +2,12 @@ import React from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createFetchClient,
+  executeFounderCommand,
   getAaliyahCommandSurface,
   getAaliyahInbox,
+  getAaliyahOpenTasks,
   getAaliyahSessionSnapshot,
+  getFounderCommandHistory,
   resetAaliyahSession,
   resolveAppApiBaseUrl,
   readApiEnv,
@@ -15,6 +18,9 @@ import {
   type AaliyahQuickAction,
   type AaliyahRuntimeResponse,
   type AaliyahSessionSnapshot,
+  type AaliyahTask,
+  type FounderCommandRecord,
+  type FounderCommandRequest,
 } from "@zbest/api-sdk";
 import { MetricTile, tokens } from "@zbest/ui";
 import { AppShell } from "../ui/AppShell";
@@ -26,6 +32,12 @@ function correlationId() {
 function shortId(value: string | null | undefined) {
   if (!value) return "None";
   return value.length > 12 ? `${value.slice(0, 12)}...` : value;
+}
+
+function toIsoFromLocalDateTime(value: string | undefined) {
+  if (!value) return undefined;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
 }
 
 function urgencyTone(urgency: string) {
@@ -95,7 +107,7 @@ export default function AaliyahPage() {
 
   const activeMode = sessionQuery.data?.session.activeModeState.activeMode ?? "founder";
 
-  const [shellQuery, inboxQuery] = useQueries({
+  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery] = useQueries({
     queries: [
       {
         queryKey: ["aaliyah", "command-surface", activeMode],
@@ -118,6 +130,31 @@ export default function AaliyahPage() {
             bearer: envData.env!.VITE_POLICY_BEARER,
             fetchClient,
             mode: activeMode,
+        }),
+        refetchInterval: 20_000,
+      },
+      {
+        queryKey: ["aaliyah", "tasks", activeMode],
+        enabled: Boolean(envData.env && envData.appApiBaseUrl),
+        queryFn: async () =>
+          getAaliyahOpenTasks({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            mode: activeMode,
+          }),
+        refetchInterval: 20_000,
+      },
+      {
+        queryKey: ["aaliyah", "founder-command-history", activeMode],
+        enabled: Boolean(envData.env && envData.appApiBaseUrl),
+        queryFn: async () =>
+          getFounderCommandHistory({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            mode: activeMode,
+            limit: 20,
           }),
         refetchInterval: 20_000,
       },
@@ -127,6 +164,16 @@ export default function AaliyahPage() {
   const [runtimeNotice, setRuntimeNotice] = React.useState<string | null>(null);
   const [runtimeError, setRuntimeError] = React.useState<string | null>(null);
   const [lastRuntimeResult, setLastRuntimeResult] = React.useState<AaliyahRuntimeResponse["result"] | null>(null);
+  const [commandNotice, setCommandNotice] = React.useState<string | null>(null);
+  const [commandError, setCommandError] = React.useState<string | null>(null);
+  const [draftFollowUpTitles, setDraftFollowUpTitles] = React.useState<Record<string, string>>({});
+  const [taskFollowUpTitles, setTaskFollowUpTitles] = React.useState<Record<string, string>>({});
+  const [draftRevisionNotes, setDraftRevisionNotes] = React.useState<Record<string, string>>({});
+  const [taskEscalationNotes, setTaskEscalationNotes] = React.useState<Record<string, string>>({});
+  const [taskScheduleReasons, setTaskScheduleReasons] = React.useState<Record<string, string>>({});
+  const [taskScheduleTimes, setTaskScheduleTimes] = React.useState<Record<string, string>>({});
+  const [calendarOverrideTargetId, setCalendarOverrideTargetId] = React.useState("");
+  const [calendarOverrideReason, setCalendarOverrideReason] = React.useState("");
 
   const runtimeMutation = useMutation({
     mutationFn: async (input: { intent: string; parameters?: Record<string, unknown>; mode?: AaliyahMode }) =>
@@ -157,6 +204,30 @@ export default function AaliyahPage() {
     },
   });
 
+  const founderCommandMutation = useMutation({
+    mutationFn: async (request: FounderCommandRequest) =>
+      executeFounderCommand({
+        baseUrl: envData.appApiBaseUrl!,
+        bearer: envData.env!.VITE_POLICY_BEARER,
+        fetchClient,
+        request,
+      }),
+    onSuccess: async (response) => {
+      if (response.result.ok) {
+        setCommandError(null);
+        setCommandNotice(response.result.summary);
+      } else {
+        setCommandNotice(null);
+        setCommandError(response.result.message);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["aaliyah"] });
+    },
+    onError: (error) => {
+      setCommandNotice(null);
+      setCommandError((error as Error).message);
+    },
+  });
+
   const resetMutation = useMutation({
     mutationFn: async (scope: "soft" | "hard") =>
       resetAaliyahSession({
@@ -179,18 +250,22 @@ export default function AaliyahPage() {
     },
   });
 
-  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading;
-  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError;
+  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading;
+  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError;
   const errorMessage =
     envData.error ??
     (sessionQuery.error as Error | undefined)?.message ??
     (shellQuery.error as Error | undefined)?.message ??
     (inboxQuery.error as Error | undefined)?.message ??
+    (tasksQuery.error as Error | undefined)?.message ??
+    (commandHistoryQuery.error as Error | undefined)?.message ??
     null;
 
   const shell = shellQuery.data?.shell;
   const inbox = inboxQuery.data?.inbox;
   const session = sessionQuery.data?.session;
+  const tasks = tasksQuery.data?.result.ok ? tasksQuery.data.result.tasks : [];
+  const commandHistory = commandHistoryQuery.data?.result.ok ? commandHistoryQuery.data.result.commands : [];
 
   async function executeIntent(intent: string, parameters?: Record<string, unknown>, mode?: AaliyahMode) {
     await runtimeMutation.mutateAsync({ intent, parameters, mode });
@@ -205,6 +280,86 @@ export default function AaliyahPage() {
     await executeIntent("execute_quick_action", { actionId: action.actionId });
   }
 
+  async function submitFounderCommand(request: Omit<FounderCommandRequest, "mode" | "idempotencyKey"> & { idempotencySeed: string }) {
+    setCommandNotice(null);
+    setCommandError(null);
+    await founderCommandMutation.mutateAsync({
+      mode: activeMode,
+      commandType: request.commandType,
+      target: request.target,
+      payload: request.payload,
+      idempotencyKey: request.idempotencySeed,
+    });
+  }
+
+  async function approveDraft(reviewItemId: string, approvalMode: "approved_for_send" | "approved_for_revision") {
+    await submitFounderCommand({
+      commandType: "approve_draft",
+      target: { targetType: "gmail_draft", targetId: reviewItemId },
+      payload: {
+        approvalMode,
+        notes: approvalMode === "approved_for_revision" ? draftRevisionNotes[reviewItemId] ?? "" : undefined,
+      },
+      idempotencySeed: `approve_draft:${reviewItemId}:${approvalMode}`,
+    });
+  }
+
+  async function createFollowUpFromTarget(targetType: FounderCommandRequest["target"]["targetType"], targetId: string, title: string) {
+    await submitFounderCommand({
+      commandType: "create_follow_up",
+      target: { targetType, targetId },
+      payload: { title },
+      idempotencySeed: `follow_up:${targetType}:${targetId}`,
+    });
+  }
+
+  async function escalateTask(taskId: string) {
+    await submitFounderCommand({
+      commandType: "escalate_task",
+      target: { targetType: "task", targetId: taskId },
+      payload: {
+        escalationReason: "urgent",
+        priority: "critical",
+        notes: taskEscalationNotes[taskId] ?? undefined,
+      },
+      idempotencySeed: `escalate_task:${taskId}`,
+    });
+  }
+
+  async function overrideTaskSchedule(taskId: string) {
+    await submitFounderCommand({
+      commandType: "override_schedule",
+      target: { targetType: "task", targetId: taskId },
+      payload: {
+        overrideMode: "reschedule",
+        startAtIso: toIsoFromLocalDateTime(taskScheduleTimes[taskId]),
+        reason: taskScheduleReasons[taskId] ?? "",
+      },
+      idempotencySeed: `override_schedule:task:${taskId}`,
+    });
+  }
+
+  async function recordCalendarOverride() {
+    await submitFounderCommand({
+      commandType: "override_schedule",
+      target: { targetType: "calendar_event", targetId: calendarOverrideTargetId },
+      payload: {
+        overrideMode: "reschedule",
+        reason: calendarOverrideReason,
+      },
+      idempotencySeed: `override_schedule:calendar:${calendarOverrideTargetId}`,
+    });
+  }
+
+  async function triggerWorkflow(workflowName: "draft_follow_up" | "contact_revival" | "post_meeting_recap") {
+    await submitFounderCommand({
+      commandType: "trigger_workflow",
+      target: { targetType: "workflow", targetId: workflowName },
+      payload: { workflowName },
+      idempotencySeed: `trigger_workflow:${workflowName}`,
+    });
+  }
+
   async function handleQueueAction(item: AaliyahInboxItem, action: string) {
     switch (action) {
       case "open_review_item":
@@ -216,20 +371,7 @@ export default function AaliyahPage() {
           setRuntimeError("Review item context is missing.");
           return;
         }
-        await executeIntent("approve_email_review_item", { reviewItemId });
-        return;
-      }
-      case "reject_review_item": {
-        const reviewItemId = extractReviewItemId(item.sourceItemId);
-        if (!reviewItemId) {
-          setRuntimeError("Review item context is missing.");
-          return;
-        }
-        const note = window.prompt("Optional rejection note", "Not moving forward with this draft right now.");
-        if (note === null) {
-          return;
-        }
-        await executeIntent("reject_email_review_item", { reviewItemId, note });
+        await approveDraft(reviewItemId, "approved_for_send");
         return;
       }
       case "request_review_revision": {
@@ -238,20 +380,12 @@ export default function AaliyahPage() {
           setRuntimeError("Review item context is missing.");
           return;
         }
-        const note = window.prompt("Revision note", "Tighten the language and remove any unconfirmed commitments.");
+        const note = window.prompt("Revision note", draftRevisionNotes[reviewItemId] ?? "Tighten the language and remove any unconfirmed commitments.");
         if (!note) {
           return;
         }
-        await executeIntent("request_email_revision", { reviewItemId, note });
-        return;
-      }
-      case "dispatch_approved_email": {
-        const reviewItemId = extractReviewItemId(item.sourceItemId);
-        if (!reviewItemId) {
-          setRuntimeError("Dispatch target is missing.");
-          return;
-        }
-        await executeIntent("dispatch_approved_email", { reviewItemId });
+        setDraftRevisionNotes((current) => ({ ...current, [reviewItemId]: note }));
+        await approveDraft(reviewItemId, "approved_for_revision");
         return;
       }
       case "open_voice_escalation": {
@@ -326,17 +460,17 @@ export default function AaliyahPage() {
             <MetricTile label="Founder Inbox" value={`${inbox.totalItems}`} />
           </div>
 
-          {runtimeNotice || runtimeError ? (
+          {runtimeNotice || runtimeError || commandNotice || commandError ? (
             <div
               style={{
                 ...panelStyle,
-                borderColor: runtimeError ? "#C92A2A" : tokens.colors.border,
-                background: runtimeError ? "rgba(201,42,42,0.08)" : tokens.colors.surface,
+                borderColor: runtimeError || commandError ? "#C92A2A" : tokens.colors.border,
+                background: runtimeError || commandError ? "rgba(201,42,42,0.08)" : tokens.colors.surface,
               }}
             >
-              <div style={{ fontWeight: 650 }}>{runtimeError ? "Action blocked" : "Runtime update"}</div>
-              <div style={{ marginTop: 6, color: runtimeError ? "#FF8787" : tokens.colors.muted, fontSize: 13 }}>
-                {runtimeError ?? runtimeNotice}
+              <div style={{ fontWeight: 650 }}>{runtimeError || commandError ? "Action blocked" : "Control update"}</div>
+              <div style={{ marginTop: 6, color: runtimeError || commandError ? "#FF8787" : tokens.colors.muted, fontSize: 13 }}>
+                {commandError ?? runtimeError ?? commandNotice ?? runtimeNotice}
               </div>
               {lastRuntimeResult ? (
                 <div style={{ marginTop: 8, fontSize: 12, color: tokens.colors.muted }}>
@@ -374,6 +508,67 @@ export default function AaliyahPage() {
                       />
                     ))
                   )}
+                </div>
+              </Section>
+
+              <Section
+                title="Founder Command Console"
+                subtitle="Backend-governed controls for draft approval, follow-through, task escalation, schedule overrides, workflows, and command history."
+              >
+                <div style={{ display: "grid", gap: 16 }}>
+                  <DraftReviewPanel
+                    drafts={shell.openApprovals.items}
+                    busy={founderCommandMutation.isPending}
+                    revisionNotes={draftRevisionNotes}
+                    followUpTitles={draftFollowUpTitles}
+                    onRevisionNoteChange={(reviewItemId, value) =>
+                      setDraftRevisionNotes((current) => ({ ...current, [reviewItemId]: value }))
+                    }
+                    onFollowUpTitleChange={(reviewItemId, value) =>
+                      setDraftFollowUpTitles((current) => ({ ...current, [reviewItemId]: value }))
+                    }
+                    onApprove={(reviewItemId) => void approveDraft(reviewItemId, "approved_for_send")}
+                    onRevision={(reviewItemId) => void approveDraft(reviewItemId, "approved_for_revision")}
+                    onCreateFollowUp={(reviewItemId, title) => void createFollowUpFromTarget("gmail_draft", reviewItemId, title)}
+                  />
+
+                  <TaskControlPanel
+                    tasks={tasks}
+                    busy={founderCommandMutation.isPending}
+                    escalationNotes={taskEscalationNotes}
+                    followUpTitles={taskFollowUpTitles}
+                    onEscalationNoteChange={(taskId, value) =>
+                      setTaskEscalationNotes((current) => ({ ...current, [taskId]: value }))
+                    }
+                    onFollowUpTitleChange={(taskId, value) =>
+                      setTaskFollowUpTitles((current) => ({ ...current, [taskId]: value }))
+                    }
+                    onEscalate={(taskId) => void escalateTask(taskId)}
+                    onCreateFollowUp={(taskId, title) => void createFollowUpFromTarget("task", taskId, title)}
+                  />
+
+                  <ScheduleOverridePanel
+                    tasks={tasks}
+                    busy={founderCommandMutation.isPending}
+                    taskScheduleReasons={taskScheduleReasons}
+                    taskScheduleTimes={taskScheduleTimes}
+                    calendarTargetId={calendarOverrideTargetId}
+                    calendarReason={calendarOverrideReason}
+                    onTaskReasonChange={(taskId, value) =>
+                      setTaskScheduleReasons((current) => ({ ...current, [taskId]: value }))
+                    }
+                    onTaskTimeChange={(taskId, value) =>
+                      setTaskScheduleTimes((current) => ({ ...current, [taskId]: value }))
+                    }
+                    onCalendarTargetIdChange={setCalendarOverrideTargetId}
+                    onCalendarReasonChange={setCalendarOverrideReason}
+                    onTaskOverride={(taskId) => void overrideTaskSchedule(taskId)}
+                    onCalendarOverride={() => void recordCalendarOverride()}
+                  />
+
+                  <WorkflowTriggerPanel busy={founderCommandMutation.isPending} onTrigger={(workflowName) => void triggerWorkflow(workflowName)} />
+
+                  <CommandHistoryPanel commands={commandHistory} />
                 </div>
               </Section>
             </div>
@@ -483,9 +678,9 @@ function InboxItemCard({
 function actionListForInbox(item: AaliyahInboxItem) {
   switch (item.nextFounderAction) {
     case "approve_review_item":
-      return ["open_review_item", "approve_review_item", "reject_review_item", "request_review_revision"];
+      return ["open_review_item", "approve_review_item", "request_review_revision"];
     case "dispatch_email":
-      return ["open_review_item", "dispatch_approved_email"];
+      return ["open_review_item"];
     case "review_voice_escalation":
       return ["open_voice_escalation"];
     case "review_incident":
@@ -626,11 +821,307 @@ function Section({
   );
 }
 
+function DraftReviewPanel(args: {
+  drafts: AaliyahCommandSurface["openApprovals"]["items"];
+  busy: boolean;
+  revisionNotes: Record<string, string>;
+  followUpTitles: Record<string, string>;
+  onRevisionNoteChange: (reviewItemId: string, value: string) => void;
+  onFollowUpTitleChange: (reviewItemId: string, value: string) => void;
+  onApprove: (reviewItemId: string) => void;
+  onRevision: (reviewItemId: string) => void;
+  onCreateFollowUp: (reviewItemId: string, title: string) => void;
+}) {
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ fontWeight: 700 }}>Draft Review</div>
+      {args.drafts.length === 0 ? (
+        <EmptyState text="No Gmail drafts are waiting for founder approval." />
+      ) : (
+        args.drafts.map((draft) => (
+          <div key={draft.reviewItemId} style={compactPanelStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+              <div>
+                <div style={{ fontWeight: 650 }}>{draft.proposedSubject}</div>
+                <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>{draft.summary}</div>
+              </div>
+              <Tag label={draft.reviewStatus.replaceAll("_", " ")} tone="outline" />
+            </div>
+            <div style={{ marginTop: 10, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+              <DataBlock label="Linked draft" value={shortId(draft.draftId)} />
+              <DataBlock label="Thread" value={shortId(draft.threadId)} />
+              <DataBlock label="Priority" value={draft.priority} />
+              <DataBlock label="Risk" value={draft.riskLevel} />
+            </div>
+            <textarea
+              style={textAreaStyle}
+              rows={2}
+              placeholder="Revision note for Aaliyah"
+              value={args.revisionNotes[draft.reviewItemId] ?? ""}
+              onChange={(event) => args.onRevisionNoteChange(draft.reviewItemId, event.target.value)}
+            />
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button style={primaryButtonStyle} disabled={args.busy} onClick={() => args.onApprove(draft.reviewItemId)}>
+                Approve for send
+              </button>
+              <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onRevision(draft.reviewItemId)}>
+                Approve for revision
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input
+                style={inputStyle}
+                value={args.followUpTitles[draft.reviewItemId] ?? ""}
+                onChange={(event) => args.onFollowUpTitleChange(draft.reviewItemId, event.target.value)}
+                placeholder="Follow-up title"
+              />
+              <button
+                style={ghostButtonStyle}
+                disabled={args.busy || !(args.followUpTitles[draft.reviewItemId] ?? "").trim()}
+                onClick={() => args.onCreateFollowUp(draft.reviewItemId, args.followUpTitles[draft.reviewItemId] ?? "")}
+              >
+                Create follow-up
+              </button>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function TaskControlPanel(args: {
+  tasks: AaliyahTask[];
+  busy: boolean;
+  escalationNotes: Record<string, string>;
+  followUpTitles: Record<string, string>;
+  onEscalationNoteChange: (taskId: string, value: string) => void;
+  onFollowUpTitleChange: (taskId: string, value: string) => void;
+  onEscalate: (taskId: string) => void;
+  onCreateFollowUp: (taskId: string, title: string) => void;
+}) {
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ fontWeight: 700 }}>Task Control</div>
+      {args.tasks.length === 0 ? (
+        <EmptyState text="No open tasks are active." />
+      ) : (
+        args.tasks.slice(0, 6).map((task) => (
+          <div key={task.id} style={compactPanelStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+              <div>
+                <div style={{ fontWeight: 650 }}>{task.title}</div>
+                <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>
+                  {task.nextStepSummary ?? task.description ?? "No next-step summary recorded."}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <Tag label={task.status.replaceAll("_", " ")} tone="outline" />
+                <Tag label={task.priority} tone={task.priority === "critical" ? "filled" : "outline"} />
+              </div>
+            </div>
+            <textarea
+              style={textAreaStyle}
+              rows={2}
+              placeholder="Escalation note"
+              value={args.escalationNotes[task.id] ?? ""}
+              onChange={(event) => args.onEscalationNoteChange(task.id, event.target.value)}
+            />
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button style={primaryButtonStyle} disabled={args.busy} onClick={() => args.onEscalate(task.id)}>
+                Escalate task
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input
+                style={inputStyle}
+                value={args.followUpTitles[task.id] ?? ""}
+                onChange={(event) => args.onFollowUpTitleChange(task.id, event.target.value)}
+                placeholder="Follow-up title"
+              />
+              <button
+                style={ghostButtonStyle}
+                disabled={args.busy || !(args.followUpTitles[task.id] ?? "").trim()}
+                onClick={() => args.onCreateFollowUp(task.id, args.followUpTitles[task.id] ?? "")}
+              >
+                Create follow-up
+              </button>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function ScheduleOverridePanel(args: {
+  tasks: AaliyahTask[];
+  busy: boolean;
+  taskScheduleReasons: Record<string, string>;
+  taskScheduleTimes: Record<string, string>;
+  calendarTargetId: string;
+  calendarReason: string;
+  onTaskReasonChange: (taskId: string, value: string) => void;
+  onTaskTimeChange: (taskId: string, value: string) => void;
+  onCalendarTargetIdChange: (value: string) => void;
+  onCalendarReasonChange: (value: string) => void;
+  onTaskOverride: (taskId: string) => void;
+  onCalendarOverride: () => void;
+}) {
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ fontWeight: 700 }}>Schedule Overrides</div>
+      <div style={{ ...compactPanelStyle, borderColor: "#4DABF7" }}>
+        <div style={{ fontWeight: 650 }}>Backend capability note</div>
+        <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>
+          Task schedule overrides apply real backend changes. Calendar event overrides are recorded and audited, but live calendar mutation is not implemented yet.
+        </div>
+      </div>
+      {args.tasks.slice(0, 3).map((task) => (
+        <div key={task.id} style={compactPanelStyle}>
+          <div style={{ fontWeight: 650 }}>{task.title}</div>
+          <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input
+              style={inputStyle}
+              type="datetime-local"
+              value={args.taskScheduleTimes[task.id] ?? ""}
+              onChange={(event) => args.onTaskTimeChange(task.id, event.target.value)}
+            />
+            <input
+              style={inputStyle}
+              value={args.taskScheduleReasons[task.id] ?? ""}
+              onChange={(event) => args.onTaskReasonChange(task.id, event.target.value)}
+              placeholder="Override reason"
+            />
+            <button
+              style={ghostButtonStyle}
+              disabled={args.busy || !(args.taskScheduleReasons[task.id] ?? "").trim()}
+              onClick={() => args.onTaskOverride(task.id)}
+            >
+              Override task schedule
+            </button>
+          </div>
+        </div>
+      ))}
+      <div style={compactPanelStyle}>
+        <div style={{ fontWeight: 650 }}>Record calendar event override</div>
+        <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input
+            style={inputStyle}
+            value={args.calendarTargetId}
+            onChange={(event) => args.onCalendarTargetIdChange(event.target.value)}
+            placeholder="Calendar event ID"
+          />
+          <input
+            style={inputStyle}
+            value={args.calendarReason}
+            onChange={(event) => args.onCalendarReasonChange(event.target.value)}
+            placeholder="Founder override reason"
+          />
+          <button
+            style={ghostButtonStyle}
+            disabled={args.busy || !args.calendarTargetId.trim() || !args.calendarReason.trim()}
+            onClick={args.onCalendarOverride}
+          >
+            Record override
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WorkflowTriggerPanel({
+  busy,
+  onTrigger,
+}: {
+  busy: boolean;
+  onTrigger: (workflowName: "draft_follow_up" | "contact_revival" | "post_meeting_recap") => void;
+}) {
+  const workflows: Array<{ workflowName: "draft_follow_up" | "contact_revival" | "post_meeting_recap"; label: string; description: string }> = [
+    {
+      workflowName: "draft_follow_up",
+      label: "Draft Follow-Up",
+      description: "Create a governed follow-up task from an approved or in-flight draft."
+    },
+    {
+      workflowName: "contact_revival",
+      label: "Contact Revival",
+      description: "Open a high-signal relationship reactivation follow-up."
+    },
+    {
+      workflowName: "post_meeting_recap",
+      label: "Post Meeting Recap",
+      description: "Create the next action trail after a meeting or schedule decision."
+    }
+  ];
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ fontWeight: 700 }}>Workflow Triggers</div>
+      <div style={{ display: "grid", gap: 8 }}>
+        {workflows.map((workflow) => (
+          <button key={workflow.workflowName} style={actionButtonStyle} disabled={busy} onClick={() => onTrigger(workflow.workflowName)}>
+            <span>
+              <div>{workflow.label}</div>
+              <div style={{ marginTop: 3, fontSize: 12, color: tokens.colors.muted }}>{workflow.description}</div>
+            </span>
+            <span style={{ fontSize: 12, color: tokens.colors.muted }}>Trigger</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CommandHistoryPanel({ commands }: { commands: FounderCommandRecord[] }) {
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ fontWeight: 700 }}>Command History</div>
+      {commands.length === 0 ? (
+        <EmptyState text="No founder commands have been recorded yet." />
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          {commands.map((command) => (
+            <div key={command.id} style={compactPanelStyle}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 650 }}>{command.commandType.replaceAll("_", " ")}</div>
+                  <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>{command.summary}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <Tag label={command.executionStatus} tone={command.executionStatus === "executed" ? "filled" : "outline"} />
+                  <Tag label={command.targetType.replaceAll("_", " ")} tone="outline" />
+                </div>
+              </div>
+              <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                <DataBlock label="Command ID" value={shortId(command.id)} />
+                <DataBlock label="Target" value={shortId(command.targetId)} />
+                <DataBlock label="Audit" value={shortId(command.auditEventId)} />
+                <DataBlock label="Executed" value={new Date(command.executedAt ?? command.createdAt).toLocaleString()} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DataRow({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13 }}>
       <span style={{ color: tokens.colors.muted }}>{label}</span>
       <span style={{ fontWeight: 600, textAlign: "right" }}>{value}</span>
+    </div>
+  );
+}
+
+function DataBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={miniFieldStyle}>
+      <div style={{ fontSize: 11, color: tokens.colors.muted, textTransform: "uppercase", letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ marginTop: 4, fontSize: 13, fontWeight: 600 }}>{value}</div>
     </div>
   );
 }
@@ -798,6 +1289,13 @@ const compactPanelStyle: React.CSSProperties = {
   padding: 12,
 };
 
+const miniFieldStyle: React.CSSProperties = {
+  border: `1px solid ${tokens.colors.border}`,
+  borderRadius: 12,
+  background: tokens.colors.surface,
+  padding: 10,
+};
+
 const ghostButtonStyle: React.CSSProperties = {
   borderRadius: 14,
   border: `1px solid ${tokens.colors.border}`,
@@ -806,6 +1304,12 @@ const ghostButtonStyle: React.CSSProperties = {
   padding: "10px 12px",
   cursor: "pointer",
   fontWeight: 650,
+};
+
+const primaryButtonStyle: React.CSSProperties = {
+  ...ghostButtonStyle,
+  background: "rgba(230,193,90,0.18)",
+  border: `1px solid ${tokens.colors.gold}`,
 };
 
 const chipButtonStyle: React.CSSProperties = {
@@ -832,4 +1336,25 @@ const actionButtonStyle: React.CSSProperties = {
   padding: "12px 14px",
   cursor: "pointer",
   fontWeight: 650,
+};
+
+const inputStyle: React.CSSProperties = {
+  minWidth: 180,
+  flex: 1,
+  borderRadius: 12,
+  border: `1px solid ${tokens.colors.border}`,
+  background: tokens.colors.surface,
+  color: tokens.colors.text,
+  padding: "10px 12px",
+};
+
+const textAreaStyle: React.CSSProperties = {
+  width: "100%",
+  borderRadius: 12,
+  border: `1px solid ${tokens.colors.border}`,
+  background: tokens.colors.surface,
+  color: tokens.colors.text,
+  padding: "10px 12px",
+  resize: "vertical",
+  minHeight: 72,
 };
