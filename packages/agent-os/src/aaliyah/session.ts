@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { AaliyahAccessControlService } from "./access.js";
 import { AaliyahMemoryBoundaryService } from "./memory-boundary.js";
 import type { AaliyahDiagnosticsService } from "./diagnostics.js";
 import { AaliyahIdempotencyService, stableRequestFingerprint } from "./idempotency.js";
@@ -48,6 +49,7 @@ const DEFAULT_COMPANY = "zbestmedia";
 
 export class AaliyahSessionContextService {
   private readonly boundary: AaliyahMemoryBoundaryService;
+  private readonly access: AaliyahAccessControlService;
 
   constructor(
     private readonly repository: AgentOsRepository,
@@ -56,6 +58,7 @@ export class AaliyahSessionContextService {
     private readonly idempotency: AaliyahIdempotencyService = new AaliyahIdempotencyService(repository)
   ) {
     this.boundary = boundary ?? new AaliyahMemoryBoundaryService();
+    this.access = new AaliyahAccessControlService(this.boundary);
   }
 
   async resolveSession(args: {
@@ -69,6 +72,7 @@ export class AaliyahSessionContextService {
     activeMode: AaliyahRuntimeMode;
     boundaryViolation: AaliyahBoundaryViolationResult | null;
   }> {
+    this.access.assertFounderPrincipal(args.principalContext);
     const generatedAt = args.generatedAt ?? new Date().toISOString();
     const loadedSession = await this.repository.getAaliyahSessionContext({
       tenantId: args.tenantId,
@@ -177,6 +181,7 @@ export class AaliyahSessionContextService {
     actorId: string;
     principalContext: "founder" | "operator";
   }): Promise<AaliyahSessionSnapshotView> {
+    this.access.assertFounderPrincipal(args.principalContext);
     const { session } = await this.resolveSession(args);
     return buildSessionSnapshotView(session);
   }
@@ -190,6 +195,7 @@ export class AaliyahSessionContextService {
     generatedAt?: string;
     idempotencyKey?: string | null;
   }): Promise<AaliyahSessionResetResult> {
+    this.access.assertFounderPrincipal(args.principalContext);
     const generatedAt = args.generatedAt ?? new Date().toISOString();
     return this.idempotency.execute({
       tenantId: args.tenantId,
@@ -250,6 +256,7 @@ export class AaliyahSessionContextService {
     result: AaliyahRuntimeResult;
     generatedAt: string;
   }): Promise<AaliyahSessionSnapshotView> {
+    this.access.assertFounderPrincipal(args.session.principalContext);
     let session = appendIntentTrail(
       args.session,
       this.buildIntentTrailEntry({ request: args.request, result: args.result, generatedAt: args.generatedAt }),

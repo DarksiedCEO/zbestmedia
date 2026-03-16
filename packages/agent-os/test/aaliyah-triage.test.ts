@@ -223,4 +223,14 @@ describe("Aaliyah founder inbox triage", () => {
     expect(stale).toHaveLength(1);
     expect(stale[0]?.queueItemId).toBe("queue:review:1");
   });
+
+  it("denies operator principal contexts from reading the prioritized founder inbox", async () => {
+    await expect(service.getPrioritizedInbox({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      principalContext: "operator",
+      mode: "founder",
+      generatedAt: "2026-03-15T12:00:00.000Z"
+    })).rejects.toThrowError("aaliyah_principal_context_denied");
+  });
 });

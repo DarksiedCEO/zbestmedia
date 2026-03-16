@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { AaliyahAccessControlService } from "./access.js";
 import type { FounderBriefingMode, FounderRecommendedAction } from "./briefing-types.js";
 import type {
   AaliyahFounderQueueAllowedAction,
@@ -51,6 +52,8 @@ const RISK_WEIGHT: Record<AaliyahQueueRisk, number> = {
 };
 
 export class AaliyahFounderReviewQueueService {
+  private readonly access = new AaliyahAccessControlService();
+
   constructor(
     private readonly org: AgentOrgService,
     private readonly briefing: AaliyahFounderBriefingService,
@@ -60,6 +63,12 @@ export class AaliyahFounderReviewQueueService {
   ) {}
 
   async getQueue(args: { tenantId: string; mode: FounderBriefingMode; generatedAt?: string }): Promise<AaliyahFounderReviewQueue> {
+    this.access.assertFounderModeAccess({
+      principalContext: "founder",
+      activeMode: args.mode,
+      requestedMode: args.mode,
+      detailLevel: args.mode === "founder" ? "summary" : "detail"
+    });
     const generatedAt = args.generatedAt ?? new Date().toISOString();
     const manifestVersion = this.org.getManifestVersion();
     const [briefing, pendingReviews, approvedReviews, voiceEscalations, openIncidents] = await Promise.all([

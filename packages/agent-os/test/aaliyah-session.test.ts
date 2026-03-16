@@ -216,4 +216,22 @@ describe("Aaliyah session context", () => {
     expect(repository.getAaliyahSessionContext).not.toHaveBeenCalled();
     expect(repository.upsertAaliyahSessionContext).not.toHaveBeenCalled();
   });
+
+  it("denies operator principal contexts from creating or reusing Aaliyah session state", async () => {
+    const repository = {
+      getAaliyahSessionContext: vi.fn(),
+      upsertAaliyahSessionContext: vi.fn()
+    } as any;
+
+    const service = new AaliyahSessionContextService(repository);
+
+    await expect(service.resolveSession({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      actorId: "actor-1",
+      principalContext: "operator",
+      requestedMode: "founder"
+    })).rejects.toThrowError("aaliyah_principal_context_denied");
+
+    expect(repository.getAaliyahSessionContext).not.toHaveBeenCalled();
+  });
 });

@@ -5,6 +5,7 @@ export * from "./runtime-types.js";
 export * from "./runtime-enforcement.js";
 export * from "./briefing-types.js";
 export * from "./briefing.js";
+export * from "./access.js";
 export * from "./confidence-types.js";
 export * from "./confidence.js";
 export * from "./diagnostics-types.js";

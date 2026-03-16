@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 
 import {
   AgentAdminService,
@@ -141,6 +141,7 @@ import {
   WorkerFreshnessQuerySchema,
   WorkerQueueEvalBodySchema
 } from "./schemas";
+import { requireRole } from "../agency/policy/http/authz";
 
 export function agentRoutes(opts: {
   repository: AgentOsRepository;
@@ -222,6 +223,9 @@ export function agentRoutes(opts: {
     }
 
     function handleAgentError(reply: { code: (statusCode: number) => { send: (body: unknown) => unknown } }, error: unknown) {
+      if (error instanceof Error && error.message === "aaliyah_principal_context_denied") {
+        return reply.code(403).send({ error: error.message });
+      }
       if (error instanceof AgentLifecycleStateError) {
         return reply.code(409).send({ error: error.message });
       }
@@ -247,6 +251,10 @@ export function agentRoutes(opts: {
         return reply.code(error.message === "aaliyah_preference_not_found" ? 404 : 400).send({ error: error.message });
       }
       throw error;
+    }
+
+    function requireAaliyahFounderRole(req: FastifyRequest): void {
+      requireRole(req, "founder");
     }
 
     function handleIncidentError(reply: { code: (statusCode: number) => { send: (body: unknown) => unknown } }, error: unknown) {
@@ -461,6 +469,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/briefing", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const query = AaliyahBriefingQuerySchema.safeParse(req.query ?? {});
       if (!query.success) {
         return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
@@ -479,6 +488,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/command-surface", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const query = AaliyahCommandSurfaceQuerySchema.safeParse(req.query ?? {});
       if (!query.success) {
         return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
@@ -498,6 +508,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/quick-actions", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const query = AaliyahCommandSurfaceQuerySchema.safeParse(req.query ?? {});
       if (!query.success) {
         return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
@@ -515,6 +526,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/interruptions", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const query = AaliyahCommandSurfaceQuerySchema.safeParse(req.query ?? {});
       if (!query.success) {
         return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
@@ -533,6 +545,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/confidence-summary", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const query = AaliyahCommandSurfaceQuerySchema.safeParse(req.query ?? {});
       if (!query.success) {
         return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
@@ -551,6 +564,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/preferences", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const query = AaliyahPreferenceQuerySchema.safeParse(req.query ?? {});
       if (!query.success) {
         return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
@@ -569,6 +583,7 @@ export function agentRoutes(opts: {
     });
 
     app.post("/v1/agent-os/aaliyah/preferences", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const body = AaliyahPreferenceCreateBodySchema.safeParse(req.body ?? {});
       if (!body.success) {
         return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
@@ -592,6 +607,7 @@ export function agentRoutes(opts: {
     });
 
     app.post("/v1/agent-os/aaliyah/preferences/:preferenceId/deactivate", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const path = AaliyahPreferenceIdParamSchema.safeParse(req.params);
       if (!path.success) {
         return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
@@ -615,6 +631,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/memory-boundaries", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const query = AaliyahPreferenceQuerySchema.safeParse(req.query ?? {});
       if (!query.success) {
         return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
@@ -632,6 +649,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/review-queue", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const query = AaliyahCommandSurfaceQuerySchema.safeParse(req.query ?? {});
       if (!query.success) {
         return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
@@ -650,6 +668,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/review-queue/:queueItemId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const path = AaliyahReviewQueueItemIdParamSchema.safeParse(req.params);
       const query = AaliyahCommandSurfaceQuerySchema.safeParse(req.query ?? {});
       if (!path.success) {
@@ -677,6 +696,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/inbox", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const query = AaliyahInboxQuerySchema.safeParse(req.query ?? {});
       if (!query.success) {
         return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
@@ -698,6 +718,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/inbox/blocked", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const query = AaliyahInboxQuerySchema.safeParse(req.query ?? {});
       if (!query.success) {
         return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
@@ -742,6 +763,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/inbox/stale", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const query = AaliyahInboxQuerySchema.safeParse(req.query ?? {});
       if (!query.success) {
         return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
@@ -786,6 +808,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/inbox/:itemId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const path = AaliyahInboxItemIdParamSchema.safeParse(req.params);
       const query = AaliyahInboxQuerySchema.safeParse(req.query ?? {});
       if (!path.success || !query.success) {
@@ -812,6 +835,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/session", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const session = await opts.aaliyahSessionService.getSessionSnapshot({
         tenantId: req.auth.tenantId,
         actorId: req.auth.actorId,
@@ -826,6 +850,7 @@ export function agentRoutes(opts: {
     });
 
     app.post("/v1/agent-os/aaliyah/session/reset", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const body = AaliyahSessionResetBodySchema.safeParse(req.body ?? {});
       if (!body.success) {
         return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
@@ -855,6 +880,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/follow-through", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const record = await opts.aaliyahFollowThroughService.getActiveFollowThrough({
         tenantId: req.auth.tenantId,
         actorId: req.auth.actorId,
@@ -869,6 +895,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/follow-through/history", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const items = await opts.aaliyahFollowThroughService.getFollowThroughHistory({
         tenantId: req.auth.tenantId,
         actorId: req.auth.actorId,
@@ -884,6 +911,7 @@ export function agentRoutes(opts: {
     });
 
     app.get("/v1/agent-os/aaliyah/diagnostics", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const query = AaliyahDiagnosticsQuerySchema.safeParse(req.query ?? {});
       if (!query.success) {
         return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
@@ -908,6 +936,7 @@ export function agentRoutes(opts: {
       reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown }; send: (payload: unknown) => unknown },
       action: "complete" | "abandon" | "escalate" | "invalidate"
     ) {
+      requireAaliyahFounderRole(req as FastifyRequest);
       const body = AaliyahFollowThroughActionBodySchema.safeParse(req.body ?? {});
       if (!body.success) {
         return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
@@ -951,6 +980,7 @@ export function agentRoutes(opts: {
     app.post("/v1/agent-os/aaliyah/follow-through/invalidate", async (req, reply) => handleFollowThroughAction(req, reply, "invalidate"));
 
     app.post("/v1/agent-os/aaliyah/runtime", async (req, reply) => {
+      requireAaliyahFounderRole(req);
       const body = AaliyahRuntimeRequestBodySchema.safeParse(req.body ?? {});
       if (!body.success) {
         return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });

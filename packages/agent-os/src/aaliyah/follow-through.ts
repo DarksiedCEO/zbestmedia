@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { AaliyahAccessControlService } from "./access.js";
 import { AaliyahMemoryBoundaryService } from "./memory-boundary.js";
 import type { AaliyahDiagnosticsService } from "./diagnostics.js";
 import { AaliyahIdempotencyService, stableRequestFingerprint } from "./idempotency.js";
@@ -34,6 +35,7 @@ const DEFAULT_COMPANY = "zbestmedia";
 
 export class AaliyahFollowThroughService {
   private readonly boundary: AaliyahMemoryBoundaryService;
+  private readonly access: AaliyahAccessControlService;
 
   constructor(
     private readonly repository: AgentOsRepository,
@@ -43,6 +45,7 @@ export class AaliyahFollowThroughService {
     private readonly idempotency: AaliyahIdempotencyService = new AaliyahIdempotencyService(repository)
   ) {
     this.boundary = boundary ?? new AaliyahMemoryBoundaryService();
+    this.access = new AaliyahAccessControlService(this.boundary);
   }
 
   async getActiveFollowThrough(args: {
@@ -51,6 +54,7 @@ export class AaliyahFollowThroughService {
     principalContext: "founder" | "operator";
     generatedAt?: string;
   }): Promise<FollowThroughRecord | null> {
+    this.access.assertFounderPrincipal(args.principalContext);
     const generatedAt = args.generatedAt ?? new Date().toISOString();
     const { session } = await this.sessions.resolveSession({
       tenantId: args.tenantId,
@@ -70,6 +74,7 @@ export class AaliyahFollowThroughService {
     principalContext: "founder" | "operator";
     limit?: number;
   }): Promise<FollowThroughHistoryEntry[]> {
+    this.access.assertFounderPrincipal(args.principalContext);
     return this.repository.listAaliyahFollowThroughHistory({
       tenantId: args.tenantId,
       actorId: args.actorId,
@@ -79,6 +84,7 @@ export class AaliyahFollowThroughService {
   }
 
   async applyAction(args: FollowThroughActionRequest): Promise<FollowThroughActionResult> {
+    this.access.assertFounderPrincipal(args.principalContext);
     const generatedAt = args.generatedAt ?? new Date().toISOString();
     return this.idempotency.execute({
       tenantId: args.tenantId,
@@ -195,6 +201,7 @@ export class AaliyahFollowThroughService {
     args: FollowThroughActionRequest & { generatedAt: string },
     existingSession?: AaliyahSessionContext
   ): Promise<FollowThroughEligibilityResult> {
+    this.access.assertFounderPrincipal(args.principalContext);
     const session = existingSession
       ?? (await this.sessions.resolveSession({
         tenantId: args.tenantId,

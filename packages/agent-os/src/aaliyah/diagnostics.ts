@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { AaliyahAccessControlService } from "./access.js";
 import type {
   AaliyahClosureQualitySignal,
   AaliyahDiagnosticsEvent,
@@ -23,6 +24,8 @@ const WINDOW_MS: Record<AaliyahDiagnosticsWindow, number> = {
 };
 
 export class AaliyahDiagnosticsService {
+  private readonly access = new AaliyahAccessControlService();
+
   constructor(private readonly repository: AgentOsRepository) {}
 
   async recordEvent(args: {
@@ -36,6 +39,7 @@ export class AaliyahDiagnosticsService {
     payload: Record<string, unknown>;
     createdAt?: string;
   }): Promise<AaliyahDiagnosticsEvent> {
+    this.access.assertFounderPrincipal(args.principalContext);
     return this.repository.createAaliyahDiagnosticsEvent({
       tenantId: args.tenantId,
       actorId: args.actorId,
@@ -56,6 +60,7 @@ export class AaliyahDiagnosticsService {
     window: AaliyahDiagnosticsWindow;
     generatedAt?: string;
   }): Promise<AaliyahDiagnosticsSummary> {
+    this.access.assertFounderPrincipal(args.principalContext);
     const generatedAt = args.generatedAt ?? new Date().toISOString();
     const windowStartedAt = new Date(new Date(generatedAt).getTime() - WINDOW_MS[args.window]).toISOString();
 

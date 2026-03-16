@@ -92,6 +92,35 @@ export class AaliyahRuntimeService {
   async execute(args: AaliyahRuntimeRequestContext & { request: AaliyahRuntimeRequestInput }): Promise<AaliyahRuntimeResult> {
     const runtimeRequestId = `aaliyah-runtime:${randomUUID()}`;
     const generatedAt = new Date().toISOString();
+    const resolvedIntent = this.resolveIntent(args.request.intent);
+    if ((args.principalContext ?? "founder") !== "founder") {
+      return this.buildFallback({
+        runtimeRequestId,
+        activeMode: args.request.mode ?? DEFAULT_MODE,
+        generatedAt,
+        requestId: args.requestId ?? null,
+        resolvedIntent,
+        invokedSurface: "aaliyah-runtime",
+        enforcement: {
+          requestedAgentId: "aaliyah",
+          requestedAtomicTaskId: "executive_orchestration_founder_protection",
+          resolvedAgentId: "aaliyah",
+          resolvedAtomicTaskId: "executive_orchestration_founder_protection",
+          confidence: "low",
+          company: "zbestmedia",
+          mode: "executive_assistant",
+          principalContext: args.principalContext ?? "operator",
+          approvalState: "not_required",
+          approvalClass: "orchestration_only",
+          reason: "aaliyah_principal_context_denied"
+        },
+        fallback: {
+          outcome: "deny_due_to_scope",
+          reason: "aaliyah_principal_context_denied",
+          delegateToAgentId: null
+        }
+      });
+    }
     const sessionResolution = await this.sessions.resolveSession({
       tenantId: args.tenantId,
       actorId: args.actorId,
@@ -100,7 +129,6 @@ export class AaliyahRuntimeService {
       generatedAt
     });
     const activeMode = sessionResolution.activeMode ?? DEFAULT_MODE;
-    const resolvedIntent = this.resolveIntent(args.request.intent);
     if (sessionResolution.boundaryViolation) {
       return this.finalizeRuntimeResult(sessionResolution.session, args.request, generatedAt, this.buildFallback({
         runtimeRequestId,

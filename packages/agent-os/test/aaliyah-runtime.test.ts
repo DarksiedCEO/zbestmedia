@@ -1224,4 +1224,19 @@ describe("Aaliyah runtime agent", () => {
       limit: undefined
     });
   });
+
+  it("fails closed when a non-founder principal tries to use the Aaliyah runtime", async () => {
+    const result = await service.execute({
+      tenantId: "tenant",
+      actorId: "actor-1",
+      principalContext: "operator",
+      request: {
+        intent: "get_founder_briefing"
+      }
+    });
+
+    expect(result.outcomeType).toBe("fallback");
+    expect(result.fallback?.outcome).toBe("deny_due_to_scope");
+    expect(result.fallback?.reason).toBe("aaliyah_principal_context_denied");
+  });
 });

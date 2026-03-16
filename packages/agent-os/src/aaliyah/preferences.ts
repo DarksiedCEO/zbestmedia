@@ -1,5 +1,6 @@
 import type { AgentOsRepository } from "../persistence/repository.js";
 import type { FounderBriefingMode } from "./briefing-types.js";
+import { AaliyahAccessControlService } from "./access.js";
 import type {
   AaliyahFounderPreferenceRecord,
   AaliyahPreferenceCategory,
@@ -25,9 +26,17 @@ const DEFAULT_RESOLVED = {
 } as const;
 
 export class AaliyahPreferenceService {
+  private readonly access = new AaliyahAccessControlService();
+
   constructor(private readonly repository: AgentOsRepository) {}
 
   async listPreferences(args: { tenantId: string; mode: FounderBriefingMode; generatedAt?: string }): Promise<AaliyahPreferenceList> {
+    this.access.assertFounderModeAccess({
+      principalContext: "founder",
+      activeMode: args.mode,
+      requestedMode: args.mode,
+      detailLevel: args.mode === "founder" ? "summary" : "detail"
+    });
     const items = await this.repository.listAaliyahFounderPreferences({
       tenantId: args.tenantId,
       activeOnly: true,
@@ -93,6 +102,12 @@ export class AaliyahPreferenceService {
   }
 
   async resolvePreferences(args: { tenantId: string; mode: FounderBriefingMode }): Promise<AaliyahResolvedPreferences> {
+    this.access.assertFounderModeAccess({
+      principalContext: "founder",
+      activeMode: args.mode,
+      requestedMode: args.mode,
+      detailLevel: args.mode === "founder" ? "summary" : "detail"
+    });
     const items = await this.repository.listAaliyahFounderPreferences({
       tenantId: args.tenantId,
       activeOnly: true,

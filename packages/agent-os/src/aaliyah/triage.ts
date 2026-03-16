@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { AaliyahAccessControlService } from "./access.js";
 import type {
   AaliyahFounderInboxItem,
   AaliyahFounderInboxSummary,
@@ -41,6 +42,8 @@ const PRIORITY_WEIGHT: Record<AaliyahPriorityBand, number> = {
 };
 
 export class AaliyahFounderInboxTriageService {
+  private readonly access = new AaliyahAccessControlService();
+
   constructor(
     private readonly org: AgentOrgService,
     private readonly reviewQueue: AaliyahFounderReviewQueueService,
@@ -54,6 +57,12 @@ export class AaliyahFounderInboxTriageService {
     mode: FounderBriefingMode;
     generatedAt?: string;
   }): Promise<AaliyahPrioritizedQueueResult> {
+    this.access.assertFounderModeAccess({
+      principalContext: args.principalContext,
+      activeMode: args.mode,
+      requestedMode: args.mode,
+      detailLevel: args.mode === "founder" ? "summary" : "detail"
+    });
     const generatedAt = args.generatedAt ?? new Date().toISOString();
     const queue = await this.reviewQueue.getQueue({ tenantId: args.tenantId, mode: args.mode, generatedAt });
     const followThroughRecords = await this.repository.listAaliyahFollowThroughRecordsBySourceIds({

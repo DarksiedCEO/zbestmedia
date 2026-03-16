@@ -1,5 +1,5 @@
 import Fastify, { type FastifyRequest } from "fastify";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { agentRoutes } from "../src/agents/routes";
 import {
@@ -67,6 +67,7 @@ import { requestIdPlugin } from "../src/http/requestId";
 
 describe("agent routes", () => {
   let app: ReturnType<typeof Fastify>;
+  let authRoles = ["admin", "founder"];
   const repository = {
     provisionFoundation: vi.fn(async () => ({
       agents: [{ agentId: "brandyn" }, { agentId: "jordyn" }, { agentId: "kobe" }, { agentId: "oracle" }, { agentId: "titan" }, { agentId: "maestro" }]
@@ -3076,7 +3077,7 @@ describe("agent routes", () => {
       req.auth = {
         tenantId: "11111111-1111-4111-8111-111111111111",
         actorId: "actor-1",
-        roles: ["admin"]
+        roles: [...authRoles]
       };
     });
     await app.register(
@@ -3118,6 +3119,10 @@ describe("agent routes", () => {
 
   afterAll(async () => {
     await app.close();
+  });
+
+  afterEach(() => {
+    authRoles = ["admin", "founder"];
   });
 
   it("provisions the brand agent foundation", async () => {
@@ -3263,6 +3268,22 @@ describe("agent routes", () => {
     });
   });
 
+  it("denies Aaliyah routes when the caller lacks the founder role", async () => {
+    authRoles = ["admin"];
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/briefing?mode=founder"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({
+      statusCode: 403,
+      code: "FORBIDDEN",
+      message: "FORBIDDEN"
+    });
+  });
+
   it("exposes the founder runtime route", async () => {
     const res = await app.inject({
       method: "POST",
@@ -3279,13 +3300,13 @@ describe("agent routes", () => {
     expect(aaliyahRuntimeService.execute).toHaveBeenCalledWith({
       tenantId: "11111111-1111-4111-8111-111111111111",
       actorId: "actor-1",
-      requestId: "req-k",
+      requestId: expect.stringMatching(/^req-/),
       principalContext: "founder",
       request: {
         intent: "get_founder_briefing",
         mode: "zbestmedia",
         parameters: {},
-        idempotencyKey: "req-k"
+        idempotencyKey: expect.stringMatching(/^req-/)
       }
     });
   });
