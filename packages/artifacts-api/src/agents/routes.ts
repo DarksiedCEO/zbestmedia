@@ -8,6 +8,7 @@ import {
   AaliyahFounderInboxTriageService,
   AaliyahFounderCommandService,
   AaliyahFollowThroughEngineService,
+  AaliyahNotificationEngineService,
   AaliyahRecommendationEngineService,
   AaliyahCalendarService,
   AaliyahCrmService,
@@ -100,6 +101,11 @@ import {
   RecommendationListQuerySchema,
   RecommendationListResponseSchema,
   RecommendationResponseSchema,
+  NotificationEvaluateBodySchema,
+  NotificationIdParamSchema,
+  NotificationListQuerySchema,
+  NotificationListResponseSchema,
+  NotificationResponseSchema,
   AaliyahTaskUpdateBodySchema,
   AaliyahWorkspaceGmailDraftBodySchema,
   AaliyahRuntimeRequestBodySchema,
@@ -206,6 +212,7 @@ export function agentRoutes(opts: {
   aaliyahFounderCommandService: AaliyahFounderCommandService;
   aaliyahFollowThroughEngineService: AaliyahFollowThroughEngineService;
   aaliyahRecommendationEngineService: AaliyahRecommendationEngineService;
+  aaliyahNotificationEngineService: AaliyahNotificationEngineService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
   aaliyahTriageService: AaliyahFounderInboxTriageService;
   aaliyahFollowThroughService: AaliyahFollowThroughService;
@@ -1660,6 +1667,129 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_recommendation_list_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/notifications/evaluate", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = NotificationEvaluateBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahNotificationEngineService.evaluateSource({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        source: body.data.source
+      });
+
+      return reply.code(201).send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_notification_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/notifications/:notificationId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = NotificationIdParamSchema.safeParse(req.params ?? {});
+      const query = NotificationListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahNotificationEngineService.getNotificationById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        notificationId: path.data.notificationId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_notification_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/notifications", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = NotificationListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahNotificationEngineService.listNotifications({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        limit: query.data.limit,
+        status: query.data.status
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_notification_list_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/notifications/:notificationId/acknowledge", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = NotificationIdParamSchema.safeParse(req.params ?? {});
+      const query = NotificationListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahNotificationEngineService.acknowledgeNotification({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        notificationId: path.data.notificationId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_notification_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/notifications/:notificationId/dismiss", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = NotificationIdParamSchema.safeParse(req.params ?? {});
+      const query = NotificationListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahNotificationEngineService.dismissNotification({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        notificationId: path.data.notificationId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_notification_result",
         result
       });
     });

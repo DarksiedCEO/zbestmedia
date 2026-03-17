@@ -109,6 +109,13 @@ import type {
   RecommendationType
 } from "../aaliyah/recommendation-engine-types.js";
 import type {
+  NotificationRecord as NotificationRecordShape,
+  NotificationSeverity,
+  NotificationSourceType,
+  NotificationStatus,
+  NotificationType
+} from "../aaliyah/notification-engine-types.js";
+import type {
   AssignmentPolicyDecision,
   AssignmentRecord,
   ExecutionRunRecord,
@@ -588,6 +595,65 @@ export const AaliyahRecommendationRecordSchema = z.object({
   evaluatedAtIso: z.string().datetime()
 }) satisfies z.ZodType<RecommendationRecordShape>;
 export type AaliyahRecommendationRecord = z.infer<typeof AaliyahRecommendationRecordSchema>;
+
+export const NotificationTypeSchema = z.enum([
+  "stale_critical_work",
+  "blocked_recommendation",
+  "founder_review_required",
+  "high_priority_follow_through",
+  "opportunity_signal",
+  "noop"
+]) satisfies z.ZodType<NotificationType>;
+export type NotificationTypeRecord = z.infer<typeof NotificationTypeSchema>;
+
+export const NotificationSeveritySchema = z.enum([
+  "info",
+  "warning",
+  "critical"
+]) satisfies z.ZodType<NotificationSeverity>;
+export type NotificationSeverityRecord = z.infer<typeof NotificationSeveritySchema>;
+
+export const NotificationStatusSchema = z.enum([
+  "active",
+  "acknowledged",
+  "dismissed"
+]) satisfies z.ZodType<NotificationStatus>;
+export type NotificationStatusRecord = z.infer<typeof NotificationStatusSchema>;
+
+export const NotificationSourceTypeSchema = z.enum([
+  "follow_through_record",
+  "recommendation",
+  "task",
+  "founder_command",
+  "contact",
+  "account"
+]) satisfies z.ZodType<NotificationSourceType>;
+export type NotificationSourceTypeRecord = z.infer<typeof NotificationSourceTypeSchema>;
+
+export const AaliyahNotificationRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  source: z.object({
+    sourceType: NotificationSourceTypeSchema,
+    sourceId: z.string().min(1)
+  }),
+  notificationType: NotificationTypeSchema,
+  severity: NotificationSeveritySchema,
+  status: NotificationStatusSchema,
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  reason: z.string().min(1),
+  idempotencyKey: z.string().min(1),
+  relatedRecommendationId: z.string().min(1).nullable(),
+  relatedTaskId: z.string().min(1).nullable(),
+  auditEventId: z.string().min(1).nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAtIso: z.string().datetime(),
+  evaluatedAtIso: z.string().datetime(),
+  acknowledgedAtIso: z.string().datetime().nullable(),
+  dismissedAtIso: z.string().datetime().nullable()
+}) satisfies z.ZodType<NotificationRecordShape>;
+export type AaliyahNotificationRecord = z.infer<typeof AaliyahNotificationRecordSchema>;
 
 
 const EmailRoutingTargetSchema = z.union([
@@ -1277,7 +1343,12 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "follow_through_engine_noop",
   "recommendation_engine_created",
   "recommendation_engine_replayed",
-  "recommendation_engine_noop"
+  "recommendation_engine_noop",
+  "notification_engine_created",
+  "notification_engine_replayed",
+  "notification_engine_acknowledged",
+  "notification_engine_dismissed",
+  "notification_engine_noop"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 

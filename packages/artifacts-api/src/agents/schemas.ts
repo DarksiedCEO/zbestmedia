@@ -8,6 +8,7 @@ import {
   AaliyahCrmAccountSchema,
   AaliyahCrmContactSchema,
   AaliyahFollowThroughEngineRecordSchema,
+  AaliyahNotificationRecordSchema,
   AaliyahRecommendationRecordSchema,
   AaliyahCrmNoteSchema,
   AaliyahFounderCommandRecordSchema,
@@ -713,6 +714,57 @@ export const RecommendationListResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_recommendation_list_result"),
   result: z.discriminatedUnion("ok", [RecommendationListSuccessSchema, RecommendationFailureSchema])
+});
+
+export const NotificationEvaluateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  source: z.object({
+    sourceType: z.enum(["follow_through_record", "recommendation", "task", "founder_command", "contact", "account"]),
+    sourceId: z.string().min(1)
+  })
+});
+
+export const NotificationIdParamSchema = z.object({
+  notificationId: z.string().min(1)
+});
+
+export const NotificationListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  limit: z.coerce.number().int().positive().max(100).default(50),
+  status: z.enum(["active", "acknowledged", "dismissed"]).optional()
+});
+
+const NotificationFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const NotificationSuccessSchema = z.object({
+  ok: z.literal(true),
+  notification: AaliyahNotificationRecordSchema,
+  replayed: z.boolean(),
+  message: z.string().min(1)
+});
+
+const NotificationListSuccessSchema = z.object({
+  ok: z.literal(true),
+  notifications: z.array(AaliyahNotificationRecordSchema),
+  message: z.string().min(1)
+});
+
+export const NotificationResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_notification_result"),
+  result: z.discriminatedUnion("ok", [NotificationSuccessSchema, NotificationFailureSchema])
+});
+
+export const NotificationListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_notification_list_result"),
+  result: z.discriminatedUnion("ok", [NotificationListSuccessSchema, NotificationFailureSchema])
 });
 
 export const BrandPipelineAdvanceBodySchema = z.object({

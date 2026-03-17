@@ -19,6 +19,7 @@ import type {
   AaliyahDiagnosticsEventRecord,
   AaliyahFollowThroughEngineRecord,
   AaliyahFounderCommandRecord,
+  AaliyahNotificationRecord,
   AaliyahRecommendationRecord,
   AaliyahTaskRecord,
   AaliyahMutationIdempotencyRecord,
@@ -394,6 +395,28 @@ type RecommendationRow = {
   audit_event_id: string | null;
   created_at: string | Date;
   evaluated_at: string | Date;
+};
+
+type NotificationRow = {
+  notification_id: string;
+  tenant_id: string;
+  source_type: AaliyahNotificationRecord["source"]["sourceType"];
+  source_id: string;
+  notification_type: AaliyahNotificationRecord["notificationType"];
+  severity: AaliyahNotificationRecord["severity"];
+  notification_status: AaliyahNotificationRecord["status"];
+  title_text: string;
+  summary_text: string;
+  reason_text: string;
+  idempotency_key: string;
+  related_recommendation_id: string | null;
+  related_task_id: string | null;
+  audit_event_id: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string | Date;
+  evaluated_at: string | Date;
+  acknowledged_at: string | Date | null;
+  dismissed_at: string | Date | null;
 };
 
 type EmailDispatchRow = {
@@ -1013,6 +1036,32 @@ function mapRecommendationRow(row: RecommendationRow): AaliyahRecommendationReco
     auditEventId: row.audit_event_id,
     createdAtIso: toIsoString(row.created_at),
     evaluatedAtIso: toIsoString(row.evaluated_at)
+  };
+}
+
+function mapNotificationRow(row: NotificationRow): AaliyahNotificationRecord {
+  return {
+    id: row.notification_id,
+    tenantId: row.tenant_id,
+    source: {
+      sourceType: row.source_type,
+      sourceId: row.source_id
+    },
+    notificationType: row.notification_type,
+    severity: row.severity,
+    status: row.notification_status,
+    title: row.title_text,
+    summary: row.summary_text,
+    reason: row.reason_text,
+    idempotencyKey: row.idempotency_key,
+    relatedRecommendationId: row.related_recommendation_id,
+    relatedTaskId: row.related_task_id,
+    auditEventId: row.audit_event_id,
+    metadata: row.metadata_json as Record<string, unknown>,
+    createdAtIso: toIsoString(row.created_at),
+    evaluatedAtIso: toIsoString(row.evaluated_at),
+    acknowledgedAtIso: row.acknowledged_at ? toIsoString(row.acknowledged_at) : null,
+    dismissedAtIso: row.dismissed_at ? toIsoString(row.dismissed_at) : null
   };
 }
 
@@ -4046,6 +4095,157 @@ export class AgentOsRepository {
       )
     );
     return res.rows.map(mapRecommendationRow);
+  }
+
+  async createNotification(args: {
+    tenantId: string;
+    notificationId: string;
+    sourceType: AaliyahNotificationRecord["source"]["sourceType"];
+    sourceId: string;
+    notificationType: AaliyahNotificationRecord["notificationType"];
+    severity: AaliyahNotificationRecord["severity"];
+    notificationStatus: AaliyahNotificationRecord["status"];
+    title: string;
+    summary: string;
+    reason: string;
+    idempotencyKey: string;
+    relatedRecommendationId: string | null;
+    relatedTaskId: string | null;
+    auditEventId: string | null;
+    metadata?: Record<string, unknown>;
+    createdAt?: string;
+    evaluatedAt?: string;
+  }): Promise<AaliyahNotificationRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<NotificationRow>(
+        `
+        INSERT INTO aaliyah_notifications (
+          notification_id, tenant_id, source_type, source_id, notification_type,
+          severity, notification_status, title_text, summary_text, reason_text,
+          idempotency_key, related_recommendation_id, related_task_id, audit_event_id,
+          metadata_json, created_at, evaluated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9, $10,
+          $11, $12, $13, $14,
+          $15::jsonb, $16, $17
+        )
+        RETURNING notification_id, tenant_id, source_type, source_id, notification_type,
+                  severity, notification_status, title_text, summary_text, reason_text,
+                  idempotency_key, related_recommendation_id, related_task_id, audit_event_id,
+                  metadata_json, created_at, evaluated_at, acknowledged_at, dismissed_at
+        `,
+        [
+          args.notificationId,
+          args.tenantId,
+          args.sourceType,
+          args.sourceId,
+          args.notificationType,
+          args.severity,
+          args.notificationStatus,
+          args.title,
+          args.summary,
+          args.reason,
+          args.idempotencyKey,
+          args.relatedRecommendationId,
+          args.relatedTaskId,
+          args.auditEventId,
+          JSON.stringify(args.metadata ?? {}),
+          createdAt,
+          args.evaluatedAt ?? createdAt
+        ]
+      )
+    );
+    return mapNotificationRow(res.rows[0]!);
+  }
+
+  async getNotificationById(args: { tenantId: string; notificationId: string }): Promise<AaliyahNotificationRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<NotificationRow>(
+        `
+        SELECT notification_id, tenant_id, source_type, source_id, notification_type,
+               severity, notification_status, title_text, summary_text, reason_text,
+               idempotency_key, related_recommendation_id, related_task_id, audit_event_id,
+               metadata_json, created_at, evaluated_at, acknowledged_at, dismissed_at
+        FROM aaliyah_notifications
+        WHERE tenant_id = $1 AND notification_id = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.notificationId]
+      )
+    );
+    return res.rows[0] ? mapNotificationRow(res.rows[0]) : null;
+  }
+
+  async getNotificationByIdempotencyKey(args: { tenantId: string; idempotencyKey: string }): Promise<AaliyahNotificationRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<NotificationRow>(
+        `
+        SELECT notification_id, tenant_id, source_type, source_id, notification_type,
+               severity, notification_status, title_text, summary_text, reason_text,
+               idempotency_key, related_recommendation_id, related_task_id, audit_event_id,
+               metadata_json, created_at, evaluated_at, acknowledged_at, dismissed_at
+        FROM aaliyah_notifications
+        WHERE tenant_id = $1 AND idempotency_key = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.idempotencyKey]
+      )
+    );
+    return res.rows[0] ? mapNotificationRow(res.rows[0]) : null;
+  }
+
+  async listNotifications(args: {
+    tenantId: string;
+    limit?: number;
+    status?: AaliyahNotificationRecord["status"];
+  }): Promise<AaliyahNotificationRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<NotificationRow>(
+        `
+        SELECT notification_id, tenant_id, source_type, source_id, notification_type,
+               severity, notification_status, title_text, summary_text, reason_text,
+               idempotency_key, related_recommendation_id, related_task_id, audit_event_id,
+               metadata_json, created_at, evaluated_at, acknowledged_at, dismissed_at
+        FROM aaliyah_notifications
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR notification_status = $2)
+        ORDER BY
+          CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
+          created_at DESC
+        LIMIT $3
+        `,
+        [args.tenantId, args.status ?? null, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapNotificationRow);
+  }
+
+  async updateNotificationStatus(args: {
+    tenantId: string;
+    notificationId: string;
+    status: 'acknowledged' | 'dismissed';
+    changedAt?: string;
+  }): Promise<AaliyahNotificationRecord> {
+    const changedAt = args.changedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<NotificationRow>(
+        `
+        UPDATE aaliyah_notifications
+        SET notification_status = $3,
+            acknowledged_at = CASE WHEN $3 = 'acknowledged' THEN $4 ELSE acknowledged_at END,
+            dismissed_at = CASE WHEN $3 = 'dismissed' THEN $4 ELSE dismissed_at END
+        WHERE tenant_id = $1 AND notification_id = $2
+        RETURNING notification_id, tenant_id, source_type, source_id, notification_type,
+                  severity, notification_status, title_text, summary_text, reason_text,
+                  idempotency_key, related_recommendation_id, related_task_id, audit_event_id,
+                  metadata_json, created_at, evaluated_at, acknowledged_at, dismissed_at
+        `,
+        [args.tenantId, args.notificationId, args.status, changedAt]
+      )
+    );
+    return mapNotificationRow(res.rows[0]!);
   }
 
   async createAaliyahFounderPreference(args: {

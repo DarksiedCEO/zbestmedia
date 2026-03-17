@@ -298,6 +298,30 @@ export type AaliyahRecommendationRecord = {
   evaluatedAtIso: string;
 };
 
+export type AaliyahNotificationRecord = {
+  id: string;
+  tenantId: string;
+  source: {
+    sourceType: "follow_through_record" | "recommendation" | "task" | "founder_command" | "contact" | "account";
+    sourceId: string;
+  };
+  notificationType: "stale_critical_work" | "blocked_recommendation" | "founder_review_required" | "high_priority_follow_through" | "opportunity_signal" | "noop";
+  severity: "info" | "warning" | "critical";
+  status: "active" | "acknowledged" | "dismissed";
+  title: string;
+  summary: string;
+  reason: string;
+  idempotencyKey: string;
+  relatedRecommendationId: string | null;
+  relatedTaskId: string | null;
+  auditEventId: string | null;
+  metadata: Record<string, unknown>;
+  createdAtIso: string;
+  evaluatedAtIso: string;
+  acknowledgedAtIso: string | null;
+  dismissedAtIso: string | null;
+};
+
 export type FounderCommandRequest = {
   mode: AaliyahMode;
   commandType: FounderCommandType;
@@ -916,6 +940,106 @@ export async function getAaliyahRecommendations(args: {
       mode: args.mode,
       limit: args.limit ? String(args.limit) : undefined,
     }),
+    bearer: args.bearer,
+  });
+}
+
+export async function getAaliyahNotifications(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  limit?: number;
+  status?: "active" | "acknowledged" | "dismissed";
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_notification_list_result";
+  result:
+    | {
+        ok: true;
+        notifications: AaliyahNotificationRecord[];
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/notifications`, {
+      mode: args.mode,
+      limit: args.limit ? String(args.limit) : undefined,
+      status: args.status,
+    }),
+    bearer: args.bearer,
+  });
+}
+
+export async function acknowledgeAaliyahNotification(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  notificationId: string;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_notification_result";
+  result:
+    | {
+        ok: true;
+        notification: AaliyahNotificationRecord;
+        replayed: boolean;
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/notifications/${args.notificationId}/acknowledge`, {
+      mode: args.mode,
+    }),
+    method: "POST",
+    bearer: args.bearer,
+  });
+}
+
+export async function dismissAaliyahNotification(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  notificationId: string;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_notification_result";
+  result:
+    | {
+        ok: true;
+        notification: AaliyahNotificationRecord;
+        replayed: boolean;
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/notifications/${args.notificationId}/dismiss`, {
+      mode: args.mode,
+    }),
+    method: "POST",
     bearer: args.bearer,
   });
 }

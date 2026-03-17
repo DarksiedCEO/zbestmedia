@@ -42,6 +42,8 @@ import {
   FollowThroughEngineResponseSchema,
   FounderCommandListResponseSchema,
   FounderCommandResponseSchema,
+  NotificationListResponseSchema,
+  NotificationResponseSchema,
   RecommendationListResponseSchema,
   RecommendationResponseSchema,
   AaliyahTaskListResponseSchema,
@@ -2743,6 +2745,134 @@ describe("agent routes", () => {
       message: "Loaded 1 recommendation."
     }))
   };
+  const aaliyahNotificationEngineService: any = {
+    evaluateSource: vi.fn(async ({ source }: { source: { sourceType: string; sourceId: string } }) => ({
+      ok: true,
+      notification: {
+        id: "notification:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        source,
+        notificationType: "stale_critical_work",
+        severity: "critical",
+        status: "active",
+        title: "Critical task has gone stale",
+        summary: "A stale high-priority item needs founder attention now.",
+        reason: "Stale high-priority work still needs founder attention.",
+        idempotencyKey: "notif:stale_critical_work:follow_through_record:follow-through-engine:1:abc",
+        relatedRecommendationId: null,
+        relatedTaskId: "task:1",
+        auditEventId: "aaliyah-diagnostics:event-4",
+        metadata: {},
+        createdAtIso: "2026-03-16T18:20:00.000Z",
+        evaluatedAtIso: "2026-03-16T18:20:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: null
+      },
+      replayed: false,
+      message: "A stale high-priority item needs founder attention now."
+    })),
+    getNotificationById: vi.fn(async ({ notificationId }: { notificationId: string }) => ({
+      ok: true,
+      notification: {
+        id: notificationId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        source: { sourceType: "follow_through_record", sourceId: "follow-through-engine:1" },
+        notificationType: "stale_critical_work",
+        severity: "critical",
+        status: "active",
+        title: "Critical task has gone stale",
+        summary: "A stale high-priority item needs founder attention now.",
+        reason: "Stale high-priority work still needs founder attention.",
+        idempotencyKey: "notif:stale_critical_work:follow_through_record:follow-through-engine:1:abc",
+        relatedRecommendationId: null,
+        relatedTaskId: "task:1",
+        auditEventId: "aaliyah-diagnostics:event-4",
+        metadata: {},
+        createdAtIso: "2026-03-16T18:20:00.000Z",
+        evaluatedAtIso: "2026-03-16T18:20:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: null
+      },
+      replayed: false,
+      message: "Loaded 1 notification."
+    })),
+    listNotifications: vi.fn(async () => ({
+      ok: true,
+      notifications: [
+        {
+          id: "notification:1",
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          source: { sourceType: "follow_through_record", sourceId: "follow-through-engine:1" },
+          notificationType: "stale_critical_work",
+          severity: "critical",
+          status: "active",
+          title: "Critical task has gone stale",
+          summary: "A stale high-priority item needs founder attention now.",
+          reason: "Stale high-priority work still needs founder attention.",
+          idempotencyKey: "notif:stale_critical_work:follow_through_record:follow-through-engine:1:abc",
+          relatedRecommendationId: null,
+          relatedTaskId: "task:1",
+          auditEventId: "aaliyah-diagnostics:event-4",
+          metadata: {},
+          createdAtIso: "2026-03-16T18:20:00.000Z",
+          evaluatedAtIso: "2026-03-16T18:20:00.000Z",
+          acknowledgedAtIso: null,
+          dismissedAtIso: null
+        }
+      ],
+      message: "Loaded 1 notification."
+    })),
+    acknowledgeNotification: vi.fn(async ({ notificationId }: { notificationId: string }) => ({
+      ok: true,
+      notification: {
+        id: notificationId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        source: { sourceType: "follow_through_record", sourceId: "follow-through-engine:1" },
+        notificationType: "stale_critical_work",
+        severity: "critical",
+        status: "acknowledged",
+        title: "Critical task has gone stale",
+        summary: "A stale high-priority item needs founder attention now.",
+        reason: "Stale high-priority work still needs founder attention.",
+        idempotencyKey: "notif:stale_critical_work:follow_through_record:follow-through-engine:1:abc",
+        relatedRecommendationId: null,
+        relatedTaskId: "task:1",
+        auditEventId: "aaliyah-diagnostics:event-4",
+        metadata: {},
+        createdAtIso: "2026-03-16T18:20:00.000Z",
+        evaluatedAtIso: "2026-03-16T18:20:00.000Z",
+        acknowledgedAtIso: "2026-03-16T18:21:00.000Z",
+        dismissedAtIso: null
+      },
+      replayed: false,
+      message: "A stale high-priority item needs founder attention now."
+    })),
+    dismissNotification: vi.fn(async ({ notificationId }: { notificationId: string }) => ({
+      ok: true,
+      notification: {
+        id: notificationId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        source: { sourceType: "follow_through_record", sourceId: "follow-through-engine:1" },
+        notificationType: "stale_critical_work",
+        severity: "critical",
+        status: "dismissed",
+        title: "Critical task has gone stale",
+        summary: "A stale high-priority item needs founder attention now.",
+        reason: "Stale high-priority work still needs founder attention.",
+        idempotencyKey: "notif:stale_critical_work:follow_through_record:follow-through-engine:1:abc",
+        relatedRecommendationId: null,
+        relatedTaskId: "task:1",
+        auditEventId: "aaliyah-diagnostics:event-4",
+        metadata: {},
+        createdAtIso: "2026-03-16T18:20:00.000Z",
+        evaluatedAtIso: "2026-03-16T18:20:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: "2026-03-16T18:21:00.000Z"
+      },
+      replayed: false,
+      message: "A stale high-priority item needs founder attention now."
+    }))
+  };
   const aaliyahMemoryBoundaryService = {
     getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
       generatedAt: "2026-03-15T00:00:00.000Z",
@@ -3682,6 +3812,7 @@ describe("agent routes", () => {
         aaliyahFounderCommandService: aaliyahFounderCommandService as never,
         aaliyahFollowThroughEngineService: aaliyahFollowThroughEngineService as never,
         aaliyahRecommendationEngineService: aaliyahRecommendationEngineService as never,
+        aaliyahNotificationEngineService: aaliyahNotificationEngineService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
         aaliyahFollowThroughService: aaliyahFollowThroughService as never,
@@ -4661,6 +4792,65 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(403);
     expect(aaliyahRecommendationEngineService.listRecommendations).not.toHaveBeenCalled();
+  });
+
+  it("exposes notification engine routes", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/notifications/evaluate",
+      payload: {
+        mode: "founder",
+        source: {
+          sourceType: "follow_through_record",
+          sourceId: "follow-through-engine:1"
+        }
+      }
+    });
+
+    expect(createRes.statusCode).toBe(201);
+    const created = NotificationResponseSchema.parse(createRes.json());
+    expect(created.result.ok).toBe(true);
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/notifications/notification:1?mode=founder"
+    });
+    expect(detailRes.statusCode).toBe(200);
+    NotificationResponseSchema.parse(detailRes.json());
+
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/notifications?mode=founder&limit=10&status=active"
+    });
+    expect(listRes.statusCode).toBe(200);
+    NotificationListResponseSchema.parse(listRes.json());
+
+    const ackRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/notifications/notification:1/acknowledge?mode=founder"
+    });
+    expect(ackRes.statusCode).toBe(200);
+    NotificationResponseSchema.parse(ackRes.json());
+
+    const dismissRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/notifications/notification:1/dismiss?mode=founder"
+    });
+    expect(dismissRes.statusCode).toBe(200);
+    NotificationResponseSchema.parse(dismissRes.json());
+  });
+
+  it("rejects notification engine routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahNotificationEngineService.listNotifications.mockClear();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/notifications?mode=founder&limit=10"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahNotificationEngineService.listNotifications).not.toHaveBeenCalled();
   });
 
   it("exposes founder preference mutation routes", async () => {

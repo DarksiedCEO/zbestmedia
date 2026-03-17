@@ -1,11 +1,14 @@
 import React from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  acknowledgeAaliyahNotification,
   createFetchClient,
+  dismissAaliyahNotification,
   executeFounderCommand,
   getAaliyahCommandSurface,
   getAaliyahFollowThroughEngineRecords,
   getAaliyahInbox,
+  getAaliyahNotifications,
   getAaliyahRecommendations,
   getAaliyahOpenTasks,
   getAaliyahSessionSnapshot,
@@ -17,6 +20,7 @@ import {
   type AaliyahInboxItem,
   type AaliyahCommandSurface,
   type AaliyahFollowThroughEngineRecord,
+  type AaliyahNotificationRecord,
   type AaliyahRecommendationRecord,
   type AaliyahMode,
   type AaliyahQuickAction,
@@ -111,7 +115,7 @@ export default function AaliyahPage() {
 
   const activeMode = sessionQuery.data?.session.activeModeState.activeMode ?? "founder";
 
-  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery] = useQueries({
+  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery] = useQueries({
     queries: [
       {
         queryKey: ["aaliyah", "command-surface", activeMode],
@@ -185,6 +189,20 @@ export default function AaliyahPage() {
             fetchClient,
             mode: activeMode,
             limit: 20,
+        }),
+        refetchInterval: 20_000,
+      },
+      {
+        queryKey: ["aaliyah", "notifications", activeMode],
+        enabled: Boolean(envData.env && envData.appApiBaseUrl),
+        queryFn: async () =>
+          getAaliyahNotifications({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            mode: activeMode,
+            limit: 20,
+            status: "active",
           }),
         refetchInterval: 20_000,
       },
@@ -258,6 +276,39 @@ export default function AaliyahPage() {
     },
   });
 
+  const notificationMutation = useMutation({
+    mutationFn: async (input: { notificationId: string; action: "acknowledge" | "dismiss" }) =>
+      input.action === "acknowledge"
+        ? acknowledgeAaliyahNotification({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            notificationId: input.notificationId,
+            mode: activeMode,
+          })
+        : dismissAaliyahNotification({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            notificationId: input.notificationId,
+            mode: activeMode,
+          }),
+    onSuccess: async (response) => {
+      if (response.result.ok) {
+        setCommandError(null);
+        setCommandNotice(response.result.message);
+      } else {
+        setCommandNotice(null);
+        setCommandError(response.result.message);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["aaliyah"] });
+    },
+    onError: (error) => {
+      setCommandNotice(null);
+      setCommandError((error as Error).message);
+    },
+  });
+
   const resetMutation = useMutation({
     mutationFn: async (scope: "soft" | "hard") =>
       resetAaliyahSession({
@@ -280,8 +331,8 @@ export default function AaliyahPage() {
     },
   });
 
-  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading;
-  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError;
+  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading;
+  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError;
   const errorMessage =
     envData.error ??
     (sessionQuery.error as Error | undefined)?.message ??
@@ -291,6 +342,7 @@ export default function AaliyahPage() {
     (commandHistoryQuery.error as Error | undefined)?.message ??
     (followThroughEngineQuery.error as Error | undefined)?.message ??
     (recommendationsQuery.error as Error | undefined)?.message ??
+    (notificationsQuery.error as Error | undefined)?.message ??
     null;
 
   const shell = shellQuery.data?.shell;
@@ -300,6 +352,7 @@ export default function AaliyahPage() {
   const commandHistory = commandHistoryQuery.data?.result.ok ? commandHistoryQuery.data.result.commands : [];
   const followThroughRecords = followThroughEngineQuery.data?.result.ok ? followThroughEngineQuery.data.result.records : [];
   const recommendations = recommendationsQuery.data?.result.ok ? recommendationsQuery.data.result.recommendations : [];
+  const notifications = notificationsQuery.data?.result.ok ? notificationsQuery.data.result.notifications : [];
 
   async function executeIntent(intent: string, parameters?: Record<string, unknown>, mode?: AaliyahMode) {
     await runtimeMutation.mutateAsync({ intent, parameters, mode });
@@ -392,6 +445,14 @@ export default function AaliyahPage() {
       payload: { workflowName },
       idempotencySeed: `trigger_workflow:${workflowName}`,
     });
+  }
+
+  async function acknowledgeNotification(notificationId: string) {
+    await notificationMutation.mutateAsync({ notificationId, action: "acknowledge" });
+  }
+
+  async function dismissNotification(notificationId: string) {
+    await notificationMutation.mutateAsync({ notificationId, action: "dismiss" });
   }
 
   async function actOnRecommendation(recommendation: AaliyahRecommendationRecord) {
@@ -657,6 +718,13 @@ export default function AaliyahPage() {
                     recommendations={recommendations}
                     busy={founderCommandMutation.isPending}
                     onAct={(recommendation) => void actOnRecommendation(recommendation)}
+                  />
+
+                  <NotificationsPanel
+                    notifications={notifications}
+                    busy={notificationMutation.isPending}
+                    onAcknowledge={(notificationId) => void acknowledgeNotification(notificationId)}
+                    onDismiss={(notificationId) => void dismissNotification(notificationId)}
                   />
                 </div>
               </Section>
@@ -1409,6 +1477,65 @@ function RecommendationsPanel(args: {
               );
             })}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function notificationTone(severity: AaliyahNotificationRecord["severity"]) {
+  switch (severity) {
+    case "critical":
+      return "filled" as const;
+    case "warning":
+      return "outline" as const;
+    default:
+      return "outline" as const;
+  }
+}
+
+function NotificationsPanel(args: {
+  notifications: AaliyahNotificationRecord[];
+  busy: boolean;
+  onAcknowledge: (notificationId: string) => void;
+  onDismiss: (notificationId: string) => void;
+}) {
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ fontWeight: 700 }}>Notifications</div>
+      {args.notifications.length === 0 ? (
+        <EmptyState text="No active founder notifications are queued right now." />
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          {args.notifications.map((notification) => (
+            <div key={notification.id} style={compactPanelStyle}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 650 }}>{notification.title}</div>
+                  <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>{notification.summary}</div>
+                  <div style={{ marginTop: 6, fontSize: 12, color: tokens.colors.muted }}>{notification.reason}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <Tag label={notification.severity} tone={notificationTone(notification.severity)} />
+                  <Tag label={notification.notificationType.replaceAll("_", " ")} tone="outline" />
+                </div>
+              </div>
+              <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                <DataBlock label="Source" value={shortId(notification.source.sourceId)} />
+                <DataBlock label="Task" value={shortId(notification.relatedTaskId)} />
+                <DataBlock label="Recommendation" value={shortId(notification.relatedRecommendationId)} />
+                <DataBlock label="Created" value={new Date(notification.createdAtIso).toLocaleString()} />
+              </div>
+              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button style={primaryButtonStyle} disabled={args.busy} onClick={() => args.onAcknowledge(notification.id)}>
+                  Acknowledge
+                </button>
+                <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onDismiss(notification.id)}>
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
