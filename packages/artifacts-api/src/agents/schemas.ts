@@ -18,6 +18,7 @@ import {
   AaliyahEvaluationScheduleRecordSchema,
   AaliyahCrmNoteSchema,
   AaliyahFounderCommandRecordSchema,
+  AaliyahFounderPreferenceControlsRecordSchema,
   AaliyahTaskSchema,
   AaliyahFounderPreferenceRecordSchema,
   EmailAccountConnectionRecordSchema,
@@ -872,6 +873,61 @@ export const DigestListResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_digest_list_result"),
   result: z.discriminatedUnion("ok", [DigestListSuccessSchema, DigestFailureSchema])
+});
+
+export const FounderPreferencesBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  preferences: z.object({
+    notification: z.object({
+      minimumConsoleSeverity: z.enum(["info", "warning", "critical"]).optional(),
+      minimumEmailSeverity: z.enum(["warning", "critical"]).optional(),
+      autoDismissInfoAfterHours: z.number().int().positive().nullable().optional()
+    }).optional(),
+    digest: z.object({
+      dailyDigestEnabled: z.boolean().optional(),
+      weeklyBriefEnabled: z.boolean().optional(),
+      criticalDigestEnabled: z.boolean().optional(),
+      sendEmptyDigests: z.boolean().optional()
+    }).optional(),
+    opportunity: z.object({
+      dormantContactDays: z.number().int().positive().optional(),
+      missedFollowUpWindowHours: z.number().int().positive().optional(),
+      recurringBlockThreshold: z.number().int().positive().optional(),
+      engagementSpikeMinimumEvents: z.number().int().positive().optional()
+    }).optional(),
+    recommendation: z.object({
+      escalateHighPriorityOnly: z.boolean().optional(),
+      reviveContactRequiresPriorValue: z.boolean().optional()
+    }).optional(),
+    scheduler: z.object({
+      allowAutomaticRuns: z.boolean().optional(),
+      defaultDailyRunHourUtc: z.number().int().min(0).max(23).nullable().optional()
+    }).optional(),
+    delivery: z.object({
+      emailEnabled: z.boolean().optional(),
+      consoleEnabled: z.boolean().optional()
+    }).optional()
+  })
+});
+
+const FounderPreferencesFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const FounderPreferencesSuccessSchema = z.object({
+  ok: z.literal(true),
+  preferences: AaliyahFounderPreferenceControlsRecordSchema,
+  message: z.string().min(1)
+});
+
+export const FounderPreferencesResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_founder_preference_controls_result"),
+  result: z.discriminatedUnion("ok", [FounderPreferencesSuccessSchema, FounderPreferencesFailureSchema])
 });
 
 export const OpportunityEvaluateBodySchema = z.object({

@@ -9,6 +9,7 @@ import {
   AaliyahDigestComposerService,
   AaliyahDiagnosticsService,
   AaliyahFounderCommandService,
+  AaliyahFounderPreferencesService,
   AaliyahFollowThroughEngineService,
   AaliyahNotificationEngineService,
   AaliyahOpportunityEngineService,
@@ -113,6 +114,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   const emailService = new EmailAssistantService(agentRepository, ledgerService, incidentService);
   const voiceService = new VoiceRuntimeService(agentRepository, ledgerService, incidentService);
   const aaliyahDiagnosticsService = new AaliyahDiagnosticsService(agentRepository);
+  const aaliyahFounderPreferencesService = new AaliyahFounderPreferencesService(agentRepository, aaliyahDiagnosticsService);
   const aaliyahWorkspaceService = new AaliyahWorkspaceService(agentRepository, aaliyahDiagnosticsService);
   const aaliyahCalendarService = new AaliyahCalendarService(agentRepository, aaliyahDiagnosticsService);
   const aaliyahCrmService = new AaliyahCrmService(agentRepository, aaliyahDiagnosticsService);
@@ -132,26 +134,31 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
   );
   const aaliyahRecommendationEngineService = new AaliyahRecommendationEngineService(
     agentRepository,
-    aaliyahDiagnosticsService
+    aaliyahDiagnosticsService,
+    aaliyahFounderPreferencesService.resolver
   );
   const aaliyahDeliveryRouterService = new AaliyahDeliveryRouterService(
     agentRepository,
     emailService,
-    aaliyahDiagnosticsService
+    aaliyahDiagnosticsService,
+    aaliyahFounderPreferencesService.resolver
   );
   const aaliyahNotificationEngineService = new AaliyahNotificationEngineService(
     agentRepository,
     aaliyahDiagnosticsService,
-    aaliyahDeliveryRouterService
+    aaliyahDeliveryRouterService,
+    aaliyahFounderPreferencesService.resolver
   );
   const aaliyahDigestComposerService = new AaliyahDigestComposerService(
     agentRepository,
     aaliyahDeliveryRouterService,
-    aaliyahDiagnosticsService
+    aaliyahDiagnosticsService,
+    aaliyahFounderPreferencesService.resolver
   );
   const aaliyahOpportunityEngineService = new AaliyahOpportunityEngineService(
     agentRepository,
-    aaliyahDiagnosticsService
+    aaliyahDiagnosticsService,
+    aaliyahFounderPreferencesService.resolver
   );
   const aaliyahStrategicIntelligenceService = new AaliyahStrategicIntelligenceService(
     agentRepository,
@@ -166,7 +173,8 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       opportunity: aaliyahOpportunityEngineService,
       strategicIntelligence: aaliyahStrategicIntelligenceService
     },
-    aaliyahDiagnosticsService
+    aaliyahDiagnosticsService,
+    aaliyahFounderPreferencesService.resolver
   );
   const aaliyahPreferenceService = new AaliyahPreferenceService(agentRepository);
   const aaliyahMemoryBoundaryService = new AaliyahMemoryBoundaryService();
@@ -280,6 +288,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       aaliyahBriefingService,
       aaliyahCommandSurfaceService,
       aaliyahPreferenceService,
+      aaliyahFounderPreferencesService,
       aaliyahMemoryBoundaryService,
       aaliyahDiagnosticsService,
       aaliyahWorkspaceService,

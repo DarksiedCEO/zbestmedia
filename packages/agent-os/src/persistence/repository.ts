@@ -26,6 +26,7 @@ import type {
   AaliyahRecommendationRecord,
   AaliyahEvaluationRunRecord,
   AaliyahEvaluationScheduleRecord,
+  AaliyahFounderPreferenceControlsRecord,
   AaliyahStrategicInsightRecord,
   AaliyahTaskRecord,
   AaliyahMutationIdempotencyRecord,
@@ -593,6 +594,20 @@ type AaliyahFounderPreferenceRow = {
   deactivated_at: string | Date | null;
   created_by: string;
   deactivated_by: string | null;
+};
+
+type FounderPreferenceControlsRow = {
+  id: string;
+  tenant_id: string;
+  actor_user_id: string;
+  notification_json: AaliyahFounderPreferenceControlsRecord["notification"];
+  digest_json: AaliyahFounderPreferenceControlsRecord["digest"];
+  opportunity_json: AaliyahFounderPreferenceControlsRecord["opportunity"];
+  recommendation_json: AaliyahFounderPreferenceControlsRecord["recommendation"];
+  scheduler_json: AaliyahFounderPreferenceControlsRecord["scheduler"];
+  delivery_json: AaliyahFounderPreferenceControlsRecord["delivery"];
+  created_at: string | Date;
+  updated_at: string | Date;
 };
 
 type AaliyahSessionContextRow = {
@@ -1363,6 +1378,22 @@ function mapAaliyahFounderPreferenceRow(row: AaliyahFounderPreferenceRow): Aaliy
     deactivatedAt: row.deactivated_at ? toIsoString(row.deactivated_at)! : null,
     createdBy: row.created_by,
     deactivatedBy: row.deactivated_by
+  };
+}
+
+function mapFounderPreferenceControlsRow(row: FounderPreferenceControlsRow): AaliyahFounderPreferenceControlsRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    actorUserId: row.actor_user_id,
+    notification: row.notification_json,
+    digest: row.digest_json,
+    opportunity: row.opportunity_json,
+    recommendation: row.recommendation_json,
+    scheduler: row.scheduler_json,
+    delivery: row.delivery_json,
+    createdAtIso: toIsoString(row.created_at)!,
+    updatedAtIso: toIsoString(row.updated_at)!
   };
 }
 
@@ -5561,6 +5592,76 @@ export class AgentOsRepository {
         ]
       )
     );
+  }
+
+  async getFounderPreferenceControls(args: {
+    tenantId: string;
+  }): Promise<AaliyahFounderPreferenceControlsRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FounderPreferenceControlsRow>(
+        `
+        SELECT id, tenant_id, actor_user_id, notification_json, digest_json, opportunity_json,
+               recommendation_json, scheduler_json, delivery_json, created_at, updated_at
+        FROM aaliyah_founder_preference_controls
+        WHERE tenant_id = $1
+        LIMIT 1
+        `,
+        [args.tenantId]
+      )
+    );
+    return res.rows[0] ? mapFounderPreferenceControlsRow(res.rows[0]) : null;
+  }
+
+  async upsertFounderPreferenceControls(args: {
+    tenantId: string;
+    preferencesId: string;
+    actorUserId: string;
+    notification: AaliyahFounderPreferenceControlsRecord["notification"];
+    digest: AaliyahFounderPreferenceControlsRecord["digest"];
+    opportunity: AaliyahFounderPreferenceControlsRecord["opportunity"];
+    recommendation: AaliyahFounderPreferenceControlsRecord["recommendation"];
+    scheduler: AaliyahFounderPreferenceControlsRecord["scheduler"];
+    delivery: AaliyahFounderPreferenceControlsRecord["delivery"];
+    createdAt: string;
+    updatedAt: string;
+  }): Promise<AaliyahFounderPreferenceControlsRecord> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FounderPreferenceControlsRow>(
+        `
+        INSERT INTO aaliyah_founder_preference_controls (
+          id, tenant_id, actor_user_id, notification_json, digest_json, opportunity_json,
+          recommendation_json, scheduler_json, delivery_json, created_at, updated_at
+        ) VALUES (
+          $1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11
+        )
+        ON CONFLICT (tenant_id) DO UPDATE
+        SET actor_user_id = EXCLUDED.actor_user_id,
+            notification_json = EXCLUDED.notification_json,
+            digest_json = EXCLUDED.digest_json,
+            opportunity_json = EXCLUDED.opportunity_json,
+            recommendation_json = EXCLUDED.recommendation_json,
+            scheduler_json = EXCLUDED.scheduler_json,
+            delivery_json = EXCLUDED.delivery_json,
+            updated_at = EXCLUDED.updated_at
+        RETURNING id, tenant_id, actor_user_id, notification_json, digest_json, opportunity_json,
+                  recommendation_json, scheduler_json, delivery_json, created_at, updated_at
+        `,
+        [
+          args.preferencesId,
+          args.tenantId,
+          args.actorUserId,
+          JSON.stringify(args.notification),
+          JSON.stringify(args.digest),
+          JSON.stringify(args.opportunity),
+          JSON.stringify(args.recommendation),
+          JSON.stringify(args.scheduler),
+          JSON.stringify(args.delivery),
+          args.createdAt,
+          args.updatedAt
+        ]
+      )
+    );
+    return mapFounderPreferenceControlsRow(res.rows[0]!);
   }
 
   async getAaliyahSessionContext(args: {

@@ -68,6 +68,8 @@ export type AaliyahDiagnosticsEventType =
   | "delivery_router_sent"
   | "delivery_router_failed"
   | "delivery_router_replayed"
+  | "founder_preferences_updated"
+  | "founder_preferences_resolved"
   | "digest_composer_composed"
   | "digest_composer_sent"
   | "digest_composer_replayed"

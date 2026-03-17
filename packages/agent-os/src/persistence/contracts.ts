@@ -35,6 +35,15 @@ import type {
   AaliyahPreferenceValue
 } from "../aaliyah/preference-types.js";
 import type {
+  FounderDeliveryPreferences,
+  FounderDigestPreferences,
+  FounderNotificationPreferences,
+  FounderOpportunityPreferences,
+  FounderPreferencesRecord as FounderPreferencesRecordShape,
+  FounderRecommendationPreferences,
+  FounderSchedulerPreferences
+} from "../aaliyah/founder-preferences-types.js";
+import type {
   AaliyahActiveModeState as AaliyahActiveModeStateShape,
   AaliyahBoundaryViolationResult as AaliyahBoundaryViolationResultShape,
   AaliyahFounderInteractionState as AaliyahFounderInteractionStateShape,
@@ -1184,6 +1193,62 @@ export const AaliyahFounderPreferenceRecordSchema = z.object({
 }) satisfies z.ZodType<AaliyahFounderPreferenceRecordShape>;
 export type AaliyahFounderPreferenceRecord = z.infer<typeof AaliyahFounderPreferenceRecordSchema>;
 
+export const FounderNotificationPreferencesSchema = z.object({
+  minimumConsoleSeverity: z.enum(["info", "warning", "critical"]),
+  minimumEmailSeverity: z.enum(["warning", "critical"]),
+  autoDismissInfoAfterHours: z.number().int().positive().nullable()
+}) satisfies z.ZodType<FounderNotificationPreferences>;
+export type { FounderNotificationPreferences };
+
+export const FounderDigestPreferencesSchema = z.object({
+  dailyDigestEnabled: z.boolean(),
+  weeklyBriefEnabled: z.boolean(),
+  criticalDigestEnabled: z.boolean(),
+  sendEmptyDigests: z.boolean()
+}) satisfies z.ZodType<FounderDigestPreferences>;
+export type { FounderDigestPreferences };
+
+export const FounderOpportunityPreferencesSchema = z.object({
+  dormantContactDays: z.number().int().positive(),
+  missedFollowUpWindowHours: z.number().int().positive(),
+  recurringBlockThreshold: z.number().int().positive(),
+  engagementSpikeMinimumEvents: z.number().int().positive()
+}) satisfies z.ZodType<FounderOpportunityPreferences>;
+export type { FounderOpportunityPreferences };
+
+export const FounderRecommendationPreferencesSchema = z.object({
+  escalateHighPriorityOnly: z.boolean(),
+  reviveContactRequiresPriorValue: z.boolean()
+}) satisfies z.ZodType<FounderRecommendationPreferences>;
+export type { FounderRecommendationPreferences };
+
+export const FounderSchedulerPreferencesSchema = z.object({
+  allowAutomaticRuns: z.boolean(),
+  defaultDailyRunHourUtc: z.number().int().min(0).max(23).nullable()
+}) satisfies z.ZodType<FounderSchedulerPreferences>;
+export type { FounderSchedulerPreferences };
+
+export const FounderDeliveryPreferencesSchema = z.object({
+  emailEnabled: z.boolean(),
+  consoleEnabled: z.boolean()
+}) satisfies z.ZodType<FounderDeliveryPreferences>;
+export type { FounderDeliveryPreferences };
+
+export const AaliyahFounderPreferenceControlsRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  actorUserId: z.string().min(1),
+  notification: FounderNotificationPreferencesSchema,
+  digest: FounderDigestPreferencesSchema,
+  opportunity: FounderOpportunityPreferencesSchema,
+  recommendation: FounderRecommendationPreferencesSchema,
+  scheduler: FounderSchedulerPreferencesSchema,
+  delivery: FounderDeliveryPreferencesSchema,
+  createdAtIso: z.string().datetime(),
+  updatedAtIso: z.string().datetime()
+}) satisfies z.ZodType<FounderPreferencesRecordShape>;
+export type AaliyahFounderPreferenceControlsRecord = z.infer<typeof AaliyahFounderPreferenceControlsRecordSchema>;
+
 export const AaliyahSessionResetReasonSchema = z.enum([
   "manual_reset",
   "idle_expired",
@@ -1629,6 +1694,8 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "delivery_router_sent",
   "delivery_router_failed",
   "delivery_router_replayed",
+  "founder_preferences_updated",
+  "founder_preferences_resolved",
   "digest_composer_composed",
   "digest_composer_sent",
   "digest_composer_replayed",

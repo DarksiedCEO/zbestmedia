@@ -19,6 +19,7 @@ import { renderDigestHtml } from './digest-composer-renderer.js';
 import type { DigestListResult, DigestResult, DigestType } from './digest-composer-types.js';
 import type { AgentOsRepository } from '../persistence/repository.js';
 import type { AaliyahDeliveryRouterService } from './delivery-router-service.js';
+import type { AaliyahFounderPreferencesResolver } from './founder-preferences-resolver.js';
 
 export class AaliyahDigestComposerService {
   private readonly access = new AaliyahAccessControlService();
@@ -28,7 +29,8 @@ export class AaliyahDigestComposerService {
   constructor(
     private readonly repository: AgentOsRepository,
     private readonly deliveryRouter: AaliyahDeliveryRouterService,
-    diagnostics?: AaliyahDiagnosticsService
+    diagnostics?: AaliyahDiagnosticsService,
+    private readonly preferencesResolver?: AaliyahFounderPreferencesResolver
   ) {
     this.audit = new AaliyahDigestComposerAuditService(diagnostics);
     this.sources = new AaliyahDigestComposerSources(repository);
@@ -46,7 +48,10 @@ export class AaliyahDigestComposerService {
     try {
       this.assertFounderModeAccess(args.principalContext, args.mode);
       const bundle = await this.sources.loadBundle({ tenantId: args.tenantId, generatedAtIso: generatedAt });
-      const draft = composeDigestDraft({ digestType: args.digestType, bundle });
+      const preferences = this.preferencesResolver
+        ? await this.preferencesResolver.resolve({ tenantId: args.tenantId, actorUserId: args.actorId, generatedAt })
+        : undefined;
+      const draft = composeDigestDraft({ digestType: args.digestType, bundle, preferences });
       const existing = await this.repository.getDigestByIdempotencyKey({ tenantId: args.tenantId, idempotencyKey: draft.idempotencyKey });
       if (existing) {
         await this.audit.record({

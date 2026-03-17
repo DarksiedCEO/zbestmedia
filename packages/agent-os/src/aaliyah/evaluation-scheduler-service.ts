@@ -13,6 +13,7 @@ import {
   EvaluationSchedulerValidationError
 } from './evaluation-scheduler-errors.js';
 import { type SchedulerEngineServices } from './evaluation-scheduler-jobs.js';
+import type { AaliyahFounderPreferencesResolver } from './founder-preferences-resolver.js';
 import { AaliyahEvaluationSchedulerRunner } from './evaluation-scheduler-runner.js';
 import {
   buildScheduleIdempotencyKey,
@@ -40,7 +41,8 @@ export class AaliyahEvaluationSchedulerService {
   constructor(
     private readonly repository: AgentOsRepository,
     services: SchedulerEngineServices,
-    diagnostics?: AaliyahDiagnosticsService
+    diagnostics?: AaliyahDiagnosticsService,
+    private readonly preferencesResolver?: AaliyahFounderPreferencesResolver
   ) {
     this.audit = new AaliyahEvaluationSchedulerAuditService(diagnostics);
     this.runner = new AaliyahEvaluationSchedulerRunner(repository, services, diagnostics);
@@ -60,8 +62,22 @@ export class AaliyahEvaluationSchedulerService {
     const generatedAt = args.generatedAt ?? new Date().toISOString();
     try {
       this.assertFounderModeAccess(args.principalContext, args.mode);
+      const preferences = this.preferencesResolver
+        ? await this.preferencesResolver.resolve({ tenantId: args.tenantId, actorUserId: args.actorId, generatedAt })
+        : null;
+      if (!(preferences?.scheduler.allowAutomaticRuns ?? true) && args.cadenceType !== 'manual') {
+        throw new EvaluationSchedulerValidationError('Automatic scheduler runs are disabled by founder preference.');
+      }
       validateCadenceValue(args.cadenceType, args.cadenceValue);
-      const cadenceValue = normalizeCadenceValue(args.cadenceType, args.cadenceValue, generatedAt);
+      const cadenceValue = normalizeCadenceValue(
+        args.cadenceType,
+        args.cadenceValue ?? (
+          args.cadenceType === 'daily' && preferences?.scheduler.defaultDailyRunHourUtc !== null && preferences?.scheduler.defaultDailyRunHourUtc !== undefined
+            ? `${String(preferences.scheduler.defaultDailyRunHourUtc).padStart(2, '0')}:00`
+            : undefined
+        ),
+        generatedAt
+      );
       const idempotencyKey = buildScheduleIdempotencyKey({ engineType: args.engineType, cadenceType: args.cadenceType, cadenceValue });
       const existing = await this.repository.getEvaluationScheduleByEngine({ tenantId: args.tenantId, engineType: args.engineType });
       const nextRunAt = computeNextRunAt({ cadenceType: args.cadenceType, cadenceValue, referenceIso: generatedAt });
@@ -256,6 +272,12 @@ export class AaliyahEvaluationSchedulerService {
       const existing = await this.repository.getEvaluationScheduleById({ tenantId: args.tenantId, scheduleId: args.scheduleId });
       if (!existing) {
         throw new EvaluationSchedulerNotFoundError('Evaluation schedule was not found.');
+      }
+      const preferences = this.preferencesResolver
+        ? await this.preferencesResolver.resolve({ tenantId: args.tenantId, actorUserId: args.actorId, generatedAt })
+        : null;
+      if (args.nextStatus === 'active' && existing.cadenceType !== 'manual' && !(preferences?.scheduler.allowAutomaticRuns ?? true)) {
+        throw new EvaluationSchedulerValidationError('Automatic scheduler runs are disabled by founder preference.');
       }
       if (existing.status === args.nextStatus) {
         return { ok: true, schedule: existing, message: buildPauseResumeMessage(existing.engineType, existing.status) };

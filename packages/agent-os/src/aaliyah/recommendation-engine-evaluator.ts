@@ -1,9 +1,17 @@
+import { isDormant } from './recommendation-engine-policy.js';
 import { buildRecommendationIdempotencyKey } from './recommendation-engine-policy.js';
 import { buildRecommendationReason, buildRecommendationSummary } from './recommendation-engine-summary.js';
+import type { FounderPreferencesRecord } from './founder-preferences-types.js';
 import type { RecommendationDraft, RecommendationSourceBundle } from './recommendation-engine-types.js';
 
-export function evaluateRecommendation(args: { bundle: RecommendationSourceBundle; evaluatedAtIso: string }): RecommendationDraft {
+export function evaluateRecommendation(args: {
+  bundle: RecommendationSourceBundle;
+  evaluatedAtIso: string;
+  preferences?: FounderPreferencesRecord;
+}): RecommendationDraft {
   const { bundle } = args;
+  const escalateHighPriorityOnly = args.preferences?.recommendation.escalateHighPriorityOnly ?? true;
+  const reviveContactRequiresPriorValue = args.preferences?.recommendation.reviveContactRequiresPriorValue ?? true;
 
   if (bundle.followThroughRecord?.status === 'blocked') {
     return buildDraft({
@@ -19,7 +27,13 @@ export function evaluateRecommendation(args: { bundle: RecommendationSourceBundl
     });
   }
 
-  if (bundle.followThroughRecord?.status === 'stale' && ['high', 'critical'].includes(bundle.task?.priority ?? '')) {
+  if (
+    bundle.followThroughRecord?.status === 'stale'
+    && (
+      !escalateHighPriorityOnly
+      || ['high', 'critical'].includes(bundle.task?.priority ?? '')
+    )
+  ) {
     return buildDraft({
       bundle,
       recommendationType: 'escalate_now',
@@ -55,9 +69,9 @@ export function evaluateRecommendation(args: { bundle: RecommendationSourceBundl
   }
 
   if (bundle.contact && bundle.openTasksForContact.length === 0) {
-    const lastTouchedAt = bundle.contact.lastTouchedAt ? Date.parse(bundle.contact.lastTouchedAt) : NaN;
-    const dormant = Number.isFinite(lastTouchedAt) && (Date.now() - lastTouchedAt) > 14 * 24 * 60 * 60 * 1000;
-    if (dormant && ['qualified', 'proposal', 'client', 'follow_up', 'dormant'].includes(bundle.contact.relationshipStage)) {
+    const dormant = isDormant(bundle.contact.lastTouchedAt, 14, args.evaluatedAtIso);
+    const hasPriorValue = ['qualified', 'proposal', 'client', 'follow_up', 'dormant'].includes(bundle.contact.relationshipStage);
+    if (dormant && (!reviveContactRequiresPriorValue || hasPriorValue)) {
       return buildDraft({
         bundle,
         recommendationType: 'revive_contact',

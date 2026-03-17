@@ -9,6 +9,7 @@ import {
   AaliyahFounderBriefingService,
   AaliyahFounderInboxTriageService,
   AaliyahFounderCommandService,
+  AaliyahFounderPreferencesService,
   AaliyahFollowThroughEngineService,
   AaliyahNotificationEngineService,
   AaliyahOpportunityEngineService,
@@ -119,6 +120,8 @@ import {
   DigestListQuerySchema,
   DigestListResponseSchema,
   DigestResponseSchema,
+  FounderPreferencesBodySchema,
+  FounderPreferencesResponseSchema,
   OpportunityEvaluateBodySchema,
   OpportunityIdParamSchema,
   OpportunityListQuerySchema,
@@ -237,6 +240,7 @@ export function agentRoutes(opts: {
   aaliyahBriefingService: AaliyahFounderBriefingService;
   aaliyahCommandSurfaceService: AaliyahCommandSurfaceService;
   aaliyahPreferenceService: AaliyahPreferenceService;
+  aaliyahFounderPreferencesService: AaliyahFounderPreferencesService;
   aaliyahMemoryBoundaryService: AaliyahMemoryBoundaryService;
   aaliyahDiagnosticsService: AaliyahDiagnosticsService;
   aaliyahWorkspaceService: AaliyahWorkspaceService;
@@ -724,6 +728,49 @@ export function agentRoutes(opts: {
       } catch (error) {
         return handleAgentError(reply, error);
       }
+    });
+
+    app.get("/v1/agent-os/aaliyah/founder-preferences", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = AaliyahPreferenceQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahFounderPreferencesService.get({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_founder_preference_controls_result",
+        result
+      });
+    });
+
+    app.put("/v1/agent-os/aaliyah/founder-preferences", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = FounderPreferencesBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahFounderPreferencesService.put({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        input: body.data.preferences
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_founder_preference_controls_result",
+        result
+      });
     });
 
     app.get("/v1/agent-os/aaliyah/memory-boundaries", async (req, reply) => {

@@ -13,6 +13,7 @@ import {
   RecommendationEngineValidationError
 } from './recommendation-engine-errors.js';
 import { evaluateRecommendation } from './recommendation-engine-evaluator.js';
+import type { AaliyahFounderPreferencesResolver } from './founder-preferences-resolver.js';
 import { AaliyahRecommendationEngineSources } from './recommendation-engine-sources.js';
 import { buildRecommendationListMessage } from './recommendation-engine-summary.js';
 import type {
@@ -28,7 +29,11 @@ export class AaliyahRecommendationEngineService {
   private readonly audit: AaliyahRecommendationEngineAuditService;
   private readonly sources: AaliyahRecommendationEngineSources;
 
-  constructor(private readonly repository: AgentOsRepository, diagnostics?: AaliyahDiagnosticsService) {
+  constructor(
+    private readonly repository: AgentOsRepository,
+    diagnostics?: AaliyahDiagnosticsService,
+    private readonly preferencesResolver?: AaliyahFounderPreferencesResolver
+  ) {
     this.audit = new AaliyahRecommendationEngineAuditService(diagnostics);
     this.sources = new AaliyahRecommendationEngineSources(repository);
   }
@@ -48,7 +53,10 @@ export class AaliyahRecommendationEngineService {
         throw new RecommendationEngineValidationError('Recommendation source id is required.');
       }
       const bundle = await this.sources.loadSourceBundle({ ...args, generatedAt });
-      const draft = evaluateRecommendation({ bundle, evaluatedAtIso: generatedAt });
+      const preferences = this.preferencesResolver
+        ? await this.preferencesResolver.resolve({ tenantId: args.tenantId, actorUserId: args.actorId, generatedAt })
+        : undefined;
+      const draft = evaluateRecommendation({ bundle, evaluatedAtIso: generatedAt, preferences });
       const existing = await this.repository.getRecommendationByIdempotencyKey({
         tenantId: args.tenantId,
         idempotencyKey: draft.idempotencyKey

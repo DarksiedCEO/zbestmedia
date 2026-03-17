@@ -14,6 +14,7 @@ import {
   getAaliyahCommandSurface,
   getAaliyahDeliveries,
   getAaliyahDigests,
+  getAaliyahFounderPreferenceControls,
   getAaliyahFollowThroughEngineRecords,
   getAaliyahInbox,
   getAaliyahNotifications,
@@ -30,6 +31,7 @@ import {
   readApiEnv,
   retryAaliyahDelivery,
   sendAaliyahDigest,
+  putAaliyahFounderPreferenceControls,
   runAaliyahRuntime,
   runAaliyahEvaluationSchedule,
   pauseAaliyahEvaluationSchedule,
@@ -46,6 +48,7 @@ import {
   type AaliyahEvaluationRunMutationResult,
   type AaliyahEvaluationScheduleRecord,
   type AaliyahEvaluationScheduleMutationResult,
+  type AaliyahFounderPreferenceControlsRecord,
   type AaliyahStrategicInsightRecord,
   type AaliyahMode,
   type AaliyahQuickAction,
@@ -139,6 +142,19 @@ export default function AaliyahPage() {
   });
 
   const activeMode = sessionQuery.data?.session.activeModeState.activeMode ?? "founder";
+
+  const founderPreferencesQuery = useQuery({
+    queryKey: ["aaliyah", "founder-preferences", activeMode],
+    enabled: Boolean(envData.env && envData.appApiBaseUrl),
+    queryFn: async () =>
+      getAaliyahFounderPreferenceControls({
+        baseUrl: envData.appApiBaseUrl!,
+        bearer: envData.env!.VITE_POLICY_BEARER,
+        fetchClient,
+        mode: activeMode,
+      }),
+    refetchInterval: 20_000,
+  });
 
   const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery, deliveriesQuery, digestsQuery, opportunitiesQuery, strategicInsightsQuery, evaluationSchedulesQuery, evaluationRunsQuery] = useQueries({
     queries: [
@@ -331,6 +347,7 @@ export default function AaliyahPage() {
   const [schedulerEngineType, setSchedulerEngineType] = React.useState<AaliyahEvaluationScheduleRecord["engineType"]>("follow_through");
   const [schedulerCadenceType, setSchedulerCadenceType] = React.useState<AaliyahEvaluationScheduleRecord["cadenceType"]>("hourly");
   const [schedulerCadenceValue, setSchedulerCadenceValue] = React.useState("1");
+  const [preferenceDraft, setPreferenceDraft] = React.useState<AaliyahFounderPreferenceControlsRecord | null>(null);
 
   const runtimeMutation = useMutation({
     mutationFn: async (input: { intent: string; parameters?: Record<string, unknown>; mode?: AaliyahMode }) =>
@@ -599,6 +616,32 @@ export default function AaliyahPage() {
     },
   });
 
+  const founderPreferencesMutation = useMutation({
+    mutationFn: async (preferences: AaliyahFounderPreferenceControlsRecord) =>
+      putAaliyahFounderPreferenceControls({
+        baseUrl: envData.appApiBaseUrl!,
+        bearer: envData.env!.VITE_POLICY_BEARER,
+        fetchClient,
+        mode: activeMode,
+        preferences
+      }),
+    onSuccess: async (response) => {
+      if (response.result.ok) {
+        setCommandError(null);
+        setCommandNotice(response.result.message);
+        setPreferenceDraft(response.result.preferences);
+      } else {
+        setCommandNotice(null);
+        setCommandError(response.result.message);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["aaliyah"] });
+    },
+    onError: (error) => {
+      setCommandNotice(null);
+      setCommandError((error as Error).message);
+    }
+  });
+
   const resetMutation = useMutation({
     mutationFn: async (scope: "soft" | "hard") =>
       resetAaliyahSession({
@@ -621,11 +664,12 @@ export default function AaliyahPage() {
     },
   });
 
-  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading || deliveriesQuery.isLoading || digestsQuery.isLoading || opportunitiesQuery.isLoading || strategicInsightsQuery.isLoading || evaluationSchedulesQuery.isLoading || evaluationRunsQuery.isLoading;
-  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError || deliveriesQuery.isError || digestsQuery.isError || opportunitiesQuery.isError || strategicInsightsQuery.isError || evaluationSchedulesQuery.isError || evaluationRunsQuery.isError;
+  const isLoading = sessionQuery.isLoading || founderPreferencesQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading || deliveriesQuery.isLoading || digestsQuery.isLoading || opportunitiesQuery.isLoading || strategicInsightsQuery.isLoading || evaluationSchedulesQuery.isLoading || evaluationRunsQuery.isLoading;
+  const isError = Boolean(envData.error) || sessionQuery.isError || founderPreferencesQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError || deliveriesQuery.isError || digestsQuery.isError || opportunitiesQuery.isError || strategicInsightsQuery.isError || evaluationSchedulesQuery.isError || evaluationRunsQuery.isError;
   const errorMessage =
     envData.error ??
     (sessionQuery.error as Error | undefined)?.message ??
+    (founderPreferencesQuery.error as Error | undefined)?.message ??
     (shellQuery.error as Error | undefined)?.message ??
     (inboxQuery.error as Error | undefined)?.message ??
     (tasksQuery.error as Error | undefined)?.message ??
@@ -655,6 +699,14 @@ export default function AaliyahPage() {
   const strategicInsights = strategicInsightsQuery.data?.result.ok ? strategicInsightsQuery.data.result.insights : [];
   const evaluationSchedules = evaluationSchedulesQuery.data?.result.ok ? evaluationSchedulesQuery.data.result.schedules : [];
   const evaluationRuns = evaluationRunsQuery.data?.result.ok ? evaluationRunsQuery.data.result.runs : [];
+  const founderPreferences = founderPreferencesQuery.data?.result.ok ? founderPreferencesQuery.data.result.preferences : null;
+
+  React.useEffect(() => {
+    if (founderPreferences) {
+      setPreferenceDraft(founderPreferences);
+    }
+  }, [founderPreferences]);
+
   const deliveriesByNotificationId = React.useMemo(() => {
     const mapping = new Map<string, Partial<Record<AaliyahDeliveryRecord["channel"], AaliyahDeliveryRecord>>>();
     for (const delivery of deliveries) {
@@ -757,6 +809,11 @@ export default function AaliyahPage() {
       payload: { workflowName },
       idempotencySeed: `trigger_workflow:${workflowName}`,
     });
+  }
+
+  async function saveFounderPreferences() {
+    if (!preferenceDraft) return;
+    await founderPreferencesMutation.mutateAsync(preferenceDraft);
   }
 
   async function acknowledgeNotification(notificationId: string) {
@@ -1184,6 +1241,13 @@ export default function AaliyahPage() {
                     onPause={(scheduleId) => void pauseEvaluationSchedule(scheduleId)}
                     onResume={(scheduleId) => void resumeEvaluationSchedule(scheduleId)}
                     onRunNow={(scheduleId) => void runEvaluationScheduleNow(scheduleId)}
+                  />
+
+                  <FounderPreferencesControlsPanel
+                    preferences={preferenceDraft}
+                    busy={founderPreferencesMutation.isPending}
+                    onChange={setPreferenceDraft}
+                    onSave={() => void saveFounderPreferences()}
                   />
                 </div>
               </Section>
@@ -2350,6 +2414,143 @@ function EvaluationSchedulerPanel(args: {
   );
 }
 
+function FounderPreferencesControlsPanel(args: {
+  preferences: AaliyahFounderPreferenceControlsRecord | null;
+  busy: boolean;
+  onChange: (value: AaliyahFounderPreferenceControlsRecord) => void;
+  onSave: () => void;
+}) {
+  if (!args.preferences) {
+    return <EmptyState text="Founder preference controls are loading." />;
+  }
+
+  const preferences = args.preferences;
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ fontWeight: 700 }}>Preference Controls</div>
+      <div style={compactPanelStyle}>
+        <div style={{ fontWeight: 650 }}>Notification and delivery thresholds</div>
+        <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+          <label style={fieldLabelStyle}>
+            <span>Console severity</span>
+            <select
+              style={inputStyle}
+              value={preferences.notification.minimumConsoleSeverity}
+              onChange={(event) => args.onChange({
+                ...preferences,
+                notification: {
+                  ...preferences.notification,
+                  minimumConsoleSeverity: event.target.value as AaliyahFounderPreferenceControlsRecord["notification"]["minimumConsoleSeverity"]
+                }
+              })}
+            >
+              <option value="info">Info</option>
+              <option value="warning">Warning</option>
+              <option value="critical">Critical</option>
+            </select>
+          </label>
+          <label style={fieldLabelStyle}>
+            <span>Email severity</span>
+            <select
+              style={inputStyle}
+              value={preferences.notification.minimumEmailSeverity}
+              onChange={(event) => args.onChange({
+                ...preferences,
+                notification: {
+                  ...preferences.notification,
+                  minimumEmailSeverity: event.target.value as AaliyahFounderPreferenceControlsRecord["notification"]["minimumEmailSeverity"]
+                }
+              })}
+            >
+              <option value="warning">Warning</option>
+              <option value="critical">Critical</option>
+            </select>
+          </label>
+          <label style={fieldLabelStyle}>
+            <span>Email enabled</span>
+            <input
+              type="checkbox"
+              checked={preferences.delivery.emailEnabled}
+              onChange={(event) => args.onChange({
+                ...preferences,
+                delivery: { ...preferences.delivery, emailEnabled: event.target.checked }
+              })}
+            />
+          </label>
+          <label style={fieldLabelStyle}>
+            <span>Console enabled</span>
+            <input
+              type="checkbox"
+              checked={preferences.delivery.consoleEnabled}
+              onChange={(event) => args.onChange({
+                ...preferences,
+                delivery: { ...preferences.delivery, consoleEnabled: event.target.checked }
+              })}
+            />
+          </label>
+        </div>
+      </div>
+
+      <div style={compactPanelStyle}>
+        <div style={{ fontWeight: 650 }}>Digest and scheduler controls</div>
+        <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+          <label style={fieldLabelStyle}><span>Daily digest</span><input type="checkbox" checked={preferences.digest.dailyDigestEnabled} onChange={(event) => args.onChange({ ...preferences, digest: { ...preferences.digest, dailyDigestEnabled: event.target.checked } })} /></label>
+          <label style={fieldLabelStyle}><span>Weekly brief</span><input type="checkbox" checked={preferences.digest.weeklyBriefEnabled} onChange={(event) => args.onChange({ ...preferences, digest: { ...preferences.digest, weeklyBriefEnabled: event.target.checked } })} /></label>
+          <label style={fieldLabelStyle}><span>Critical digest</span><input type="checkbox" checked={preferences.digest.criticalDigestEnabled} onChange={(event) => args.onChange({ ...preferences, digest: { ...preferences.digest, criticalDigestEnabled: event.target.checked } })} /></label>
+          <label style={fieldLabelStyle}><span>Automatic runs</span><input type="checkbox" checked={preferences.scheduler.allowAutomaticRuns} onChange={(event) => args.onChange({ ...preferences, scheduler: { ...preferences.scheduler, allowAutomaticRuns: event.target.checked } })} /></label>
+        </div>
+      </div>
+
+      <div style={compactPanelStyle}>
+        <div style={{ fontWeight: 650 }}>Opportunity thresholds</div>
+        <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+          <label style={fieldLabelStyle}>
+            <span>Dormant contact days</span>
+            <input
+              type="number"
+              style={inputStyle}
+              value={preferences.opportunity.dormantContactDays}
+              onChange={(event) => args.onChange({
+                ...preferences,
+                opportunity: { ...preferences.opportunity, dormantContactDays: Number(event.target.value || 0) }
+              })}
+            />
+          </label>
+          <label style={fieldLabelStyle}>
+            <span>Missed follow-up hours</span>
+            <input
+              type="number"
+              style={inputStyle}
+              value={preferences.opportunity.missedFollowUpWindowHours}
+              onChange={(event) => args.onChange({
+                ...preferences,
+                opportunity: { ...preferences.opportunity, missedFollowUpWindowHours: Number(event.target.value || 0) }
+              })}
+            />
+          </label>
+          <label style={fieldLabelStyle}>
+            <span>Recurring block threshold</span>
+            <input
+              type="number"
+              style={inputStyle}
+              value={preferences.opportunity.recurringBlockThreshold}
+              onChange={(event) => args.onChange({
+                ...preferences,
+                opportunity: { ...preferences.opportunity, recurringBlockThreshold: Number(event.target.value || 0) }
+              })}
+            />
+          </label>
+        </div>
+      </div>
+
+      <button style={primaryButtonStyle} disabled={args.busy} onClick={args.onSave}>
+        Save preference controls
+      </button>
+    </div>
+  );
+}
+
 function EmptyState({ text }: { text: string }) {
   return <div style={{ color: tokens.colors.muted, fontSize: 13 }}>{text}</div>;
 }
@@ -2531,6 +2732,13 @@ const inputStyle: React.CSSProperties = {
   background: tokens.colors.surface,
   color: tokens.colors.text,
   padding: "10px 12px",
+};
+
+const fieldLabelStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+  fontSize: 12,
+  color: tokens.colors.muted
 };
 
 const textAreaStyle: React.CSSProperties = {

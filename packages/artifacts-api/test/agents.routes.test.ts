@@ -46,6 +46,7 @@ import {
   DeliveryResponseSchema,
   DigestListResponseSchema,
   DigestResponseSchema,
+  FounderPreferencesResponseSchema,
   NotificationListResponseSchema,
   NotificationResponseSchema,
   OpportunityListResponseSchema,
@@ -3468,6 +3469,88 @@ describe("agent routes", () => {
       message: "Daily founder digest sent through the delivery router."
     }))
   };
+  const aaliyahFounderPreferencesService: any = {
+    get: vi.fn(async () => ({
+      ok: true,
+      preferences: {
+        id: "founder-preference-controls:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        actorUserId: "actor-1",
+        notification: {
+          minimumConsoleSeverity: "warning",
+          minimumEmailSeverity: "critical",
+          autoDismissInfoAfterHours: null
+        },
+        digest: {
+          dailyDigestEnabled: true,
+          weeklyBriefEnabled: true,
+          criticalDigestEnabled: true,
+          sendEmptyDigests: false
+        },
+        opportunity: {
+          dormantContactDays: 14,
+          missedFollowUpWindowHours: 48,
+          recurringBlockThreshold: 3,
+          engagementSpikeMinimumEvents: 3
+        },
+        recommendation: {
+          escalateHighPriorityOnly: true,
+          reviveContactRequiresPriorValue: true
+        },
+        scheduler: {
+          allowAutomaticRuns: true,
+          defaultDailyRunHourUtc: 16
+        },
+        delivery: {
+          emailEnabled: true,
+          consoleEnabled: true
+        },
+        createdAtIso: "2026-03-17T08:00:00.000Z",
+        updatedAtIso: "2026-03-17T08:00:00.000Z"
+      },
+      message: "Founder preference controls loaded successfully."
+    })),
+    put: vi.fn(async () => ({
+      ok: true,
+      preferences: {
+        id: "founder-preference-controls:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        actorUserId: "actor-1",
+        notification: {
+          minimumConsoleSeverity: "warning",
+          minimumEmailSeverity: "warning",
+          autoDismissInfoAfterHours: null
+        },
+        digest: {
+          dailyDigestEnabled: false,
+          weeklyBriefEnabled: true,
+          criticalDigestEnabled: true,
+          sendEmptyDigests: false
+        },
+        opportunity: {
+          dormantContactDays: 21,
+          missedFollowUpWindowHours: 72,
+          recurringBlockThreshold: 3,
+          engagementSpikeMinimumEvents: 3
+        },
+        recommendation: {
+          escalateHighPriorityOnly: true,
+          reviveContactRequiresPriorValue: true
+        },
+        scheduler: {
+          allowAutomaticRuns: false,
+          defaultDailyRunHourUtc: 16
+        },
+        delivery: {
+          emailEnabled: true,
+          consoleEnabled: true
+        },
+        createdAtIso: "2026-03-17T08:00:00.000Z",
+        updatedAtIso: "2026-03-17T09:00:00.000Z"
+      },
+      message: "Founder preference controls updated successfully."
+    }))
+  };
   const aaliyahMemoryBoundaryService = {
     getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
       generatedAt: "2026-03-15T00:00:00.000Z",
@@ -4398,6 +4481,7 @@ describe("agent routes", () => {
         aaliyahBriefingService: aaliyahBriefingService as never,
         aaliyahCommandSurfaceService: aaliyahCommandSurfaceService as never,
         aaliyahPreferenceService: aaliyahPreferenceService as never,
+        aaliyahFounderPreferencesService: aaliyahFounderPreferencesService as never,
         aaliyahMemoryBoundaryService: aaliyahMemoryBoundaryService as never,
         aaliyahDiagnosticsService: aaliyahDiagnosticsService as never,
         aaliyahWorkspaceService: aaliyahWorkspaceService as never,
@@ -5776,6 +5860,48 @@ describe("agent routes", () => {
     expect(deactivateRes.statusCode).toBe(200);
     const deactivated = AaliyahPreferenceDetailResponseSchema.parse(deactivateRes.json());
     expect(deactivated.preference.active).toBe(false);
+  });
+
+  it("exposes founder preference control routes", async () => {
+    const getRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/founder-preferences?mode=founder"
+    });
+
+    expect(getRes.statusCode).toBe(200);
+    const loaded = FounderPreferencesResponseSchema.parse(getRes.json());
+    expect(loaded.result.ok).toBe(true);
+
+    const putRes = await app.inject({
+      method: "PUT",
+      url: "/v1/agent-os/aaliyah/founder-preferences",
+      payload: {
+        mode: "founder",
+        preferences: {
+          notification: { minimumEmailSeverity: "warning" },
+          digest: { dailyDigestEnabled: false },
+          opportunity: { dormantContactDays: 21, missedFollowUpWindowHours: 72 },
+          scheduler: { allowAutomaticRuns: false }
+        }
+      }
+    });
+
+    expect(putRes.statusCode).toBe(200);
+    const updated = FounderPreferencesResponseSchema.parse(putRes.json());
+    expect(updated.result.ok).toBe(true);
+  });
+
+  it("rejects founder preference control routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahFounderPreferencesService.get.mockClear();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/founder-preferences?mode=founder"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahFounderPreferencesService.get).not.toHaveBeenCalled();
   });
 
   it("exposes governed voice intake routes", async () => {

@@ -48,3 +48,15 @@ export function isPastDue(referenceIso: string, dueAt: string | null): boolean {
   }
   return due < reference;
 }
+
+export function isPastDueByHours(referenceIso: string, dueAt: string | null, thresholdHours: number): boolean {
+  if (!dueAt) {
+    return false;
+  }
+  const due = Date.parse(dueAt);
+  const reference = Date.parse(referenceIso);
+  if (Number.isNaN(due) || Number.isNaN(reference)) {
+    return false;
+  }
+  return reference - due > thresholdHours * 60 * 60 * 1000;
+}

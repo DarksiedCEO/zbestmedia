@@ -1,6 +1,7 @@
-import { buildOpportunityIdempotencyKey, isDormantFrom, isPastDue } from './opportunity-engine-policy.js';
+import { buildOpportunityIdempotencyKey, isDormantFrom, isPastDue, isPastDueByHours } from './opportunity-engine-policy.js';
 import { buildOpportunityReason, buildOpportunitySummary } from './opportunity-engine-summary.js';
 import type { OpportunityDraft, OpportunitySourceBundle } from './opportunity-engine-types.js';
+import type { FounderPreferencesRecord } from './founder-preferences-types.js';
 
 function buildDraft(args: {
   bundle: OpportunitySourceBundle;
@@ -34,8 +35,12 @@ function buildDraft(args: {
 export function evaluateOpportunity(args: {
   bundle: OpportunitySourceBundle;
   evaluatedAtIso: string;
+  preferences?: FounderPreferencesRecord;
 }): OpportunityDraft {
   const { bundle, evaluatedAtIso } = args;
+  const recurringBlockThreshold = args.preferences?.opportunity.recurringBlockThreshold ?? 3;
+  const missedFollowUpWindowHours = args.preferences?.opportunity.missedFollowUpWindowHours ?? 48;
+  const dormantContactDays = args.preferences?.opportunity.dormantContactDays ?? 14;
 
   const blockedSignals = bundle.diagnosticsHints.filter((event) =>
     ['founder_command_rejected', 'follow_through_engine_blocked', 'notification_engine_created'].includes(event.eventType)
@@ -43,7 +48,7 @@ export function evaluateOpportunity(args: {
   const blockedRecommendations = bundle.activeRecommendations.filter((item) => item.type === 'review_blocked' && item.status === 'active');
   if (
     (bundle.followThroughRecord?.status === 'blocked' || bundle.recommendation?.recommendationType === 'review_blocked')
-    && (blockedSignals.length >= 2 || blockedRecommendations.length >= 1)
+    && (blockedSignals.length >= recurringBlockThreshold || (blockedSignals.length + blockedRecommendations.length) >= recurringBlockThreshold)
   ) {
     return buildDraft({
       bundle,
@@ -63,7 +68,7 @@ export function evaluateOpportunity(args: {
   if (
     bundle.task
     && ['open', 'in_progress'].includes(bundle.task.status)
-    && isPastDue(evaluatedAtIso, bundle.task.dueAt)
+    && isPastDueByHours(evaluatedAtIso, bundle.task.dueAt, missedFollowUpWindowHours)
     && (bundle.task.relatedCalendarEventId || bundle.task.relatedEmailDraftId || bundle.followThroughRecord?.policyKey === 'FT-004-event-linked-recap')
   ) {
     return buildDraft({
@@ -85,7 +90,7 @@ export function evaluateOpportunity(args: {
     bundle.contact
     && !hasOpenFollowUp
     && ['qualified', 'proposal', 'client', 'follow_up', 'dormant'].includes(bundle.contact.relationshipStage)
-    && isDormantFrom(evaluatedAtIso, bundle.contact.lastTouchedAt)
+    && isDormantFrom(evaluatedAtIso, bundle.contact.lastTouchedAt, dormantContactDays)
   ) {
     return buildDraft({
       bundle,

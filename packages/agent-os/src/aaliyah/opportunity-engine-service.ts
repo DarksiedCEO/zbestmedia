@@ -13,6 +13,7 @@ import {
   OpportunityEngineValidationError
 } from './opportunity-engine-errors.js';
 import { evaluateOpportunity } from './opportunity-engine-evaluator.js';
+import type { AaliyahFounderPreferencesResolver } from './founder-preferences-resolver.js';
 import { AaliyahOpportunityEngineSources } from './opportunity-engine-sources.js';
 import { buildOpportunityListMessage } from './opportunity-engine-summary.js';
 import type {
@@ -28,7 +29,11 @@ export class AaliyahOpportunityEngineService {
   private readonly audit: AaliyahOpportunityEngineAuditService;
   private readonly sources: AaliyahOpportunityEngineSources;
 
-  constructor(private readonly repository: AgentOsRepository, diagnostics?: AaliyahDiagnosticsService) {
+  constructor(
+    private readonly repository: AgentOsRepository,
+    diagnostics?: AaliyahDiagnosticsService,
+    private readonly preferencesResolver?: AaliyahFounderPreferencesResolver
+  ) {
     this.audit = new AaliyahOpportunityEngineAuditService(diagnostics);
     this.sources = new AaliyahOpportunityEngineSources(repository);
   }
@@ -48,7 +53,10 @@ export class AaliyahOpportunityEngineService {
         throw new OpportunityEngineValidationError('Opportunity source id is required.');
       }
       const bundle = await this.sources.loadSourceBundle({ ...args, generatedAt });
-      const draft = evaluateOpportunity({ bundle, evaluatedAtIso: generatedAt });
+      const preferences = this.preferencesResolver
+        ? await this.preferencesResolver.resolve({ tenantId: args.tenantId, actorUserId: args.actorId, generatedAt })
+        : undefined;
+      const draft = evaluateOpportunity({ bundle, evaluatedAtIso: generatedAt, preferences });
       const existing = await this.repository.getOpportunityByIdempotencyKey({
         tenantId: args.tenantId,
         idempotencyKey: draft.idempotencyKey

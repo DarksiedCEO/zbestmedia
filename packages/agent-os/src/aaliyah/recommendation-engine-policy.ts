@@ -25,9 +25,14 @@ export function buildRecommendationIdempotencyKey(args: {
   return `rec:${args.recommendationType}:${args.source.sourceType}:${args.source.sourceId}:${hash([args.sourceVersion])}`;
 }
 
-export function isDormant(lastTouchedAt: string | null, thresholdDays = 14): boolean {
+export function isDormant(lastTouchedAt: string | null, thresholdDays = 14, referenceIso?: string): boolean {
   if (!lastTouchedAt) {
     return false;
   }
-  return Date.now() - Date.parse(lastTouchedAt) > thresholdDays * 24 * 60 * 60 * 1000;
+  const reference = referenceIso ? Date.parse(referenceIso) : Date.now();
+  const lastTouched = Date.parse(lastTouchedAt);
+  if (Number.isNaN(reference) || Number.isNaN(lastTouched)) {
+    return false;
+  }
+  return reference - lastTouched > thresholdDays * 24 * 60 * 60 * 1000;
 }

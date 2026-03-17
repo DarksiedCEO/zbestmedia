@@ -21,10 +21,12 @@ import { assertRetryable, nextAttemptCount } from './delivery-router-retry.js';
 import { buildDeliveryListMessage, buildDeliveryMessage } from './delivery-router-summary.js';
 import type { DeliveryChannel, DeliveryListResult, DeliveryResult, DeliverySourceType } from './delivery-router-types.js';
 import type { DigestRecord } from './digest-composer-types.js';
+import type { FounderPreferencesRecord } from './founder-preferences-types.js';
 import type { NotificationRecord } from './notification-engine-types.js';
 import type { AgentOsRepository } from '../persistence/repository.js';
 import type { EmailAssistantService } from '../email/service.js';
 import { renderDigestHtml } from './digest-composer-renderer.js';
+import type { AaliyahFounderPreferencesResolver } from './founder-preferences-resolver.js';
 
 export class AaliyahDeliveryRouterService {
   private readonly access = new AaliyahAccessControlService();
@@ -34,7 +36,8 @@ export class AaliyahDeliveryRouterService {
   constructor(
     private readonly repository: AgentOsRepository,
     emailService: EmailAssistantService,
-    diagnostics?: AaliyahDiagnosticsService
+    diagnostics?: AaliyahDiagnosticsService,
+    private readonly preferencesResolver?: AaliyahFounderPreferencesResolver
   ) {
     this.audit = new AaliyahDeliveryRouterAuditService(diagnostics);
     this.handlers = new AaliyahDeliveryRouterHandlers(emailService);
@@ -70,20 +73,26 @@ export class AaliyahDeliveryRouterService {
     if (source.sourceType !== 'notification') {
       throw new DeliveryRouterValidationError('Notification routing requires a notification source.');
     }
+    const preferences = this.preferencesResolver
+      ? await this.preferencesResolver.resolve({ tenantId: args.tenantId, actorUserId: args.actorId, generatedAt })
+      : undefined;
     const notification = source.notification;
     const results: DeliveryResult[] = [];
-    results.push(
-      await this.deliver({
-        ...args,
-        sourceType: 'notification',
-        sourceId: notification.id,
-        channel: 'console',
-        generatedAt,
-        allowRetryFromFailed: false,
-        notification
-      })
-    );
-    if (isChannelEligibleForNotification({ channel: 'email', notification })) {
+    if (isChannelEligibleForNotification({ channel: 'console', notification, preferences })) {
+      results.push(
+        await this.deliver({
+          ...args,
+          sourceType: 'notification',
+          sourceId: notification.id,
+          channel: 'console',
+          generatedAt,
+          allowRetryFromFailed: false,
+          notification,
+          preferences
+        })
+      );
+    }
+    if (isChannelEligibleForNotification({ channel: 'email', notification, preferences })) {
       results.push(
         await this.deliver({
           ...args,
@@ -92,7 +101,8 @@ export class AaliyahDeliveryRouterService {
           channel: 'email',
           generatedAt,
           allowRetryFromFailed: false,
-          notification
+          notification,
+          preferences
         })
       );
     }
@@ -190,6 +200,7 @@ export class AaliyahDeliveryRouterService {
     } & Awaited<ReturnType<AgentOsRepository['getDeliveryById']>>;
     notification?: NotificationRecord;
     digest?: DigestRecord;
+    preferences?: FounderPreferencesRecord;
   }): Promise<DeliveryResult> {
     try {
       this.assertFounderModeAccess(args.principalContext, args.mode);
@@ -200,10 +211,15 @@ export class AaliyahDeliveryRouterService {
         notification: args.notification,
         digest: args.digest
       });
-      if (source.sourceType === 'notification' && !isChannelEligibleForNotification({ channel: args.channel, notification: source.notification })) {
+      const preferences = args.preferences ?? (
+        this.preferencesResolver
+          ? await this.preferencesResolver.resolve({ tenantId: args.tenantId, actorUserId: args.actorId, generatedAt: args.generatedAt })
+          : undefined
+      );
+      if (source.sourceType === 'notification' && !isChannelEligibleForNotification({ channel: args.channel, notification: source.notification, preferences })) {
         throw new DeliveryRouterValidationError(`Delivery channel ${args.channel} is not allowed for this notification.`);
       }
-      if (source.sourceType === 'digest' && !isChannelEligibleForDigest({ channel: args.channel, digest: source.digest })) {
+      if (source.sourceType === 'digest' && !isChannelEligibleForDigest({ channel: args.channel, digest: source.digest, preferences })) {
         throw new DeliveryRouterValidationError(`Delivery channel ${args.channel} is not allowed for this digest.`);
       }
 

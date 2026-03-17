@@ -14,6 +14,7 @@ import {
 } from './notification-engine-errors.js';
 import { buildNotificationIdempotencyKey } from './notification-engine-policy.js';
 import { AaliyahNotificationEngineSources } from './notification-engine-sources.js';
+import type { AaliyahFounderPreferencesResolver } from './founder-preferences-resolver.js';
 import type { AaliyahDeliveryRouterService } from './delivery-router-service.js';
 import {
   buildNotificationListMessage,
@@ -69,7 +70,8 @@ export class AaliyahNotificationEngineService {
   constructor(
     private readonly repository: AgentOsRepository,
     diagnostics?: AaliyahDiagnosticsService,
-    private readonly deliveryRouter?: AaliyahDeliveryRouterService
+    private readonly deliveryRouter?: AaliyahDeliveryRouterService,
+    private readonly preferencesResolver?: AaliyahFounderPreferencesResolver
   ) {
     this.audit = new AaliyahNotificationEngineAuditService(diagnostics);
     this.sources = new AaliyahNotificationEngineSources(repository);
@@ -204,12 +206,21 @@ export class AaliyahNotificationEngineService {
   }): Promise<NotificationListResult> {
     try {
       this.assertFounderModeAccess(args.principalContext, args.mode);
+      const preferences = this.preferencesResolver
+        ? await this.preferencesResolver.resolve({ tenantId: args.tenantId, actorUserId: args.actorId })
+        : null;
       const notifications = await this.repository.listNotifications({
         tenantId: args.tenantId,
         limit: args.limit,
         status: args.status
       });
-      return { ok: true, notifications, message: buildNotificationListMessage(notifications.length) };
+      const filtered = preferences
+        ? notifications.filter((item) => {
+            const order = ['info', 'warning', 'critical'];
+            return order.indexOf(item.severity) >= order.indexOf(preferences.notification.minimumConsoleSeverity);
+          })
+        : notifications;
+      return { ok: true, notifications: filtered, message: buildNotificationListMessage(filtered.length) };
     } catch (error) {
       return this.normalizeFailure(error);
     }

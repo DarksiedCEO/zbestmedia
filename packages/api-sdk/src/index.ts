@@ -429,6 +429,57 @@ export type AaliyahEvaluationRunRecord = {
   completedAtIso: string | null;
 };
 
+export type AaliyahFounderPreferenceControlsRecord = {
+  id: string;
+  tenantId: string;
+  actorUserId: string;
+  notification: {
+    minimumConsoleSeverity: "info" | "warning" | "critical";
+    minimumEmailSeverity: "warning" | "critical";
+    autoDismissInfoAfterHours: number | null;
+  };
+  digest: {
+    dailyDigestEnabled: boolean;
+    weeklyBriefEnabled: boolean;
+    criticalDigestEnabled: boolean;
+    sendEmptyDigests: boolean;
+  };
+  opportunity: {
+    dormantContactDays: number;
+    missedFollowUpWindowHours: number;
+    recurringBlockThreshold: number;
+    engagementSpikeMinimumEvents: number;
+  };
+  recommendation: {
+    escalateHighPriorityOnly: boolean;
+    reviveContactRequiresPriorValue: boolean;
+  };
+  scheduler: {
+    allowAutomaticRuns: boolean;
+    defaultDailyRunHourUtc: number | null;
+  };
+  delivery: {
+    emailEnabled: boolean;
+    consoleEnabled: boolean;
+  };
+  createdAtIso: string;
+  updatedAtIso: string;
+};
+
+export type AaliyahFounderPreferenceControlsMutationResult =
+  | {
+      ok: true;
+      preferences: AaliyahFounderPreferenceControlsRecord;
+      message: string;
+    }
+  | {
+      ok: false;
+      denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+      errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+      retryable: boolean;
+      message: string;
+    };
+
 export type AaliyahEvaluationScheduleMutationResult =
   | {
       ok: true;
@@ -755,7 +806,7 @@ export function resolveAppApiBaseUrl(raw: Record<string, unknown>): string {
 export function createFetchClient(args: { correlationId: () => string }) {
   return async function fetchJson<T>(input: {
     url: string;
-    method?: "GET" | "POST";
+    method?: "GET" | "POST" | "PUT";
     bearer?: string;
     introspectionToken?: string;
     body?: unknown;
@@ -1661,6 +1712,46 @@ export async function sendAaliyahDigest(args: {
     }),
     method: "POST",
     bearer: args.bearer
+  });
+}
+
+export async function getAaliyahFounderPreferenceControls(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_founder_preference_controls_result";
+  result: AaliyahFounderPreferenceControlsMutationResult;
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/founder-preferences`, {
+      mode: args.mode
+    }),
+    bearer: args.bearer
+  });
+}
+
+export async function putAaliyahFounderPreferenceControls(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  preferences: Partial<AaliyahFounderPreferenceControlsRecord>;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_founder_preference_controls_result";
+  result: AaliyahFounderPreferenceControlsMutationResult;
+}> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/founder-preferences`,
+    method: "PUT",
+    bearer: args.bearer,
+    body: {
+      mode: args.mode ?? "founder",
+      preferences: args.preferences
+    }
   });
 }
 
