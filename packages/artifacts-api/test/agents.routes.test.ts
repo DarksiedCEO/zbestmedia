@@ -60,6 +60,8 @@ import {
   OperatorQueueRefreshResponseSchema,
   OperatorQueueResponseSchema,
   OperatorQueueTopResponseSchema,
+  FounderBriefListResponseSchema,
+  FounderBriefResponseSchema,
   OutcomeFeedbackDetailResponseSchema,
   OutcomeFeedbackListResponseSchema,
   OutcomeFeedbackWriteResponseSchema,
@@ -3784,6 +3786,230 @@ describe("agent routes", () => {
       message: "Loaded 0 outcome feedback records."
     }))
   };
+  const aaliyahFounderBriefService: any = {
+    generate: vi.fn(async ({ briefKind }: { briefKind: "daily" | "ad_hoc" }) => ({
+      ok: true,
+      replayed: false,
+      brief: {
+        id: "founder-brief:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        briefDate: "2026-03-17",
+        briefKind,
+        generatedByFounderActorId: "actor-1",
+        generatedAtIso: "2026-03-17T14:00:00.000Z",
+        windowStartAtIso: "2026-03-16T14:00:00.000Z",
+        windowEndAtIso: "2026-03-17T14:00:00.000Z",
+        headline: "1 immediate action, 1 issue resolved, 1 reopened, 1 opportunity worth review.",
+        summary: {
+          headline: "1 immediate action, 1 issue resolved, 1 reopened, 1 opportunity worth review.",
+          generatedAtIso: "2026-03-17T14:00:00.000Z",
+          previousBriefId: "founder-brief:previous",
+          counts: {
+            immediateActions: 1,
+            resolved: 1,
+            reopenedOrPersisting: 1,
+            opportunities: 1,
+            watchlist: 1
+          },
+          sectionOrder: [
+            "immediate_founder_actions",
+            "newly_resolved",
+            "reopened_or_persisting",
+            "high_value_opportunities",
+            "strategic_watchlist",
+            "execution_outcome_summary"
+          ],
+          notes: ["Built from queue, outcomes, issue state, and strategic intelligence."]
+        },
+        idempotencyKey: "founder-brief:daily:2026-03-17",
+        previousBriefId: "founder-brief:previous",
+        deliveryStatus: "not_sent",
+        lastDispatchedAtIso: null,
+        auditEventId: "aaliyah-diagnostics:event-founder-brief-1",
+        metadata: {
+          sourceVersion: "queue:1|outcome:1|issue:1",
+          counts: {
+            queueItems: 4,
+            outcomes: 2
+          }
+        },
+        createdAtIso: "2026-03-17T14:00:00.000Z"
+      },
+      items: [
+        {
+          id: "founder-brief-item:1",
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          briefId: "founder-brief:1",
+          section: "immediate_founder_actions",
+          queueItemId: "operator-queue:1",
+          canonicalIssueKey: "task:1|issue:stale_critical_escalation|command:none",
+          operatorActionLogId: null,
+          outcomeFeedbackId: null,
+          priorityScore: 980,
+          deltaType: "new",
+          payload: {
+            title: "Escalation requires founder action",
+            summary: "A critical escalation remains active and actionable."
+          },
+          createdAtIso: "2026-03-17T14:00:00.000Z"
+        }
+      ],
+      message: "Generated founder brief with 1 immediate action item."
+    })),
+    latest: vi.fn(async ({ briefKind }: { briefKind: "daily" | "ad_hoc" }) => ({
+      ok: true,
+      replayed: false,
+      brief: {
+        id: "founder-brief:latest",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        briefDate: "2026-03-17",
+        briefKind,
+        generatedByFounderActorId: "actor-1",
+        generatedAtIso: "2026-03-17T14:00:00.000Z",
+        windowStartAtIso: "2026-03-16T14:00:00.000Z",
+        windowEndAtIso: "2026-03-17T14:00:00.000Z",
+        headline: "1 immediate action, 1 resolved issue, and 1 watch item.",
+        summary: {
+          headline: "1 immediate action, 1 resolved issue, and 1 watch item.",
+          generatedAtIso: "2026-03-17T14:00:00.000Z",
+          previousBriefId: null,
+          counts: {
+            immediateActions: 1,
+            resolved: 1,
+            reopenedOrPersisting: 0,
+            opportunities: 0,
+            watchlist: 1
+          },
+          sectionOrder: [
+            "immediate_founder_actions",
+            "newly_resolved",
+            "reopened_or_persisting",
+            "high_value_opportunities",
+            "strategic_watchlist",
+            "execution_outcome_summary"
+          ],
+          notes: []
+        },
+        idempotencyKey: "founder-brief:latest:daily",
+        previousBriefId: null,
+        deliveryStatus: "not_sent",
+        lastDispatchedAtIso: null,
+        auditEventId: "aaliyah-diagnostics:event-founder-brief-latest",
+        metadata: {},
+        createdAtIso: "2026-03-17T14:00:00.000Z"
+      },
+      items: [],
+      message: "Loaded the latest founder brief."
+    })),
+    getById: vi.fn(async ({ briefId }: { briefId: string }) => ({
+      ok: true,
+      replayed: false,
+      brief: {
+        id: briefId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        briefDate: "2026-03-17",
+        briefKind: "daily",
+        generatedByFounderActorId: "actor-1",
+        generatedAtIso: "2026-03-17T14:00:00.000Z",
+        windowStartAtIso: "2026-03-16T14:00:00.000Z",
+        windowEndAtIso: "2026-03-17T14:00:00.000Z",
+        headline: "1 immediate action, 1 issue resolved, 1 reopened, 1 opportunity worth review.",
+        summary: {
+          headline: "1 immediate action, 1 issue resolved, 1 reopened, 1 opportunity worth review.",
+          generatedAtIso: "2026-03-17T14:00:00.000Z",
+          previousBriefId: "founder-brief:previous",
+          counts: {
+            immediateActions: 1,
+            resolved: 1,
+            reopenedOrPersisting: 1,
+            opportunities: 1,
+            watchlist: 1
+          },
+          sectionOrder: [
+            "immediate_founder_actions",
+            "newly_resolved",
+            "reopened_or_persisting",
+            "high_value_opportunities",
+            "strategic_watchlist",
+            "execution_outcome_summary"
+          ],
+          notes: []
+        },
+        idempotencyKey: "founder-brief:daily:2026-03-17",
+        previousBriefId: "founder-brief:previous",
+        deliveryStatus: "not_sent",
+        lastDispatchedAtIso: null,
+        auditEventId: "aaliyah-diagnostics:event-founder-brief-1",
+        metadata: {},
+        createdAtIso: "2026-03-17T14:00:00.000Z"
+      },
+      items: [
+        {
+          id: "founder-brief-item:detail",
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          briefId,
+          section: "reopened_or_persisting",
+          queueItemId: "operator-queue:reopened",
+          canonicalIssueKey: "account:1|issue:retention_risk|command:create_follow_up",
+          operatorActionLogId: "operator-action:1",
+          outcomeFeedbackId: "outcome-feedback:1",
+          priorityScore: 720,
+          deltaType: "reopened",
+          payload: {
+            title: "Retention issue reopened",
+            summary: "The same account reopened after a prior successful founder action."
+          },
+          createdAtIso: "2026-03-17T14:00:00.000Z"
+        }
+      ],
+      message: "Loaded founder brief detail."
+    })),
+    list: vi.fn(async () => ({
+      ok: true,
+      briefs: [
+        {
+          id: "founder-brief:1",
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          briefDate: "2026-03-17",
+          briefKind: "daily",
+          generatedByFounderActorId: "actor-1",
+          generatedAtIso: "2026-03-17T14:00:00.000Z",
+          windowStartAtIso: "2026-03-16T14:00:00.000Z",
+          windowEndAtIso: "2026-03-17T14:00:00.000Z",
+          headline: "1 immediate action, 1 issue resolved, 1 reopened, 1 opportunity worth review.",
+          summary: {
+            headline: "1 immediate action, 1 issue resolved, 1 reopened, 1 opportunity worth review.",
+            generatedAtIso: "2026-03-17T14:00:00.000Z",
+            previousBriefId: "founder-brief:previous",
+            counts: {
+              immediateActions: 1,
+              resolved: 1,
+              reopenedOrPersisting: 1,
+              opportunities: 1,
+              watchlist: 1
+            },
+            sectionOrder: [
+              "immediate_founder_actions",
+              "newly_resolved",
+              "reopened_or_persisting",
+              "high_value_opportunities",
+              "strategic_watchlist",
+              "execution_outcome_summary"
+            ],
+            notes: []
+          },
+          idempotencyKey: "founder-brief:daily:2026-03-17",
+          previousBriefId: "founder-brief:previous",
+          deliveryStatus: "not_sent",
+          lastDispatchedAtIso: null,
+          auditEventId: "aaliyah-diagnostics:event-founder-brief-1",
+          metadata: {},
+          createdAtIso: "2026-03-17T14:00:00.000Z"
+        }
+      ],
+      message: "Loaded 1 founder brief."
+    }))
+  };
   const aaliyahEvaluationSchedulerService: any = {
     createOrUpdateSchedule: vi.fn(async ({ engineType, cadenceType, cadenceValue }: any) => ({
       ok: true,
@@ -5170,6 +5396,7 @@ describe("agent routes", () => {
         aaliyahOperatorQueueService: aaliyahOperatorQueueService as never,
         aaliyahOperatorActionService: aaliyahOperatorActionService as never,
         aaliyahOutcomeFeedbackService: aaliyahOutcomeFeedbackService as never,
+        aaliyahFounderBriefService: aaliyahFounderBriefService as never,
         aaliyahEvaluationSchedulerService: aaliyahEvaluationSchedulerService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
@@ -6596,6 +6823,58 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(403);
     expect(aaliyahOutcomeFeedbackService.record).not.toHaveBeenCalled();
+  });
+
+  it("exposes founder brief routes", async () => {
+    const generateRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/founder-briefs/generate",
+      payload: {
+        mode: "founder",
+        briefKind: "daily"
+      }
+    });
+
+    expect(generateRes.statusCode).toBe(201);
+    FounderBriefResponseSchema.parse(generateRes.json());
+
+    const latestRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/founder-briefs/latest?mode=founder&briefKind=daily"
+    });
+    expect(latestRes.statusCode).toBe(200);
+    FounderBriefResponseSchema.parse(latestRes.json());
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/founder-briefs/founder-brief:1?mode=founder&briefKind=daily"
+    });
+    expect(detailRes.statusCode).toBe(200);
+    FounderBriefResponseSchema.parse(detailRes.json());
+
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/founder-briefs?mode=founder&briefKind=daily&limit=10"
+    });
+    expect(listRes.statusCode).toBe(200);
+    FounderBriefListResponseSchema.parse(listRes.json());
+  });
+
+  it("rejects founder brief routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahFounderBriefService.generate.mockClear();
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/founder-briefs/generate",
+      payload: {
+        mode: "founder",
+        briefKind: "daily"
+      }
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahFounderBriefService.generate).not.toHaveBeenCalled();
   });
 
   it("exposes evaluation scheduler routes", async () => {

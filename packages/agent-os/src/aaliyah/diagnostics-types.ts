@@ -96,7 +96,9 @@ export type AaliyahDiagnosticsEventType =
   | "operator_action_replayed"
   | "outcome_feedback_recorded"
   | "outcome_feedback_replayed"
-  | "outcome_feedback_rejected";
+  | "outcome_feedback_rejected"
+  | "founder_brief_generated"
+  | "founder_brief_replayed";
 
 export type AaliyahDiagnosticsEvent = {
   tenantId: string;
@@ -105,7 +107,12 @@ export type AaliyahDiagnosticsEvent = {
   principalContext: "founder" | "operator";
   activeMode: "founder" | "zbestmedia";
   eventType: AaliyahDiagnosticsEventType;
-  eventSource: "aaliyah_runtime" | "aaliyah_session" | "aaliyah_follow_through" | "aaliyah_workspace";
+  eventSource:
+    | "aaliyah_runtime"
+    | "aaliyah_session"
+    | "aaliyah_follow_through"
+    | "aaliyah_workspace"
+    | "aaliyah_founder_brief";
   signalKey: string;
   payload: Record<string, unknown>;
   createdAt: string;

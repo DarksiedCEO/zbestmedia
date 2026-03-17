@@ -569,6 +569,67 @@ export type AaliyahIssueStateRecord = {
   };
 };
 
+export type AaliyahFounderBriefRecord = {
+  id: string;
+  tenantId: string;
+  briefDate: string;
+  briefKind: "daily" | "ad_hoc";
+  generatedByFounderActorId: string;
+  generatedAtIso: string;
+  windowStartAtIso: string;
+  windowEndAtIso: string;
+  headline: string;
+  summary: {
+    headline: string;
+    generatedAtIso: string;
+    previousBriefId: string | null;
+    counts: {
+      immediateActions: number;
+      resolved: number;
+      reopenedOrPersisting: number;
+      opportunities: number;
+      watchlist: number;
+    };
+    sectionOrder: Array<
+      | "immediate_founder_actions"
+      | "newly_resolved"
+      | "reopened_or_persisting"
+      | "high_value_opportunities"
+      | "strategic_watchlist"
+      | "execution_outcome_summary"
+    >;
+    notes: string[];
+  };
+  idempotencyKey: string;
+  previousBriefId: string | null;
+  deliveryStatus: "not_sent" | "sent";
+  lastDispatchedAtIso: string | null;
+  auditEventId: string | null;
+  metadata: Record<string, unknown>;
+  createdAtIso: string;
+};
+
+export type AaliyahFounderBriefItemRecord = {
+  id: string;
+  tenantId: string;
+  briefId: string;
+  section:
+    | "immediate_founder_actions"
+    | "newly_resolved"
+    | "reopened_or_persisting"
+    | "high_value_opportunities"
+    | "strategic_watchlist"
+    | "execution_outcome_summary";
+  queueItemId: string | null;
+  canonicalIssueKey: string | null;
+  operatorActionLogId: string | null;
+  outcomeFeedbackId: string | null;
+  priorityScore: number;
+  deltaType: "new" | "unchanged" | "worsened" | "improved" | "resolved" | "reopened" | "suppressed";
+  payload: Record<string, unknown>;
+  createdAtIso: string;
+};
+
 export type AaliyahEvaluationScheduleRecord = {
   id: string;
   tenantId: string;
@@ -2416,6 +2477,97 @@ export async function getAaliyahOutcomeFeedbackByQueueItem(args: {
   return args.fetchClient({
     url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/outcomes/queue-item/${args.queueItemId}`, {
       mode: args.mode,
+      limit: args.limit ? String(args.limit) : undefined
+    }),
+    bearer: args.bearer
+  });
+}
+
+export async function generateAaliyahFounderBrief(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  briefKind?: AaliyahFounderBriefRecord["briefKind"];
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_founder_brief_result";
+  result:
+    | { ok: true; brief: AaliyahFounderBriefRecord; items: AaliyahFounderBriefItemRecord[]; replayed: boolean; message: string }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/founder-briefs/generate`,
+    method: "POST",
+    bearer: args.bearer,
+    body: {
+      mode: args.mode ?? "founder",
+      briefKind: args.briefKind ?? "daily"
+    }
+  });
+}
+
+export async function getLatestAaliyahFounderBrief(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  briefKind?: AaliyahFounderBriefRecord["briefKind"];
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_founder_brief_result";
+  result:
+    | { ok: true; brief: AaliyahFounderBriefRecord; items: AaliyahFounderBriefItemRecord[]; replayed: boolean; message: string }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/founder-briefs/latest`, {
+      mode: args.mode,
+      briefKind: args.briefKind
+    }),
+    bearer: args.bearer
+  });
+}
+
+export async function getAaliyahFounderBrief(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  briefId: string;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_founder_brief_result";
+  result:
+    | { ok: true; brief: AaliyahFounderBriefRecord; items: AaliyahFounderBriefItemRecord[]; replayed: boolean; message: string }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/founder-briefs/${args.briefId}`, {
+      mode: args.mode
+    }),
+    bearer: args.bearer
+  });
+}
+
+export async function listAaliyahFounderBriefs(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  briefKind?: AaliyahFounderBriefRecord["briefKind"];
+  limit?: number;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_founder_brief_list_result";
+  result:
+    | { ok: true; briefs: AaliyahFounderBriefRecord[]; message: string }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/founder-briefs`, {
+      mode: args.mode,
+      briefKind: args.briefKind,
       limit: args.limit ? String(args.limit) : undefined
     }),
     bearer: args.bearer

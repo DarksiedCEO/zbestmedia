@@ -21,6 +21,8 @@ import {
   AaliyahFounderPreferenceControlsRecordSchema,
   AaliyahCoalescedSignalRecordSchema,
   AaliyahEscalationRecordSchema,
+  AaliyahFounderBriefItemRecordSchema,
+  AaliyahFounderBriefRecordSchema,
   AaliyahOperatorActionLogRecordSchema,
   AaliyahOperatorQueueRecordSchema,
   AaliyahOutcomeFeedbackRecordSchema,
@@ -1399,6 +1401,60 @@ export const OutcomeFeedbackListResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_outcome_feedback_list_result"),
   result: z.discriminatedUnion("ok", [OutcomeFeedbackListSuccessSchema, OutcomeFeedbackFailureSchema])
+});
+
+export const FounderBriefGenerateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  briefKind: z.enum(["daily", "ad_hoc"]).default("daily")
+});
+
+export const FounderBriefIdParamSchema = z.object({
+  briefId: z.string().min(1)
+});
+
+export const FounderBriefLatestQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  briefKind: z.enum(["daily", "ad_hoc"]).default("daily")
+});
+
+export const FounderBriefListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  briefKind: z.enum(["daily", "ad_hoc"]).optional(),
+  limit: z.coerce.number().int().positive().max(100).default(30)
+});
+
+const FounderBriefFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const FounderBriefSuccessSchema = z.object({
+  ok: z.literal(true),
+  brief: AaliyahFounderBriefRecordSchema,
+  items: z.array(AaliyahFounderBriefItemRecordSchema),
+  replayed: z.boolean(),
+  message: z.string().min(1)
+});
+
+const FounderBriefListSuccessSchema = z.object({
+  ok: z.literal(true),
+  briefs: z.array(AaliyahFounderBriefRecordSchema),
+  message: z.string().min(1)
+});
+
+export const FounderBriefResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_founder_brief_result"),
+  result: z.discriminatedUnion("ok", [FounderBriefSuccessSchema, FounderBriefFailureSchema])
+});
+
+export const FounderBriefListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_founder_brief_list_result"),
+  result: z.discriminatedUnion("ok", [FounderBriefListSuccessSchema, FounderBriefFailureSchema])
 });
 
 export const EvaluationScheduleCreateBodySchema = z.object({

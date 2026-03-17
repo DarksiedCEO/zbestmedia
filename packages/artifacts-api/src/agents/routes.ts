@@ -7,6 +7,7 @@ import {
   AaliyahDigestComposerService,
   AaliyahDiagnosticsService,
   AaliyahEscalationEngineService,
+  AaliyahFounderBriefService,
   AaliyahFounderBriefingService,
   AaliyahFounderInboxTriageService,
   AaliyahFounderCommandService,
@@ -159,6 +160,12 @@ import {
   OutcomeFeedbackListQuerySchema,
   OutcomeFeedbackListResponseSchema,
   OutcomeFeedbackQueueItemParamSchema,
+  FounderBriefGenerateBodySchema,
+  FounderBriefIdParamSchema,
+  FounderBriefLatestQuerySchema,
+  FounderBriefListQuerySchema,
+  FounderBriefListResponseSchema,
+  FounderBriefResponseSchema,
   OpportunityEvaluateBodySchema,
   OpportunityIdParamSchema,
   OpportunityListQuerySchema,
@@ -296,6 +303,7 @@ export function agentRoutes(opts: {
   aaliyahOperatorQueueService: AaliyahOperatorQueueService;
   aaliyahOperatorActionService: AaliyahOperatorActionService;
   aaliyahOutcomeFeedbackService: AaliyahOutcomeFeedbackService;
+  aaliyahFounderBriefService: AaliyahFounderBriefService;
   aaliyahStrategicIntelligenceService: AaliyahStrategicIntelligenceService;
   aaliyahEvaluationSchedulerService: AaliyahEvaluationSchedulerService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
@@ -2867,6 +2875,99 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_outcome_feedback_detail_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/founder-briefs/generate", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = FounderBriefGenerateBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahFounderBriefService.generate({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        briefKind: body.data.briefKind
+      });
+
+      return reply.code(201).send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_founder_brief_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/founder-briefs/latest", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = FounderBriefLatestQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahFounderBriefService.latest({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        briefKind: query.data.briefKind
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_founder_brief_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/founder-briefs/:briefId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = FounderBriefIdParamSchema.safeParse(req.params ?? {});
+      const query = FounderBriefLatestQuerySchema.safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahFounderBriefService.getById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        briefId: path.data.briefId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_founder_brief_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/founder-briefs", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = FounderBriefListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahFounderBriefService.list({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        briefKind: query.data.briefKind,
+        limit: query.data.limit
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_founder_brief_list_result",
         result
       });
     });

@@ -171,6 +171,15 @@ import type {
   OutcomeFeedbackType
 } from "../aaliyah/outcome-feedback-types.js";
 import type {
+  FounderBriefDeliveryStatus,
+  FounderBriefDeltaType,
+  FounderBriefItemRecord as FounderBriefItemRecordShape,
+  FounderBriefKind,
+  FounderBriefRecord as FounderBriefRecordShape,
+  FounderBriefSection,
+  FounderBriefSummary as FounderBriefSummaryShape
+} from "../aaliyah/founder-brief-types.js";
+import type {
   EvaluationCadenceType,
   EvaluationRunRecord as EvaluationRunRecordShape,
   EvaluationRunStatus,
@@ -1220,6 +1229,92 @@ export const AaliyahIssueStateRecordSchema = z.object({
 }) satisfies z.ZodType<IssueStateRecordShape>;
 export type AaliyahIssueStateRecord = z.infer<typeof AaliyahIssueStateRecordSchema>;
 
+export const FounderBriefKindSchema = z.enum([
+  "daily",
+  "ad_hoc"
+]) satisfies z.ZodType<FounderBriefKind>;
+export type FounderBriefKindRecord = z.infer<typeof FounderBriefKindSchema>;
+
+export const FounderBriefDeliveryStatusSchema = z.enum([
+  "not_sent",
+  "sent"
+]) satisfies z.ZodType<FounderBriefDeliveryStatus>;
+export type FounderBriefDeliveryStatusRecord = z.infer<typeof FounderBriefDeliveryStatusSchema>;
+
+export const FounderBriefSectionSchema = z.enum([
+  "immediate_founder_actions",
+  "newly_resolved",
+  "reopened_or_persisting",
+  "high_value_opportunities",
+  "strategic_watchlist",
+  "execution_outcome_summary"
+]) satisfies z.ZodType<FounderBriefSection>;
+export type FounderBriefSectionRecord = z.infer<typeof FounderBriefSectionSchema>;
+
+export const FounderBriefDeltaTypeSchema = z.enum([
+  "new",
+  "unchanged",
+  "worsened",
+  "improved",
+  "resolved",
+  "reopened",
+  "suppressed"
+]) satisfies z.ZodType<FounderBriefDeltaType>;
+export type FounderBriefDeltaTypeRecord = z.infer<typeof FounderBriefDeltaTypeSchema>;
+
+export const FounderBriefSummarySchema = z.object({
+  headline: z.string().min(1),
+  generatedAtIso: z.string().datetime(),
+  previousBriefId: z.string().min(1).nullable(),
+  counts: z.object({
+    immediateActions: z.number().int().nonnegative(),
+    resolved: z.number().int().nonnegative(),
+    reopenedOrPersisting: z.number().int().nonnegative(),
+    opportunities: z.number().int().nonnegative(),
+    watchlist: z.number().int().nonnegative()
+  }),
+  sectionOrder: z.array(FounderBriefSectionSchema),
+  notes: z.array(z.string().min(1))
+}) satisfies z.ZodType<FounderBriefSummaryShape>;
+export type FounderBriefSummaryRecord = z.infer<typeof FounderBriefSummarySchema>;
+
+export const AaliyahFounderBriefRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  briefDate: z.string().min(1),
+  briefKind: FounderBriefKindSchema,
+  generatedByFounderActorId: z.string().min(1),
+  generatedAtIso: z.string().datetime(),
+  windowStartAtIso: z.string().datetime(),
+  windowEndAtIso: z.string().datetime(),
+  headline: z.string().min(1),
+  summary: FounderBriefSummarySchema,
+  idempotencyKey: z.string().min(1),
+  previousBriefId: z.string().min(1).nullable(),
+  deliveryStatus: FounderBriefDeliveryStatusSchema,
+  lastDispatchedAtIso: z.string().datetime().nullable(),
+  auditEventId: z.string().min(1).nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAtIso: z.string().datetime()
+}) satisfies z.ZodType<FounderBriefRecordShape>;
+export type AaliyahFounderBriefRecord = z.infer<typeof AaliyahFounderBriefRecordSchema>;
+
+export const AaliyahFounderBriefItemRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  briefId: z.string().min(1),
+  section: FounderBriefSectionSchema,
+  queueItemId: z.string().min(1).nullable(),
+  canonicalIssueKey: z.string().min(1).nullable(),
+  operatorActionLogId: z.string().min(1).nullable(),
+  outcomeFeedbackId: z.string().min(1).nullable(),
+  priorityScore: z.number().int(),
+  deltaType: FounderBriefDeltaTypeSchema,
+  payload: z.record(z.string(), z.unknown()),
+  createdAtIso: z.string().datetime()
+}) satisfies z.ZodType<FounderBriefItemRecordShape>;
+export type AaliyahFounderBriefItemRecord = z.infer<typeof AaliyahFounderBriefItemRecordSchema>;
+
 export const ScheduledEngineTypeSchema = z.enum([
   "follow_through",
   "recommendation",
@@ -2091,7 +2186,9 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "operator_action_replayed",
   "outcome_feedback_recorded",
   "outcome_feedback_replayed",
-  "outcome_feedback_rejected"
+  "outcome_feedback_rejected",
+  "founder_brief_generated",
+  "founder_brief_replayed"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 
@@ -2102,7 +2199,7 @@ export const AaliyahDiagnosticsEventSchema = z.object({
   principalContext: z.enum(["founder", "operator"]),
   activeMode: z.enum(["founder", "zbestmedia"]),
   eventType: AaliyahDiagnosticsEventTypeSchema,
-  eventSource: z.enum(["aaliyah_runtime", "aaliyah_session", "aaliyah_follow_through", "aaliyah_workspace"]),
+  eventSource: z.enum(["aaliyah_runtime", "aaliyah_session", "aaliyah_follow_through", "aaliyah_workspace", "aaliyah_founder_brief"]),
   signalKey: z.string().min(1),
   payload: z.record(z.string(), z.unknown()),
   createdAt: z.string().datetime()

@@ -33,6 +33,8 @@ import type {
   AaliyahOperatorActionLogRecord,
   AaliyahOutcomeFeedbackRecord,
   AaliyahIssueStateRecord,
+  AaliyahFounderBriefRecord,
+  AaliyahFounderBriefItemRecord,
   AaliyahStrategicInsightRecord,
   AaliyahTaskRecord,
   AaliyahMutationIdempotencyRecord,
@@ -637,6 +639,41 @@ type IssueStateRow = {
   reopen_count: number;
   resolution_count: number;
   metadata_json: AaliyahIssueStateRecord["metadata"];
+};
+
+type FounderBriefRow = {
+  brief_id: string;
+  tenant_id: string;
+  brief_date: string | Date;
+  brief_kind: AaliyahFounderBriefRecord["briefKind"];
+  generated_by_founder_actor_id: string;
+  generated_at: string | Date;
+  window_start_at: string | Date;
+  window_end_at: string | Date;
+  headline: string;
+  summary_json: AaliyahFounderBriefRecord["summary"];
+  idempotency_key: string;
+  previous_brief_id: string | null;
+  delivery_status: AaliyahFounderBriefRecord["deliveryStatus"];
+  last_dispatched_at: string | Date | null;
+  audit_event_id: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string | Date;
+};
+
+type FounderBriefItemRow = {
+  brief_item_id: string;
+  tenant_id: string;
+  brief_id: string;
+  section: AaliyahFounderBriefItemRecord["section"];
+  queue_item_id: string | null;
+  canonical_issue_key: string | null;
+  operator_action_log_id: string | null;
+  outcome_feedback_id: string | null;
+  priority_score: number;
+  delta_type: AaliyahFounderBriefItemRecord["deltaType"];
+  payload_json: Record<string, unknown>;
+  created_at: string | Date;
 };
 
 type EvaluationScheduleRow = {
@@ -1555,6 +1592,45 @@ function mapIssueStateRow(row: IssueStateRow): AaliyahIssueStateRecord {
     reopenCount: row.reopen_count,
     resolutionCount: row.resolution_count,
     metadata: row.metadata_json
+  };
+}
+
+function mapFounderBriefRow(row: FounderBriefRow): AaliyahFounderBriefRecord {
+  return {
+    id: row.brief_id,
+    tenantId: row.tenant_id,
+    briefDate: toIsoString(row.brief_date).slice(0, 10),
+    briefKind: row.brief_kind,
+    generatedByFounderActorId: row.generated_by_founder_actor_id,
+    generatedAtIso: toIsoString(row.generated_at),
+    windowStartAtIso: toIsoString(row.window_start_at),
+    windowEndAtIso: toIsoString(row.window_end_at),
+    headline: row.headline,
+    summary: row.summary_json,
+    idempotencyKey: row.idempotency_key,
+    previousBriefId: row.previous_brief_id,
+    deliveryStatus: row.delivery_status,
+    lastDispatchedAtIso: row.last_dispatched_at ? toIsoString(row.last_dispatched_at) : null,
+    auditEventId: row.audit_event_id,
+    metadata: row.metadata_json as Record<string, unknown>,
+    createdAtIso: toIsoString(row.created_at)
+  };
+}
+
+function mapFounderBriefItemRow(row: FounderBriefItemRow): AaliyahFounderBriefItemRecord {
+  return {
+    id: row.brief_item_id,
+    tenantId: row.tenant_id,
+    briefId: row.brief_id,
+    section: row.section,
+    queueItemId: row.queue_item_id,
+    canonicalIssueKey: row.canonical_issue_key,
+    operatorActionLogId: row.operator_action_log_id,
+    outcomeFeedbackId: row.outcome_feedback_id,
+    priorityScore: row.priority_score,
+    deltaType: row.delta_type,
+    payload: row.payload_json as Record<string, unknown>,
+    createdAtIso: toIsoString(row.created_at)
   };
 }
 
@@ -6124,6 +6200,27 @@ export class AgentOsRepository {
     return res.rows[0] ? mapOperatorActionLogRow(res.rows[0]) : null;
   }
 
+  async listOperatorActionLogs(args: {
+    tenantId: string;
+    limit?: number;
+  }): Promise<AaliyahOperatorActionLogRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OperatorActionLogRow>(
+        `
+        SELECT action_log_id, tenant_id, queue_item_id, queue_item_version, canonical_issue_key,
+               action_path, command_id, founder_actor_id, idempotency_key, execution_status,
+               failure_code, failure_reason, executed_at, created_at
+        FROM aaliyah_operator_action_log
+        WHERE tenant_id = $1
+        ORDER BY executed_at DESC
+        LIMIT $2
+        `,
+        [args.tenantId, args.limit ?? 100]
+      )
+    );
+    return res.rows.map(mapOperatorActionLogRow);
+  }
+
   async createOutcomeFeedback(args: {
     tenantId: string;
     outcomeId: string;
@@ -6271,6 +6368,28 @@ export class AgentOsRepository {
     return res.rows.map(mapOutcomeFeedbackRow);
   }
 
+  async listOutcomeFeedback(args: {
+    tenantId: string;
+    limit?: number;
+  }): Promise<AaliyahOutcomeFeedbackRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OutcomeFeedbackRow>(
+        `
+        SELECT outcome_id, tenant_id, queue_item_id, operator_action_log_id, command_id,
+               canonical_issue_key, source_type, source_id, outcome_type, outcome_status,
+               reason_code, notes, reported_by_founder_actor_id, reported_at, audit_event_id,
+               metadata_json, idempotency_key, created_at
+        FROM aaliyah_outcome_feedback
+        WHERE tenant_id = $1
+        ORDER BY reported_at DESC
+        LIMIT $2
+        `,
+        [args.tenantId, args.limit ?? 100]
+      )
+    );
+    return res.rows.map(mapOutcomeFeedbackRow);
+  }
+
   async getIssueStateByCanonicalIssueKey(args: {
     tenantId: string;
     canonicalIssueKey: string;
@@ -6352,6 +6471,255 @@ export class AgentOsRepository {
       )
     );
     return mapIssueStateRow(res.rows[0]!);
+  }
+
+  async listIssueStates(args: {
+    tenantId: string;
+    limit?: number;
+  }): Promise<AaliyahIssueStateRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<IssueStateRow>(
+        `
+        SELECT tenant_id, canonical_issue_key, current_state, last_outcome_type, last_outcome_status,
+               last_queue_item_id, last_operator_action_log_id, last_command_id, last_updated_at,
+               last_outcome_at, reopen_count, resolution_count, metadata_json
+        FROM aaliyah_issue_state
+        WHERE tenant_id = $1
+        ORDER BY last_updated_at DESC
+        LIMIT $2
+        `,
+        [args.tenantId, args.limit ?? 100]
+      )
+    );
+    return res.rows.map(mapIssueStateRow);
+  }
+
+  async createFounderBrief(args: {
+    tenantId: string;
+    briefId: string;
+    briefDate: string;
+    briefKind: AaliyahFounderBriefRecord["briefKind"];
+    generatedByFounderActorId: string;
+    generatedAt: string;
+    windowStartAt: string;
+    windowEndAt: string;
+    headline: string;
+    summary: AaliyahFounderBriefRecord["summary"];
+    idempotencyKey: string;
+    previousBriefId: string | null;
+    deliveryStatus: AaliyahFounderBriefRecord["deliveryStatus"];
+    lastDispatchedAt: string | null;
+    auditEventId: string | null;
+    metadata: Record<string, unknown>;
+    createdAt?: string;
+  }): Promise<AaliyahFounderBriefRecord> {
+    const createdAt = args.createdAt ?? args.generatedAt;
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FounderBriefRow>(
+        `
+        INSERT INTO aaliyah_founder_brief (
+          brief_id, tenant_id, brief_date, brief_kind, generated_by_founder_actor_id,
+          generated_at, window_start_at, window_end_at, headline, summary_json,
+          idempotency_key, previous_brief_id, delivery_status, last_dispatched_at,
+          audit_event_id, metadata_json, created_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9, $10::jsonb,
+          $11, $12, $13, $14,
+          $15, $16::jsonb, $17
+        )
+        RETURNING brief_id, tenant_id, brief_date, brief_kind, generated_by_founder_actor_id,
+                  generated_at, window_start_at, window_end_at, headline, summary_json,
+                  idempotency_key, previous_brief_id, delivery_status, last_dispatched_at,
+                  audit_event_id, metadata_json, created_at
+        `,
+        [
+          args.briefId,
+          args.tenantId,
+          args.briefDate,
+          args.briefKind,
+          args.generatedByFounderActorId,
+          args.generatedAt,
+          args.windowStartAt,
+          args.windowEndAt,
+          args.headline,
+          JSON.stringify(args.summary),
+          args.idempotencyKey,
+          args.previousBriefId,
+          args.deliveryStatus,
+          args.lastDispatchedAt,
+          args.auditEventId,
+          JSON.stringify(args.metadata ?? {}),
+          createdAt
+        ]
+      )
+    );
+    return mapFounderBriefRow(res.rows[0]!);
+  }
+
+  async getFounderBriefById(args: { tenantId: string; briefId: string }): Promise<AaliyahFounderBriefRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FounderBriefRow>(
+        `
+        SELECT brief_id, tenant_id, brief_date, brief_kind, generated_by_founder_actor_id,
+               generated_at, window_start_at, window_end_at, headline, summary_json,
+               idempotency_key, previous_brief_id, delivery_status, last_dispatched_at,
+               audit_event_id, metadata_json, created_at
+        FROM aaliyah_founder_brief
+        WHERE tenant_id = $1 AND brief_id = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.briefId]
+      )
+    );
+    return res.rows[0] ? mapFounderBriefRow(res.rows[0]) : null;
+  }
+
+  async getFounderBriefByIdempotencyKey(args: { tenantId: string; idempotencyKey: string }): Promise<AaliyahFounderBriefRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FounderBriefRow>(
+        `
+        SELECT brief_id, tenant_id, brief_date, brief_kind, generated_by_founder_actor_id,
+               generated_at, window_start_at, window_end_at, headline, summary_json,
+               idempotency_key, previous_brief_id, delivery_status, last_dispatched_at,
+               audit_event_id, metadata_json, created_at
+        FROM aaliyah_founder_brief
+        WHERE tenant_id = $1 AND idempotency_key = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.idempotencyKey]
+      )
+    );
+    return res.rows[0] ? mapFounderBriefRow(res.rows[0]) : null;
+  }
+
+  async getLatestFounderBrief(args: {
+    tenantId: string;
+    briefKind?: AaliyahFounderBriefRecord["briefKind"];
+    beforeGeneratedAt?: string;
+  }): Promise<AaliyahFounderBriefRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FounderBriefRow>(
+        `
+        SELECT brief_id, tenant_id, brief_date, brief_kind, generated_by_founder_actor_id,
+               generated_at, window_start_at, window_end_at, headline, summary_json,
+               idempotency_key, previous_brief_id, delivery_status, last_dispatched_at,
+               audit_event_id, metadata_json, created_at
+        FROM aaliyah_founder_brief
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR brief_kind = $2)
+          AND ($3::timestamptz IS NULL OR generated_at < $3)
+        ORDER BY generated_at DESC
+        LIMIT 1
+        `,
+        [args.tenantId, args.briefKind ?? null, args.beforeGeneratedAt ?? null]
+      )
+    );
+    return res.rows[0] ? mapFounderBriefRow(res.rows[0]) : null;
+  }
+
+  async listFounderBriefs(args: {
+    tenantId: string;
+    briefKind?: AaliyahFounderBriefRecord["briefKind"];
+    limit?: number;
+  }): Promise<AaliyahFounderBriefRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FounderBriefRow>(
+        `
+        SELECT brief_id, tenant_id, brief_date, brief_kind, generated_by_founder_actor_id,
+               generated_at, window_start_at, window_end_at, headline, summary_json,
+               idempotency_key, previous_brief_id, delivery_status, last_dispatched_at,
+               audit_event_id, metadata_json, created_at
+        FROM aaliyah_founder_brief
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR brief_kind = $2)
+        ORDER BY generated_at DESC
+        LIMIT $3
+        `,
+        [args.tenantId, args.briefKind ?? null, args.limit ?? 30]
+      )
+    );
+    return res.rows.map(mapFounderBriefRow);
+  }
+
+  async createFounderBriefItem(args: {
+    tenantId: string;
+    briefItemId: string;
+    briefId: string;
+    section: AaliyahFounderBriefItemRecord["section"];
+    queueItemId: string | null;
+    canonicalIssueKey: string | null;
+    operatorActionLogId: string | null;
+    outcomeFeedbackId: string | null;
+    priorityScore: number;
+    deltaType: AaliyahFounderBriefItemRecord["deltaType"];
+    payload: Record<string, unknown>;
+    createdAt?: string;
+  }): Promise<AaliyahFounderBriefItemRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FounderBriefItemRow>(
+        `
+        INSERT INTO aaliyah_founder_brief_item (
+          brief_item_id, tenant_id, brief_id, section, queue_item_id,
+          canonical_issue_key, operator_action_log_id, outcome_feedback_id, priority_score,
+          delta_type, payload_json, created_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9,
+          $10, $11::jsonb, $12
+        )
+        RETURNING brief_item_id, tenant_id, brief_id, section, queue_item_id,
+                  canonical_issue_key, operator_action_log_id, outcome_feedback_id, priority_score,
+                  delta_type, payload_json, created_at
+        `,
+        [
+          args.briefItemId,
+          args.tenantId,
+          args.briefId,
+          args.section,
+          args.queueItemId,
+          args.canonicalIssueKey,
+          args.operatorActionLogId,
+          args.outcomeFeedbackId,
+          args.priorityScore,
+          args.deltaType,
+          JSON.stringify(args.payload ?? {}),
+          createdAt
+        ]
+      )
+    );
+    return mapFounderBriefItemRow(res.rows[0]!);
+  }
+
+  async listFounderBriefItems(args: {
+    tenantId: string;
+    briefId: string;
+  }): Promise<AaliyahFounderBriefItemRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<FounderBriefItemRow>(
+        `
+        SELECT brief_item_id, tenant_id, brief_id, section, queue_item_id,
+               canonical_issue_key, operator_action_log_id, outcome_feedback_id, priority_score,
+               delta_type, payload_json, created_at
+        FROM aaliyah_founder_brief_item
+        WHERE tenant_id = $1 AND brief_id = $2
+        ORDER BY
+          CASE section
+            WHEN 'immediate_founder_actions' THEN 0
+            WHEN 'newly_resolved' THEN 1
+            WHEN 'reopened_or_persisting' THEN 2
+            WHEN 'high_value_opportunities' THEN 3
+            WHEN 'strategic_watchlist' THEN 4
+            ELSE 5
+          END,
+          priority_score DESC,
+          created_at ASC
+        `,
+        [args.tenantId, args.briefId]
+      )
+    );
+    return res.rows.map(mapFounderBriefItemRow);
   }
 
   async createEvaluationSchedule(args: {
