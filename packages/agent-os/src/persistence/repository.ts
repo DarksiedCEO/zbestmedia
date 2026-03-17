@@ -19,6 +19,7 @@ import type {
   AaliyahDiagnosticsEventRecord,
   AaliyahFollowThroughEngineRecord,
   AaliyahFounderCommandRecord,
+  AaliyahRecommendationRecord,
   AaliyahTaskRecord,
   AaliyahMutationIdempotencyRecord,
   AaliyahSessionContextRecord,
@@ -373,6 +374,24 @@ type FollowThroughEngineRow = {
   created_artifact_ids_json: string[];
   audit_event_id: string | null;
   metadata_json: Record<string, unknown>;
+  created_at: string | Date;
+  evaluated_at: string | Date;
+};
+
+type RecommendationRow = {
+  recommendation_id: string;
+  tenant_id: string;
+  source_type: AaliyahRecommendationRecord["source"]["sourceType"];
+  source_id: string;
+  recommendation_type: AaliyahRecommendationRecord["recommendationType"];
+  recommendation_status: AaliyahRecommendationRecord["status"];
+  reason_text: string;
+  summary_text: string;
+  idempotency_key: string;
+  related_command_id: string | null;
+  related_task_id: string | null;
+  metadata_json: Record<string, unknown>;
+  audit_event_id: string | null;
   created_at: string | Date;
   evaluated_at: string | Date;
 };
@@ -971,6 +990,28 @@ function mapFollowThroughEngineRow(row: FollowThroughEngineRow): AaliyahFollowTh
     auditEventId: row.audit_event_id,
     metadata: row.metadata_json as Record<string, unknown>,
     createdAt: toIsoString(row.created_at),
+    evaluatedAtIso: toIsoString(row.evaluated_at)
+  };
+}
+
+function mapRecommendationRow(row: RecommendationRow): AaliyahRecommendationRecord {
+  return {
+    id: row.recommendation_id,
+    tenantId: row.tenant_id,
+    source: {
+      sourceType: row.source_type,
+      sourceId: row.source_id
+    },
+    recommendationType: row.recommendation_type,
+    status: row.recommendation_status,
+    reason: row.reason_text,
+    summary: row.summary_text,
+    idempotencyKey: row.idempotency_key,
+    relatedCommandId: row.related_command_id,
+    relatedTaskId: row.related_task_id,
+    metadata: row.metadata_json as Record<string, unknown>,
+    auditEventId: row.audit_event_id,
+    createdAtIso: toIsoString(row.created_at),
     evaluatedAtIso: toIsoString(row.evaluated_at)
   };
 }
@@ -3897,6 +3938,114 @@ export class AgentOsRepository {
       )
     );
     return res.rows.map(mapFollowThroughEngineRow);
+  }
+
+  async createRecommendation(args: {
+    tenantId: string;
+    recommendationId: string;
+    sourceType: AaliyahRecommendationRecord["source"]["sourceType"];
+    sourceId: string;
+    recommendationType: AaliyahRecommendationRecord["recommendationType"];
+    recommendationStatus: AaliyahRecommendationRecord["status"];
+    reason: string;
+    summary: string;
+    idempotencyKey: string;
+    relatedCommandId: string | null;
+    relatedTaskId: string | null;
+    metadata?: Record<string, unknown>;
+    auditEventId: string | null;
+    createdAt?: string;
+    evaluatedAt?: string;
+  }): Promise<AaliyahRecommendationRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<RecommendationRow>(
+        `
+        INSERT INTO aaliyah_recommendations (
+          recommendation_id, tenant_id, source_type, source_id, recommendation_type,
+          recommendation_status, reason_text, summary_text, idempotency_key,
+          related_command_id, related_task_id, metadata_json, audit_event_id, created_at, evaluated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9,
+          $10, $11, $12::jsonb, $13, $14, $15
+        )
+        RETURNING recommendation_id, tenant_id, source_type, source_id, recommendation_type,
+                  recommendation_status, reason_text, summary_text, idempotency_key,
+                  related_command_id, related_task_id, metadata_json, audit_event_id, created_at, evaluated_at
+        `,
+        [
+          args.recommendationId,
+          args.tenantId,
+          args.sourceType,
+          args.sourceId,
+          args.recommendationType,
+          args.recommendationStatus,
+          args.reason,
+          args.summary,
+          args.idempotencyKey,
+          args.relatedCommandId,
+          args.relatedTaskId,
+          JSON.stringify(args.metadata ?? {}),
+          args.auditEventId,
+          createdAt,
+          args.evaluatedAt ?? createdAt
+        ]
+      )
+    );
+    return mapRecommendationRow(res.rows[0]!);
+  }
+
+  async getRecommendationById(args: { tenantId: string; recommendationId: string }): Promise<AaliyahRecommendationRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<RecommendationRow>(
+        `
+        SELECT recommendation_id, tenant_id, source_type, source_id, recommendation_type,
+               recommendation_status, reason_text, summary_text, idempotency_key,
+               related_command_id, related_task_id, metadata_json, audit_event_id, created_at, evaluated_at
+        FROM aaliyah_recommendations
+        WHERE tenant_id = $1 AND recommendation_id = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.recommendationId]
+      )
+    );
+    return res.rows[0] ? mapRecommendationRow(res.rows[0]) : null;
+  }
+
+  async getRecommendationByIdempotencyKey(args: { tenantId: string; idempotencyKey: string }): Promise<AaliyahRecommendationRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<RecommendationRow>(
+        `
+        SELECT recommendation_id, tenant_id, source_type, source_id, recommendation_type,
+               recommendation_status, reason_text, summary_text, idempotency_key,
+               related_command_id, related_task_id, metadata_json, audit_event_id, created_at, evaluated_at
+        FROM aaliyah_recommendations
+        WHERE tenant_id = $1 AND idempotency_key = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.idempotencyKey]
+      )
+    );
+    return res.rows[0] ? mapRecommendationRow(res.rows[0]) : null;
+  }
+
+  async listRecommendations(args: { tenantId: string; limit?: number }): Promise<AaliyahRecommendationRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<RecommendationRow>(
+        `
+        SELECT recommendation_id, tenant_id, source_type, source_id, recommendation_type,
+               recommendation_status, reason_text, summary_text, idempotency_key,
+               related_command_id, related_task_id, metadata_json, audit_event_id, created_at, evaluated_at
+        FROM aaliyah_recommendations
+        WHERE tenant_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+        `,
+        [args.tenantId, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapRecommendationRow);
   }
 
   async createAaliyahFounderPreference(args: {

@@ -103,6 +103,12 @@ import type {
   FollowThroughSourceType
 } from "../aaliyah/follow-through-engine-types.js";
 import type {
+  RecommendationRecord as RecommendationRecordShape,
+  RecommendationSourceType,
+  RecommendationStatus,
+  RecommendationType
+} from "../aaliyah/recommendation-engine-types.js";
+import type {
   AssignmentPolicyDecision,
   AssignmentRecord,
   ExecutionRunRecord,
@@ -531,6 +537,57 @@ export const AaliyahFollowThroughEngineRecordSchema = z.object({
   evaluatedAtIso: z.string().datetime()
 }) satisfies z.ZodType<FollowThroughEngineRecordShape>;
 export type AaliyahFollowThroughEngineRecord = z.infer<typeof AaliyahFollowThroughEngineRecordSchema>;
+
+export const RecommendationTypeSchema = z.enum([
+  "send_now",
+  "follow_up_now",
+  "review_blocked",
+  "escalate_now",
+  "revive_contact",
+  "schedule_next",
+  "noop"
+]) satisfies z.ZodType<RecommendationType>;
+export type RecommendationTypeRecord = z.infer<typeof RecommendationTypeSchema>;
+
+export const RecommendationSourceTypeSchema = z.enum([
+  "follow_through_record",
+  "founder_command",
+  "task",
+  "gmail_draft",
+  "calendar_event",
+  "contact",
+  "account"
+]) satisfies z.ZodType<RecommendationSourceType>;
+export type RecommendationSourceTypeRecord = z.infer<typeof RecommendationSourceTypeSchema>;
+
+export const RecommendationStatusSchema = z.enum([
+  "active",
+  "dismissed",
+  "accepted",
+  "noop"
+]) satisfies z.ZodType<RecommendationStatus>;
+export type RecommendationStatusRecord = z.infer<typeof RecommendationStatusSchema>;
+
+export const AaliyahRecommendationRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  source: z.object({
+    sourceType: RecommendationSourceTypeSchema,
+    sourceId: z.string().min(1)
+  }),
+  recommendationType: RecommendationTypeSchema,
+  status: RecommendationStatusSchema,
+  reason: z.string().min(1),
+  summary: z.string().min(1),
+  idempotencyKey: z.string().min(1),
+  relatedCommandId: z.string().min(1).nullable(),
+  relatedTaskId: z.string().min(1).nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  auditEventId: z.string().min(1).nullable(),
+  createdAtIso: z.string().datetime(),
+  evaluatedAtIso: z.string().datetime()
+}) satisfies z.ZodType<RecommendationRecordShape>;
+export type AaliyahRecommendationRecord = z.infer<typeof AaliyahRecommendationRecordSchema>;
 
 
 const EmailRoutingTargetSchema = z.union([
@@ -1217,7 +1274,10 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "follow_through_engine_executed",
   "follow_through_engine_blocked",
   "follow_through_engine_stale",
-  "follow_through_engine_noop"
+  "follow_through_engine_noop",
+  "recommendation_engine_created",
+  "recommendation_engine_replayed",
+  "recommendation_engine_noop"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 

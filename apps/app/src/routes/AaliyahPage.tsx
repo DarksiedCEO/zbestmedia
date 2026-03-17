@@ -6,6 +6,7 @@ import {
   getAaliyahCommandSurface,
   getAaliyahFollowThroughEngineRecords,
   getAaliyahInbox,
+  getAaliyahRecommendations,
   getAaliyahOpenTasks,
   getAaliyahSessionSnapshot,
   getFounderCommandHistory,
@@ -16,6 +17,7 @@ import {
   type AaliyahInboxItem,
   type AaliyahCommandSurface,
   type AaliyahFollowThroughEngineRecord,
+  type AaliyahRecommendationRecord,
   type AaliyahMode,
   type AaliyahQuickAction,
   type AaliyahRuntimeResponse,
@@ -109,7 +111,7 @@ export default function AaliyahPage() {
 
   const activeMode = sessionQuery.data?.session.activeModeState.activeMode ?? "founder";
 
-  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery] = useQueries({
+  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery] = useQueries({
     queries: [
       {
         queryKey: ["aaliyah", "command-surface", activeMode],
@@ -170,6 +172,19 @@ export default function AaliyahPage() {
             fetchClient,
             mode: activeMode,
             limit: 30,
+        }),
+        refetchInterval: 20_000,
+      },
+      {
+        queryKey: ["aaliyah", "recommendations", activeMode],
+        enabled: Boolean(envData.env && envData.appApiBaseUrl),
+        queryFn: async () =>
+          getAaliyahRecommendations({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            mode: activeMode,
+            limit: 20,
           }),
         refetchInterval: 20_000,
       },
@@ -265,8 +280,8 @@ export default function AaliyahPage() {
     },
   });
 
-  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading;
-  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError;
+  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading;
+  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError;
   const errorMessage =
     envData.error ??
     (sessionQuery.error as Error | undefined)?.message ??
@@ -275,6 +290,7 @@ export default function AaliyahPage() {
     (tasksQuery.error as Error | undefined)?.message ??
     (commandHistoryQuery.error as Error | undefined)?.message ??
     (followThroughEngineQuery.error as Error | undefined)?.message ??
+    (recommendationsQuery.error as Error | undefined)?.message ??
     null;
 
   const shell = shellQuery.data?.shell;
@@ -283,6 +299,7 @@ export default function AaliyahPage() {
   const tasks = tasksQuery.data?.result.ok ? tasksQuery.data.result.tasks : [];
   const commandHistory = commandHistoryQuery.data?.result.ok ? commandHistoryQuery.data.result.commands : [];
   const followThroughRecords = followThroughEngineQuery.data?.result.ok ? followThroughEngineQuery.data.result.records : [];
+  const recommendations = recommendationsQuery.data?.result.ok ? recommendationsQuery.data.result.recommendations : [];
 
   async function executeIntent(intent: string, parameters?: Record<string, unknown>, mode?: AaliyahMode) {
     await runtimeMutation.mutateAsync({ intent, parameters, mode });
@@ -375,6 +392,53 @@ export default function AaliyahPage() {
       payload: { workflowName },
       idempotencySeed: `trigger_workflow:${workflowName}`,
     });
+  }
+
+  async function actOnRecommendation(recommendation: AaliyahRecommendationRecord) {
+    const targetType = typeof recommendation.metadata.targetType === "string" ? recommendation.metadata.targetType : null;
+    const targetId = typeof recommendation.metadata.targetId === "string" ? recommendation.metadata.targetId : null;
+
+    switch (recommendation.recommendationType) {
+      case "escalate_now":
+        if (targetType === "task" && targetId) {
+          await escalateTask(targetId);
+          return;
+        }
+        break;
+      case "revive_contact":
+        if (targetType === "contact" && targetId) {
+          await createFollowUpFromTarget("contact", targetId, "Revive relationship with this contact");
+          return;
+        }
+        break;
+      case "follow_up_now":
+        if (targetType && targetId && ["task", "contact", "account", "gmail_draft", "calendar_event"].includes(targetType)) {
+          await createFollowUpFromTarget(targetType as FounderCommandRequest["target"]["targetType"], targetId, "Follow up now");
+          return;
+        }
+        break;
+      case "schedule_next":
+        if (targetType === "calendar_event" && targetId) {
+          await submitFounderCommand({
+            commandType: "override_schedule",
+            target: { targetType: "calendar_event", targetId },
+            payload: {
+              overrideMode: "reschedule",
+              reason: "Recommendation surfaced a missing next scheduled step.",
+            },
+            idempotencySeed: `override_schedule:calendar:${targetId}`,
+          });
+          return;
+        }
+        break;
+      case "send_now":
+      case "noop":
+      default:
+        break;
+    }
+
+    setCommandNotice(null);
+    setCommandError("This recommendation is advisory only right now and has no Pack 34 command mapping.");
   }
 
   async function handleQueueAction(item: AaliyahInboxItem, action: string) {
@@ -588,6 +652,12 @@ export default function AaliyahPage() {
                   <CommandHistoryPanel commands={commandHistory} />
 
                   <FollowThroughEnginePanel records={followThroughRecords} />
+
+                  <RecommendationsPanel
+                    recommendations={recommendations}
+                    busy={founderCommandMutation.isPending}
+                    onAct={(recommendation) => void actOnRecommendation(recommendation)}
+                  />
                 </div>
               </Section>
             </div>
@@ -1248,6 +1318,100 @@ function Tag({ label, tone = "filled" }: { label: string; tone?: "filled" | "out
     >
       {label}
     </span>
+  );
+}
+
+function recommendationActionLabel(recommendation: AaliyahRecommendationRecord) {
+  switch (recommendation.recommendationType) {
+    case "escalate_now":
+      return "Escalate now";
+    case "revive_contact":
+      return "Revive contact";
+    case "follow_up_now":
+      return "Follow up now";
+    case "schedule_next":
+      return "Record next step";
+    case "review_blocked":
+    case "send_now":
+      return "Advisory only";
+    default:
+      return "No action";
+  }
+}
+
+function recommendationTone(type: AaliyahRecommendationRecord["recommendationType"]) {
+  switch (type) {
+    case "escalate_now":
+    case "review_blocked":
+      return "filled" as const;
+    default:
+      return "outline" as const;
+  }
+}
+
+function RecommendationsPanel(args: {
+  recommendations: AaliyahRecommendationRecord[];
+  busy: boolean;
+  onAct: (recommendation: AaliyahRecommendationRecord) => void;
+}) {
+  const actionable = args.recommendations.filter((recommendation) => !["noop", "send_now", "review_blocked"].includes(recommendation.recommendationType));
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ fontWeight: 700 }}>Recommendations</div>
+      {args.recommendations.length === 0 ? (
+        <EmptyState text="No persisted founder recommendations are active." />
+      ) : (
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+            <MetricMini label="Actionable" value={actionable.length} />
+            <MetricMini label="Blocked review" value={args.recommendations.filter((item) => item.recommendationType === "review_blocked").length} />
+            <MetricMini label="Escalate now" value={args.recommendations.filter((item) => item.recommendationType === "escalate_now").length} />
+            <MetricMini label="Total records" value={args.recommendations.length} />
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {args.recommendations.map((recommendation) => {
+              const actionableNow = !["send_now", "noop", "review_blocked"].includes(recommendation.recommendationType);
+              return (
+                <div key={recommendation.id} style={compactPanelStyle}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 650 }}>{recommendation.summary}</div>
+                      <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>{recommendation.reason}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <Tag label={recommendation.recommendationType.replaceAll("_", " ")} tone={recommendationTone(recommendation.recommendationType)} />
+                      <Tag label={recommendation.status} tone="outline" />
+                      <Tag label={recommendation.source.sourceType.replaceAll("_", " ")} tone="outline" />
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                    <DataBlock label="Source" value={shortId(recommendation.source.sourceId)} />
+                    <DataBlock label="Task" value={shortId(recommendation.relatedTaskId)} />
+                    <DataBlock label="Command" value={shortId(recommendation.relatedCommandId)} />
+                    <DataBlock label="Evaluated" value={new Date(recommendation.evaluatedAtIso).toLocaleString()} />
+                  </div>
+                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      style={actionableNow ? primaryButtonStyle : ghostButtonStyle}
+                      disabled={args.busy || !actionableNow}
+                      onClick={() => args.onAct(recommendation)}
+                    >
+                      {recommendationActionLabel(recommendation)}
+                    </button>
+                    {!actionableNow ? (
+                      <div style={{ alignSelf: "center", fontSize: 12, color: tokens.colors.muted }}>
+                        Execution remains founder-command only. This recommendation is advisory for now.
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

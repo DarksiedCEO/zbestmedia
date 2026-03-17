@@ -42,6 +42,8 @@ import {
   FollowThroughEngineResponseSchema,
   FounderCommandListResponseSchema,
   FounderCommandResponseSchema,
+  RecommendationListResponseSchema,
+  RecommendationResponseSchema,
   AaliyahTaskListResponseSchema,
   AaliyahTaskResponseSchema,
   AaliyahWorkspaceGmailDraftResponseSchema,
@@ -2669,6 +2671,78 @@ describe("agent routes", () => {
       message: "Follow-through record loaded successfully."
     }))
   };
+  const aaliyahRecommendationEngineService: any = {
+    evaluateSource: vi.fn(async ({ source }: { source: { sourceType: string; sourceId: string } }) => ({
+      ok: true,
+      recommendation: {
+        id: "recommendation:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        source,
+        recommendationType: "escalate_now",
+        status: "active",
+        reason: "Stale high-priority work should be escalated now.",
+        summary: "Escalate the stale task now.",
+        idempotencyKey: "rec:escalate_now:follow_through_record:follow-through-engine:1:abc",
+        relatedCommandId: "founder-command:1",
+        relatedTaskId: "task:1",
+        metadata: { targetType: "task", targetId: "task:1" },
+        auditEventId: "aaliyah-diagnostics:event-3",
+        createdAtIso: "2026-03-16T18:10:00.000Z",
+        evaluatedAtIso: "2026-03-16T18:10:00.000Z"
+      },
+      replayed: false,
+      message: "Escalate the stale task now."
+    })),
+    getRecommendationById: vi.fn(async ({ recommendationId }: { recommendationId: string }) => ({
+      ok: true,
+      recommendation: {
+        id: recommendationId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        source: {
+          sourceType: "follow_through_record",
+          sourceId: "follow-through-engine:1"
+        },
+        recommendationType: "escalate_now",
+        status: "active",
+        reason: "Stale high-priority work should be escalated now.",
+        summary: "Escalate the stale task now.",
+        idempotencyKey: "rec:escalate_now:follow_through_record:follow-through-engine:1:abc",
+        relatedCommandId: "founder-command:1",
+        relatedTaskId: "task:1",
+        metadata: { targetType: "task", targetId: "task:1" },
+        auditEventId: "aaliyah-diagnostics:event-3",
+        createdAtIso: "2026-03-16T18:10:00.000Z",
+        evaluatedAtIso: "2026-03-16T18:10:00.000Z"
+      },
+      replayed: false,
+      message: "Loaded 1 recommendation."
+    })),
+    listRecommendations: vi.fn(async () => ({
+      ok: true,
+      recommendations: [
+        {
+          id: "recommendation:1",
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          source: {
+            sourceType: "follow_through_record",
+            sourceId: "follow-through-engine:1"
+          },
+          recommendationType: "escalate_now",
+          status: "active",
+          reason: "Stale high-priority work should be escalated now.",
+          summary: "Escalate the stale task now.",
+          idempotencyKey: "rec:escalate_now:follow_through_record:follow-through-engine:1:abc",
+          relatedCommandId: "founder-command:1",
+          relatedTaskId: "task:1",
+          metadata: { targetType: "task", targetId: "task:1" },
+          auditEventId: "aaliyah-diagnostics:event-3",
+          createdAtIso: "2026-03-16T18:10:00.000Z",
+          evaluatedAtIso: "2026-03-16T18:10:00.000Z"
+        }
+      ],
+      message: "Loaded 1 recommendation."
+    }))
+  };
   const aaliyahMemoryBoundaryService = {
     getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
       generatedAt: "2026-03-15T00:00:00.000Z",
@@ -3607,6 +3681,7 @@ describe("agent routes", () => {
         aaliyahTasksService: aaliyahTasksService as never,
         aaliyahFounderCommandService: aaliyahFounderCommandService as never,
         aaliyahFollowThroughEngineService: aaliyahFollowThroughEngineService as never,
+        aaliyahRecommendationEngineService: aaliyahRecommendationEngineService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
         aaliyahFollowThroughService: aaliyahFollowThroughService as never,
@@ -4531,6 +4606,61 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(403);
     expect(aaliyahFollowThroughEngineService.listRecords).not.toHaveBeenCalled();
+  });
+
+  it("exposes recommendation engine routes", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/recommendations/evaluate",
+      payload: {
+        mode: "founder",
+        source: {
+          sourceType: "follow_through_record",
+          sourceId: "follow-through-engine:1"
+        }
+      }
+    });
+
+    expect(createRes.statusCode).toBe(201);
+    const created = RecommendationResponseSchema.parse(createRes.json());
+    expect(created.result.ok).toBe(true);
+    expect(aaliyahRecommendationEngineService.evaluateSource).toHaveBeenCalledWith({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      actorId: "actor-1",
+      principalContext: "founder",
+      mode: "founder",
+      source: {
+        sourceType: "follow_through_record",
+        sourceId: "follow-through-engine:1"
+      }
+    });
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/recommendations/recommendation:1?mode=founder"
+    });
+    expect(detailRes.statusCode).toBe(200);
+    RecommendationResponseSchema.parse(detailRes.json());
+
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/recommendations?mode=founder&limit=10"
+    });
+    expect(listRes.statusCode).toBe(200);
+    RecommendationListResponseSchema.parse(listRes.json());
+  });
+
+  it("rejects recommendation engine routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahRecommendationEngineService.listRecommendations.mockClear();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/recommendations?mode=founder&limit=10"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahRecommendationEngineService.listRecommendations).not.toHaveBeenCalled();
   });
 
   it("exposes founder preference mutation routes", async () => {

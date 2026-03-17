@@ -38,7 +38,10 @@ export type AaliyahDiagnosticsEventType =
   | "follow_through_engine_executed"
   | "follow_through_engine_blocked"
   | "follow_through_engine_stale"
-  | "follow_through_engine_noop";
+  | "follow_through_engine_noop"
+  | "recommendation_engine_created"
+  | "recommendation_engine_replayed"
+  | "recommendation_engine_noop";
 
 export type AaliyahDiagnosticsEvent = {
   tenantId: string;

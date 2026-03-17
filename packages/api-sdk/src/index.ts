@@ -278,6 +278,26 @@ export type AaliyahFollowThroughEngineRecord = {
   evaluatedAtIso: string;
 };
 
+export type AaliyahRecommendationRecord = {
+  id: string;
+  tenantId: string;
+  source: {
+    sourceType: "follow_through_record" | "founder_command" | "task" | "gmail_draft" | "calendar_event" | "contact" | "account";
+    sourceId: string;
+  };
+  recommendationType: "send_now" | "follow_up_now" | "review_blocked" | "escalate_now" | "revive_contact" | "schedule_next" | "noop";
+  status: "active" | "dismissed" | "accepted" | "noop";
+  reason: string;
+  summary: string;
+  idempotencyKey: string;
+  relatedCommandId: string | null;
+  relatedTaskId: string | null;
+  metadata: Record<string, unknown>;
+  auditEventId: string | null;
+  createdAtIso: string;
+  evaluatedAtIso: string;
+};
+
 export type FounderCommandRequest = {
   mode: AaliyahMode;
   commandType: FounderCommandType;
@@ -823,6 +843,76 @@ export async function getAaliyahFollowThroughEngineRecords(args: {
 }> {
   return args.fetchClient({
     url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/follow-through/engine`, {
+      mode: args.mode,
+      limit: args.limit ? String(args.limit) : undefined,
+    }),
+    bearer: args.bearer,
+  });
+}
+
+export async function evaluateAaliyahRecommendation(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  source: {
+    sourceType: "follow_through_record" | "founder_command" | "task" | "gmail_draft" | "calendar_event" | "contact" | "account";
+    sourceId: string;
+  };
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_recommendation_result";
+  result:
+    | {
+        ok: true;
+        recommendation: AaliyahRecommendationRecord;
+        replayed: boolean;
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/recommendations/evaluate`,
+    method: "POST",
+    bearer: args.bearer,
+    body: {
+      mode: args.mode ?? "founder",
+      source: args.source,
+    },
+  });
+}
+
+export async function getAaliyahRecommendations(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  limit?: number;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_recommendation_list_result";
+  result:
+    | {
+        ok: true;
+        recommendations: AaliyahRecommendationRecord[];
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/recommendations`, {
       mode: args.mode,
       limit: args.limit ? String(args.limit) : undefined,
     }),

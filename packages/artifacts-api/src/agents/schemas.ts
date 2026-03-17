@@ -8,6 +8,7 @@ import {
   AaliyahCrmAccountSchema,
   AaliyahCrmContactSchema,
   AaliyahFollowThroughEngineRecordSchema,
+  AaliyahRecommendationRecordSchema,
   AaliyahCrmNoteSchema,
   AaliyahFounderCommandRecordSchema,
   AaliyahTaskSchema,
@@ -662,6 +663,56 @@ export const FollowThroughEngineListResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_follow_through_engine_list_result"),
   result: z.discriminatedUnion("ok", [FollowThroughEngineListSuccessSchema, FollowThroughEngineFailureSchema])
+});
+
+export const RecommendationEvaluateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  source: z.object({
+    sourceType: z.enum(["follow_through_record", "founder_command", "task", "gmail_draft", "calendar_event", "contact", "account"]),
+    sourceId: z.string().min(1)
+  })
+});
+
+export const RecommendationIdParamSchema = z.object({
+  recommendationId: z.string().min(1)
+});
+
+export const RecommendationListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  limit: z.coerce.number().int().positive().max(100).default(50)
+});
+
+const RecommendationFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const RecommendationSuccessSchema = z.object({
+  ok: z.literal(true),
+  recommendation: AaliyahRecommendationRecordSchema,
+  replayed: z.boolean(),
+  message: z.string().min(1)
+});
+
+const RecommendationListSuccessSchema = z.object({
+  ok: z.literal(true),
+  recommendations: z.array(AaliyahRecommendationRecordSchema),
+  message: z.string().min(1)
+});
+
+export const RecommendationResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_recommendation_result"),
+  result: z.discriminatedUnion("ok", [RecommendationSuccessSchema, RecommendationFailureSchema])
+});
+
+export const RecommendationListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_recommendation_list_result"),
+  result: z.discriminatedUnion("ok", [RecommendationListSuccessSchema, RecommendationFailureSchema])
 });
 
 export const BrandPipelineAdvanceBodySchema = z.object({
