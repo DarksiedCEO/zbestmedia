@@ -54,7 +54,10 @@ import {
   EscalationListResponseSchema,
   EscalationResponseSchema,
   OperatorQueueDetailResponseSchema,
+  OperatorQueueExecuteResponseSchema,
   OperatorQueueListResponseSchema,
+  OperatorQueueRefreshAllResponseSchema,
+  OperatorQueueRefreshResponseSchema,
   OperatorQueueResponseSchema,
   OperatorQueueTopResponseSchema,
   NotificationListResponseSchema,
@@ -3426,6 +3429,11 @@ describe("agent routes", () => {
         queueItemType: "immediate_action",
         priorityScore: 100,
         priorityBand: "critical",
+        status: "active",
+        rankingVersion: 1,
+        staleAfterAtIso: "2026-03-17T13:25:00.000Z",
+        canonicalIssueKey: "task:1|issue:stale_critical_escalation|command:none",
+        supersededByQueueItemId: null,
         title: "Critical issue crossed the escalation line",
         summary: "Critical stale work has remained active too long.",
         reason: "Critical notification remained unresolved past threshold.",
@@ -3438,7 +3446,9 @@ describe("agent routes", () => {
         auditEventId: "aaliyah-diagnostics:event-oq-1",
         metadata: { clusterKey: "task:1" },
         createdAtIso: "2026-03-17T13:10:00.000Z",
-        evaluatedAtIso: "2026-03-17T13:10:00.000Z"
+        evaluatedAtIso: "2026-03-17T13:10:00.000Z",
+        lastRefreshedAtIso: null,
+        lastExecutedAtIso: null
       }],
       replayedCount: 0,
       suppressedCount: 2,
@@ -3454,6 +3464,11 @@ describe("agent routes", () => {
         queueItemType: "immediate_action",
         priorityScore: 100,
         priorityBand: "critical",
+        status: "active",
+        rankingVersion: 1,
+        staleAfterAtIso: "2026-03-17T13:25:00.000Z",
+        canonicalIssueKey: "task:1|issue:stale_critical_escalation|command:none",
+        supersededByQueueItemId: null,
         title: "Critical issue crossed the escalation line",
         summary: "Critical stale work has remained active too long.",
         reason: "Critical notification remained unresolved past threshold.",
@@ -3466,7 +3481,9 @@ describe("agent routes", () => {
         auditEventId: "aaliyah-diagnostics:event-oq-1",
         metadata: { clusterKey: "task:1" },
         createdAtIso: "2026-03-17T13:10:00.000Z",
-        evaluatedAtIso: "2026-03-17T13:10:00.000Z"
+        evaluatedAtIso: "2026-03-17T13:10:00.000Z",
+        lastRefreshedAtIso: null,
+        lastExecutedAtIso: null
       },
       message: "Critical stale work has remained active too long."
     })),
@@ -3480,6 +3497,11 @@ describe("agent routes", () => {
         queueItemType: "immediate_action",
         priorityScore: 100,
         priorityBand: "critical",
+        status: "active",
+        rankingVersion: 1,
+        staleAfterAtIso: "2026-03-17T13:25:00.000Z",
+        canonicalIssueKey: "task:1|issue:stale_critical_escalation|command:none",
+        supersededByQueueItemId: null,
         title: "Critical issue crossed the escalation line",
         summary: "Critical stale work has remained active too long.",
         reason: "Critical notification remained unresolved past threshold.",
@@ -3492,7 +3514,9 @@ describe("agent routes", () => {
         auditEventId: "aaliyah-diagnostics:event-oq-1",
         metadata: { clusterKey: "task:1" },
         createdAtIso: "2026-03-17T13:10:00.000Z",
-        evaluatedAtIso: "2026-03-17T13:10:00.000Z"
+        evaluatedAtIso: "2026-03-17T13:10:00.000Z",
+        lastRefreshedAtIso: null,
+        lastExecutedAtIso: null
       }],
       message: "Operator queue contains 1 ranked founder item."
     })),
@@ -3506,6 +3530,11 @@ describe("agent routes", () => {
         queueItemType: "immediate_action",
         priorityScore: 100,
         priorityBand: "critical",
+        status: "active",
+        rankingVersion: 1,
+        staleAfterAtIso: "2026-03-17T13:25:00.000Z",
+        canonicalIssueKey: "task:1|issue:stale_critical_escalation|command:none",
+        supersededByQueueItemId: null,
         title: "Critical issue crossed the escalation line",
         summary: "Critical stale work has remained active too long.",
         reason: "Critical notification remained unresolved past threshold.",
@@ -3518,7 +3547,9 @@ describe("agent routes", () => {
         auditEventId: "aaliyah-diagnostics:event-oq-1",
         metadata: { clusterKey: "task:1" },
         createdAtIso: "2026-03-17T13:10:00.000Z",
-        evaluatedAtIso: "2026-03-17T13:10:00.000Z"
+        evaluatedAtIso: "2026-03-17T13:10:00.000Z",
+        lastRefreshedAtIso: null,
+        lastExecutedAtIso: null
       }],
       topQueueItems: [{
         id: "operator-queue:1",
@@ -3528,6 +3559,11 @@ describe("agent routes", () => {
         queueItemType: "immediate_action",
         priorityScore: 100,
         priorityBand: "critical",
+        status: "active",
+        rankingVersion: 1,
+        staleAfterAtIso: "2026-03-17T13:25:00.000Z",
+        canonicalIssueKey: "task:1|issue:stale_critical_escalation|command:none",
+        supersededByQueueItemId: null,
         title: "Critical issue crossed the escalation line",
         summary: "Critical stale work has remained active too long.",
         reason: "Critical notification remained unresolved past threshold.",
@@ -3540,9 +3576,82 @@ describe("agent routes", () => {
         auditEventId: "aaliyah-diagnostics:event-oq-1",
         metadata: { clusterKey: "task:1" },
         createdAtIso: "2026-03-17T13:10:00.000Z",
-        evaluatedAtIso: "2026-03-17T13:10:00.000Z"
+        evaluatedAtIso: "2026-03-17T13:10:00.000Z",
+        lastRefreshedAtIso: null,
+        lastExecutedAtIso: null
       }],
       message: "Operator queue top view contains 1 immediate actions and 1 ranked items."
+    })),
+    refreshById: vi.fn(async ({ queueItemId }: { queueItemId: string }) => ({
+      ok: true,
+      queueItem: {
+        id: queueItemId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        sourceType: "escalation",
+        sourceId: "escalation:1",
+        queueItemType: "immediate_action",
+        priorityScore: 100,
+        priorityBand: "critical",
+        status: "active",
+        rankingVersion: 2,
+        staleAfterAtIso: "2026-03-17T13:40:00.000Z",
+        canonicalIssueKey: "task:1|issue:stale_critical_escalation|command:none",
+        supersededByQueueItemId: null,
+        title: "Critical issue crossed the escalation line",
+        summary: "Critical stale work has remained active too long.",
+        reason: "Critical notification remained unresolved past threshold.",
+        idempotencyKey: "oq:escalation:1:critical",
+        relatedRecordIds: ["notification:1"],
+        relatedRecordTypes: ["notification"],
+        actionableCommandType: null,
+        actionableTargetType: null,
+        actionableTargetId: null,
+        auditEventId: "aaliyah-diagnostics:event-oq-1",
+        metadata: { clusterKey: "task:1" },
+        createdAtIso: "2026-03-17T13:10:00.000Z",
+        evaluatedAtIso: "2026-03-17T13:25:00.000Z",
+        lastRefreshedAtIso: "2026-03-17T13:25:00.000Z",
+        lastExecutedAtIso: null
+      },
+      refreshed: true,
+      invalidated: false,
+      message: "Operator queue item refreshed successfully."
+    })),
+    refreshAll: vi.fn(async () => ({
+      ok: true,
+      refreshedCount: 1,
+      invalidatedCount: 0,
+      queueItems: [],
+      message: "Operator queue refresh processed 1 items."
+    }))
+  };
+  const aaliyahOperatorActionService: any = {
+    execute: vi.fn(async ({ queueItemId }: { queueItemId: string }) => ({
+      ok: true,
+      result: {
+        executionStatus: "success",
+        queueItemId,
+        commandId: "founder-command:1",
+        canonicalIssueKey: "task:1|issue:stale_critical_escalation|command:none",
+        executedAtIso: "2026-03-17T13:30:00.000Z",
+        auditId: "operator-action:1"
+      },
+      log: {
+        id: "operator-action:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        queueItemId,
+        queueItemVersion: 2,
+        canonicalIssueKey: "task:1|issue:stale_critical_escalation|command:none",
+        actionPath: "escalate_task:task:task:1",
+        commandId: "founder-command:1",
+        founderActorId: "actor-1",
+        idempotencyKey: "operator-action:execute:1",
+        executionStatus: "success",
+        failureCode: null,
+        failureReason: null,
+        executedAtIso: "2026-03-17T13:30:00.000Z",
+        createdAtIso: "2026-03-17T13:30:00.000Z"
+      }
     }))
   };
   const aaliyahEvaluationSchedulerService: any = {
@@ -4929,6 +5038,7 @@ describe("agent routes", () => {
         aaliyahSignalCoalescingService: aaliyahSignalCoalescingService as never,
         aaliyahEscalationEngineService: aaliyahEscalationEngineService as never,
         aaliyahOperatorQueueService: aaliyahOperatorQueueService as never,
+        aaliyahOperatorActionService: aaliyahOperatorActionService as never,
         aaliyahEvaluationSchedulerService: aaliyahEvaluationSchedulerService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
@@ -6232,11 +6342,48 @@ describe("agent routes", () => {
     });
     expect(topRes.statusCode).toBe(200);
     OperatorQueueTopResponseSchema.parse(topRes.json());
+
+    const refreshAllRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/operator-queue/refresh",
+      payload: {
+        mode: "founder",
+        generatedAt: "2026-03-17T13:25:00.000Z",
+        force: true
+      }
+    });
+    expect(refreshAllRes.statusCode).toBe(200);
+    OperatorQueueRefreshAllResponseSchema.parse(refreshAllRes.json());
+
+    const executeRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/operator-queue/operator-queue:1/execute",
+      payload: {
+        mode: "founder",
+        idempotencyKey: "operator-action:execute:1",
+        requestedAt: "2026-03-17T13:30:00.000Z"
+      }
+    });
+    expect(executeRes.statusCode).toBe(200);
+    OperatorQueueExecuteResponseSchema.parse(executeRes.json());
+
+    const refreshItemRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/operator-queue/operator-queue:1/refresh",
+      payload: {
+        mode: "founder",
+        generatedAt: "2026-03-17T13:25:00.000Z",
+        force: true
+      }
+    });
+    expect(refreshItemRes.statusCode).toBe(200);
+    OperatorQueueRefreshResponseSchema.parse(refreshItemRes.json());
   });
 
   it("rejects operator queue routes for non-founder callers", async () => {
     authRoles = ["admin"];
     aaliyahOperatorQueueService.list.mockClear();
+    aaliyahOperatorActionService.execute.mockClear();
 
     const res = await app.inject({
       method: "GET",
@@ -6245,6 +6392,18 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(403);
     expect(aaliyahOperatorQueueService.list).not.toHaveBeenCalled();
+
+    const executeRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/operator-queue/operator-queue:1/execute",
+      payload: {
+        mode: "founder",
+        idempotencyKey: "operator-action:execute:blocked"
+      }
+    });
+
+    expect(executeRes.statusCode).toBe(403);
+    expect(aaliyahOperatorActionService.execute).not.toHaveBeenCalled();
   });
 
   it("exposes evaluation scheduler routes", async () => {

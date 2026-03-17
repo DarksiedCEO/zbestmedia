@@ -63,6 +63,12 @@ function mapEventType(eventType: OperatorQueueAuditEvent['eventType']) {
       return 'operator_queue_created' as const;
     case 'aaliyah.operator_queue.replayed':
       return 'operator_queue_replayed' as const;
+    case 'aaliyah.operator_queue.refreshed':
+      return 'operator_queue_refreshed' as const;
+    case 'aaliyah.operator_queue.invalidated':
+      return 'operator_queue_invalidated' as const;
+    case 'aaliyah.operator_queue.suppressed':
+      return 'operator_queue_suppressed' as const;
     case 'aaliyah.operator_queue.noop':
       return 'operator_queue_noop' as const;
   }

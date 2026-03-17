@@ -30,6 +30,7 @@ import type {
   AaliyahCoalescedSignalRecord,
   AaliyahEscalationRecord,
   AaliyahOperatorQueueRecord,
+  AaliyahOperatorActionLogRecord,
   AaliyahStrategicInsightRecord,
   AaliyahTaskRecord,
   AaliyahMutationIdempotencyRecord,
@@ -556,6 +557,11 @@ type OperatorQueueRow = {
   queue_item_type: AaliyahOperatorQueueRecord["queueItemType"];
   priority_score: number;
   priority_band: AaliyahOperatorQueueRecord["priorityBand"];
+  queue_status: AaliyahOperatorQueueRecord["status"];
+  ranking_version: number;
+  stale_after_at: string | Date;
+  canonical_issue_key: string | null;
+  superseded_by_queue_item_id: string | null;
   title_text: string;
   summary_text: string;
   reason_text: string;
@@ -569,6 +575,25 @@ type OperatorQueueRow = {
   metadata_json: Record<string, unknown>;
   created_at: string | Date;
   evaluated_at: string | Date;
+  last_refreshed_at: string | Date | null;
+  last_executed_at: string | Date | null;
+};
+
+type OperatorActionLogRow = {
+  action_log_id: string;
+  tenant_id: string;
+  queue_item_id: string;
+  queue_item_version: number;
+  canonical_issue_key: string | null;
+  action_path: string;
+  command_id: string | null;
+  founder_actor_id: string;
+  idempotency_key: string;
+  execution_status: AaliyahOperatorActionLogRecord["executionStatus"];
+  failure_code: AaliyahOperatorActionLogRecord["failureCode"];
+  failure_reason: string | null;
+  executed_at: string | Date;
+  created_at: string | Date;
 };
 
 type EvaluationScheduleRow = {
@@ -1403,6 +1428,11 @@ function mapOperatorQueueRow(row: OperatorQueueRow): AaliyahOperatorQueueRecord 
     queueItemType: row.queue_item_type,
     priorityScore: row.priority_score,
     priorityBand: row.priority_band,
+    status: row.queue_status,
+    rankingVersion: row.ranking_version,
+    staleAfterAtIso: toIsoString(row.stale_after_at),
+    canonicalIssueKey: row.canonical_issue_key,
+    supersededByQueueItemId: row.superseded_by_queue_item_id,
     title: row.title_text,
     summary: row.summary_text,
     reason: row.reason_text,
@@ -1415,7 +1445,28 @@ function mapOperatorQueueRow(row: OperatorQueueRow): AaliyahOperatorQueueRecord 
     auditEventId: row.audit_event_id,
     metadata: row.metadata_json as Record<string, unknown>,
     createdAtIso: toIsoString(row.created_at),
-    evaluatedAtIso: toIsoString(row.evaluated_at)
+    evaluatedAtIso: toIsoString(row.evaluated_at),
+    lastRefreshedAtIso: row.last_refreshed_at ? toIsoString(row.last_refreshed_at) : null,
+    lastExecutedAtIso: row.last_executed_at ? toIsoString(row.last_executed_at) : null
+  };
+}
+
+function mapOperatorActionLogRow(row: OperatorActionLogRow): AaliyahOperatorActionLogRecord {
+  return {
+    id: row.action_log_id,
+    tenantId: row.tenant_id,
+    queueItemId: row.queue_item_id,
+    queueItemVersion: row.queue_item_version,
+    canonicalIssueKey: row.canonical_issue_key,
+    actionPath: row.action_path,
+    commandId: row.command_id,
+    founderActorId: row.founder_actor_id,
+    idempotencyKey: row.idempotency_key,
+    executionStatus: row.execution_status,
+    failureCode: row.failure_code,
+    failureReason: row.failure_reason,
+    executedAtIso: toIsoString(row.executed_at),
+    createdAtIso: toIsoString(row.created_at)
   };
 }
 
@@ -5605,6 +5656,11 @@ export class AgentOsRepository {
     queueItemType: AaliyahOperatorQueueRecord["queueItemType"];
     priorityScore: number;
     priorityBand: AaliyahOperatorQueueRecord["priorityBand"];
+    status: AaliyahOperatorQueueRecord["status"];
+    rankingVersion: number;
+    staleAfterAt: string;
+    canonicalIssueKey: string | null;
+    supersededByQueueItemId: string | null;
     title: string;
     summary: string;
     reason: string;
@@ -5618,6 +5674,8 @@ export class AgentOsRepository {
     metadata?: Record<string, unknown>;
     createdAt?: string;
     evaluatedAt?: string;
+    lastRefreshedAt?: string | null;
+    lastExecutedAt?: string | null;
   }): Promise<AaliyahOperatorQueueRecord> {
     const createdAt = args.createdAt ?? new Date().toISOString();
     const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
@@ -5625,22 +5683,25 @@ export class AgentOsRepository {
         `
         INSERT INTO aaliyah_operator_queue (
           queue_item_id, tenant_id, source_type, source_id, queue_item_type,
-          priority_score, priority_band, title_text, summary_text, reason_text,
+          priority_score, priority_band, queue_status, ranking_version, stale_after_at,
+          canonical_issue_key, superseded_by_queue_item_id, title_text, summary_text, reason_text,
           idempotency_key, related_record_ids_json, related_record_types_json,
           actionable_command_type, actionable_target_type, actionable_target_id,
-          audit_event_id, metadata_json, created_at, evaluated_at
+          audit_event_id, metadata_json, created_at, evaluated_at, last_refreshed_at, last_executed_at
         ) VALUES (
           $1, $2, $3, $4, $5,
           $6, $7, $8, $9, $10,
-          $11, $12::jsonb, $13::jsonb,
-          $14, $15, $16,
-          $17, $18::jsonb, $19, $20
+          $11, $12, $13, $14, $15,
+          $16, $17::jsonb, $18::jsonb,
+          $19, $20, $21,
+          $22, $23::jsonb, $24, $25, $26, $27
         )
         RETURNING queue_item_id, tenant_id, source_type, source_id, queue_item_type,
-                  priority_score, priority_band, title_text, summary_text, reason_text,
+                  priority_score, priority_band, queue_status, ranking_version, stale_after_at,
+                  canonical_issue_key, superseded_by_queue_item_id, title_text, summary_text, reason_text,
                   idempotency_key, related_record_ids_json, related_record_types_json,
                   actionable_command_type, actionable_target_type, actionable_target_id,
-                  audit_event_id, metadata_json, created_at, evaluated_at
+                  audit_event_id, metadata_json, created_at, evaluated_at, last_refreshed_at, last_executed_at
         `,
         [
           args.queueItemId,
@@ -5650,6 +5711,11 @@ export class AgentOsRepository {
           args.queueItemType,
           args.priorityScore,
           args.priorityBand,
+          args.status,
+          args.rankingVersion,
+          args.staleAfterAt,
+          args.canonicalIssueKey,
+          args.supersededByQueueItemId,
           args.title,
           args.summary,
           args.reason,
@@ -5662,7 +5728,9 @@ export class AgentOsRepository {
           args.auditEventId,
           JSON.stringify(args.metadata ?? {}),
           createdAt,
-          args.evaluatedAt ?? createdAt
+          args.evaluatedAt ?? createdAt,
+          args.lastRefreshedAt ?? null,
+          args.lastExecutedAt ?? null
         ]
       )
     );
@@ -5674,10 +5742,11 @@ export class AgentOsRepository {
       client.query<OperatorQueueRow>(
         `
         SELECT queue_item_id, tenant_id, source_type, source_id, queue_item_type,
-               priority_score, priority_band, title_text, summary_text, reason_text,
+               priority_score, priority_band, queue_status, ranking_version, stale_after_at,
+               canonical_issue_key, superseded_by_queue_item_id, title_text, summary_text, reason_text,
                idempotency_key, related_record_ids_json, related_record_types_json,
                actionable_command_type, actionable_target_type, actionable_target_id,
-               audit_event_id, metadata_json, created_at, evaluated_at
+               audit_event_id, metadata_json, created_at, evaluated_at, last_refreshed_at, last_executed_at
         FROM aaliyah_operator_queue
         WHERE tenant_id = $1 AND queue_item_id = $2
         LIMIT 1
@@ -5696,10 +5765,11 @@ export class AgentOsRepository {
       client.query<OperatorQueueRow>(
         `
         SELECT queue_item_id, tenant_id, source_type, source_id, queue_item_type,
-               priority_score, priority_band, title_text, summary_text, reason_text,
+               priority_score, priority_band, queue_status, ranking_version, stale_after_at,
+               canonical_issue_key, superseded_by_queue_item_id, title_text, summary_text, reason_text,
                idempotency_key, related_record_ids_json, related_record_types_json,
                actionable_command_type, actionable_target_type, actionable_target_id,
-               audit_event_id, metadata_json, created_at, evaluated_at
+               audit_event_id, metadata_json, created_at, evaluated_at, last_refreshed_at, last_executed_at
         FROM aaliyah_operator_queue
         WHERE tenant_id = $1 AND idempotency_key = $2
         LIMIT 1
@@ -5714,28 +5784,212 @@ export class AgentOsRepository {
     tenantId: string;
     limit?: number;
     priorityBand?: AaliyahOperatorQueueRecord["priorityBand"];
+    statuses?: AaliyahOperatorQueueRecord["status"][];
+    canonicalIssueKey?: string;
   }): Promise<AaliyahOperatorQueueRecord[]> {
     const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
       client.query<OperatorQueueRow>(
         `
         SELECT queue_item_id, tenant_id, source_type, source_id, queue_item_type,
-               priority_score, priority_band, title_text, summary_text, reason_text,
+               priority_score, priority_band, queue_status, ranking_version, stale_after_at,
+               canonical_issue_key, superseded_by_queue_item_id, title_text, summary_text, reason_text,
                idempotency_key, related_record_ids_json, related_record_types_json,
                actionable_command_type, actionable_target_type, actionable_target_id,
-               audit_event_id, metadata_json, created_at, evaluated_at
+               audit_event_id, metadata_json, created_at, evaluated_at, last_refreshed_at, last_executed_at
         FROM aaliyah_operator_queue
         WHERE tenant_id = $1
           AND ($2::text IS NULL OR priority_band = $2)
+          AND ($3::text[] IS NULL OR queue_status = ANY($3))
+          AND ($4::text IS NULL OR canonical_issue_key = $4)
         ORDER BY
+          CASE queue_status WHEN 'active' THEN 0 WHEN 'suppressed' THEN 1 WHEN 'superseded' THEN 2 WHEN 'executed' THEN 3 ELSE 4 END,
           CASE priority_band WHEN 'critical' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,
           priority_score DESC,
           created_at DESC
-        LIMIT $3
+        LIMIT $5
         `,
-        [args.tenantId, args.priorityBand ?? null, args.limit ?? 50]
+        [args.tenantId, args.priorityBand ?? null, args.statuses ?? null, args.canonicalIssueKey ?? null, args.limit ?? 50]
       )
     );
     return res.rows.map(mapOperatorQueueRow);
+  }
+
+  async updateOperatorQueueRecord(args: {
+    tenantId: string;
+    queueItemId: string;
+    queueItemType?: AaliyahOperatorQueueRecord["queueItemType"];
+    priorityScore?: number;
+    priorityBand?: AaliyahOperatorQueueRecord["priorityBand"];
+    status?: AaliyahOperatorQueueRecord["status"];
+    rankingVersion?: number;
+    staleAfterAt?: string;
+    canonicalIssueKey?: string | null;
+    supersededByQueueItemId?: string | null;
+    title?: string;
+    summary?: string;
+    reason?: string;
+    relatedRecordIds?: string[];
+    relatedRecordTypes?: string[];
+    actionableCommandType?: AaliyahOperatorQueueRecord["actionableCommandType"];
+    actionableTargetType?: AaliyahOperatorQueueRecord["actionableTargetType"];
+    actionableTargetId?: string | null;
+    metadata?: Record<string, unknown>;
+    evaluatedAt?: string;
+    lastRefreshedAt?: string | null;
+    lastExecutedAt?: string | null;
+  }): Promise<AaliyahOperatorQueueRecord> {
+    const existing = await this.getOperatorQueueRecordById({ tenantId: args.tenantId, queueItemId: args.queueItemId });
+    if (!existing) {
+      throw new Error('operator_queue_item_not_found');
+    }
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OperatorQueueRow>(
+        `
+        UPDATE aaliyah_operator_queue
+        SET queue_item_type = $3,
+            priority_score = $4,
+            priority_band = $5,
+            queue_status = $6,
+            ranking_version = $7,
+            stale_after_at = $8,
+            canonical_issue_key = $9,
+            superseded_by_queue_item_id = $10,
+            title_text = $11,
+            summary_text = $12,
+            reason_text = $13,
+            related_record_ids_json = $14::jsonb,
+            related_record_types_json = $15::jsonb,
+            actionable_command_type = $16,
+            actionable_target_type = $17,
+            actionable_target_id = $18,
+            metadata_json = $19::jsonb,
+            evaluated_at = $20,
+            last_refreshed_at = $21,
+            last_executed_at = $22
+        WHERE tenant_id = $1 AND queue_item_id = $2
+        RETURNING queue_item_id, tenant_id, source_type, source_id, queue_item_type,
+                  priority_score, priority_band, queue_status, ranking_version, stale_after_at,
+                  canonical_issue_key, superseded_by_queue_item_id, title_text, summary_text, reason_text,
+                  idempotency_key, related_record_ids_json, related_record_types_json,
+                  actionable_command_type, actionable_target_type, actionable_target_id,
+                  audit_event_id, metadata_json, created_at, evaluated_at, last_refreshed_at, last_executed_at
+        `,
+        [
+          args.tenantId,
+          args.queueItemId,
+          args.queueItemType ?? existing.queueItemType,
+          args.priorityScore ?? existing.priorityScore,
+          args.priorityBand ?? existing.priorityBand,
+          args.status ?? existing.status,
+          args.rankingVersion ?? existing.rankingVersion,
+          args.staleAfterAt ?? existing.staleAfterAtIso,
+          args.canonicalIssueKey === undefined ? existing.canonicalIssueKey : args.canonicalIssueKey,
+          args.supersededByQueueItemId === undefined ? existing.supersededByQueueItemId : args.supersededByQueueItemId,
+          args.title ?? existing.title,
+          args.summary ?? existing.summary,
+          args.reason ?? existing.reason,
+          JSON.stringify(args.relatedRecordIds ?? existing.relatedRecordIds),
+          JSON.stringify(args.relatedRecordTypes ?? existing.relatedRecordTypes),
+          args.actionableCommandType === undefined ? existing.actionableCommandType : args.actionableCommandType,
+          args.actionableTargetType === undefined ? existing.actionableTargetType : args.actionableTargetType,
+          args.actionableTargetId === undefined ? existing.actionableTargetId : args.actionableTargetId,
+          JSON.stringify(args.metadata ?? existing.metadata),
+          args.evaluatedAt ?? existing.evaluatedAtIso,
+          args.lastRefreshedAt === undefined ? existing.lastRefreshedAtIso : args.lastRefreshedAt,
+          args.lastExecutedAt === undefined ? existing.lastExecutedAtIso : args.lastExecutedAt
+        ]
+      )
+    );
+    return mapOperatorQueueRow(res.rows[0]!);
+  }
+
+  async createOperatorActionLog(args: {
+    tenantId: string;
+    actionLogId: string;
+    queueItemId: string;
+    queueItemVersion: number;
+    canonicalIssueKey: string | null;
+    actionPath: string;
+    commandId: string | null;
+    founderActorId: string;
+    idempotencyKey: string;
+    executionStatus: AaliyahOperatorActionLogRecord["executionStatus"];
+    failureCode: AaliyahOperatorActionLogRecord["failureCode"];
+    failureReason: string | null;
+    executedAt: string;
+    createdAt?: string;
+  }): Promise<AaliyahOperatorActionLogRecord> {
+    const createdAt = args.createdAt ?? args.executedAt;
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OperatorActionLogRow>(
+        `
+        INSERT INTO aaliyah_operator_action_log (
+          action_log_id, tenant_id, queue_item_id, queue_item_version, canonical_issue_key,
+          action_path, command_id, founder_actor_id, idempotency_key, execution_status,
+          failure_code, failure_reason, executed_at, created_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9, $10,
+          $11, $12, $13, $14
+        )
+        RETURNING action_log_id, tenant_id, queue_item_id, queue_item_version, canonical_issue_key,
+                  action_path, command_id, founder_actor_id, idempotency_key, execution_status,
+                  failure_code, failure_reason, executed_at, created_at
+        `,
+        [
+          args.actionLogId,
+          args.tenantId,
+          args.queueItemId,
+          args.queueItemVersion,
+          args.canonicalIssueKey,
+          args.actionPath,
+          args.commandId,
+          args.founderActorId,
+          args.idempotencyKey,
+          args.executionStatus,
+          args.failureCode,
+          args.failureReason,
+          args.executedAt,
+          createdAt
+        ]
+      )
+    );
+    return mapOperatorActionLogRow(res.rows[0]!);
+  }
+
+  async getOperatorActionLogByIdempotencyKey(args: { tenantId: string; idempotencyKey: string }): Promise<AaliyahOperatorActionLogRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OperatorActionLogRow>(
+        `
+        SELECT action_log_id, tenant_id, queue_item_id, queue_item_version, canonical_issue_key,
+               action_path, command_id, founder_actor_id, idempotency_key, execution_status,
+               failure_code, failure_reason, executed_at, created_at
+        FROM aaliyah_operator_action_log
+        WHERE tenant_id = $1 AND idempotency_key = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.idempotencyKey]
+      )
+    );
+    return res.rows[0] ? mapOperatorActionLogRow(res.rows[0]) : null;
+  }
+
+  async getOperatorActionLogByQueueItemId(args: { tenantId: string; queueItemId: string }): Promise<AaliyahOperatorActionLogRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OperatorActionLogRow>(
+        `
+        SELECT action_log_id, tenant_id, queue_item_id, queue_item_version, canonical_issue_key,
+               action_path, command_id, founder_actor_id, idempotency_key, execution_status,
+               failure_code, failure_reason, executed_at, created_at
+        FROM aaliyah_operator_action_log
+        WHERE tenant_id = $1 AND queue_item_id = $2
+        ORDER BY executed_at DESC
+        LIMIT 1
+        `,
+        [args.tenantId, args.queueItemId]
+      )
+    );
+    return res.rows[0] ? mapOperatorActionLogRow(res.rows[0]) : null;
   }
 
   async createEvaluationSchedule(args: {

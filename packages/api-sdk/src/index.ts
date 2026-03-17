@@ -451,6 +451,11 @@ export type AaliyahOperatorQueueRecord = {
   queueItemType: "immediate_action" | "review_required" | "watch_item" | "summary_item";
   priorityScore: number;
   priorityBand: "critical" | "high" | "normal";
+  status: "active" | "suppressed" | "executed" | "invalidated" | "superseded";
+  rankingVersion: number;
+  staleAfterAtIso: string;
+  canonicalIssueKey: string | null;
+  supersededByQueueItemId: string | null;
   title: string;
   summary: string;
   reason: string;
@@ -464,6 +469,35 @@ export type AaliyahOperatorQueueRecord = {
   metadata: Record<string, unknown>;
   createdAtIso: string;
   evaluatedAtIso: string;
+  lastRefreshedAtIso: string | null;
+  lastExecutedAtIso: string | null;
+};
+
+export type AaliyahOperatorActionLogRecord = {
+  id: string;
+  tenantId: string;
+  queueItemId: string;
+  queueItemVersion: number;
+  canonicalIssueKey: string | null;
+  actionPath: string;
+  commandId: string | null;
+  founderActorId: string;
+  idempotencyKey: string;
+  executionStatus: "success" | "failure" | "invalidated" | "already_executed" | "superseded" | "not_actionable";
+  failureCode:
+    | "QUEUE_ITEM_NOT_FOUND"
+    | "QUEUE_ITEM_STALE"
+    | "QUEUE_ITEM_INVALIDATED"
+    | "QUEUE_ITEM_SUPERSEDED"
+    | "QUEUE_ITEM_ALREADY_EXECUTED"
+    | "SOURCE_NOT_FOUND"
+    | "SOURCE_NOT_ACTIONABLE"
+    | "ACTION_PATH_UNRESOLVABLE"
+    | "FOUNDER_PERMISSION_DENIED"
+    | null;
+  failureReason: string | null;
+  executedAtIso: string;
+  createdAtIso: string;
 };
 
 export type AaliyahEvaluationScheduleRecord = {
@@ -2102,6 +2136,109 @@ export async function getAaliyahOperatorQueueTop(args: {
       overallLimit: args.overallLimit ? String(args.overallLimit) : undefined
     }),
     bearer: args.bearer
+  });
+}
+
+export async function executeAaliyahOperatorQueueItem(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  queueItemId: string;
+  idempotencyKey: string;
+  mode?: AaliyahMode;
+  requestedAt?: string;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_operator_queue_execute_result";
+  result:
+    | {
+        ok: true;
+        result: {
+          executionStatus: "success" | "failure" | "invalidated" | "already_executed" | "superseded" | "not_actionable";
+          queueItemId: string;
+          commandId?: string;
+          canonicalIssueKey?: string | null;
+          executedAtIso: string;
+          auditId: string;
+        };
+        log: AaliyahOperatorActionLogRecord;
+      }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/operator-queue/${args.queueItemId}/execute`,
+    method: "POST",
+    bearer: args.bearer,
+    body: {
+      mode: args.mode ?? "founder",
+      idempotencyKey: args.idempotencyKey,
+      requestedAt: args.requestedAt
+    }
+  });
+}
+
+export async function refreshAaliyahOperatorQueueItem(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  queueItemId: string;
+  mode?: AaliyahMode;
+  generatedAt?: string;
+  force?: boolean;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_operator_queue_refresh_result";
+  result:
+    | {
+        ok: true;
+        queueItem: AaliyahOperatorQueueRecord;
+        refreshed: boolean;
+        invalidated: boolean;
+        message: string;
+      }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/operator-queue/${args.queueItemId}/refresh`,
+    method: "POST",
+    bearer: args.bearer,
+    body: {
+      mode: args.mode ?? "founder",
+      generatedAt: args.generatedAt,
+      force: args.force ?? false
+    }
+  });
+}
+
+export async function refreshAaliyahOperatorQueue(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  generatedAt?: string;
+  force?: boolean;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_operator_queue_refresh_all_result";
+  result:
+    | {
+        ok: true;
+        queueItems: AaliyahOperatorQueueRecord[];
+        refreshedCount: number;
+        invalidatedCount: number;
+        message: string;
+      }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/operator-queue/refresh`,
+    method: "POST",
+    bearer: args.bearer,
+    body: {
+      mode: args.mode ?? "founder",
+      generatedAt: args.generatedAt,
+      force: args.force ?? false
+    }
   });
 }
 

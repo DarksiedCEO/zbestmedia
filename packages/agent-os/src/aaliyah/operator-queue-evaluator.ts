@@ -2,6 +2,8 @@ import {
   buildOperatorQueueIdempotencyKey,
   sortOperatorQueueRecords
 } from './operator-queue-policy.js';
+import { computeOperatorQueueStaleAfter } from './operator-action-policy.js';
+import { canonicalIssueKeyForComparable } from './operator-queue-canonicalization.js';
 import type {
   OperatorQueueComparableRecord,
   OperatorQueueDraft,
@@ -21,12 +23,22 @@ export function evaluateOperatorQueue(args: {
     .filter((record) => !suppressionIds.has(record.id))
     .map((record) => {
       const queueItemType = resolveQueueItemType(record);
+      const canonicalIssueKey = canonicalIssueKeyForComparable(record);
       return {
         sourceType: record.sourceType,
         sourceId: record.id,
         queueItemType,
         priorityScore: record.severityScore,
         priorityBand: record.priorityHint,
+        status: 'active' as const,
+        rankingVersion: 1,
+        staleAfterAtIso: computeOperatorQueueStaleAfter({
+          evaluatedAtIso: args.evaluatedAtIso,
+          sourceType: record.sourceType,
+          priorityBand: record.priorityHint
+        }),
+        canonicalIssueKey,
+        supersededByQueueItemId: null,
         title: record.title,
         summary: record.summary,
         reason: record.reason,
@@ -44,6 +56,7 @@ export function evaluateOperatorQueue(args: {
         metadata: {
           clusterKey: record.clusterKey,
           semanticTag: record.semanticTag,
+          canonicalIssueKey,
           ...record.metadata
         },
         evaluatedAtIso: args.evaluatedAtIso,
@@ -99,7 +112,7 @@ function buildSuppressionSet(bundle: OperatorQueueSourceBundle) {
   return suppressed;
 }
 
-function resolveQueueItemType(record: OperatorQueueComparableRecord): OperatorQueueItemType {
+export function resolveQueueItemType(record: OperatorQueueComparableRecord): OperatorQueueItemType {
   if (record.sourceType === 'escalation') {
     return 'immediate_action';
   }

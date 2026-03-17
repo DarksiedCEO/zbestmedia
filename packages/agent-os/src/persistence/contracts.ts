@@ -155,8 +155,14 @@ import type {
   OperatorQueueItemType,
   OperatorQueuePriorityBand,
   OperatorQueueRecord as OperatorQueueRecordShape,
+  OperatorQueueStatus,
   OperatorQueueSourceType
 } from "../aaliyah/operator-queue-types.js";
+import type {
+  OperatorActionExecutionStatus,
+  OperatorActionFailureCode,
+  OperatorActionLogRecord as OperatorActionLogRecordShape
+} from "../aaliyah/operator-action-types.js";
 import type {
   EvaluationCadenceType,
   EvaluationRunRecord as EvaluationRunRecordShape,
@@ -1014,6 +1020,15 @@ export const OperatorQueuePriorityBandSchema = z.enum([
 ]) satisfies z.ZodType<OperatorQueuePriorityBand>;
 export type OperatorQueuePriorityBandRecord = z.infer<typeof OperatorQueuePriorityBandSchema>;
 
+export const OperatorQueueStatusSchema = z.enum([
+  "active",
+  "suppressed",
+  "executed",
+  "invalidated",
+  "superseded"
+]) satisfies z.ZodType<OperatorQueueStatus>;
+export type OperatorQueueStatusRecord = z.infer<typeof OperatorQueueStatusSchema>;
+
 export const OperatorQueueActionableCommandTypeSchema = z.enum([
   "approve_draft",
   "create_follow_up",
@@ -1041,6 +1056,11 @@ export const AaliyahOperatorQueueRecordSchema = z.object({
   queueItemType: OperatorQueueItemTypeSchema,
   priorityScore: z.number().int(),
   priorityBand: OperatorQueuePriorityBandSchema,
+  status: OperatorQueueStatusSchema,
+  rankingVersion: z.number().int(),
+  staleAfterAtIso: z.string().datetime(),
+  canonicalIssueKey: z.string().min(1).nullable(),
+  supersededByQueueItemId: z.string().min(1).nullable(),
   title: z.string().min(1),
   summary: z.string().min(1),
   reason: z.string().min(1),
@@ -1053,9 +1073,52 @@ export const AaliyahOperatorQueueRecordSchema = z.object({
   auditEventId: z.string().min(1).nullable(),
   metadata: z.record(z.string(), z.unknown()),
   createdAtIso: z.string().datetime(),
-  evaluatedAtIso: z.string().datetime()
+  evaluatedAtIso: z.string().datetime(),
+  lastRefreshedAtIso: z.string().datetime().nullable(),
+  lastExecutedAtIso: z.string().datetime().nullable()
 }) satisfies z.ZodType<OperatorQueueRecordShape>;
 export type AaliyahOperatorQueueRecord = z.infer<typeof AaliyahOperatorQueueRecordSchema>;
+
+export const OperatorActionExecutionStatusSchema = z.enum([
+  "success",
+  "failure",
+  "invalidated",
+  "already_executed",
+  "superseded",
+  "not_actionable"
+]) satisfies z.ZodType<OperatorActionExecutionStatus>;
+export type OperatorActionExecutionStatusRecord = z.infer<typeof OperatorActionExecutionStatusSchema>;
+
+export const OperatorActionFailureCodeSchema = z.enum([
+  "QUEUE_ITEM_NOT_FOUND",
+  "QUEUE_ITEM_STALE",
+  "QUEUE_ITEM_INVALIDATED",
+  "QUEUE_ITEM_SUPERSEDED",
+  "QUEUE_ITEM_ALREADY_EXECUTED",
+  "SOURCE_NOT_FOUND",
+  "SOURCE_NOT_ACTIONABLE",
+  "ACTION_PATH_UNRESOLVABLE",
+  "FOUNDER_PERMISSION_DENIED"
+]) satisfies z.ZodType<OperatorActionFailureCode>;
+export type OperatorActionFailureCodeRecord = z.infer<typeof OperatorActionFailureCodeSchema>;
+
+export const AaliyahOperatorActionLogRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  queueItemId: z.string().min(1),
+  queueItemVersion: z.number().int(),
+  canonicalIssueKey: z.string().min(1).nullable(),
+  actionPath: z.string().min(1),
+  commandId: z.string().min(1).nullable(),
+  founderActorId: z.string().min(1),
+  idempotencyKey: z.string().min(1),
+  executionStatus: OperatorActionExecutionStatusSchema,
+  failureCode: OperatorActionFailureCodeSchema.nullable(),
+  failureReason: z.string().min(1).nullable(),
+  executedAtIso: z.string().datetime(),
+  createdAtIso: z.string().datetime()
+}) satisfies z.ZodType<OperatorActionLogRecordShape>;
+export type AaliyahOperatorActionLogRecord = z.infer<typeof AaliyahOperatorActionLogRecordSchema>;
 
 export const ScheduledEngineTypeSchema = z.enum([
   "follow_through",
@@ -1919,7 +1982,13 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "escalation_engine_noop",
   "operator_queue_created",
   "operator_queue_replayed",
-  "operator_queue_noop"
+  "operator_queue_noop",
+  "operator_queue_refreshed",
+  "operator_queue_invalidated",
+  "operator_queue_suppressed",
+  "operator_action_executed",
+  "operator_action_failed",
+  "operator_action_replayed"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 

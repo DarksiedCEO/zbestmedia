@@ -13,6 +13,7 @@ import {
   AaliyahFounderPreferencesService,
   AaliyahFollowThroughEngineService,
   AaliyahNotificationEngineService,
+  AaliyahOperatorActionService,
   AaliyahOperatorQueueService,
   AaliyahOpportunityEngineService,
   AaliyahRecommendationEngineService,
@@ -139,9 +140,14 @@ import {
   EscalationResponseSchema,
   OperatorQueueDetailResponseSchema,
   OperatorQueueEvaluateBodySchema,
+  OperatorQueueExecuteBodySchema,
   OperatorQueueIdParamSchema,
   OperatorQueueListQuerySchema,
   OperatorQueueListResponseSchema,
+  OperatorQueueExecuteResponseSchema,
+  OperatorQueueRefreshAllResponseSchema,
+  OperatorQueueRefreshBodySchema,
+  OperatorQueueRefreshResponseSchema,
   OperatorQueueResponseSchema,
   OperatorQueueTopQuerySchema,
   OperatorQueueTopResponseSchema,
@@ -280,6 +286,7 @@ export function agentRoutes(opts: {
   aaliyahSignalCoalescingService: AaliyahSignalCoalescingService;
   aaliyahEscalationEngineService: AaliyahEscalationEngineService;
   aaliyahOperatorQueueService: AaliyahOperatorQueueService;
+  aaliyahOperatorActionService: AaliyahOperatorActionService;
   aaliyahStrategicIntelligenceService: AaliyahStrategicIntelligenceService;
   aaliyahEvaluationSchedulerService: AaliyahEvaluationSchedulerService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
@@ -2661,6 +2668,85 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_operator_queue_top_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/operator-queue/refresh", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = OperatorQueueRefreshBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahOperatorQueueService.refreshAll({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        generatedAt: body.data.generatedAt,
+        force: body.data.force
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_operator_queue_refresh_all_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/operator-queue/:queueItemId/execute", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = OperatorQueueIdParamSchema.safeParse(req.params ?? {});
+      const body = OperatorQueueExecuteBodySchema.safeParse(req.body ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahOperatorActionService.execute({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        queueItemId: path.data.queueItemId,
+        idempotencyKey: body.data.idempotencyKey,
+        requestedAt: body.data.requestedAt
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_operator_queue_execute_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/operator-queue/:queueItemId/refresh", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = OperatorQueueIdParamSchema.safeParse(req.params ?? {});
+      const body = OperatorQueueRefreshBodySchema.safeParse(req.body ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahOperatorQueueService.refreshById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        queueItemId: path.data.queueItemId,
+        generatedAt: body.data.generatedAt,
+        force: body.data.force
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_operator_queue_refresh_result",
         result
       });
     });

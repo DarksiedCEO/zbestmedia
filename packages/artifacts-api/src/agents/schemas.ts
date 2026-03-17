@@ -21,6 +21,7 @@ import {
   AaliyahFounderPreferenceControlsRecordSchema,
   AaliyahCoalescedSignalRecordSchema,
   AaliyahEscalationRecordSchema,
+  AaliyahOperatorActionLogRecordSchema,
   AaliyahOperatorQueueRecordSchema,
   AaliyahTaskSchema,
   AaliyahFounderPreferenceRecordSchema,
@@ -1191,6 +1192,18 @@ export const OperatorQueueTopQuerySchema = z.object({
   overallLimit: z.coerce.number().int().positive().max(20).default(5)
 });
 
+export const OperatorQueueExecuteBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  idempotencyKey: z.string().min(1),
+  requestedAt: z.string().datetime().optional()
+});
+
+export const OperatorQueueRefreshBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  generatedAt: z.string().datetime().optional(),
+  force: z.boolean().optional()
+});
+
 const OperatorQueueFailureSchema = z.object({
   ok: z.literal(false),
   denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
@@ -1226,6 +1239,35 @@ const OperatorQueueTopSuccessSchema = z.object({
   message: z.string().min(1)
 });
 
+const OperatorQueueRefreshSuccessSchema = z.object({
+  ok: z.literal(true),
+  queueItem: AaliyahOperatorQueueRecordSchema,
+  refreshed: z.boolean(),
+  invalidated: z.boolean(),
+  message: z.string().min(1)
+});
+
+const OperatorQueueRefreshAllSuccessSchema = z.object({
+  ok: z.literal(true),
+  refreshedCount: z.number().int().nonnegative(),
+  invalidatedCount: z.number().int().nonnegative(),
+  queueItems: z.array(AaliyahOperatorQueueRecordSchema),
+  message: z.string().min(1)
+});
+
+const OperatorQueueExecuteSuccessSchema = z.object({
+  ok: z.literal(true),
+  result: z.object({
+    executionStatus: z.enum(["success", "failure", "invalidated", "already_executed", "superseded", "not_actionable"]),
+    queueItemId: z.string().min(1),
+    commandId: z.string().min(1).optional(),
+    canonicalIssueKey: z.string().min(1).nullable().optional(),
+    executedAtIso: z.string().datetime(),
+    auditId: z.string().min(1)
+  }),
+  log: AaliyahOperatorActionLogRecordSchema
+});
+
 export const OperatorQueueResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_operator_queue_result"),
@@ -1248,6 +1290,24 @@ export const OperatorQueueTopResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_operator_queue_top_result"),
   result: z.discriminatedUnion("ok", [OperatorQueueTopSuccessSchema, OperatorQueueFailureSchema])
+});
+
+export const OperatorQueueExecuteResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_operator_queue_execute_result"),
+  result: z.discriminatedUnion("ok", [OperatorQueueExecuteSuccessSchema, OperatorQueueFailureSchema])
+});
+
+export const OperatorQueueRefreshResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_operator_queue_refresh_result"),
+  result: z.discriminatedUnion("ok", [OperatorQueueRefreshSuccessSchema, OperatorQueueFailureSchema])
+});
+
+export const OperatorQueueRefreshAllResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_operator_queue_refresh_all_result"),
+  result: z.discriminatedUnion("ok", [OperatorQueueRefreshAllSuccessSchema, OperatorQueueFailureSchema])
 });
 
 export const EvaluationScheduleCreateBodySchema = z.object({

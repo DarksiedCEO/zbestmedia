@@ -14,6 +14,13 @@ export type OperatorQueueItemType =
 
 export type OperatorQueuePriorityBand = 'critical' | 'high' | 'normal';
 
+export type OperatorQueueStatus =
+  | 'active'
+  | 'suppressed'
+  | 'executed'
+  | 'invalidated'
+  | 'superseded';
+
 export type OperatorQueueActionableCommandType =
   | 'approve_draft'
   | 'create_follow_up'
@@ -37,6 +44,11 @@ export type OperatorQueueRecord = {
   queueItemType: OperatorQueueItemType;
   priorityScore: number;
   priorityBand: OperatorQueuePriorityBand;
+  status: OperatorQueueStatus;
+  rankingVersion: number;
+  staleAfterAtIso: string;
+  canonicalIssueKey: string | null;
+  supersededByQueueItemId: string | null;
   title: string;
   summary: string;
   reason: string;
@@ -50,9 +62,14 @@ export type OperatorQueueRecord = {
   metadata: Record<string, unknown>;
   createdAtIso: string;
   evaluatedAtIso: string;
+  lastRefreshedAtIso: string | null;
+  lastExecutedAtIso: string | null;
 };
 
-export type OperatorQueueDraft = Omit<OperatorQueueRecord, 'id' | 'tenantId' | 'auditEventId' | 'createdAtIso'>;
+export type OperatorQueueDraft = Omit<
+  OperatorQueueRecord,
+  'id' | 'tenantId' | 'auditEventId' | 'createdAtIso' | 'lastRefreshedAtIso' | 'lastExecutedAtIso'
+>;
 
 export type OperatorQueueFailureResult = {
   ok: false;
@@ -97,10 +114,33 @@ export type OperatorQueueTopResult =
     }
   | OperatorQueueFailureResult;
 
+export type OperatorQueueRefreshResult =
+  | {
+      ok: true;
+      queueItem: OperatorQueueRecord;
+      refreshed: boolean;
+      invalidated: boolean;
+      message: string;
+    }
+  | OperatorQueueFailureResult;
+
+export type OperatorQueueRefreshAllResult =
+  | {
+      ok: true;
+      refreshedCount: number;
+      invalidatedCount: number;
+      queueItems: OperatorQueueRecord[];
+      message: string;
+    }
+  | OperatorQueueFailureResult;
+
 export type OperatorQueueAuditEventType =
   | 'aaliyah.operator_queue.created'
   | 'aaliyah.operator_queue.replayed'
-  | 'aaliyah.operator_queue.noop';
+  | 'aaliyah.operator_queue.noop'
+  | 'aaliyah.operator_queue.refreshed'
+  | 'aaliyah.operator_queue.invalidated'
+  | 'aaliyah.operator_queue.suppressed';
 
 export type OperatorQueueAuditEvent = {
   eventType: OperatorQueueAuditEventType;

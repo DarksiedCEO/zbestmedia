@@ -3,6 +3,7 @@ import type { FounderBriefingMode } from './briefing-types.js';
 import type {
   OperatorQueueActionableCommandType,
   OperatorQueueActionableTargetType,
+  OperatorQueueComparableRecord,
   OperatorQueueSourceBundle
 } from './operator-queue-types.js';
 
@@ -280,6 +281,18 @@ export class AaliyahOperatorQueueSources {
           ...opportunities.map((item) => `${item.id}:${item.status}:${item.evaluatedAtIso}`)
         ].join('|') || 'operator-queue:empty'
     };
+  }
+
+  findComparableRecord(bundle: OperatorQueueSourceBundle, sourceType: string, sourceId: string): OperatorQueueComparableRecord | null {
+    const records = [
+      ...bundle.escalations,
+      ...bundle.coalescedSignals,
+      ...bundle.strategicInsights,
+      ...bundle.notifications,
+      ...bundle.recommendations,
+      ...bundle.opportunities
+    ];
+    return records.find((record) => record.sourceType === sourceType && record.id === sourceId) ?? null;
   }
 }
 
