@@ -124,6 +124,11 @@ describe("email draft dispatch service", () => {
     };
     const gmailRuntime = {
       createConnector: vi.fn(async () => ({
+        sendMessage: vi.fn(async () => ({
+          providerMessageId: "gmail-message-1",
+          providerThreadId: "thread-1",
+          sentAt: "2026-03-12T00:02:00.000Z"
+        })),
         sendApprovedDraft: vi.fn(async () => ({
           providerMessageId: "gmail-message-1",
           providerThreadId: "thread-1",
@@ -189,6 +194,11 @@ describe("email draft dispatch service", () => {
     };
     const gmailRuntime = {
       createConnector: vi.fn(async () => ({
+        sendMessage: vi.fn(async () => ({
+          providerMessageId: "gmail-message-1",
+          providerThreadId: "thread-1",
+          sentAt: "2026-03-12T00:02:00.000Z"
+        })),
         sendApprovedDraft: vi.fn(async () => {
           throw new Error("gmail_send_failed");
         })

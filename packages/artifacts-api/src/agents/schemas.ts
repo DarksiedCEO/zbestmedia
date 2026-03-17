@@ -7,6 +7,7 @@ import {
   AssignmentRecordSchema,
   AaliyahCrmAccountSchema,
   AaliyahCrmContactSchema,
+  AaliyahDeliveryRecordSchema,
   AaliyahFollowThroughEngineRecordSchema,
   AaliyahNotificationRecordSchema,
   AaliyahOpportunityRecordSchema,
@@ -769,6 +770,59 @@ export const NotificationListResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_notification_list_result"),
   result: z.discriminatedUnion("ok", [NotificationListSuccessSchema, NotificationFailureSchema])
+});
+
+export const DeliverySendBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  channel: z.enum(["console", "email"]),
+  source: z.object({
+    sourceType: z.enum(["notification", "digest"]),
+    sourceId: z.string().min(1)
+  })
+});
+
+export const DeliveryIdParamSchema = z.object({
+  deliveryId: z.string().min(1)
+});
+
+export const DeliveryListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  limit: z.coerce.number().int().positive().max(100).default(100),
+  sourceType: z.enum(["notification", "digest"]).optional(),
+  sourceId: z.string().min(1).optional()
+});
+
+const DeliveryFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const DeliverySuccessSchema = z.object({
+  ok: z.literal(true),
+  delivery: AaliyahDeliveryRecordSchema,
+  replayed: z.boolean(),
+  message: z.string().min(1)
+});
+
+const DeliveryListSuccessSchema = z.object({
+  ok: z.literal(true),
+  deliveries: z.array(AaliyahDeliveryRecordSchema),
+  message: z.string().min(1)
+});
+
+export const DeliveryResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_delivery_result"),
+  result: z.discriminatedUnion("ok", [DeliverySuccessSchema, DeliveryFailureSchema])
+});
+
+export const DeliveryListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_delivery_list_result"),
+  result: z.discriminatedUnion("ok", [DeliveryListSuccessSchema, DeliveryFailureSchema])
 });
 
 export const OpportunityEvaluateBodySchema = z.object({

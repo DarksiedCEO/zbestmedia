@@ -49,6 +49,16 @@ export type GmailCreateDraftArgs = {
   threadId?: string | null;
 };
 
+export type GmailSendMessageArgs = {
+  to: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject: string;
+  bodyText: string;
+  bodyHtml?: string | null;
+  threadId?: string | null;
+};
+
 export type GmailSendDraftResult = {
   providerMessageId: string;
   providerThreadId: string;
@@ -107,6 +117,7 @@ export interface GmailConnector {
   normalizeMessage(input: GmailNormalizeMessageInput): Promise<NormalizedEmailMessage>;
   registerWatch(): Promise<GmailWatchRegistration>;
   createDraft(args: GmailCreateDraftArgs): Promise<GmailCreateDraftResult>;
+  sendMessage(args: GmailSendMessageArgs): Promise<GmailSendDraftResult>;
   sendApprovedDraft(args: GmailSendDraftArgs): Promise<GmailSendDraftResult>;
 }
 
@@ -318,6 +329,50 @@ export class GmailConnectorScaffold implements GmailConnector {
       providerDraftId: payload.id,
       providerThreadId: payload.message?.threadId ?? null,
       createdAt: new Date().toISOString()
+    };
+  }
+
+  async sendMessage(_args: GmailSendMessageArgs): Promise<GmailSendDraftResult> {
+    const accessToken = await refreshAccessToken({
+      clientId: this.config.clientId,
+      clientSecret: this.config.clientSecretReference,
+      refreshToken: this.config.tokenReference ?? null
+    });
+    const encodedMessage = encodeDraftMessage({
+      from: this.config.accountEmailAddress,
+      to: _args.to,
+      cc: _args.cc,
+      bcc: _args.bcc,
+      subject: _args.subject,
+      bodyText: _args.bodyText,
+      bodyHtml: _args.bodyHtml ?? null
+    });
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        raw: encodedMessage,
+        threadId: _args.threadId ?? undefined
+      })
+    });
+    if (!res.ok) {
+      const body = await safeReadText(res);
+      throw new GmailConnectorNotConfiguredError(`gmail_send_message_failed:${res.status}:${body}`);
+    }
+    const payload = (await res.json()) as {
+      id?: string;
+      threadId?: string | null;
+    };
+    if (!payload.id) {
+      throw new GmailConnectorNotConfiguredError('gmail_send_message_missing_id');
+    }
+    return {
+      providerMessageId: payload.id,
+      providerThreadId: payload.threadId ?? _args.threadId ?? '',
+      sentAt: new Date().toISOString()
     };
   }
 

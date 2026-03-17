@@ -135,6 +135,12 @@ import type {
   ScheduledEngineType
 } from "../aaliyah/evaluation-scheduler-types.js";
 import type {
+  DeliveryChannel,
+  DeliveryRecord as DeliveryRecordShape,
+  DeliverySourceType,
+  DeliveryStatus
+} from "../aaliyah/delivery-router-types.js";
+import type {
   AssignmentPolicyDecision,
   AssignmentRecord,
   ExecutionRunRecord,
@@ -673,6 +679,42 @@ export const AaliyahNotificationRecordSchema = z.object({
   dismissedAtIso: z.string().datetime().nullable()
 }) satisfies z.ZodType<NotificationRecordShape>;
 export type AaliyahNotificationRecord = z.infer<typeof AaliyahNotificationRecordSchema>;
+
+export const DeliveryChannelSchema = z.enum([
+  "console",
+  "email"
+]) satisfies z.ZodType<DeliveryChannel>;
+export type DeliveryChannelRecord = z.infer<typeof DeliveryChannelSchema>;
+
+export const DeliverySourceTypeSchema = z.enum([
+  "notification",
+  "digest"
+]) satisfies z.ZodType<DeliverySourceType>;
+export type DeliverySourceTypeRecord = z.infer<typeof DeliverySourceTypeSchema>;
+
+export const DeliveryStatusSchema = z.enum([
+  "pending",
+  "sent",
+  "failed",
+  "replayed"
+]) satisfies z.ZodType<DeliveryStatus>;
+export type DeliveryStatusRecord = z.infer<typeof DeliveryStatusSchema>;
+
+export const AaliyahDeliveryRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  channel: DeliveryChannelSchema,
+  sourceType: DeliverySourceTypeSchema,
+  sourceId: z.string().min(1),
+  deliveryStatus: DeliveryStatusSchema,
+  attemptCount: z.number().int().nonnegative(),
+  lastError: z.string().nullable(),
+  idempotencyKey: z.string().min(1),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAtIso: z.string().datetime(),
+  sentAtIso: z.string().datetime().nullable()
+}) satisfies z.ZodType<DeliveryRecordShape>;
+export type AaliyahDeliveryRecord = z.infer<typeof AaliyahDeliveryRecordSchema>;
 
 export const OpportunityTypeSchema = z.enum([
   "dormant_contact",
@@ -1540,7 +1582,10 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "evaluation_run_started",
   "evaluation_run_completed",
   "evaluation_run_failed",
-  "evaluation_run_replayed"
+  "evaluation_run_replayed",
+  "delivery_router_sent",
+  "delivery_router_failed",
+  "delivery_router_replayed"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 

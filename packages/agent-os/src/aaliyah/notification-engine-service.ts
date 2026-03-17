@@ -14,6 +14,7 @@ import {
 } from './notification-engine-errors.js';
 import { buildNotificationIdempotencyKey } from './notification-engine-policy.js';
 import { AaliyahNotificationEngineSources } from './notification-engine-sources.js';
+import type { AaliyahDeliveryRouterService } from './delivery-router-service.js';
 import {
   buildNotificationListMessage,
   buildNotificationReason,
@@ -65,7 +66,11 @@ export class AaliyahNotificationEngineService {
   private readonly audit: AaliyahNotificationEngineAuditService;
   private readonly sources: AaliyahNotificationEngineSources;
 
-  constructor(private readonly repository: AgentOsRepository, diagnostics?: AaliyahDiagnosticsService) {
+  constructor(
+    private readonly repository: AgentOsRepository,
+    diagnostics?: AaliyahDiagnosticsService,
+    private readonly deliveryRouter?: AaliyahDeliveryRouterService
+  ) {
     this.audit = new AaliyahNotificationEngineAuditService(diagnostics);
     this.sources = new AaliyahNotificationEngineSources(repository);
   }
@@ -152,6 +157,17 @@ export class AaliyahNotificationEngineService {
         createdAt: generatedAt,
         evaluatedAt: draft.evaluatedAtIso
       });
+
+      if (this.deliveryRouter && notification.notificationType !== 'noop') {
+        await this.deliveryRouter.routeNotification({
+          tenantId: args.tenantId,
+          actorId: args.actorId,
+          principalContext: args.principalContext,
+          mode: args.mode,
+          notificationId: notification.id,
+          generatedAt
+        });
+      }
 
       return { ok: true, notification, replayed: false, message: notification.summary };
     } catch (error) {

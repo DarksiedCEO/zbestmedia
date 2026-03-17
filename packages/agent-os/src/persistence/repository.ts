@@ -17,6 +17,7 @@ import type {
   AaliyahCrmContactRecord,
   AaliyahCrmNoteRecord,
   AaliyahDiagnosticsEventRecord,
+  AaliyahDeliveryRecord,
   AaliyahFollowThroughEngineRecord,
   AaliyahFounderCommandRecord,
   AaliyahNotificationRecord,
@@ -421,6 +422,21 @@ type NotificationRow = {
   evaluated_at: string | Date;
   acknowledged_at: string | Date | null;
   dismissed_at: string | Date | null;
+};
+
+type DeliveryRow = {
+  delivery_id: string;
+  tenant_id: string;
+  channel: AaliyahDeliveryRecord["channel"];
+  source_type: AaliyahDeliveryRecord["sourceType"];
+  source_id: string;
+  delivery_status: AaliyahDeliveryRecord["deliveryStatus"];
+  attempt_count: number;
+  last_error: string | null;
+  idempotency_key: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string | Date;
+  sent_at: string | Date | null;
 };
 
 type OpportunityRow = {
@@ -1134,6 +1150,23 @@ function mapNotificationRow(row: NotificationRow): AaliyahNotificationRecord {
     evaluatedAtIso: toIsoString(row.evaluated_at),
     acknowledgedAtIso: row.acknowledged_at ? toIsoString(row.acknowledged_at) : null,
     dismissedAtIso: row.dismissed_at ? toIsoString(row.dismissed_at) : null
+  };
+}
+
+function mapDeliveryRow(row: DeliveryRow): AaliyahDeliveryRecord {
+  return {
+    id: row.delivery_id,
+    tenantId: row.tenant_id,
+    channel: row.channel,
+    sourceType: row.source_type,
+    sourceId: row.source_id,
+    deliveryStatus: row.delivery_status,
+    attemptCount: row.attempt_count,
+    lastError: row.last_error,
+    idempotencyKey: row.idempotency_key,
+    metadata: row.metadata_json as Record<string, unknown>,
+    createdAtIso: toIsoString(row.created_at),
+    sentAtIso: row.sent_at ? toIsoString(row.sent_at) : null
   };
 }
 
@@ -4430,6 +4463,155 @@ export class AgentOsRepository {
       )
     );
     return mapNotificationRow(res.rows[0]!);
+  }
+
+  async createDelivery(args: {
+    tenantId: string;
+    deliveryId: string;
+    channel: AaliyahDeliveryRecord["channel"];
+    sourceType: AaliyahDeliveryRecord["sourceType"];
+    sourceId: string;
+    deliveryStatus: AaliyahDeliveryRecord["deliveryStatus"];
+    attemptCount: number;
+    lastError: string | null;
+    idempotencyKey: string;
+    metadata?: Record<string, unknown>;
+    createdAt?: string;
+    sentAt?: string | null;
+  }): Promise<AaliyahDeliveryRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<DeliveryRow>(
+        `
+        INSERT INTO aaliyah_deliveries (
+          delivery_id, tenant_id, channel, source_type, source_id,
+          delivery_status, attempt_count, last_error, idempotency_key, metadata_json,
+          created_at, sent_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9, $10::jsonb,
+          $11, $12
+        )
+        RETURNING delivery_id, tenant_id, channel, source_type, source_id,
+                  delivery_status, attempt_count, last_error, idempotency_key, metadata_json,
+                  created_at, sent_at
+        `,
+        [
+          args.deliveryId,
+          args.tenantId,
+          args.channel,
+          args.sourceType,
+          args.sourceId,
+          args.deliveryStatus,
+          args.attemptCount,
+          args.lastError,
+          args.idempotencyKey,
+          JSON.stringify(args.metadata ?? {}),
+          createdAt,
+          args.sentAt ?? null
+        ]
+      )
+    );
+    return mapDeliveryRow(res.rows[0]!);
+  }
+
+  async updateDelivery(args: {
+    tenantId: string;
+    deliveryId: string;
+    deliveryStatus: AaliyahDeliveryRecord["deliveryStatus"];
+    attemptCount: number;
+    lastError: string | null;
+    metadata?: Record<string, unknown>;
+    sentAt?: string | null;
+  }): Promise<AaliyahDeliveryRecord> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<DeliveryRow>(
+        `
+        UPDATE aaliyah_deliveries
+        SET delivery_status = $3,
+            attempt_count = $4,
+            last_error = $5,
+            metadata_json = $6::jsonb,
+            sent_at = CASE
+              WHEN $7::timestamptz IS NULL THEN sent_at
+              ELSE $7::timestamptz
+            END
+        WHERE tenant_id = $1 AND delivery_id = $2
+        RETURNING delivery_id, tenant_id, channel, source_type, source_id,
+                  delivery_status, attempt_count, last_error, idempotency_key, metadata_json,
+                  created_at, sent_at
+        `,
+        [
+          args.tenantId,
+          args.deliveryId,
+          args.deliveryStatus,
+          args.attemptCount,
+          args.lastError,
+          JSON.stringify(args.metadata ?? {}),
+          args.sentAt ?? null
+        ]
+      )
+    );
+    return mapDeliveryRow(res.rows[0]!);
+  }
+
+  async getDeliveryById(args: { tenantId: string; deliveryId: string }): Promise<AaliyahDeliveryRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<DeliveryRow>(
+        `
+        SELECT delivery_id, tenant_id, channel, source_type, source_id,
+               delivery_status, attempt_count, last_error, idempotency_key, metadata_json,
+               created_at, sent_at
+        FROM aaliyah_deliveries
+        WHERE tenant_id = $1 AND delivery_id = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.deliveryId]
+      )
+    );
+    return res.rows[0] ? mapDeliveryRow(res.rows[0]) : null;
+  }
+
+  async getDeliveryByIdempotencyKey(args: { tenantId: string; idempotencyKey: string }): Promise<AaliyahDeliveryRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<DeliveryRow>(
+        `
+        SELECT delivery_id, tenant_id, channel, source_type, source_id,
+               delivery_status, attempt_count, last_error, idempotency_key, metadata_json,
+               created_at, sent_at
+        FROM aaliyah_deliveries
+        WHERE tenant_id = $1 AND idempotency_key = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.idempotencyKey]
+      )
+    );
+    return res.rows[0] ? mapDeliveryRow(res.rows[0]) : null;
+  }
+
+  async listDeliveries(args: {
+    tenantId: string;
+    limit?: number;
+    sourceType?: AaliyahDeliveryRecord["sourceType"];
+    sourceId?: string;
+  }): Promise<AaliyahDeliveryRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<DeliveryRow>(
+        `
+        SELECT delivery_id, tenant_id, channel, source_type, source_id,
+               delivery_status, attempt_count, last_error, idempotency_key, metadata_json,
+               created_at, sent_at
+        FROM aaliyah_deliveries
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR source_type = $2)
+          AND ($3::text IS NULL OR source_id = $3)
+        ORDER BY created_at DESC
+        LIMIT $4
+        `,
+        [args.tenantId, args.sourceType ?? null, args.sourceId ?? null, args.limit ?? 100]
+      )
+    );
+    return res.rows.map(mapDeliveryRow);
   }
 
   async createOpportunity(args: {

@@ -322,6 +322,21 @@ export type AaliyahNotificationRecord = {
   dismissedAtIso: string | null;
 };
 
+export type AaliyahDeliveryRecord = {
+  id: string;
+  tenantId: string;
+  channel: "console" | "email";
+  sourceType: "notification" | "digest";
+  sourceId: string;
+  deliveryStatus: "pending" | "sent" | "failed" | "replayed";
+  attemptCount: number;
+  lastError: string | null;
+  idempotencyKey: string;
+  metadata: Record<string, unknown>;
+  createdAtIso: string;
+  sentAtIso: string | null;
+};
+
 export type AaliyahOpportunityRecord = {
   id: string;
   tenantId: string;
@@ -1412,6 +1427,116 @@ export async function dismissAaliyahStrategicInsight(args: {
     }),
     method: "POST",
     bearer: args.bearer,
+  });
+}
+
+export async function sendAaliyahDelivery(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  channel: AaliyahDeliveryRecord["channel"];
+  sourceType: AaliyahDeliveryRecord["sourceType"];
+  sourceId: string;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_delivery_result";
+  result:
+    | {
+        ok: true;
+        delivery: AaliyahDeliveryRecord;
+        replayed: boolean;
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/deliveries/send`,
+    method: "POST",
+    bearer: args.bearer,
+    body: {
+      mode: args.mode ?? "founder",
+      channel: args.channel,
+      source: {
+        sourceType: args.sourceType,
+        sourceId: args.sourceId
+      }
+    }
+  });
+}
+
+export async function getAaliyahDeliveries(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  limit?: number;
+  sourceType?: AaliyahDeliveryRecord["sourceType"];
+  sourceId?: string;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_delivery_list_result";
+  result:
+    | {
+        ok: true;
+        deliveries: AaliyahDeliveryRecord[];
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/deliveries`, {
+      mode: args.mode,
+      limit: args.limit ? String(args.limit) : undefined,
+      sourceType: args.sourceType,
+      sourceId: args.sourceId
+    }),
+    bearer: args.bearer
+  });
+}
+
+export async function retryAaliyahDelivery(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  deliveryId: string;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_delivery_result";
+  result:
+    | {
+        ok: true;
+        delivery: AaliyahDeliveryRecord;
+        replayed: boolean;
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/deliveries/${args.deliveryId}/retry`, {
+      mode: args.mode
+    }),
+    method: "POST",
+    bearer: args.bearer
   });
 }
 

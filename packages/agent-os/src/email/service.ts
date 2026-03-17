@@ -17,6 +17,7 @@ import {
   GmailRuntimeScaffold,
   type GmailConnector,
   type GmailOAuthExchangeResult,
+  type GmailSendDraftResult,
   type GmailRuntimeGateway
 } from "./gmail.js";
 import { EmailRoutingService } from "./routing.js";
@@ -174,6 +175,36 @@ export class EmailAssistantService {
       auditMetadata: {
         source: "email-assistant-service"
       }
+    });
+  }
+
+  async sendSystemEmail(args: {
+    tenantId: string;
+    subject: string;
+    bodyText: string;
+    bodyHtml?: string | null;
+    to?: string[];
+  }): Promise<GmailSendDraftResult> {
+    const accounts = await this.repository.listEmailAccountConnections({
+      tenantId: args.tenantId,
+      limit: 10
+    });
+    const account = accounts.find(
+      (candidate) =>
+        candidate.provider === "gmail" &&
+        candidate.connectionStatus === "connected" &&
+        Boolean(candidate.tokenReference) &&
+        Boolean(candidate.accountEmailAddress)
+    );
+    if (!account || !account.accountEmailAddress) {
+      throw new EmailAccountConfigurationError("delivery_email_account_not_connected");
+    }
+    const connector = await this.gmailRuntime.createConnector({ account });
+    return connector.sendMessage({
+      to: args.to && args.to.length > 0 ? args.to : [account.accountEmailAddress],
+      subject: args.subject,
+      bodyText: args.bodyText,
+      bodyHtml: args.bodyHtml ?? null
     });
   }
 

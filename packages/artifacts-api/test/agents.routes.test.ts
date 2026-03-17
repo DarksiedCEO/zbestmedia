@@ -42,6 +42,8 @@ import {
   FollowThroughEngineResponseSchema,
   FounderCommandListResponseSchema,
   FounderCommandResponseSchema,
+  DeliveryListResponseSchema,
+  DeliveryResponseSchema,
   NotificationListResponseSchema,
   NotificationResponseSchema,
   OpportunityListResponseSchema,
@@ -3282,6 +3284,83 @@ describe("agent routes", () => {
       message: "Ran follow through evaluation with 2 executed, 0 replayed, and 0 failed source checks."
     }))
   };
+  const aaliyahDeliveryRouterService: any = {
+    send: vi.fn(async ({ channel, sourceType, sourceId }: any) => ({
+      ok: true,
+      delivery: {
+        id: "delivery:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        channel,
+        sourceType,
+        sourceId,
+        deliveryStatus: "sent",
+        attemptCount: 1,
+        lastError: null,
+        idempotencyKey: `delivery:${channel}:${sourceType}:${sourceId}`,
+        metadata: {},
+        createdAtIso: "2026-03-17T08:00:00.000Z",
+        sentAtIso: "2026-03-17T08:00:00.000Z"
+      },
+      replayed: false,
+      message: "Sent delivery."
+    })),
+    getDeliveryById: vi.fn(async ({ deliveryId }: any) => ({
+      ok: true,
+      delivery: {
+        id: deliveryId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        channel: "email",
+        sourceType: "notification",
+        sourceId: "notification:1",
+        deliveryStatus: "failed",
+        attemptCount: 1,
+        lastError: "smtp_down",
+        idempotencyKey: "delivery:email:notification:notification:1",
+        metadata: {},
+        createdAtIso: "2026-03-17T08:00:00.000Z",
+        sentAtIso: null
+      },
+      replayed: false,
+      message: "smtp_down"
+    })),
+    listDeliveries: vi.fn(async () => ({
+      ok: true,
+      deliveries: [{
+        id: "delivery:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        channel: "console",
+        sourceType: "notification",
+        sourceId: "notification:1",
+        deliveryStatus: "sent",
+        attemptCount: 1,
+        lastError: null,
+        idempotencyKey: "delivery:console:notification:notification:1",
+        metadata: {},
+        createdAtIso: "2026-03-17T08:00:00.000Z",
+        sentAtIso: "2026-03-17T08:00:00.000Z"
+      }],
+      message: "Loaded 1 delivery record."
+    })),
+    retryDelivery: vi.fn(async ({ deliveryId }: any) => ({
+      ok: true,
+      delivery: {
+        id: deliveryId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        channel: "email",
+        sourceType: "notification",
+        sourceId: "notification:1",
+        deliveryStatus: "sent",
+        attemptCount: 2,
+        lastError: null,
+        idempotencyKey: "delivery:email:notification:notification:1",
+        metadata: {},
+        createdAtIso: "2026-03-17T08:00:00.000Z",
+        sentAtIso: "2026-03-17T08:05:00.000Z"
+      },
+      replayed: false,
+      message: "Sent email delivery."
+    }))
+  };
   const aaliyahMemoryBoundaryService = {
     getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
       generatedAt: "2026-03-15T00:00:00.000Z",
@@ -4221,6 +4300,7 @@ describe("agent routes", () => {
         aaliyahFounderCommandService: aaliyahFounderCommandService as never,
         aaliyahFollowThroughEngineService: aaliyahFollowThroughEngineService as never,
         aaliyahRecommendationEngineService: aaliyahRecommendationEngineService as never,
+        aaliyahDeliveryRouterService: aaliyahDeliveryRouterService as never,
         aaliyahNotificationEngineService: aaliyahNotificationEngineService as never,
         aaliyahOpportunityEngineService: aaliyahOpportunityEngineService as never,
         aaliyahStrategicIntelligenceService: aaliyahStrategicIntelligenceService as never,
@@ -5455,6 +5535,58 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(403);
     expect(aaliyahEvaluationSchedulerService.listSchedules).not.toHaveBeenCalled();
+  });
+
+  it("exposes delivery router routes", async () => {
+    const sendRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/deliveries/send",
+      payload: {
+        mode: "founder",
+        channel: "email",
+        source: {
+          sourceType: "notification",
+          sourceId: "notification:1"
+        }
+      }
+    });
+
+    expect(sendRes.statusCode).toBe(201);
+    DeliveryResponseSchema.parse(sendRes.json());
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/deliveries/delivery:1?mode=founder"
+    });
+    expect(detailRes.statusCode).toBe(200);
+    DeliveryResponseSchema.parse(detailRes.json());
+
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/deliveries?mode=founder&limit=10&sourceType=notification"
+    });
+    expect(listRes.statusCode).toBe(200);
+    DeliveryListResponseSchema.parse(listRes.json());
+
+    const retryRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/deliveries/delivery:1/retry?mode=founder"
+    });
+    expect(retryRes.statusCode).toBe(200);
+    DeliveryResponseSchema.parse(retryRes.json());
+  });
+
+  it("rejects delivery router routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahDeliveryRouterService.listDeliveries.mockClear();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/deliveries?mode=founder&limit=10"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahDeliveryRouterService.listDeliveries).not.toHaveBeenCalled();
   });
 
   it("exposes founder preference mutation routes", async () => {

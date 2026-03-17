@@ -3,6 +3,7 @@ import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import {
   AgentAdminService,
   AaliyahCommandSurfaceService,
+  AaliyahDeliveryRouterService,
   AaliyahDiagnosticsService,
   AaliyahFounderBriefingService,
   AaliyahFounderInboxTriageService,
@@ -107,6 +108,11 @@ import {
   NotificationEvaluateBodySchema,
   NotificationIdParamSchema,
   NotificationListQuerySchema,
+  DeliveryIdParamSchema,
+  DeliveryListQuerySchema,
+  DeliveryListResponseSchema,
+  DeliveryResponseSchema,
+  DeliverySendBodySchema,
   OpportunityEvaluateBodySchema,
   OpportunityIdParamSchema,
   OpportunityListQuerySchema,
@@ -234,6 +240,7 @@ export function agentRoutes(opts: {
   aaliyahFounderCommandService: AaliyahFounderCommandService;
   aaliyahFollowThroughEngineService: AaliyahFollowThroughEngineService;
   aaliyahRecommendationEngineService: AaliyahRecommendationEngineService;
+  aaliyahDeliveryRouterService: AaliyahDeliveryRouterService;
   aaliyahNotificationEngineService: AaliyahNotificationEngineService;
   aaliyahOpportunityEngineService: AaliyahOpportunityEngineService;
   aaliyahStrategicIntelligenceService: AaliyahStrategicIntelligenceService;
@@ -1815,6 +1822,106 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_notification_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/deliveries/send", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = DeliverySendBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahDeliveryRouterService.send({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        channel: body.data.channel,
+        sourceType: body.data.source.sourceType,
+        sourceId: body.data.source.sourceId
+      });
+
+      return reply.code(201).send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_delivery_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/deliveries/:deliveryId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = DeliveryIdParamSchema.safeParse(req.params ?? {});
+      const query = DeliveryListQuerySchema.partial({ limit: true, sourceType: true, sourceId: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahDeliveryRouterService.getDeliveryById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        deliveryId: path.data.deliveryId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_delivery_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/deliveries", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = DeliveryListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahDeliveryRouterService.listDeliveries({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        limit: query.data.limit,
+        sourceType: query.data.sourceType,
+        sourceId: query.data.sourceId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_delivery_list_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/deliveries/:deliveryId/retry", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = DeliveryIdParamSchema.safeParse(req.params ?? {});
+      const query = DeliveryListQuerySchema.partial({ limit: true, sourceType: true, sourceId: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahDeliveryRouterService.retryDelivery({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        deliveryId: path.data.deliveryId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_delivery_result",
         result
       });
     });

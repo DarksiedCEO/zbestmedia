@@ -11,6 +11,7 @@ import {
   dismissAaliyahNotification,
   executeFounderCommand,
   getAaliyahCommandSurface,
+  getAaliyahDeliveries,
   getAaliyahFollowThroughEngineRecords,
   getAaliyahInbox,
   getAaliyahNotifications,
@@ -25,12 +26,14 @@ import {
   resetAaliyahSession,
   resolveAppApiBaseUrl,
   readApiEnv,
+  retryAaliyahDelivery,
   runAaliyahRuntime,
   runAaliyahEvaluationSchedule,
   pauseAaliyahEvaluationSchedule,
   resumeAaliyahEvaluationSchedule,
   type AaliyahInboxItem,
   type AaliyahCommandSurface,
+  type AaliyahDeliveryRecord,
   type AaliyahFollowThroughEngineRecord,
   type AaliyahNotificationRecord,
   type AaliyahOpportunityRecord,
@@ -133,7 +136,7 @@ export default function AaliyahPage() {
 
   const activeMode = sessionQuery.data?.session.activeModeState.activeMode ?? "founder";
 
-  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery, opportunitiesQuery, strategicInsightsQuery, evaluationSchedulesQuery, evaluationRunsQuery] = useQueries({
+  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery, deliveriesQuery, opportunitiesQuery, strategicInsightsQuery, evaluationSchedulesQuery, evaluationRunsQuery] = useQueries({
     queries: [
       {
         queryKey: ["aaliyah", "command-surface", activeMode],
@@ -221,6 +224,20 @@ export default function AaliyahPage() {
             mode: activeMode,
             limit: 20,
             status: "active",
+        }),
+        refetchInterval: 20_000,
+      },
+      {
+        queryKey: ["aaliyah", "deliveries", activeMode],
+        enabled: Boolean(envData.env && envData.appApiBaseUrl),
+        queryFn: async () =>
+          getAaliyahDeliveries({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            mode: activeMode,
+            limit: 50,
+            sourceType: "notification",
           }),
         refetchInterval: 20_000,
       },
@@ -440,6 +457,31 @@ export default function AaliyahPage() {
     },
   });
 
+  const deliveryRetryMutation = useMutation({
+    mutationFn: async (deliveryId: string) =>
+      retryAaliyahDelivery({
+        baseUrl: envData.appApiBaseUrl!,
+        bearer: envData.env!.VITE_POLICY_BEARER,
+        fetchClient,
+        deliveryId,
+        mode: activeMode,
+      }),
+    onSuccess: async (response) => {
+      if (response.result.ok) {
+        setCommandError(null);
+        setCommandNotice(response.result.message);
+      } else {
+        setCommandNotice(null);
+        setCommandError(response.result.message);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["aaliyah"] });
+    },
+    onError: (error) => {
+      setCommandNotice(null);
+      setCommandError((error as Error).message);
+    },
+  });
+
   const schedulerMutation = useMutation<
     { manifestVersion: string; resourceType: "aaliyah_evaluation_schedule_result"; result: AaliyahEvaluationScheduleMutationResult }
     | { manifestVersion: string; resourceType: "aaliyah_evaluation_run_result"; result: AaliyahEvaluationRunMutationResult },
@@ -525,8 +567,8 @@ export default function AaliyahPage() {
     },
   });
 
-  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading || opportunitiesQuery.isLoading || strategicInsightsQuery.isLoading || evaluationSchedulesQuery.isLoading || evaluationRunsQuery.isLoading;
-  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError || opportunitiesQuery.isError || strategicInsightsQuery.isError || evaluationSchedulesQuery.isError || evaluationRunsQuery.isError;
+  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading || deliveriesQuery.isLoading || opportunitiesQuery.isLoading || strategicInsightsQuery.isLoading || evaluationSchedulesQuery.isLoading || evaluationRunsQuery.isLoading;
+  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError || deliveriesQuery.isError || opportunitiesQuery.isError || strategicInsightsQuery.isError || evaluationSchedulesQuery.isError || evaluationRunsQuery.isError;
   const errorMessage =
     envData.error ??
     (sessionQuery.error as Error | undefined)?.message ??
@@ -537,6 +579,7 @@ export default function AaliyahPage() {
     (followThroughEngineQuery.error as Error | undefined)?.message ??
     (recommendationsQuery.error as Error | undefined)?.message ??
     (notificationsQuery.error as Error | undefined)?.message ??
+    (deliveriesQuery.error as Error | undefined)?.message ??
     (opportunitiesQuery.error as Error | undefined)?.message ??
     (strategicInsightsQuery.error as Error | undefined)?.message ??
     (evaluationSchedulesQuery.error as Error | undefined)?.message ??
@@ -551,10 +594,21 @@ export default function AaliyahPage() {
   const followThroughRecords = followThroughEngineQuery.data?.result.ok ? followThroughEngineQuery.data.result.records : [];
   const recommendations = recommendationsQuery.data?.result.ok ? recommendationsQuery.data.result.recommendations : [];
   const notifications = notificationsQuery.data?.result.ok ? notificationsQuery.data.result.notifications : [];
+  const deliveries = deliveriesQuery.data?.result.ok ? deliveriesQuery.data.result.deliveries : [];
   const opportunities = opportunitiesQuery.data?.result.ok ? opportunitiesQuery.data.result.opportunities : [];
   const strategicInsights = strategicInsightsQuery.data?.result.ok ? strategicInsightsQuery.data.result.insights : [];
   const evaluationSchedules = evaluationSchedulesQuery.data?.result.ok ? evaluationSchedulesQuery.data.result.schedules : [];
   const evaluationRuns = evaluationRunsQuery.data?.result.ok ? evaluationRunsQuery.data.result.runs : [];
+  const deliveriesByNotificationId = React.useMemo(() => {
+    const mapping = new Map<string, Partial<Record<AaliyahDeliveryRecord["channel"], AaliyahDeliveryRecord>>>();
+    for (const delivery of deliveries) {
+      if (delivery.sourceType !== "notification") continue;
+      const existing = mapping.get(delivery.sourceId) ?? {};
+      existing[delivery.channel] = delivery;
+      mapping.set(delivery.sourceId, existing);
+    }
+    return mapping;
+  }, [deliveries]);
 
   async function executeIntent(intent: string, parameters?: Record<string, unknown>, mode?: AaliyahMode) {
     await runtimeMutation.mutateAsync({ intent, parameters, mode });
@@ -655,6 +709,10 @@ export default function AaliyahPage() {
 
   async function dismissNotification(notificationId: string) {
     await notificationMutation.mutateAsync({ notificationId, action: "dismiss" });
+  }
+
+  async function retryDelivery(deliveryId: string) {
+    await deliveryRetryMutation.mutateAsync(deliveryId);
   }
 
   async function acknowledgeOpportunity(opportunityId: string) {
@@ -1019,9 +1077,11 @@ export default function AaliyahPage() {
 
                   <NotificationsPanel
                     notifications={notifications}
-                    busy={notificationMutation.isPending}
+                    deliveriesByNotificationId={deliveriesByNotificationId}
+                    busy={notificationMutation.isPending || deliveryRetryMutation.isPending}
                     onAcknowledge={(notificationId) => void acknowledgeNotification(notificationId)}
                     onDismiss={(notificationId) => void dismissNotification(notificationId)}
+                    onRetryDelivery={(deliveryId) => void retryDelivery(deliveryId)}
                   />
 
                   <OpportunitiesPanel
@@ -1824,9 +1884,11 @@ function notificationTone(severity: AaliyahNotificationRecord["severity"]) {
 
 function NotificationsPanel(args: {
   notifications: AaliyahNotificationRecord[];
+  deliveriesByNotificationId: Map<string, Partial<Record<AaliyahDeliveryRecord["channel"], AaliyahDeliveryRecord>>>;
   busy: boolean;
   onAcknowledge: (notificationId: string) => void;
   onDismiss: (notificationId: string) => void;
+  onRetryDelivery: (deliveryId: string) => void;
 }) {
   return (
     <div style={{ display: "grid", gap: 10 }}>
@@ -1835,35 +1897,52 @@ function NotificationsPanel(args: {
         <EmptyState text="No active founder notifications are queued right now." />
       ) : (
         <div style={{ display: "grid", gap: 8 }}>
-          {args.notifications.map((notification) => (
-            <div key={notification.id} style={compactPanelStyle}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
-                <div>
-                  <div style={{ fontWeight: 650 }}>{notification.title}</div>
-                  <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>{notification.summary}</div>
-                  <div style={{ marginTop: 6, fontSize: 12, color: tokens.colors.muted }}>{notification.reason}</div>
+          {args.notifications.map((notification) => {
+            const deliveries = args.deliveriesByNotificationId.get(notification.id) ?? {};
+            const consoleDelivery = deliveries.console ?? null;
+            const emailDelivery = deliveries.email ?? null;
+
+            return (
+              <div key={notification.id} style={compactPanelStyle}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontWeight: 650 }}>{notification.title}</div>
+                    <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>{notification.summary}</div>
+                    <div style={{ marginTop: 6, fontSize: 12, color: tokens.colors.muted }}>{notification.reason}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <Tag label={notification.severity} tone={notificationTone(notification.severity)} />
+                    <Tag label={notification.notificationType.replace(/_/g, " ")} tone="outline" />
+                  </div>
                 </div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                  <Tag label={notification.severity} tone={notificationTone(notification.severity)} />
-                  <Tag label={notification.notificationType.replaceAll("_", " ")} tone="outline" />
+                <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                  <DataBlock label="Source" value={shortId(notification.source.sourceId)} />
+                  <DataBlock label="Task" value={shortId(notification.relatedTaskId)} />
+                  <DataBlock label="Recommendation" value={shortId(notification.relatedRecommendationId)} />
+                  <DataBlock label="Created" value={new Date(notification.createdAtIso).toLocaleString()} />
+                </div>
+                <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+                  <DataBlock label="Console delivery" value={consoleDelivery?.deliveryStatus ?? "not routed"} />
+                  <DataBlock label="Email delivery" value={emailDelivery?.deliveryStatus ?? "not sent"} />
+                  <DataBlock label="Email attempts" value={emailDelivery ? String(emailDelivery.attemptCount) : "0"} />
+                  <DataBlock label="Last email error" value={emailDelivery?.lastError ?? "None"} />
+                </div>
+                <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button style={primaryButtonStyle} disabled={args.busy} onClick={() => args.onAcknowledge(notification.id)}>
+                    Acknowledge
+                  </button>
+                  <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onDismiss(notification.id)}>
+                    Dismiss
+                  </button>
+                  {emailDelivery?.deliveryStatus === "failed" ? (
+                    <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onRetryDelivery(emailDelivery.id)}>
+                      Retry email
+                    </button>
+                  ) : null}
                 </div>
               </div>
-              <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
-                <DataBlock label="Source" value={shortId(notification.source.sourceId)} />
-                <DataBlock label="Task" value={shortId(notification.relatedTaskId)} />
-                <DataBlock label="Recommendation" value={shortId(notification.relatedRecommendationId)} />
-                <DataBlock label="Created" value={new Date(notification.createdAtIso).toLocaleString()} />
-              </div>
-              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button style={primaryButtonStyle} disabled={args.busy} onClick={() => args.onAcknowledge(notification.id)}>
-                  Acknowledge
-                </button>
-                <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onDismiss(notification.id)}>
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
