@@ -19,6 +19,7 @@ import {
   AaliyahCrmNoteSchema,
   AaliyahFounderCommandRecordSchema,
   AaliyahFounderPreferenceControlsRecordSchema,
+  AaliyahCoalescedSignalRecordSchema,
   AaliyahTaskSchema,
   AaliyahFounderPreferenceRecordSchema,
   EmailAccountConnectionRecordSchema,
@@ -1039,6 +1040,65 @@ export const StrategicInsightListResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_strategic_intelligence_list_result"),
   result: z.discriminatedUnion("ok", [StrategicInsightListSuccessSchema, StrategicInsightFailureSchema])
+});
+
+export const CoalescedSignalEvaluateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder")
+});
+
+export const CoalescedSignalIdParamSchema = z.object({
+  signalId: z.string().min(1)
+});
+
+export const CoalescedSignalListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  limit: z.coerce.number().int().positive().max(100).default(50),
+  status: z.enum(["active", "acknowledged", "dismissed", "resolved"]).optional()
+});
+
+const CoalescedSignalFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const CoalescedSignalSuccessSchema = z.object({
+  ok: z.literal(true),
+  signals: z.array(AaliyahCoalescedSignalRecordSchema),
+  replayedCount: z.number().int().nonnegative(),
+  message: z.string().min(1)
+});
+
+const CoalescedSignalDetailSuccessSchema = z.object({
+  ok: z.literal(true),
+  signal: AaliyahCoalescedSignalRecordSchema,
+  message: z.string().min(1)
+});
+
+const CoalescedSignalListSuccessSchema = z.object({
+  ok: z.literal(true),
+  signals: z.array(AaliyahCoalescedSignalRecordSchema),
+  message: z.string().min(1)
+});
+
+export const CoalescedSignalResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_coalesced_signal_result"),
+  result: z.discriminatedUnion("ok", [CoalescedSignalSuccessSchema, CoalescedSignalFailureSchema])
+});
+
+export const CoalescedSignalDetailResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_coalesced_signal_detail_result"),
+  result: z.discriminatedUnion("ok", [CoalescedSignalDetailSuccessSchema, CoalescedSignalFailureSchema])
+});
+
+export const CoalescedSignalListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_coalesced_signal_list_result"),
+  result: z.discriminatedUnion("ok", [CoalescedSignalListSuccessSchema, CoalescedSignalFailureSchema])
 });
 
 export const EvaluationScheduleCreateBodySchema = z.object({

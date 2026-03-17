@@ -14,6 +14,7 @@ import {
   AaliyahNotificationEngineService,
   AaliyahOpportunityEngineService,
   AaliyahRecommendationEngineService,
+  AaliyahSignalCoalescingService,
   AaliyahStrategicIntelligenceService,
   AaliyahEvaluationSchedulerService,
   AaliyahCalendarService,
@@ -122,6 +123,12 @@ import {
   DigestResponseSchema,
   FounderPreferencesBodySchema,
   FounderPreferencesResponseSchema,
+  CoalescedSignalDetailResponseSchema,
+  CoalescedSignalEvaluateBodySchema,
+  CoalescedSignalIdParamSchema,
+  CoalescedSignalListQuerySchema,
+  CoalescedSignalListResponseSchema,
+  CoalescedSignalResponseSchema,
   OpportunityEvaluateBodySchema,
   OpportunityIdParamSchema,
   OpportunityListQuerySchema,
@@ -254,6 +261,7 @@ export function agentRoutes(opts: {
   aaliyahDigestComposerService: AaliyahDigestComposerService;
   aaliyahNotificationEngineService: AaliyahNotificationEngineService;
   aaliyahOpportunityEngineService: AaliyahOpportunityEngineService;
+  aaliyahSignalCoalescingService: AaliyahSignalCoalescingService;
   aaliyahStrategicIntelligenceService: AaliyahStrategicIntelligenceService;
   aaliyahEvaluationSchedulerService: AaliyahEvaluationSchedulerService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
@@ -2319,6 +2327,128 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_strategic_intelligence_detail_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/coalesced-signals/evaluate", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = CoalescedSignalEvaluateBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahSignalCoalescingService.evaluate({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_coalesced_signal_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/coalesced-signals/:signalId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = CoalescedSignalIdParamSchema.safeParse(req.params ?? {});
+      const query = CoalescedSignalListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahSignalCoalescingService.getById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        signalId: path.data.signalId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_coalesced_signal_detail_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/coalesced-signals", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = CoalescedSignalListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahSignalCoalescingService.list({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        limit: query.data.limit,
+        status: query.data.status
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_coalesced_signal_list_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/coalesced-signals/:signalId/acknowledge", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = CoalescedSignalIdParamSchema.safeParse(req.params ?? {});
+      const query = CoalescedSignalListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahSignalCoalescingService.acknowledge({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        signalId: path.data.signalId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_coalesced_signal_detail_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/coalesced-signals/:signalId/dismiss", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = CoalescedSignalIdParamSchema.safeParse(req.params ?? {});
+      const query = CoalescedSignalListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahSignalCoalescingService.dismiss({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        signalId: path.data.signalId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_coalesced_signal_detail_result",
         result
       });
     });

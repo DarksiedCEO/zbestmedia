@@ -136,6 +136,12 @@ import type {
   StrategicInsightType
 } from "../aaliyah/strategic-intelligence-types.js";
 import type {
+  CoalescedSignalRecord as CoalescedSignalRecordShape,
+  CoalescedSignalStatus,
+  CoalescedSignalType,
+  CoalescedSourceRecordType
+} from "../aaliyah/signal-coalescing-types.js";
+import type {
   EvaluationCadenceType,
   EvaluationRunRecord as EvaluationRunRecordShape,
   EvaluationRunStatus,
@@ -860,6 +866,54 @@ export const AaliyahStrategicInsightRecordSchema = z.object({
   dismissedAtIso: z.string().datetime().nullable()
 }) satisfies z.ZodType<StrategicInsightRecordShape>;
 export type AaliyahStrategicInsightRecord = z.infer<typeof AaliyahStrategicInsightRecordSchema>;
+
+export const CoalescedSignalTypeSchema = z.enum([
+  "blocked_execution_cluster",
+  "follow_up_gap_cluster",
+  "opportunity_cluster",
+  "attention_cluster",
+  "noop"
+]) satisfies z.ZodType<CoalescedSignalType>;
+export type CoalescedSignalTypeRecord = z.infer<typeof CoalescedSignalTypeSchema>;
+
+export const CoalescedSignalStatusSchema = z.enum([
+  "active",
+  "acknowledged",
+  "dismissed",
+  "resolved"
+]) satisfies z.ZodType<CoalescedSignalStatus>;
+export type CoalescedSignalStatusRecord = z.infer<typeof CoalescedSignalStatusSchema>;
+
+export const CoalescedSourceRecordTypeSchema = z.enum([
+  "notification",
+  "recommendation",
+  "opportunity",
+  "strategic_insight",
+  "follow_through_record"
+]) satisfies z.ZodType<CoalescedSourceRecordType>;
+export type CoalescedSourceRecordTypeRecord = z.infer<typeof CoalescedSourceRecordTypeSchema>;
+
+export const AaliyahCoalescedSignalRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  signalType: CoalescedSignalTypeSchema,
+  status: CoalescedSignalStatusSchema,
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  reason: z.string().min(1),
+  idempotencyKey: z.string().min(1),
+  sourceRecordIds: z.array(z.string().min(1)),
+  sourceRecordTypes: z.array(CoalescedSourceRecordTypeSchema),
+  dominantSourceType: CoalescedSourceRecordTypeSchema,
+  suppressedRecordIds: z.array(z.string().min(1)),
+  auditEventId: z.string().min(1).nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAtIso: z.string().datetime(),
+  evaluatedAtIso: z.string().datetime(),
+  acknowledgedAtIso: z.string().datetime().nullable(),
+  dismissedAtIso: z.string().datetime().nullable()
+}) satisfies z.ZodType<CoalescedSignalRecordShape>;
+export type AaliyahCoalescedSignalRecord = z.infer<typeof AaliyahCoalescedSignalRecordSchema>;
 
 export const ScheduledEngineTypeSchema = z.enum([
   "follow_through",
@@ -1683,6 +1737,11 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "strategic_intelligence_acknowledged",
   "strategic_intelligence_dismissed",
   "strategic_intelligence_noop",
+  "signal_coalescing_created",
+  "signal_coalescing_replayed",
+  "signal_coalescing_acknowledged",
+  "signal_coalescing_dismissed",
+  "signal_coalescing_noop",
   "evaluation_schedule_created",
   "evaluation_schedule_updated",
   "evaluation_schedule_paused",

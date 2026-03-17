@@ -14,6 +14,7 @@ import {
   AaliyahNotificationEngineService,
   AaliyahOpportunityEngineService,
   AaliyahRecommendationEngineService,
+  AaliyahSignalCoalescingService,
   AaliyahStrategicIntelligenceService,
   AaliyahEvaluationSchedulerService,
   AaliyahFounderBriefingService,
@@ -164,6 +165,10 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
     agentRepository,
     aaliyahDiagnosticsService
   );
+  const aaliyahSignalCoalescingService = new AaliyahSignalCoalescingService(
+    agentRepository,
+    aaliyahDiagnosticsService
+  );
   const aaliyahEvaluationSchedulerService = new AaliyahEvaluationSchedulerService(
     agentRepository,
     {
@@ -303,6 +308,7 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
       aaliyahNotificationEngineService,
     aaliyahOpportunityEngineService,
     aaliyahStrategicIntelligenceService,
+    aaliyahSignalCoalescingService,
     aaliyahEvaluationSchedulerService,
     aaliyahReviewQueueService,
       aaliyahTriageService,

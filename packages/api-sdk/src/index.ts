@@ -400,6 +400,27 @@ export type AaliyahStrategicInsightRecord = {
   dismissedAtIso: string | null;
 };
 
+export type AaliyahCoalescedSignalRecord = {
+  id: string;
+  tenantId: string;
+  signalType: "blocked_execution_cluster" | "follow_up_gap_cluster" | "opportunity_cluster" | "attention_cluster" | "noop";
+  status: "active" | "acknowledged" | "dismissed" | "resolved";
+  title: string;
+  summary: string;
+  reason: string;
+  idempotencyKey: string;
+  sourceRecordIds: string[];
+  sourceRecordTypes: Array<"notification" | "recommendation" | "opportunity" | "strategic_insight" | "follow_through_record">;
+  dominantSourceType: "notification" | "recommendation" | "opportunity" | "strategic_insight" | "follow_through_record";
+  suppressedRecordIds: string[];
+  auditEventId: string | null;
+  metadata: Record<string, unknown>;
+  createdAtIso: string;
+  evaluatedAtIso: string;
+  acknowledgedAtIso: string | null;
+  dismissedAtIso: string | null;
+};
+
 export type AaliyahEvaluationScheduleRecord = {
   id: string;
   tenantId: string;
@@ -1496,6 +1517,137 @@ export async function dismissAaliyahStrategicInsight(args: {
 }> {
   return args.fetchClient({
     url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/strategic-intelligence/${args.insightId}/dismiss`, {
+      mode: args.mode,
+    }),
+    method: "POST",
+    bearer: args.bearer,
+  });
+}
+
+export async function evaluateAaliyahCoalescedSignals(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_coalesced_signal_result";
+  result:
+    | {
+        ok: true;
+        signals: AaliyahCoalescedSignalRecord[];
+        replayedCount: number;
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/coalesced-signals/evaluate`,
+    method: "POST",
+    bearer: args.bearer,
+    body: {
+      mode: args.mode ?? "founder",
+    },
+  });
+}
+
+export async function getAaliyahCoalescedSignals(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  limit?: number;
+  status?: "active" | "acknowledged" | "dismissed" | "resolved";
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_coalesced_signal_list_result";
+  result:
+    | {
+        ok: true;
+        signals: AaliyahCoalescedSignalRecord[];
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/coalesced-signals`, {
+      mode: args.mode,
+      limit: args.limit ? String(args.limit) : undefined,
+      status: args.status,
+    }),
+    bearer: args.bearer,
+  });
+}
+
+export async function acknowledgeAaliyahCoalescedSignal(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  signalId: string;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_coalesced_signal_detail_result";
+  result:
+    | {
+        ok: true;
+        signal: AaliyahCoalescedSignalRecord;
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/coalesced-signals/${args.signalId}/acknowledge`, {
+      mode: args.mode,
+    }),
+    method: "POST",
+    bearer: args.bearer,
+  });
+}
+
+export async function dismissAaliyahCoalescedSignal(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  signalId: string;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_coalesced_signal_detail_result";
+  result:
+    | {
+        ok: true;
+        signal: AaliyahCoalescedSignalRecord;
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/coalesced-signals/${args.signalId}/dismiss`, {
       mode: args.mode,
     }),
     method: "POST",

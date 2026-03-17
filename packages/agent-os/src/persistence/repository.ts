@@ -27,6 +27,7 @@ import type {
   AaliyahEvaluationRunRecord,
   AaliyahEvaluationScheduleRecord,
   AaliyahFounderPreferenceControlsRecord,
+  AaliyahCoalescedSignalRecord,
   AaliyahStrategicInsightRecord,
   AaliyahTaskRecord,
   AaliyahMutationIdempotencyRecord,
@@ -494,6 +495,27 @@ type StrategicInsightRow = {
   idempotency_key: string;
   related_entity_ids_json: string[];
   related_record_ids_json: string[];
+  audit_event_id: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string | Date;
+  evaluated_at: string | Date;
+  acknowledged_at: string | Date | null;
+  dismissed_at: string | Date | null;
+};
+
+type CoalescedSignalRow = {
+  signal_id: string;
+  tenant_id: string;
+  signal_type: AaliyahCoalescedSignalRecord["signalType"];
+  signal_status: AaliyahCoalescedSignalRecord["status"];
+  title_text: string;
+  summary_text: string;
+  reason_text: string;
+  idempotency_key: string;
+  source_record_ids_json: string[];
+  source_record_types_json: AaliyahCoalescedSignalRecord["sourceRecordTypes"];
+  dominant_source_type: AaliyahCoalescedSignalRecord["dominantSourceType"];
+  suppressed_record_ids_json: string[];
   audit_event_id: string | null;
   metadata_json: Record<string, unknown>;
   created_at: string | Date;
@@ -1268,6 +1290,29 @@ function mapStrategicInsightRow(row: StrategicInsightRow): AaliyahStrategicInsig
     idempotencyKey: row.idempotency_key,
     relatedEntityIds: row.related_entity_ids_json,
     relatedRecordIds: row.related_record_ids_json,
+    auditEventId: row.audit_event_id,
+    metadata: row.metadata_json as Record<string, unknown>,
+    createdAtIso: toIsoString(row.created_at),
+    evaluatedAtIso: toIsoString(row.evaluated_at),
+    acknowledgedAtIso: row.acknowledged_at ? toIsoString(row.acknowledged_at) : null,
+    dismissedAtIso: row.dismissed_at ? toIsoString(row.dismissed_at) : null
+  };
+}
+
+function mapCoalescedSignalRow(row: CoalescedSignalRow): AaliyahCoalescedSignalRecord {
+  return {
+    id: row.signal_id,
+    tenantId: row.tenant_id,
+    signalType: row.signal_type,
+    status: row.signal_status,
+    title: row.title_text,
+    summary: row.summary_text,
+    reason: row.reason_text,
+    idempotencyKey: row.idempotency_key,
+    sourceRecordIds: row.source_record_ids_json,
+    sourceRecordTypes: row.source_record_types_json,
+    dominantSourceType: row.dominant_source_type,
+    suppressedRecordIds: row.suppressed_record_ids_json,
     auditEventId: row.audit_event_id,
     metadata: row.metadata_json as Record<string, unknown>,
     createdAtIso: toIsoString(row.created_at),
@@ -5151,6 +5196,156 @@ export class AgentOsRepository {
       )
     );
     return mapStrategicInsightRow(res.rows[0]!);
+  }
+
+  async createCoalescedSignal(args: {
+    tenantId: string;
+    signalId: string;
+    signalType: AaliyahCoalescedSignalRecord["signalType"];
+    signalStatus: AaliyahCoalescedSignalRecord["status"];
+    title: string;
+    summary: string;
+    reason: string;
+    idempotencyKey: string;
+    sourceRecordIds: string[];
+    sourceRecordTypes: AaliyahCoalescedSignalRecord["sourceRecordTypes"];
+    dominantSourceType: AaliyahCoalescedSignalRecord["dominantSourceType"];
+    suppressedRecordIds: string[];
+    auditEventId: string | null;
+    metadata?: Record<string, unknown>;
+    createdAt?: string;
+    evaluatedAt?: string;
+  }): Promise<AaliyahCoalescedSignalRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<CoalescedSignalRow>(
+        `
+        INSERT INTO aaliyah_coalesced_signals (
+          signal_id, tenant_id, signal_type, signal_status, title_text,
+          summary_text, reason_text, idempotency_key, source_record_ids_json,
+          source_record_types_json, dominant_source_type, suppressed_record_ids_json,
+          audit_event_id, metadata_json, created_at, evaluated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9::jsonb,
+          $10::jsonb, $11, $12::jsonb,
+          $13, $14::jsonb, $15, $16
+        )
+        RETURNING signal_id, tenant_id, signal_type, signal_status, title_text,
+                  summary_text, reason_text, idempotency_key, source_record_ids_json,
+                  source_record_types_json, dominant_source_type, suppressed_record_ids_json,
+                  audit_event_id, metadata_json, created_at, evaluated_at, acknowledged_at, dismissed_at
+        `,
+        [
+          args.signalId,
+          args.tenantId,
+          args.signalType,
+          args.signalStatus,
+          args.title,
+          args.summary,
+          args.reason,
+          args.idempotencyKey,
+          JSON.stringify(args.sourceRecordIds),
+          JSON.stringify(args.sourceRecordTypes),
+          args.dominantSourceType,
+          JSON.stringify(args.suppressedRecordIds),
+          args.auditEventId,
+          JSON.stringify(args.metadata ?? {}),
+          createdAt,
+          args.evaluatedAt ?? createdAt
+        ]
+      )
+    );
+    return mapCoalescedSignalRow(res.rows[0]!);
+  }
+
+  async getCoalescedSignalById(args: { tenantId: string; signalId: string }): Promise<AaliyahCoalescedSignalRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<CoalescedSignalRow>(
+        `
+        SELECT signal_id, tenant_id, signal_type, signal_status, title_text,
+               summary_text, reason_text, idempotency_key, source_record_ids_json,
+               source_record_types_json, dominant_source_type, suppressed_record_ids_json,
+               audit_event_id, metadata_json, created_at, evaluated_at, acknowledged_at, dismissed_at
+        FROM aaliyah_coalesced_signals
+        WHERE tenant_id = $1 AND signal_id = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.signalId]
+      )
+    );
+    return res.rows[0] ? mapCoalescedSignalRow(res.rows[0]) : null;
+  }
+
+  async getCoalescedSignalByIdempotencyKey(args: {
+    tenantId: string;
+    idempotencyKey: string;
+  }): Promise<AaliyahCoalescedSignalRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<CoalescedSignalRow>(
+        `
+        SELECT signal_id, tenant_id, signal_type, signal_status, title_text,
+               summary_text, reason_text, idempotency_key, source_record_ids_json,
+               source_record_types_json, dominant_source_type, suppressed_record_ids_json,
+               audit_event_id, metadata_json, created_at, evaluated_at, acknowledged_at, dismissed_at
+        FROM aaliyah_coalesced_signals
+        WHERE tenant_id = $1 AND idempotency_key = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.idempotencyKey]
+      )
+    );
+    return res.rows[0] ? mapCoalescedSignalRow(res.rows[0]) : null;
+  }
+
+  async listCoalescedSignals(args: {
+    tenantId: string;
+    limit?: number;
+    status?: AaliyahCoalescedSignalRecord["status"];
+  }): Promise<AaliyahCoalescedSignalRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<CoalescedSignalRow>(
+        `
+        SELECT signal_id, tenant_id, signal_type, signal_status, title_text,
+               summary_text, reason_text, idempotency_key, source_record_ids_json,
+               source_record_types_json, dominant_source_type, suppressed_record_ids_json,
+               audit_event_id, metadata_json, created_at, evaluated_at, acknowledged_at, dismissed_at
+        FROM aaliyah_coalesced_signals
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR signal_status = $2)
+        ORDER BY created_at DESC
+        LIMIT $3
+        `,
+        [args.tenantId, args.status ?? null, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapCoalescedSignalRow);
+  }
+
+  async updateCoalescedSignalStatus(args: {
+    tenantId: string;
+    signalId: string;
+    status: "acknowledged" | "dismissed";
+    changedAt?: string;
+  }): Promise<AaliyahCoalescedSignalRecord> {
+    const changedAt = args.changedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<CoalescedSignalRow>(
+        `
+        UPDATE aaliyah_coalesced_signals
+        SET signal_status = $3,
+            acknowledged_at = CASE WHEN $3 = 'acknowledged' THEN $4 ELSE acknowledged_at END,
+            dismissed_at = CASE WHEN $3 = 'dismissed' THEN $4 ELSE dismissed_at END
+        WHERE tenant_id = $1 AND signal_id = $2
+        RETURNING signal_id, tenant_id, signal_type, signal_status, title_text,
+                  summary_text, reason_text, idempotency_key, source_record_ids_json,
+                  source_record_types_json, dominant_source_type, suppressed_record_ids_json,
+                  audit_event_id, metadata_json, created_at, evaluated_at, acknowledged_at, dismissed_at
+        `,
+        [args.tenantId, args.signalId, args.status, changedAt]
+      )
+    );
+    return mapCoalescedSignalRow(res.rows[0]!);
   }
 
   async createEvaluationSchedule(args: {

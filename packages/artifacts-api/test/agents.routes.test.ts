@@ -47,6 +47,9 @@ import {
   DigestListResponseSchema,
   DigestResponseSchema,
   FounderPreferencesResponseSchema,
+  CoalescedSignalDetailResponseSchema,
+  CoalescedSignalListResponseSchema,
+  CoalescedSignalResponseSchema,
   NotificationListResponseSchema,
   NotificationResponseSchema,
   OpportunityListResponseSchema,
@@ -3129,6 +3132,129 @@ describe("agent routes", () => {
       message: "Critical signal is accumulating and needs founder attention before momentum slips."
     }))
   };
+  const aaliyahSignalCoalescingService: any = {
+    evaluate: vi.fn(async () => ({
+      ok: true,
+      signals: [{
+        id: "coalesced-signal:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        signalType: "blocked_execution_cluster",
+        status: "active",
+        title: "Blocked execution cluster",
+        summary: "2 related blocked records point to the same execution problem.",
+        reason: "Blocked records are overlapping around the same task.",
+        idempotencyKey: "coal:blocked_execution_cluster:task:1:abc",
+        sourceRecordIds: ["notification:1", "recommendation:1"],
+        sourceRecordTypes: ["notification", "recommendation"],
+        dominantSourceType: "notification",
+        suppressedRecordIds: ["recommendation:1"],
+        auditEventId: "aaliyah-diagnostics:event-coal-1",
+        metadata: { clusterKey: "task:1", contributingCount: 2 },
+        createdAtIso: "2026-03-17T12:30:00.000Z",
+        evaluatedAtIso: "2026-03-17T12:30:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: null
+      }],
+      replayedCount: 0,
+      message: "Priority cluster created successfully."
+    })),
+    getById: vi.fn(async ({ signalId }: { signalId: string }) => ({
+      ok: true,
+      signal: {
+        id: signalId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        signalType: "blocked_execution_cluster",
+        status: "active",
+        title: "Blocked execution cluster",
+        summary: "2 related blocked records point to the same execution problem.",
+        reason: "Blocked records are overlapping around the same task.",
+        idempotencyKey: "coal:blocked_execution_cluster:task:1:abc",
+        sourceRecordIds: ["notification:1", "recommendation:1"],
+        sourceRecordTypes: ["notification", "recommendation"],
+        dominantSourceType: "notification",
+        suppressedRecordIds: ["recommendation:1"],
+        auditEventId: "aaliyah-diagnostics:event-coal-1",
+        metadata: { clusterKey: "task:1", contributingCount: 2 },
+        createdAtIso: "2026-03-17T12:30:00.000Z",
+        evaluatedAtIso: "2026-03-17T12:30:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: null
+      },
+      message: "2 related blocked records point to the same execution problem."
+    })),
+    list: vi.fn(async () => ({
+      ok: true,
+      signals: [{
+        id: "coalesced-signal:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        signalType: "blocked_execution_cluster",
+        status: "active",
+        title: "Blocked execution cluster",
+        summary: "2 related blocked records point to the same execution problem.",
+        reason: "Blocked records are overlapping around the same task.",
+        idempotencyKey: "coal:blocked_execution_cluster:task:1:abc",
+        sourceRecordIds: ["notification:1", "recommendation:1"],
+        sourceRecordTypes: ["notification", "recommendation"],
+        dominantSourceType: "notification",
+        suppressedRecordIds: ["recommendation:1"],
+        auditEventId: "aaliyah-diagnostics:event-coal-1",
+        metadata: { clusterKey: "task:1", contributingCount: 2 },
+        createdAtIso: "2026-03-17T12:30:00.000Z",
+        evaluatedAtIso: "2026-03-17T12:30:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: null
+      }],
+      message: "Priority cluster loaded successfully."
+    })),
+    acknowledge: vi.fn(async ({ signalId }: { signalId: string }) => ({
+      ok: true,
+      signal: {
+        id: signalId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        signalType: "blocked_execution_cluster",
+        status: "acknowledged",
+        title: "Blocked execution cluster",
+        summary: "2 related blocked records point to the same execution problem.",
+        reason: "Blocked records are overlapping around the same task.",
+        idempotencyKey: "coal:blocked_execution_cluster:task:1:abc",
+        sourceRecordIds: ["notification:1", "recommendation:1"],
+        sourceRecordTypes: ["notification", "recommendation"],
+        dominantSourceType: "notification",
+        suppressedRecordIds: ["recommendation:1"],
+        auditEventId: "aaliyah-diagnostics:event-coal-1",
+        metadata: { clusterKey: "task:1", contributingCount: 2 },
+        createdAtIso: "2026-03-17T12:30:00.000Z",
+        evaluatedAtIso: "2026-03-17T12:30:00.000Z",
+        acknowledgedAtIso: "2026-03-17T12:31:00.000Z",
+        dismissedAtIso: null
+      },
+      message: "2 related blocked records point to the same execution problem."
+    })),
+    dismiss: vi.fn(async ({ signalId }: { signalId: string }) => ({
+      ok: true,
+      signal: {
+        id: signalId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        signalType: "blocked_execution_cluster",
+        status: "dismissed",
+        title: "Blocked execution cluster",
+        summary: "2 related blocked records point to the same execution problem.",
+        reason: "Blocked records are overlapping around the same task.",
+        idempotencyKey: "coal:blocked_execution_cluster:task:1:abc",
+        sourceRecordIds: ["notification:1", "recommendation:1"],
+        sourceRecordTypes: ["notification", "recommendation"],
+        dominantSourceType: "notification",
+        suppressedRecordIds: ["recommendation:1"],
+        auditEventId: "aaliyah-diagnostics:event-coal-1",
+        metadata: { clusterKey: "task:1", contributingCount: 2 },
+        createdAtIso: "2026-03-17T12:30:00.000Z",
+        evaluatedAtIso: "2026-03-17T12:30:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: "2026-03-17T12:31:00.000Z"
+      },
+      message: "2 related blocked records point to the same execution problem."
+    }))
+  };
   const aaliyahEvaluationSchedulerService: any = {
     createOrUpdateSchedule: vi.fn(async ({ engineType, cadenceType, cadenceValue }: any) => ({
       ok: true,
@@ -4496,6 +4622,7 @@ describe("agent routes", () => {
         aaliyahNotificationEngineService: aaliyahNotificationEngineService as never,
         aaliyahOpportunityEngineService: aaliyahOpportunityEngineService as never,
         aaliyahStrategicIntelligenceService: aaliyahStrategicIntelligenceService as never,
+        aaliyahSignalCoalescingService: aaliyahSignalCoalescingService as never,
         aaliyahEvaluationSchedulerService: aaliyahEvaluationSchedulerService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
@@ -5649,6 +5776,61 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(403);
     expect(aaliyahStrategicIntelligenceService.list).not.toHaveBeenCalled();
+  });
+
+  it("exposes coalesced signal routes", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/coalesced-signals/evaluate",
+      payload: {
+        mode: "founder",
+        generatedAt: "2026-03-17T12:30:00.000Z"
+      }
+    });
+
+    expect(createRes.statusCode).toBe(200);
+    CoalescedSignalResponseSchema.parse(createRes.json());
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/coalesced-signals/coalesced-signal:1?mode=founder"
+    });
+    expect(detailRes.statusCode).toBe(200);
+    CoalescedSignalDetailResponseSchema.parse(detailRes.json());
+
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/coalesced-signals?mode=founder&limit=10&status=active"
+    });
+    expect(listRes.statusCode).toBe(200);
+    CoalescedSignalListResponseSchema.parse(listRes.json());
+
+    const ackRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/coalesced-signals/coalesced-signal:1/acknowledge?mode=founder"
+    });
+    expect(ackRes.statusCode).toBe(200);
+    CoalescedSignalDetailResponseSchema.parse(ackRes.json());
+
+    const dismissRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/coalesced-signals/coalesced-signal:1/dismiss?mode=founder"
+    });
+    expect(dismissRes.statusCode).toBe(200);
+    CoalescedSignalDetailResponseSchema.parse(dismissRes.json());
+  });
+
+  it("rejects coalesced signal routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahSignalCoalescingService.list.mockClear();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/coalesced-signals?mode=founder&limit=10"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahSignalCoalescingService.list).not.toHaveBeenCalled();
   });
 
   it("exposes evaluation scheduler routes", async () => {

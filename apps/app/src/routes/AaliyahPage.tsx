@@ -1,17 +1,21 @@
 import React from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  acknowledgeAaliyahCoalescedSignal,
   acknowledgeAaliyahOpportunity,
   acknowledgeAaliyahStrategicInsight,
   acknowledgeAaliyahNotification,
   createAaliyahEvaluationSchedule,
   createFetchClient,
   composeAaliyahDigest,
+  dismissAaliyahCoalescedSignal,
   dismissAaliyahOpportunity,
   dismissAaliyahStrategicInsight,
   dismissAaliyahNotification,
+  evaluateAaliyahCoalescedSignals,
   executeFounderCommand,
   getAaliyahCommandSurface,
+  getAaliyahCoalescedSignals,
   getAaliyahDeliveries,
   getAaliyahDigests,
   getAaliyahFounderPreferenceControls,
@@ -38,6 +42,7 @@ import {
   resumeAaliyahEvaluationSchedule,
   type AaliyahInboxItem,
   type AaliyahCommandSurface,
+  type AaliyahCoalescedSignalRecord,
   type AaliyahDeliveryRecord,
   type AaliyahDigestRecord,
   type AaliyahFollowThroughEngineRecord,
@@ -156,7 +161,7 @@ export default function AaliyahPage() {
     refetchInterval: 20_000,
   });
 
-  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery, deliveriesQuery, digestsQuery, opportunitiesQuery, strategicInsightsQuery, evaluationSchedulesQuery, evaluationRunsQuery] = useQueries({
+  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery, deliveriesQuery, digestsQuery, opportunitiesQuery, strategicInsightsQuery, coalescedSignalsQuery, evaluationSchedulesQuery, evaluationRunsQuery] = useQueries({
     queries: [
       {
         queryKey: ["aaliyah", "command-surface", activeMode],
@@ -300,6 +305,20 @@ export default function AaliyahPage() {
             limit: 20,
             status: "active",
         }),
+        refetchInterval: 20_000,
+      },
+      {
+        queryKey: ["aaliyah", "coalesced-signals", activeMode],
+        enabled: Boolean(envData.env && envData.appApiBaseUrl),
+        queryFn: async () =>
+          getAaliyahCoalescedSignals({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            mode: activeMode,
+            limit: 20,
+            status: "active",
+          }),
         refetchInterval: 20_000,
       },
       {
@@ -491,6 +510,52 @@ export default function AaliyahPage() {
     },
   });
 
+  const coalescedSignalMutation = useMutation({
+    mutationFn: async (
+      input:
+        | { action: "evaluate" }
+        | { action: "acknowledge" | "dismiss"; signalId: string }
+    ) => {
+      if (input.action === "evaluate") {
+        return evaluateAaliyahCoalescedSignals({
+          baseUrl: envData.appApiBaseUrl!,
+          bearer: envData.env!.VITE_POLICY_BEARER,
+          fetchClient,
+          mode: activeMode,
+        });
+      }
+      return input.action === "acknowledge"
+        ? acknowledgeAaliyahCoalescedSignal({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            signalId: input.signalId,
+            mode: activeMode,
+          })
+        : dismissAaliyahCoalescedSignal({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            signalId: input.signalId,
+            mode: activeMode,
+          });
+    },
+    onSuccess: async (response) => {
+      if (response.result.ok) {
+        setCommandError(null);
+        setCommandNotice(response.result.message);
+      } else {
+        setCommandNotice(null);
+        setCommandError(response.result.message);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["aaliyah"] });
+    },
+    onError: (error) => {
+      setCommandNotice(null);
+      setCommandError((error as Error).message);
+    },
+  });
+
   const deliveryRetryMutation = useMutation({
     mutationFn: async (deliveryId: string) =>
       retryAaliyahDelivery({
@@ -664,8 +729,8 @@ export default function AaliyahPage() {
     },
   });
 
-  const isLoading = sessionQuery.isLoading || founderPreferencesQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading || deliveriesQuery.isLoading || digestsQuery.isLoading || opportunitiesQuery.isLoading || strategicInsightsQuery.isLoading || evaluationSchedulesQuery.isLoading || evaluationRunsQuery.isLoading;
-  const isError = Boolean(envData.error) || sessionQuery.isError || founderPreferencesQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError || deliveriesQuery.isError || digestsQuery.isError || opportunitiesQuery.isError || strategicInsightsQuery.isError || evaluationSchedulesQuery.isError || evaluationRunsQuery.isError;
+  const isLoading = sessionQuery.isLoading || founderPreferencesQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading || deliveriesQuery.isLoading || digestsQuery.isLoading || opportunitiesQuery.isLoading || strategicInsightsQuery.isLoading || coalescedSignalsQuery.isLoading || evaluationSchedulesQuery.isLoading || evaluationRunsQuery.isLoading;
+  const isError = Boolean(envData.error) || sessionQuery.isError || founderPreferencesQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError || deliveriesQuery.isError || digestsQuery.isError || opportunitiesQuery.isError || strategicInsightsQuery.isError || coalescedSignalsQuery.isError || evaluationSchedulesQuery.isError || evaluationRunsQuery.isError;
   const errorMessage =
     envData.error ??
     (sessionQuery.error as Error | undefined)?.message ??
@@ -681,6 +746,7 @@ export default function AaliyahPage() {
     (digestsQuery.error as Error | undefined)?.message ??
     (opportunitiesQuery.error as Error | undefined)?.message ??
     (strategicInsightsQuery.error as Error | undefined)?.message ??
+    (coalescedSignalsQuery.error as Error | undefined)?.message ??
     (evaluationSchedulesQuery.error as Error | undefined)?.message ??
     (evaluationRunsQuery.error as Error | undefined)?.message ??
     null;
@@ -697,6 +763,7 @@ export default function AaliyahPage() {
   const digests = digestsQuery.data?.result.ok ? digestsQuery.data.result.digests : [];
   const opportunities = opportunitiesQuery.data?.result.ok ? opportunitiesQuery.data.result.opportunities : [];
   const strategicInsights = strategicInsightsQuery.data?.result.ok ? strategicInsightsQuery.data.result.insights : [];
+  const coalescedSignals = coalescedSignalsQuery.data?.result.ok ? coalescedSignalsQuery.data.result.signals : [];
   const evaluationSchedules = evaluationSchedulesQuery.data?.result.ok ? evaluationSchedulesQuery.data.result.schedules : [];
   const evaluationRuns = evaluationRunsQuery.data?.result.ok ? evaluationRunsQuery.data.result.runs : [];
   const founderPreferences = founderPreferencesQuery.data?.result.ok ? founderPreferencesQuery.data.result.preferences : null;
@@ -850,6 +917,18 @@ export default function AaliyahPage() {
 
   async function dismissStrategicInsight(insightId: string) {
     await strategicInsightMutation.mutateAsync({ insightId, action: "dismiss" });
+  }
+
+  async function refreshPriorityClusters() {
+    await coalescedSignalMutation.mutateAsync({ action: "evaluate" });
+  }
+
+  async function acknowledgeCoalescedSignal(signalId: string) {
+    await coalescedSignalMutation.mutateAsync({ action: "acknowledge", signalId });
+  }
+
+  async function dismissCoalescedSignal(signalId: string) {
+    await coalescedSignalMutation.mutateAsync({ action: "dismiss", signalId });
   }
 
   async function saveEvaluationSchedule() {
@@ -1225,6 +1304,14 @@ export default function AaliyahPage() {
                     busy={strategicInsightMutation.isPending}
                     onAcknowledge={(insightId) => void acknowledgeStrategicInsight(insightId)}
                     onDismiss={(insightId) => void dismissStrategicInsight(insightId)}
+                  />
+
+                  <PriorityClustersPanel
+                    signals={coalescedSignals}
+                    busy={coalescedSignalMutation.isPending}
+                    onRefresh={() => void refreshPriorityClusters()}
+                    onAcknowledge={(signalId) => void acknowledgeCoalescedSignal(signalId)}
+                    onDismiss={(signalId) => void dismissCoalescedSignal(signalId)}
                   />
 
                   <EvaluationSchedulerPanel
@@ -2286,6 +2373,83 @@ function StrategicIntelligencePanel(args: {
                     Acknowledge
                   </button>
                   <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onDismiss(insight.id)}>
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function coalescedSignalTone(type: AaliyahCoalescedSignalRecord["signalType"]) {
+  switch (type) {
+    case "attention_cluster":
+    case "blocked_execution_cluster":
+      return "filled" as const;
+    default:
+      return "outline" as const;
+  }
+}
+
+function PriorityClustersPanel(args: {
+  signals: AaliyahCoalescedSignalRecord[];
+  busy: boolean;
+  onRefresh: () => void;
+  onAcknowledge: (signalId: string) => void;
+  onDismiss: (signalId: string) => void;
+}) {
+  const blockedCount = args.signals.filter((signal) => signal.signalType === "blocked_execution_cluster").length;
+  const attentionCount = args.signals.filter((signal) => signal.signalType === "attention_cluster").length;
+  const suppressedCount = args.signals.reduce((total, signal) => total + signal.suppressedRecordIds.length, 0);
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ fontWeight: 700 }}>Priority Clusters</div>
+        <button style={primaryButtonStyle} disabled={args.busy} onClick={args.onRefresh}>
+          Refresh clusters
+        </button>
+      </div>
+      {args.signals.length === 0 ? (
+        <EmptyState text="No coalesced clusters are persisted right now." />
+      ) : (
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+            <MetricMini label="Blocked clusters" value={blockedCount} />
+            <MetricMini label="Attention clusters" value={attentionCount} />
+            <MetricMini label="Suppressed duplicates" value={suppressedCount} />
+            <MetricMini label="Active clusters" value={args.signals.length} />
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {args.signals.map((signal) => (
+              <div key={signal.id} style={compactPanelStyle}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontWeight: 650 }}>{signal.title}</div>
+                    <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>{signal.summary}</div>
+                    <div style={{ marginTop: 6, fontSize: 12, color: tokens.colors.muted }}>{signal.reason}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <Tag label={signal.signalType.replaceAll("_", " ")} tone={coalescedSignalTone(signal.signalType)} />
+                    <Tag label={signal.status} tone="outline" />
+                    <Tag label={signal.dominantSourceType.replaceAll("_", " ")} tone="outline" />
+                  </div>
+                </div>
+                <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                  <DataBlock label="Source records" value={String(signal.sourceRecordIds.length)} />
+                  <DataBlock label="Suppressed" value={String(signal.suppressedRecordIds.length)} />
+                  <DataBlock label="Dominant source" value={signal.dominantSourceType.replaceAll("_", " ")} />
+                  <DataBlock label="Evaluated" value={new Date(signal.evaluatedAtIso).toLocaleString()} />
+                </div>
+                <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button style={primaryButtonStyle} disabled={args.busy} onClick={() => args.onAcknowledge(signal.id)}>
+                    Acknowledge
+                  </button>
+                  <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onDismiss(signal.id)}>
                     Dismiss
                   </button>
                 </div>
