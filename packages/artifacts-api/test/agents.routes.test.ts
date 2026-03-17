@@ -49,6 +49,11 @@ import {
   StrategicInsightDetailResponseSchema,
   StrategicInsightListResponseSchema,
   StrategicInsightResponseSchema,
+  EvaluationScheduleResponseSchema,
+  EvaluationScheduleListResponseSchema,
+  EvaluationRunResponseSchema,
+  EvaluationRunDetailResponseSchema,
+  EvaluationRunListResponseSchema,
   RecommendationListResponseSchema,
   RecommendationResponseSchema,
   AaliyahTaskListResponseSchema,
@@ -3119,6 +3124,164 @@ describe("agent routes", () => {
       message: "Critical signal is accumulating and needs founder attention before momentum slips."
     }))
   };
+  const aaliyahEvaluationSchedulerService: any = {
+    createOrUpdateSchedule: vi.fn(async ({ engineType, cadenceType, cadenceValue }: any) => ({
+      ok: true,
+      schedule: {
+        id: "evaluation-schedule:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        engineType,
+        status: "active",
+        cadenceType,
+        cadenceValue: cadenceValue ?? null,
+        lastRunAtIso: null,
+        nextRunAtIso: "2026-03-17T02:00:00.000Z",
+        idempotencyKey: "sched:follow_through:hourly:abc",
+        metadata: {},
+        createdAtIso: "2026-03-16T18:30:00.000Z",
+        updatedAtIso: "2026-03-16T18:30:00.000Z"
+      },
+      message: "Created the follow through evaluation cadence."
+    })),
+    getScheduleById: vi.fn(async ({ scheduleId }: any) => ({
+      ok: true,
+      schedule: {
+        id: scheduleId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        engineType: "follow_through",
+        status: "active",
+        cadenceType: "hourly",
+        cadenceValue: "1",
+        lastRunAtIso: "2026-03-16T18:00:00.000Z",
+        nextRunAtIso: "2026-03-16T19:00:00.000Z",
+        idempotencyKey: "sched:follow_through:hourly:abc",
+        metadata: {},
+        createdAtIso: "2026-03-16T18:00:00.000Z",
+        updatedAtIso: "2026-03-16T18:00:00.000Z"
+      },
+      message: "follow_through"
+    })),
+    listSchedules: vi.fn(async () => ({
+      ok: true,
+      schedules: [{
+        id: "evaluation-schedule:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        engineType: "follow_through",
+        status: "active",
+        cadenceType: "hourly",
+        cadenceValue: "1",
+        lastRunAtIso: "2026-03-16T18:00:00.000Z",
+        nextRunAtIso: "2026-03-16T19:00:00.000Z",
+        idempotencyKey: "sched:follow_through:hourly:abc",
+        metadata: {},
+        createdAtIso: "2026-03-16T18:00:00.000Z",
+        updatedAtIso: "2026-03-16T18:00:00.000Z"
+      }],
+      message: "Loaded 1 evaluation schedule."
+    })),
+    pauseSchedule: vi.fn(async ({ scheduleId }: any) => ({
+      ok: true,
+      schedule: {
+        id: scheduleId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        engineType: "follow_through",
+        status: "paused",
+        cadenceType: "hourly",
+        cadenceValue: "1",
+        lastRunAtIso: "2026-03-16T18:00:00.000Z",
+        nextRunAtIso: null,
+        idempotencyKey: "sched:follow_through:hourly:abc",
+        metadata: {},
+        createdAtIso: "2026-03-16T18:00:00.000Z",
+        updatedAtIso: "2026-03-16T18:31:00.000Z"
+      },
+      message: "Paused the follow through cadence."
+    })),
+    resumeSchedule: vi.fn(async ({ scheduleId }: any) => ({
+      ok: true,
+      schedule: {
+        id: scheduleId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        engineType: "follow_through",
+        status: "active",
+        cadenceType: "hourly",
+        cadenceValue: "1",
+        lastRunAtIso: "2026-03-16T18:00:00.000Z",
+        nextRunAtIso: "2026-03-16T19:00:00.000Z",
+        idempotencyKey: "sched:follow_through:hourly:abc",
+        metadata: {},
+        createdAtIso: "2026-03-16T18:00:00.000Z",
+        updatedAtIso: "2026-03-16T18:32:00.000Z"
+      },
+      message: "Resumed the follow through cadence."
+    })),
+    runSchedule: vi.fn(async ({ scheduleId }: any) => ({
+      ok: true,
+      replayed: false,
+      schedule: {
+        id: scheduleId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        engineType: "follow_through",
+        status: "active",
+        cadenceType: "hourly",
+        cadenceValue: "1",
+        lastRunAtIso: "2026-03-16T18:35:00.000Z",
+        nextRunAtIso: "2026-03-16T19:00:00.000Z",
+        idempotencyKey: "sched:follow_through:hourly:abc",
+        metadata: {},
+        createdAtIso: "2026-03-16T18:00:00.000Z",
+        updatedAtIso: "2026-03-16T18:35:00.000Z"
+      },
+      run: {
+        id: "evaluation-run:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        scheduleId,
+        engineType: "follow_through",
+        runStatus: "completed",
+        windowKey: "schedrun:follow_through:evaluation-schedule:1:2026-03-16T18",
+        summary: "Ran follow through evaluation with 2 executed, 0 replayed, and 0 failed source checks.",
+        auditEventId: "aaliyah-diagnostics:event-8",
+        metadata: {},
+        startedAtIso: "2026-03-16T18:35:00.000Z",
+        completedAtIso: "2026-03-16T18:35:02.000Z"
+      },
+      message: "Ran follow through evaluation with 2 executed, 0 replayed, and 0 failed source checks."
+    })),
+    listRuns: vi.fn(async () => ({
+      ok: true,
+      runs: [{
+        id: "evaluation-run:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        scheduleId: "evaluation-schedule:1",
+        engineType: "follow_through",
+        runStatus: "completed",
+        windowKey: "schedrun:follow_through:evaluation-schedule:1:2026-03-16T18",
+        summary: "Ran follow through evaluation with 2 executed, 0 replayed, and 0 failed source checks.",
+        auditEventId: "aaliyah-diagnostics:event-8",
+        metadata: {},
+        startedAtIso: "2026-03-16T18:35:00.000Z",
+        completedAtIso: "2026-03-16T18:35:02.000Z"
+      }],
+      message: "Loaded 1 evaluation run."
+    })),
+    getRunById: vi.fn(async ({ runId }: any) => ({
+      ok: true,
+      run: {
+        id: runId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        scheduleId: "evaluation-schedule:1",
+        engineType: "follow_through",
+        runStatus: "completed",
+        windowKey: "schedrun:follow_through:evaluation-schedule:1:2026-03-16T18",
+        summary: "Ran follow through evaluation with 2 executed, 0 replayed, and 0 failed source checks.",
+        auditEventId: "aaliyah-diagnostics:event-8",
+        metadata: {},
+        startedAtIso: "2026-03-16T18:35:00.000Z",
+        completedAtIso: "2026-03-16T18:35:02.000Z"
+      },
+      message: "Ran follow through evaluation with 2 executed, 0 replayed, and 0 failed source checks."
+    }))
+  };
   const aaliyahMemoryBoundaryService = {
     getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
       generatedAt: "2026-03-15T00:00:00.000Z",
@@ -4061,6 +4224,7 @@ describe("agent routes", () => {
         aaliyahNotificationEngineService: aaliyahNotificationEngineService as never,
         aaliyahOpportunityEngineService: aaliyahOpportunityEngineService as never,
         aaliyahStrategicIntelligenceService: aaliyahStrategicIntelligenceService as never,
+        aaliyahEvaluationSchedulerService: aaliyahEvaluationSchedulerService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
         aaliyahFollowThroughService: aaliyahFollowThroughService as never,
@@ -5213,6 +5377,84 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(403);
     expect(aaliyahStrategicIntelligenceService.list).not.toHaveBeenCalled();
+  });
+
+  it("exposes evaluation scheduler routes", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/evaluation-schedules",
+      payload: {
+        mode: "founder",
+        engineType: "follow_through",
+        cadenceType: "hourly",
+        cadenceValue: "1"
+      }
+    });
+
+    expect(createRes.statusCode).toBe(201);
+    EvaluationScheduleResponseSchema.parse(createRes.json());
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/evaluation-schedules/evaluation-schedule:1?mode=founder"
+    });
+    expect(detailRes.statusCode).toBe(200);
+    EvaluationScheduleResponseSchema.parse(detailRes.json());
+
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/evaluation-schedules?mode=founder&limit=10"
+    });
+    expect(listRes.statusCode).toBe(200);
+    EvaluationScheduleListResponseSchema.parse(listRes.json());
+
+    const pauseRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/evaluation-schedules/evaluation-schedule:1/pause?mode=founder"
+    });
+    expect(pauseRes.statusCode).toBe(200);
+    EvaluationScheduleResponseSchema.parse(pauseRes.json());
+
+    const resumeRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/evaluation-schedules/evaluation-schedule:1/resume?mode=founder"
+    });
+    expect(resumeRes.statusCode).toBe(200);
+    EvaluationScheduleResponseSchema.parse(resumeRes.json());
+
+    const runRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/evaluation-schedules/evaluation-schedule:1/run?mode=founder"
+    });
+    expect(runRes.statusCode).toBe(201);
+    EvaluationRunResponseSchema.parse(runRes.json());
+
+    const runDetailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/evaluation-runs/evaluation-run:1?mode=founder"
+    });
+    expect(runDetailRes.statusCode).toBe(200);
+    EvaluationRunDetailResponseSchema.parse(runDetailRes.json());
+
+    const runListRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/evaluation-runs?mode=founder&limit=10"
+    });
+    expect(runListRes.statusCode).toBe(200);
+    EvaluationRunListResponseSchema.parse(runListRes.json());
+  });
+
+  it("rejects evaluation scheduler routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahEvaluationSchedulerService.listSchedules.mockClear();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/evaluation-schedules?mode=founder&limit=10"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahEvaluationSchedulerService.listSchedules).not.toHaveBeenCalled();
   });
 
   it("exposes founder preference mutation routes", async () => {

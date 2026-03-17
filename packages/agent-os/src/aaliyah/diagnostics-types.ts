@@ -56,7 +56,15 @@ export type AaliyahDiagnosticsEventType =
   | "strategic_intelligence_replayed"
   | "strategic_intelligence_acknowledged"
   | "strategic_intelligence_dismissed"
-  | "strategic_intelligence_noop";
+  | "strategic_intelligence_noop"
+  | "evaluation_schedule_created"
+  | "evaluation_schedule_updated"
+  | "evaluation_schedule_paused"
+  | "evaluation_schedule_resumed"
+  | "evaluation_run_started"
+  | "evaluation_run_completed"
+  | "evaluation_run_failed"
+  | "evaluation_run_replayed";
 
 export type AaliyahDiagnosticsEvent = {
   tenantId: string;

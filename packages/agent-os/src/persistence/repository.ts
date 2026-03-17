@@ -22,6 +22,8 @@ import type {
   AaliyahNotificationRecord,
   AaliyahOpportunityRecord,
   AaliyahRecommendationRecord,
+  AaliyahEvaluationRunRecord,
+  AaliyahEvaluationScheduleRecord,
   AaliyahStrategicInsightRecord,
   AaliyahTaskRecord,
   AaliyahMutationIdempotencyRecord,
@@ -458,6 +460,35 @@ type StrategicInsightRow = {
   evaluated_at: string | Date;
   acknowledged_at: string | Date | null;
   dismissed_at: string | Date | null;
+};
+
+type EvaluationScheduleRow = {
+  schedule_id: string;
+  tenant_id: string;
+  engine_type: AaliyahEvaluationScheduleRecord["engineType"];
+  schedule_status: AaliyahEvaluationScheduleRecord["status"];
+  cadence_type: AaliyahEvaluationScheduleRecord["cadenceType"];
+  cadence_value: string | null;
+  last_run_at: string | Date | null;
+  next_run_at: string | Date | null;
+  idempotency_key: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string | Date;
+  updated_at: string | Date;
+};
+
+type EvaluationRunRow = {
+  run_id: string;
+  tenant_id: string;
+  schedule_id: string;
+  engine_type: AaliyahEvaluationRunRecord["engineType"];
+  run_status: AaliyahEvaluationRunRecord["runStatus"];
+  window_key: string;
+  summary_text: string;
+  audit_event_id: string | null;
+  metadata_json: Record<string, unknown>;
+  started_at: string | Date;
+  completed_at: string | Date | null;
 };
 
 type EmailDispatchRow = {
@@ -1148,6 +1179,39 @@ function mapStrategicInsightRow(row: StrategicInsightRow): AaliyahStrategicInsig
     evaluatedAtIso: toIsoString(row.evaluated_at),
     acknowledgedAtIso: row.acknowledged_at ? toIsoString(row.acknowledged_at) : null,
     dismissedAtIso: row.dismissed_at ? toIsoString(row.dismissed_at) : null
+  };
+}
+
+function mapEvaluationScheduleRow(row: EvaluationScheduleRow): AaliyahEvaluationScheduleRecord {
+  return {
+    id: row.schedule_id,
+    tenantId: row.tenant_id,
+    engineType: row.engine_type,
+    status: row.schedule_status,
+    cadenceType: row.cadence_type,
+    cadenceValue: row.cadence_value,
+    lastRunAtIso: row.last_run_at ? new Date(row.last_run_at).toISOString() : null,
+    nextRunAtIso: row.next_run_at ? new Date(row.next_run_at).toISOString() : null,
+    idempotencyKey: row.idempotency_key,
+    metadata: row.metadata_json ?? {},
+    createdAtIso: new Date(row.created_at).toISOString(),
+    updatedAtIso: new Date(row.updated_at).toISOString()
+  };
+}
+
+function mapEvaluationRunRow(row: EvaluationRunRow): AaliyahEvaluationRunRecord {
+  return {
+    id: row.run_id,
+    tenantId: row.tenant_id,
+    scheduleId: row.schedule_id,
+    engineType: row.engine_type,
+    runStatus: row.run_status,
+    windowKey: row.window_key,
+    summary: row.summary_text,
+    auditEventId: row.audit_event_id,
+    metadata: row.metadata_json ?? {},
+    startedAtIso: new Date(row.started_at).toISOString(),
+    completedAtIso: row.completed_at ? new Date(row.completed_at).toISOString() : null
   };
 }
 
@@ -3495,6 +3559,24 @@ export class AgentOsRepository {
     return res.rows[0] ? mapAaliyahCrmContactRow(res.rows[0]) : null;
   }
 
+  async listAaliyahCrmContacts(args: { tenantId: string; limit?: number }): Promise<AaliyahCrmContactRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahCrmContactRow>(
+        `
+        SELECT contact_id, tenant_id, principal_id, email, first_name, last_name, account_id,
+               role_title, phone, status, relationship_stage, last_touched_at, next_action_at,
+               notes_summary, created_at, updated_at
+        FROM aaliyah_crm_contacts
+        WHERE tenant_id = $1
+        ORDER BY updated_at DESC
+        LIMIT $2
+        `,
+        [args.tenantId, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapAaliyahCrmContactRow);
+  }
+
   async createAaliyahCrmAccount(args: {
     tenantId: string;
     accountId: string;
@@ -3565,6 +3647,22 @@ export class AgentOsRepository {
       )
     );
     return res.rows[0] ? mapAaliyahCrmAccountRow(res.rows[0]) : null;
+  }
+
+  async listAaliyahCrmAccounts(args: { tenantId: string; limit?: number }): Promise<AaliyahCrmAccountRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<AaliyahCrmAccountRow>(
+        `
+        SELECT account_id, tenant_id, name, website, industry, status, notes_summary, created_at, updated_at
+        FROM aaliyah_crm_accounts
+        WHERE tenant_id = $1
+        ORDER BY updated_at DESC
+        LIMIT $2
+        `,
+        [args.tenantId, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapAaliyahCrmAccountRow);
   }
 
   async createAaliyahCrmNote(args: {
@@ -4621,6 +4719,315 @@ export class AgentOsRepository {
       )
     );
     return mapStrategicInsightRow(res.rows[0]!);
+  }
+
+  async createEvaluationSchedule(args: {
+    tenantId: string;
+    scheduleId: string;
+    engineType: AaliyahEvaluationScheduleRecord["engineType"];
+    status: AaliyahEvaluationScheduleRecord["status"];
+    cadenceType: AaliyahEvaluationScheduleRecord["cadenceType"];
+    cadenceValue: string | null;
+    lastRunAt: string | null;
+    nextRunAt: string | null;
+    idempotencyKey: string;
+    metadata: Record<string, unknown>;
+    createdAt: string;
+    updatedAt: string;
+  }): Promise<AaliyahEvaluationScheduleRecord> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EvaluationScheduleRow>(
+        `
+        INSERT INTO aaliyah_evaluation_schedules (
+          schedule_id, tenant_id, engine_type, schedule_status, cadence_type, cadence_value,
+          last_run_at, next_run_at, idempotency_key, metadata_json, created_at, updated_at
+        ) VALUES ($2, $1, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING schedule_id, tenant_id, engine_type, schedule_status, cadence_type, cadence_value,
+                  last_run_at, next_run_at, idempotency_key, metadata_json, created_at, updated_at
+        `,
+        [
+          args.tenantId,
+          args.scheduleId,
+          args.engineType,
+          args.status,
+          args.cadenceType,
+          args.cadenceValue,
+          args.lastRunAt,
+          args.nextRunAt,
+          args.idempotencyKey,
+          args.metadata,
+          args.createdAt,
+          args.updatedAt
+        ]
+      )
+    );
+    return mapEvaluationScheduleRow(res.rows[0]!);
+  }
+
+  async updateEvaluationSchedule(args: {
+    tenantId: string;
+    scheduleId: string;
+    status?: AaliyahEvaluationScheduleRecord["status"];
+    cadenceType?: AaliyahEvaluationScheduleRecord["cadenceType"];
+    cadenceValue?: string | null;
+    nextRunAt?: string | null;
+    idempotencyKey?: string;
+    metadata?: Record<string, unknown>;
+    updatedAt: string;
+  }): Promise<AaliyahEvaluationScheduleRecord> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EvaluationScheduleRow>(
+        `
+        UPDATE aaliyah_evaluation_schedules
+        SET schedule_status = COALESCE($3, schedule_status),
+            cadence_type = COALESCE($4, cadence_type),
+            cadence_value = CASE
+              WHEN COALESCE($4, cadence_type) = 'manual' THEN NULL
+              WHEN $5 IS NULL THEN cadence_value
+              ELSE $5
+            END,
+            next_run_at = $6,
+            idempotency_key = COALESCE($7, idempotency_key),
+            metadata_json = COALESCE($8, metadata_json),
+            updated_at = $9
+        WHERE tenant_id = $1 AND schedule_id = $2
+        RETURNING schedule_id, tenant_id, engine_type, schedule_status, cadence_type, cadence_value,
+                  last_run_at, next_run_at, idempotency_key, metadata_json, created_at, updated_at
+        `,
+        [
+          args.tenantId,
+          args.scheduleId,
+          args.status ?? null,
+          args.cadenceType ?? null,
+          args.cadenceValue ?? null,
+          args.nextRunAt ?? null,
+          args.idempotencyKey ?? null,
+          args.metadata ?? null,
+          args.updatedAt
+        ]
+      )
+    );
+    return mapEvaluationScheduleRow(res.rows[0]!);
+  }
+
+  async updateEvaluationScheduleRuntime(args: {
+    tenantId: string;
+    scheduleId: string;
+    lastRunAt: string | null;
+    nextRunAt: string | null;
+    updatedAt: string;
+  }): Promise<AaliyahEvaluationScheduleRecord> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EvaluationScheduleRow>(
+        `
+        UPDATE aaliyah_evaluation_schedules
+        SET last_run_at = $3,
+            next_run_at = $4,
+            updated_at = $5
+        WHERE tenant_id = $1 AND schedule_id = $2
+        RETURNING schedule_id, tenant_id, engine_type, schedule_status, cadence_type, cadence_value,
+                  last_run_at, next_run_at, idempotency_key, metadata_json, created_at, updated_at
+        `,
+        [args.tenantId, args.scheduleId, args.lastRunAt, args.nextRunAt, args.updatedAt]
+      )
+    );
+    return mapEvaluationScheduleRow(res.rows[0]!);
+  }
+
+  async getEvaluationScheduleById(args: { tenantId: string; scheduleId: string }): Promise<AaliyahEvaluationScheduleRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EvaluationScheduleRow>(
+        `
+        SELECT schedule_id, tenant_id, engine_type, schedule_status, cadence_type, cadence_value,
+               last_run_at, next_run_at, idempotency_key, metadata_json, created_at, updated_at
+        FROM aaliyah_evaluation_schedules
+        WHERE tenant_id = $1 AND schedule_id = $2
+        `,
+        [args.tenantId, args.scheduleId]
+      )
+    );
+    return res.rows[0] ? mapEvaluationScheduleRow(res.rows[0]) : null;
+  }
+
+  async getEvaluationScheduleByEngine(args: {
+    tenantId: string;
+    engineType: AaliyahEvaluationScheduleRecord["engineType"];
+  }): Promise<AaliyahEvaluationScheduleRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EvaluationScheduleRow>(
+        `
+        SELECT schedule_id, tenant_id, engine_type, schedule_status, cadence_type, cadence_value,
+               last_run_at, next_run_at, idempotency_key, metadata_json, created_at, updated_at
+        FROM aaliyah_evaluation_schedules
+        WHERE tenant_id = $1 AND engine_type = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.engineType]
+      )
+    );
+    return res.rows[0] ? mapEvaluationScheduleRow(res.rows[0]) : null;
+  }
+
+  async listEvaluationSchedules(args: { tenantId: string; limit?: number }): Promise<AaliyahEvaluationScheduleRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EvaluationScheduleRow>(
+        `
+        SELECT schedule_id, tenant_id, engine_type, schedule_status, cadence_type, cadence_value,
+               last_run_at, next_run_at, idempotency_key, metadata_json, created_at, updated_at
+        FROM aaliyah_evaluation_schedules
+        WHERE tenant_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2
+        `,
+        [args.tenantId, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapEvaluationScheduleRow);
+  }
+
+  async listDueEvaluationSchedules(args: { tenantId: string; referenceAt: string }): Promise<AaliyahEvaluationScheduleRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EvaluationScheduleRow>(
+        `
+        SELECT schedule_id, tenant_id, engine_type, schedule_status, cadence_type, cadence_value,
+               last_run_at, next_run_at, idempotency_key, metadata_json, created_at, updated_at
+        FROM aaliyah_evaluation_schedules
+        WHERE tenant_id = $1
+          AND schedule_status = 'active'
+          AND next_run_at IS NOT NULL
+          AND next_run_at <= $2
+        ORDER BY next_run_at ASC
+        `,
+        [args.tenantId, args.referenceAt]
+      )
+    );
+    return res.rows.map(mapEvaluationScheduleRow);
+  }
+
+  async createEvaluationRun(args: {
+    tenantId: string;
+    runId: string;
+    scheduleId: string;
+    engineType: AaliyahEvaluationRunRecord["engineType"];
+    runStatus: AaliyahEvaluationRunRecord["runStatus"];
+    windowKey: string;
+    summary: string;
+    auditEventId: string | null;
+    metadata: Record<string, unknown>;
+    startedAt: string;
+    completedAt: string | null;
+  }): Promise<AaliyahEvaluationRunRecord> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EvaluationRunRow>(
+        `
+        INSERT INTO aaliyah_evaluation_runs (
+          run_id, tenant_id, schedule_id, engine_type, run_status, window_key,
+          summary_text, audit_event_id, metadata_json, started_at, completed_at
+        ) VALUES ($2, $1, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING run_id, tenant_id, schedule_id, engine_type, run_status, window_key,
+                  summary_text, audit_event_id, metadata_json, started_at, completed_at
+        `,
+        [
+          args.tenantId,
+          args.runId,
+          args.scheduleId,
+          args.engineType,
+          args.runStatus,
+          args.windowKey,
+          args.summary,
+          args.auditEventId,
+          args.metadata,
+          args.startedAt,
+          args.completedAt
+        ]
+      )
+    );
+    return mapEvaluationRunRow(res.rows[0]!);
+  }
+
+  async updateEvaluationRun(args: {
+    tenantId: string;
+    runId: string;
+    runStatus: AaliyahEvaluationRunRecord["runStatus"];
+    summary: string;
+    auditEventId: string | null;
+    metadata: Record<string, unknown>;
+    completedAt: string | null;
+  }): Promise<AaliyahEvaluationRunRecord> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EvaluationRunRow>(
+        `
+        UPDATE aaliyah_evaluation_runs
+        SET run_status = $3,
+            summary_text = $4,
+            audit_event_id = $5,
+            metadata_json = $6,
+            completed_at = $7
+        WHERE tenant_id = $1 AND run_id = $2
+        RETURNING run_id, tenant_id, schedule_id, engine_type, run_status, window_key,
+                  summary_text, audit_event_id, metadata_json, started_at, completed_at
+        `,
+        [args.tenantId, args.runId, args.runStatus, args.summary, args.auditEventId, args.metadata, args.completedAt]
+      )
+    );
+    return mapEvaluationRunRow(res.rows[0]!);
+  }
+
+  async getEvaluationRunById(args: { tenantId: string; runId: string }): Promise<AaliyahEvaluationRunRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EvaluationRunRow>(
+        `
+        SELECT run_id, tenant_id, schedule_id, engine_type, run_status, window_key,
+               summary_text, audit_event_id, metadata_json, started_at, completed_at
+        FROM aaliyah_evaluation_runs
+        WHERE tenant_id = $1 AND run_id = $2
+        `,
+        [args.tenantId, args.runId]
+      )
+    );
+    return res.rows[0] ? mapEvaluationRunRow(res.rows[0]) : null;
+  }
+
+  async getEvaluationRunByWindowKey(args: {
+    tenantId: string;
+    scheduleId: string;
+    windowKey: string;
+  }): Promise<AaliyahEvaluationRunRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EvaluationRunRow>(
+        `
+        SELECT run_id, tenant_id, schedule_id, engine_type, run_status, window_key,
+               summary_text, audit_event_id, metadata_json, started_at, completed_at
+        FROM aaliyah_evaluation_runs
+        WHERE tenant_id = $1 AND schedule_id = $2 AND window_key = $3
+        LIMIT 1
+        `,
+        [args.tenantId, args.scheduleId, args.windowKey]
+      )
+    );
+    return res.rows[0] ? mapEvaluationRunRow(res.rows[0]) : null;
+  }
+
+  async listEvaluationRuns(args: {
+    tenantId: string;
+    limit?: number;
+    engineType?: AaliyahEvaluationRunRecord["engineType"];
+  }): Promise<AaliyahEvaluationRunRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EvaluationRunRow>(
+        `
+        SELECT run_id, tenant_id, schedule_id, engine_type, run_status, window_key,
+               summary_text, audit_event_id, metadata_json, started_at, completed_at
+        FROM aaliyah_evaluation_runs
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR engine_type = $2)
+        ORDER BY started_at DESC
+        LIMIT $3
+        `,
+        [args.tenantId, args.engineType ?? null, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapEvaluationRunRow);
   }
 
   async createAaliyahFounderPreference(args: {

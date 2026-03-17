@@ -363,6 +363,65 @@ export type AaliyahStrategicInsightRecord = {
   dismissedAtIso: string | null;
 };
 
+export type AaliyahEvaluationScheduleRecord = {
+  id: string;
+  tenantId: string;
+  engineType: "follow_through" | "recommendation" | "notification" | "opportunity" | "strategic_intelligence";
+  status: "active" | "paused";
+  cadenceType: "manual" | "hourly" | "daily" | "weekly";
+  cadenceValue: string | null;
+  lastRunAtIso: string | null;
+  nextRunAtIso: string | null;
+  idempotencyKey: string;
+  metadata: Record<string, unknown>;
+  createdAtIso: string;
+  updatedAtIso: string;
+};
+
+export type AaliyahEvaluationRunRecord = {
+  id: string;
+  tenantId: string;
+  scheduleId: string;
+  engineType: "follow_through" | "recommendation" | "notification" | "opportunity" | "strategic_intelligence";
+  runStatus: "started" | "completed" | "failed" | "replayed";
+  windowKey: string;
+  summary: string;
+  auditEventId: string | null;
+  metadata: Record<string, unknown>;
+  startedAtIso: string;
+  completedAtIso: string | null;
+};
+
+export type AaliyahEvaluationScheduleMutationResult =
+  | {
+      ok: true;
+      schedule: AaliyahEvaluationScheduleRecord;
+      message: string;
+    }
+  | {
+      ok: false;
+      denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+      errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+      retryable: boolean;
+      message: string;
+    };
+
+export type AaliyahEvaluationRunMutationResult =
+  | {
+      ok: true;
+      run: AaliyahEvaluationRunRecord;
+      schedule: AaliyahEvaluationScheduleRecord;
+      replayed: boolean;
+      message: string;
+    }
+  | {
+      ok: false;
+      denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+      errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+      retryable: boolean;
+      message: string;
+    };
+
 export type FounderCommandRequest = {
   mode: AaliyahMode;
   commandType: FounderCommandType;
@@ -1352,6 +1411,160 @@ export async function dismissAaliyahStrategicInsight(args: {
       mode: args.mode,
     }),
     method: "POST",
+    bearer: args.bearer,
+  });
+}
+
+export async function createAaliyahEvaluationSchedule(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  engineType: AaliyahEvaluationScheduleRecord["engineType"];
+  cadenceType: AaliyahEvaluationScheduleRecord["cadenceType"];
+  cadenceValue?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_evaluation_schedule_result";
+  result: AaliyahEvaluationScheduleMutationResult;
+}> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/evaluation-schedules`,
+    method: "POST",
+    bearer: args.bearer,
+    body: {
+      mode: args.mode ?? "founder",
+      engineType: args.engineType,
+      cadenceType: args.cadenceType,
+      cadenceValue: args.cadenceValue,
+      metadata: args.metadata,
+    },
+  });
+}
+
+export async function getAaliyahEvaluationSchedules(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  limit?: number;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_evaluation_schedule_list_result";
+  result:
+    | {
+        ok: true;
+        schedules: AaliyahEvaluationScheduleRecord[];
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/evaluation-schedules`, {
+      mode: args.mode,
+      limit: args.limit ? String(args.limit) : undefined,
+    }),
+    bearer: args.bearer,
+  });
+}
+
+export async function pauseAaliyahEvaluationSchedule(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  scheduleId: string;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_evaluation_schedule_result";
+  result: AaliyahEvaluationScheduleMutationResult;
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/evaluation-schedules/${args.scheduleId}/pause`, {
+      mode: args.mode,
+    }),
+    method: "POST",
+    bearer: args.bearer,
+  });
+}
+
+export async function resumeAaliyahEvaluationSchedule(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  scheduleId: string;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_evaluation_schedule_result";
+  result: AaliyahEvaluationScheduleMutationResult;
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/evaluation-schedules/${args.scheduleId}/resume`, {
+      mode: args.mode,
+    }),
+    method: "POST",
+    bearer: args.bearer,
+  });
+}
+
+export async function runAaliyahEvaluationSchedule(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  scheduleId: string;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_evaluation_run_result";
+  result: AaliyahEvaluationRunMutationResult;
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/evaluation-schedules/${args.scheduleId}/run`, {
+      mode: args.mode,
+    }),
+    method: "POST",
+    bearer: args.bearer,
+  });
+}
+
+export async function getAaliyahEvaluationRuns(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  limit?: number;
+  engineType?: AaliyahEvaluationRunRecord["engineType"];
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_evaluation_run_list_result";
+  result:
+    | {
+        ok: true;
+        runs: AaliyahEvaluationRunRecord[];
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/evaluation-runs`, {
+      mode: args.mode,
+      limit: args.limit ? String(args.limit) : undefined,
+      engineType: args.engineType,
+    }),
     bearer: args.bearer,
   });
 }

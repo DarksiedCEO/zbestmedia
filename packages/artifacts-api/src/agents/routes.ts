@@ -12,6 +12,7 @@ import {
   AaliyahOpportunityEngineService,
   AaliyahRecommendationEngineService,
   AaliyahStrategicIntelligenceService,
+  AaliyahEvaluationSchedulerService,
   AaliyahCalendarService,
   AaliyahCrmService,
   AaliyahTasksService,
@@ -115,6 +116,16 @@ import {
   StrategicInsightListResponseSchema,
   StrategicInsightResponseSchema,
   StrategicIntelligenceEvaluateBodySchema,
+  EvaluationScheduleCreateBodySchema,
+  EvaluationScheduleIdParamSchema,
+  EvaluationScheduleListQuerySchema,
+  EvaluationScheduleListResponseSchema,
+  EvaluationScheduleResponseSchema,
+  EvaluationRunIdParamSchema,
+  EvaluationRunListQuerySchema,
+  EvaluationRunListResponseSchema,
+  EvaluationRunDetailResponseSchema,
+  EvaluationRunResponseSchema,
   NotificationListResponseSchema,
   NotificationResponseSchema,
   AaliyahTaskUpdateBodySchema,
@@ -226,6 +237,7 @@ export function agentRoutes(opts: {
   aaliyahNotificationEngineService: AaliyahNotificationEngineService;
   aaliyahOpportunityEngineService: AaliyahOpportunityEngineService;
   aaliyahStrategicIntelligenceService: AaliyahStrategicIntelligenceService;
+  aaliyahEvaluationSchedulerService: AaliyahEvaluationSchedulerService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
   aaliyahTriageService: AaliyahFounderInboxTriageService;
   aaliyahFollowThroughService: AaliyahFollowThroughService;
@@ -2049,6 +2061,206 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_strategic_intelligence_detail_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/evaluation-schedules", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = EvaluationScheduleCreateBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahEvaluationSchedulerService.createOrUpdateSchedule({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        engineType: body.data.engineType,
+        cadenceType: body.data.cadenceType,
+        cadenceValue: body.data.cadenceValue,
+        metadata: body.data.metadata
+      });
+
+      return reply.code(201).send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_evaluation_schedule_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/evaluation-schedules/:scheduleId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = EvaluationScheduleIdParamSchema.safeParse(req.params ?? {});
+      const query = EvaluationScheduleListQuerySchema.partial({ limit: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahEvaluationSchedulerService.getScheduleById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        scheduleId: path.data.scheduleId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_evaluation_schedule_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/evaluation-schedules", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = EvaluationScheduleListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahEvaluationSchedulerService.listSchedules({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        limit: query.data.limit
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_evaluation_schedule_list_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/evaluation-schedules/:scheduleId/pause", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = EvaluationScheduleIdParamSchema.safeParse(req.params ?? {});
+      const query = EvaluationScheduleListQuerySchema.partial({ limit: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahEvaluationSchedulerService.pauseSchedule({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        scheduleId: path.data.scheduleId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_evaluation_schedule_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/evaluation-schedules/:scheduleId/resume", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = EvaluationScheduleIdParamSchema.safeParse(req.params ?? {});
+      const query = EvaluationScheduleListQuerySchema.partial({ limit: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahEvaluationSchedulerService.resumeSchedule({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        scheduleId: path.data.scheduleId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_evaluation_schedule_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/evaluation-schedules/:scheduleId/run", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = EvaluationScheduleIdParamSchema.safeParse(req.params ?? {});
+      const query = EvaluationScheduleListQuerySchema.partial({ limit: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahEvaluationSchedulerService.runSchedule({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        scheduleId: path.data.scheduleId
+      });
+
+      return reply.code(201).send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_evaluation_run_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/evaluation-runs/:runId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = EvaluationRunIdParamSchema.safeParse(req.params ?? {});
+      const query = EvaluationRunListQuerySchema.partial({ limit: true, engineType: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahEvaluationSchedulerService.getRunById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        runId: path.data.runId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_evaluation_run_detail_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/evaluation-runs", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = EvaluationRunListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahEvaluationSchedulerService.listRuns({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        limit: query.data.limit,
+        engineType: query.data.engineType
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_evaluation_run_list_result",
         result
       });
     });

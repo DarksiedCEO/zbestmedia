@@ -127,6 +127,14 @@ import type {
   StrategicInsightType
 } from "../aaliyah/strategic-intelligence-types.js";
 import type {
+  EvaluationCadenceType,
+  EvaluationRunRecord as EvaluationRunRecordShape,
+  EvaluationRunStatus,
+  EvaluationScheduleRecord as EvaluationScheduleRecordShape,
+  EvaluationScheduleStatus,
+  ScheduledEngineType
+} from "../aaliyah/evaluation-scheduler-types.js";
+import type {
   AssignmentPolicyDecision,
   AssignmentRecord,
   ExecutionRunRecord,
@@ -758,6 +766,68 @@ export const AaliyahStrategicInsightRecordSchema = z.object({
   dismissedAtIso: z.string().datetime().nullable()
 }) satisfies z.ZodType<StrategicInsightRecordShape>;
 export type AaliyahStrategicInsightRecord = z.infer<typeof AaliyahStrategicInsightRecordSchema>;
+
+export const ScheduledEngineTypeSchema = z.enum([
+  "follow_through",
+  "recommendation",
+  "notification",
+  "opportunity",
+  "strategic_intelligence"
+]) satisfies z.ZodType<ScheduledEngineType>;
+export type ScheduledEngineTypeRecord = z.infer<typeof ScheduledEngineTypeSchema>;
+
+export const EvaluationScheduleStatusSchema = z.enum([
+  "active",
+  "paused"
+]) satisfies z.ZodType<EvaluationScheduleStatus>;
+export type EvaluationScheduleStatusRecord = z.infer<typeof EvaluationScheduleStatusSchema>;
+
+export const EvaluationCadenceTypeSchema = z.enum([
+  "manual",
+  "hourly",
+  "daily",
+  "weekly"
+]) satisfies z.ZodType<EvaluationCadenceType>;
+export type EvaluationCadenceTypeRecord = z.infer<typeof EvaluationCadenceTypeSchema>;
+
+export const AaliyahEvaluationScheduleRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  engineType: ScheduledEngineTypeSchema,
+  status: EvaluationScheduleStatusSchema,
+  cadenceType: EvaluationCadenceTypeSchema,
+  cadenceValue: z.string().min(1).nullable(),
+  lastRunAtIso: z.string().datetime().nullable(),
+  nextRunAtIso: z.string().datetime().nullable(),
+  idempotencyKey: z.string().min(1),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAtIso: z.string().datetime(),
+  updatedAtIso: z.string().datetime()
+}) satisfies z.ZodType<EvaluationScheduleRecordShape>;
+export type AaliyahEvaluationScheduleRecord = z.infer<typeof AaliyahEvaluationScheduleRecordSchema>;
+
+export const EvaluationRunStatusSchema = z.enum([
+  "started",
+  "completed",
+  "failed",
+  "replayed"
+]) satisfies z.ZodType<EvaluationRunStatus>;
+export type EvaluationRunStatusRecord = z.infer<typeof EvaluationRunStatusSchema>;
+
+export const AaliyahEvaluationRunRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  scheduleId: z.string().min(1),
+  engineType: ScheduledEngineTypeSchema,
+  runStatus: EvaluationRunStatusSchema,
+  windowKey: z.string().min(1),
+  summary: z.string().min(1),
+  auditEventId: z.string().min(1).nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  startedAtIso: z.string().datetime(),
+  completedAtIso: z.string().datetime().nullable()
+}) satisfies z.ZodType<EvaluationRunRecordShape>;
+export type AaliyahEvaluationRunRecord = z.infer<typeof AaliyahEvaluationRunRecordSchema>;
 
 
 const EmailRoutingTargetSchema = z.union([
@@ -1462,7 +1532,15 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "strategic_intelligence_replayed",
   "strategic_intelligence_acknowledged",
   "strategic_intelligence_dismissed",
-  "strategic_intelligence_noop"
+  "strategic_intelligence_noop",
+  "evaluation_schedule_created",
+  "evaluation_schedule_updated",
+  "evaluation_schedule_paused",
+  "evaluation_schedule_resumed",
+  "evaluation_run_started",
+  "evaluation_run_completed",
+  "evaluation_run_failed",
+  "evaluation_run_replayed"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 

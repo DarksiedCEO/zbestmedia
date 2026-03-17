@@ -12,6 +12,7 @@ import {
   AaliyahOpportunityEngineService,
   AaliyahRecommendationEngineService,
   AaliyahStrategicIntelligenceService,
+  AaliyahEvaluationSchedulerService,
   AaliyahFounderBriefingService,
   AaliyahFounderInboxTriageService,
   AaliyahTasksService,
@@ -143,6 +144,17 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
     agentRepository,
     aaliyahDiagnosticsService
   );
+  const aaliyahEvaluationSchedulerService = new AaliyahEvaluationSchedulerService(
+    agentRepository,
+    {
+      followThrough: aaliyahFollowThroughEngineService,
+      recommendation: aaliyahRecommendationEngineService,
+      notification: aaliyahNotificationEngineService,
+      opportunity: aaliyahOpportunityEngineService,
+      strategicIntelligence: aaliyahStrategicIntelligenceService
+    },
+    aaliyahDiagnosticsService
+  );
   const aaliyahPreferenceService = new AaliyahPreferenceService(agentRepository);
   const aaliyahMemoryBoundaryService = new AaliyahMemoryBoundaryService();
   const aaliyahSessionService = new AaliyahSessionContextService(agentRepository, aaliyahMemoryBoundaryService, aaliyahDiagnosticsService);
@@ -267,7 +279,8 @@ export async function buildServer(envInput?: AppEnv): Promise<FastifyInstance> {
     aaliyahNotificationEngineService,
     aaliyahOpportunityEngineService,
     aaliyahStrategicIntelligenceService,
-      aaliyahReviewQueueService,
+    aaliyahEvaluationSchedulerService,
+    aaliyahReviewQueueService,
       aaliyahTriageService,
       aaliyahFollowThroughService,
       aaliyahSessionService,

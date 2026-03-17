@@ -4,6 +4,7 @@ import {
   acknowledgeAaliyahOpportunity,
   acknowledgeAaliyahStrategicInsight,
   acknowledgeAaliyahNotification,
+  createAaliyahEvaluationSchedule,
   createFetchClient,
   dismissAaliyahOpportunity,
   dismissAaliyahStrategicInsight,
@@ -15,6 +16,8 @@ import {
   getAaliyahNotifications,
   getAaliyahOpportunities,
   getAaliyahStrategicInsights,
+  getAaliyahEvaluationSchedules,
+  getAaliyahEvaluationRuns,
   getAaliyahRecommendations,
   getAaliyahOpenTasks,
   getAaliyahSessionSnapshot,
@@ -23,12 +26,19 @@ import {
   resolveAppApiBaseUrl,
   readApiEnv,
   runAaliyahRuntime,
+  runAaliyahEvaluationSchedule,
+  pauseAaliyahEvaluationSchedule,
+  resumeAaliyahEvaluationSchedule,
   type AaliyahInboxItem,
   type AaliyahCommandSurface,
   type AaliyahFollowThroughEngineRecord,
   type AaliyahNotificationRecord,
   type AaliyahOpportunityRecord,
   type AaliyahRecommendationRecord,
+  type AaliyahEvaluationRunRecord,
+  type AaliyahEvaluationRunMutationResult,
+  type AaliyahEvaluationScheduleRecord,
+  type AaliyahEvaluationScheduleMutationResult,
   type AaliyahStrategicInsightRecord,
   type AaliyahMode,
   type AaliyahQuickAction,
@@ -123,7 +133,7 @@ export default function AaliyahPage() {
 
   const activeMode = sessionQuery.data?.session.activeModeState.activeMode ?? "founder";
 
-  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery, opportunitiesQuery, strategicInsightsQuery] = useQueries({
+  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery, opportunitiesQuery, strategicInsightsQuery, evaluationSchedulesQuery, evaluationRunsQuery] = useQueries({
     queries: [
       {
         queryKey: ["aaliyah", "command-surface", activeMode],
@@ -239,6 +249,32 @@ export default function AaliyahPage() {
             mode: activeMode,
             limit: 20,
             status: "active",
+        }),
+        refetchInterval: 20_000,
+      },
+      {
+        queryKey: ["aaliyah", "evaluation-schedules", activeMode],
+        enabled: Boolean(envData.env && envData.appApiBaseUrl),
+        queryFn: async () =>
+          getAaliyahEvaluationSchedules({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            mode: activeMode,
+            limit: 20,
+          }),
+        refetchInterval: 20_000,
+      },
+      {
+        queryKey: ["aaliyah", "evaluation-runs", activeMode],
+        enabled: Boolean(envData.env && envData.appApiBaseUrl),
+        queryFn: async () =>
+          getAaliyahEvaluationRuns({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            mode: activeMode,
+            limit: 20,
           }),
         refetchInterval: 20_000,
       },
@@ -258,6 +294,9 @@ export default function AaliyahPage() {
   const [taskScheduleTimes, setTaskScheduleTimes] = React.useState<Record<string, string>>({});
   const [calendarOverrideTargetId, setCalendarOverrideTargetId] = React.useState("");
   const [calendarOverrideReason, setCalendarOverrideReason] = React.useState("");
+  const [schedulerEngineType, setSchedulerEngineType] = React.useState<AaliyahEvaluationScheduleRecord["engineType"]>("follow_through");
+  const [schedulerCadenceType, setSchedulerCadenceType] = React.useState<AaliyahEvaluationScheduleRecord["cadenceType"]>("hourly");
+  const [schedulerCadenceValue, setSchedulerCadenceValue] = React.useState("1");
 
   const runtimeMutation = useMutation({
     mutationFn: async (input: { intent: string; parameters?: Record<string, unknown>; mode?: AaliyahMode }) =>
@@ -401,6 +440,69 @@ export default function AaliyahPage() {
     },
   });
 
+  const schedulerMutation = useMutation<
+    { manifestVersion: string; resourceType: "aaliyah_evaluation_schedule_result"; result: AaliyahEvaluationScheduleMutationResult }
+    | { manifestVersion: string; resourceType: "aaliyah_evaluation_run_result"; result: AaliyahEvaluationRunMutationResult },
+    Error,
+    | { action: "create"; engineType: AaliyahEvaluationScheduleRecord["engineType"]; cadenceType: AaliyahEvaluationScheduleRecord["cadenceType"]; cadenceValue?: string }
+    | { action: "pause" | "resume" | "run"; scheduleId: string }
+  >({
+    mutationFn: async (input:
+      | { action: "create"; engineType: AaliyahEvaluationScheduleRecord["engineType"]; cadenceType: AaliyahEvaluationScheduleRecord["cadenceType"]; cadenceValue?: string }
+      | { action: "pause" | "resume" | "run"; scheduleId: string }) => {
+      if (input.action === "create") {
+        return createAaliyahEvaluationSchedule({
+          baseUrl: envData.appApiBaseUrl!,
+          bearer: envData.env!.VITE_POLICY_BEARER,
+          fetchClient,
+          mode: activeMode,
+          engineType: input.engineType,
+          cadenceType: input.cadenceType,
+          cadenceValue: input.cadenceValue,
+        });
+      }
+      if (input.action === "pause") {
+        return pauseAaliyahEvaluationSchedule({
+          baseUrl: envData.appApiBaseUrl!,
+          bearer: envData.env!.VITE_POLICY_BEARER,
+          fetchClient,
+          scheduleId: input.scheduleId,
+          mode: activeMode,
+        });
+      }
+      if (input.action === "resume") {
+        return resumeAaliyahEvaluationSchedule({
+          baseUrl: envData.appApiBaseUrl!,
+          bearer: envData.env!.VITE_POLICY_BEARER,
+          fetchClient,
+          scheduleId: input.scheduleId,
+          mode: activeMode,
+        });
+      }
+      return runAaliyahEvaluationSchedule({
+        baseUrl: envData.appApiBaseUrl!,
+        bearer: envData.env!.VITE_POLICY_BEARER,
+        fetchClient,
+        scheduleId: input.scheduleId,
+        mode: activeMode,
+      });
+    },
+    onSuccess: async (response) => {
+      if (response.result.ok) {
+        setCommandError(null);
+        setCommandNotice(response.result.message);
+      } else {
+        setCommandNotice(null);
+        setCommandError(response.result.message);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["aaliyah"] });
+    },
+    onError: (error) => {
+      setCommandNotice(null);
+      setCommandError((error as Error).message);
+    },
+  });
+
   const resetMutation = useMutation({
     mutationFn: async (scope: "soft" | "hard") =>
       resetAaliyahSession({
@@ -423,8 +525,8 @@ export default function AaliyahPage() {
     },
   });
 
-  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading || opportunitiesQuery.isLoading || strategicInsightsQuery.isLoading;
-  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError || opportunitiesQuery.isError || strategicInsightsQuery.isError;
+  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading || opportunitiesQuery.isLoading || strategicInsightsQuery.isLoading || evaluationSchedulesQuery.isLoading || evaluationRunsQuery.isLoading;
+  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError || opportunitiesQuery.isError || strategicInsightsQuery.isError || evaluationSchedulesQuery.isError || evaluationRunsQuery.isError;
   const errorMessage =
     envData.error ??
     (sessionQuery.error as Error | undefined)?.message ??
@@ -437,6 +539,8 @@ export default function AaliyahPage() {
     (notificationsQuery.error as Error | undefined)?.message ??
     (opportunitiesQuery.error as Error | undefined)?.message ??
     (strategicInsightsQuery.error as Error | undefined)?.message ??
+    (evaluationSchedulesQuery.error as Error | undefined)?.message ??
+    (evaluationRunsQuery.error as Error | undefined)?.message ??
     null;
 
   const shell = shellQuery.data?.shell;
@@ -449,6 +553,8 @@ export default function AaliyahPage() {
   const notifications = notificationsQuery.data?.result.ok ? notificationsQuery.data.result.notifications : [];
   const opportunities = opportunitiesQuery.data?.result.ok ? opportunitiesQuery.data.result.opportunities : [];
   const strategicInsights = strategicInsightsQuery.data?.result.ok ? strategicInsightsQuery.data.result.insights : [];
+  const evaluationSchedules = evaluationSchedulesQuery.data?.result.ok ? evaluationSchedulesQuery.data.result.schedules : [];
+  const evaluationRuns = evaluationRunsQuery.data?.result.ok ? evaluationRunsQuery.data.result.runs : [];
 
   async function executeIntent(intent: string, parameters?: Record<string, unknown>, mode?: AaliyahMode) {
     await runtimeMutation.mutateAsync({ intent, parameters, mode });
@@ -565,6 +671,27 @@ export default function AaliyahPage() {
 
   async function dismissStrategicInsight(insightId: string) {
     await strategicInsightMutation.mutateAsync({ insightId, action: "dismiss" });
+  }
+
+  async function saveEvaluationSchedule() {
+    await schedulerMutation.mutateAsync({
+      action: "create",
+      engineType: schedulerEngineType,
+      cadenceType: schedulerCadenceType,
+      cadenceValue: schedulerCadenceType === "manual" ? undefined : schedulerCadenceValue,
+    });
+  }
+
+  async function pauseEvaluationSchedule(scheduleId: string) {
+    await schedulerMutation.mutateAsync({ action: "pause", scheduleId });
+  }
+
+  async function resumeEvaluationSchedule(scheduleId: string) {
+    await schedulerMutation.mutateAsync({ action: "resume", scheduleId });
+  }
+
+  async function runEvaluationScheduleNow(scheduleId: string) {
+    await schedulerMutation.mutateAsync({ action: "run", scheduleId });
   }
 
   async function actOnRecommendation(recommendation: AaliyahRecommendationRecord) {
@@ -910,6 +1037,22 @@ export default function AaliyahPage() {
                     busy={strategicInsightMutation.isPending}
                     onAcknowledge={(insightId) => void acknowledgeStrategicInsight(insightId)}
                     onDismiss={(insightId) => void dismissStrategicInsight(insightId)}
+                  />
+
+                  <EvaluationSchedulerPanel
+                    schedules={evaluationSchedules}
+                    runs={evaluationRuns}
+                    busy={schedulerMutation.isPending}
+                    engineType={schedulerEngineType}
+                    cadenceType={schedulerCadenceType}
+                    cadenceValue={schedulerCadenceValue}
+                    onEngineTypeChange={setSchedulerEngineType}
+                    onCadenceTypeChange={setSchedulerCadenceType}
+                    onCadenceValueChange={setSchedulerCadenceValue}
+                    onSave={() => void saveEvaluationSchedule()}
+                    onPause={(scheduleId) => void pauseEvaluationSchedule(scheduleId)}
+                    onResume={(scheduleId) => void resumeEvaluationSchedule(scheduleId)}
+                    onRunNow={(scheduleId) => void runEvaluationScheduleNow(scheduleId)}
                   />
                 </div>
               </Section>
@@ -1873,6 +2016,122 @@ function StrategicIntelligencePanel(args: {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function EvaluationSchedulerPanel(args: {
+  schedules: AaliyahEvaluationScheduleRecord[];
+  runs: AaliyahEvaluationRunRecord[];
+  busy: boolean;
+  engineType: AaliyahEvaluationScheduleRecord["engineType"];
+  cadenceType: AaliyahEvaluationScheduleRecord["cadenceType"];
+  cadenceValue: string;
+  onEngineTypeChange: (value: AaliyahEvaluationScheduleRecord["engineType"]) => void;
+  onCadenceTypeChange: (value: AaliyahEvaluationScheduleRecord["cadenceType"]) => void;
+  onCadenceValueChange: (value: string) => void;
+  onSave: () => void;
+  onPause: (scheduleId: string) => void;
+  onResume: (scheduleId: string) => void;
+  onRunNow: (scheduleId: string) => void;
+}) {
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ fontWeight: 700 }}>Cadence / Scheduler</div>
+      <div style={compactPanelStyle}>
+        <div style={{ fontWeight: 650 }}>Control the clock</div>
+        <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <select style={inputStyle} value={args.engineType} onChange={(event) => args.onEngineTypeChange(event.target.value as AaliyahEvaluationScheduleRecord["engineType"])}>
+            <option value="follow_through">Follow through</option>
+            <option value="recommendation">Recommendation</option>
+            <option value="notification">Notification</option>
+            <option value="opportunity">Opportunity</option>
+            <option value="strategic_intelligence">Strategic intelligence</option>
+          </select>
+          <select style={inputStyle} value={args.cadenceType} onChange={(event) => args.onCadenceTypeChange(event.target.value as AaliyahEvaluationScheduleRecord["cadenceType"])}>
+            <option value="manual">Manual</option>
+            <option value="hourly">Hourly</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+          </select>
+          <input
+            style={inputStyle}
+            value={args.cadenceValue}
+            onChange={(event) => args.onCadenceValueChange(event.target.value)}
+            placeholder={args.cadenceType === "hourly" ? "1" : args.cadenceType === "daily" ? "09:00" : "MON@09:00"}
+            disabled={args.cadenceType === "manual"}
+          />
+          <button style={primaryButtonStyle} disabled={args.busy} onClick={args.onSave}>
+            Save cadence
+          </button>
+        </div>
+      </div>
+      {args.schedules.length === 0 ? (
+        <EmptyState text="No evaluation cadences are persisted yet." />
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          {args.schedules.map((schedule) => (
+            <div key={schedule.id} style={compactPanelStyle}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 650 }}>{schedule.engineType.replaceAll("_", " ")}</div>
+                  <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>
+                    {schedule.cadenceType === "manual" ? "Manual only" : `${schedule.cadenceType} cadence${schedule.cadenceValue ? ` (${schedule.cadenceValue})` : ""}`}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <Tag label={schedule.status} tone={schedule.status === "active" ? "filled" : "outline"} />
+                  <Tag label={schedule.engineType.replaceAll("_", " ")} tone="outline" />
+                </div>
+              </div>
+              <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                <DataBlock label="Last run" value={schedule.lastRunAtIso ? new Date(schedule.lastRunAtIso).toLocaleString() : "Never"} />
+                <DataBlock label="Next run" value={schedule.nextRunAtIso ? new Date(schedule.nextRunAtIso).toLocaleString() : "Manual"} />
+                <DataBlock label="Schedule ID" value={shortId(schedule.id)} />
+              </div>
+              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button style={primaryButtonStyle} disabled={args.busy} onClick={() => args.onRunNow(schedule.id)}>
+                  Run now
+                </button>
+                {schedule.status === "active" ? (
+                  <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onPause(schedule.id)}>
+                    Pause
+                  </button>
+                ) : (
+                  <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onResume(schedule.id)}>
+                    Resume
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ fontWeight: 650 }}>Recent evaluation runs</div>
+        {args.runs.length === 0 ? (
+          <EmptyState text="No scheduler runs have been recorded yet." />
+        ) : (
+          args.runs.map((run) => (
+            <div key={run.id} style={compactPanelStyle}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 650 }}>{run.engineType.replaceAll("_", " ")}</div>
+                  <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>{run.summary}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <Tag label={run.runStatus} tone={run.runStatus === "failed" ? "filled" : "outline"} />
+                </div>
+              </div>
+              <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                <DataBlock label="Window" value={run.windowKey} />
+                <DataBlock label="Started" value={new Date(run.startedAtIso).toLocaleString()} />
+                <DataBlock label="Completed" value={run.completedAtIso ? new Date(run.completedAtIso).toLocaleString() : "Running"} />
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

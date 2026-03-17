@@ -12,6 +12,8 @@ import {
   AaliyahOpportunityRecordSchema,
   AaliyahRecommendationRecordSchema,
   AaliyahStrategicInsightRecordSchema,
+  AaliyahEvaluationRunRecordSchema,
+  AaliyahEvaluationScheduleRecordSchema,
   AaliyahCrmNoteSchema,
   AaliyahFounderCommandRecordSchema,
   AaliyahTaskSchema,
@@ -878,6 +880,103 @@ export const StrategicInsightListResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_strategic_intelligence_list_result"),
   result: z.discriminatedUnion("ok", [StrategicInsightListSuccessSchema, StrategicInsightFailureSchema])
+});
+
+export const EvaluationScheduleCreateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  engineType: z.enum(["follow_through", "recommendation", "notification", "opportunity", "strategic_intelligence"]),
+  cadenceType: z.enum(["manual", "hourly", "daily", "weekly"]),
+  cadenceValue: z.string().min(1).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional()
+});
+
+export const EvaluationScheduleIdParamSchema = z.object({
+  scheduleId: z.string().min(1)
+});
+
+export const EvaluationRunIdParamSchema = z.object({
+  runId: z.string().min(1)
+});
+
+export const EvaluationScheduleListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  limit: z.coerce.number().int().positive().max(100).default(50)
+});
+
+export const EvaluationRunListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  limit: z.coerce.number().int().positive().max(100).default(50),
+  engineType: z.enum(["follow_through", "recommendation", "notification", "opportunity", "strategic_intelligence"]).optional()
+});
+
+const EvaluationSchedulerFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const EvaluationScheduleSuccessSchema = z.object({
+  ok: z.literal(true),
+  schedule: AaliyahEvaluationScheduleRecordSchema,
+  message: z.string().min(1)
+});
+
+const EvaluationScheduleListSuccessSchema = z.object({
+  ok: z.literal(true),
+  schedules: z.array(AaliyahEvaluationScheduleRecordSchema),
+  message: z.string().min(1)
+});
+
+const EvaluationRunSuccessSchema = z.object({
+  ok: z.literal(true),
+  run: AaliyahEvaluationRunRecordSchema,
+  schedule: AaliyahEvaluationScheduleRecordSchema,
+  replayed: z.boolean(),
+  message: z.string().min(1)
+});
+
+const EvaluationRunDetailSuccessSchema = z.object({
+  ok: z.literal(true),
+  run: AaliyahEvaluationRunRecordSchema,
+  message: z.string().min(1)
+});
+
+const EvaluationRunListSuccessSchema = z.object({
+  ok: z.literal(true),
+  runs: z.array(AaliyahEvaluationRunRecordSchema),
+  message: z.string().min(1)
+});
+
+export const EvaluationScheduleResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_evaluation_schedule_result"),
+  result: z.discriminatedUnion("ok", [EvaluationScheduleSuccessSchema, EvaluationSchedulerFailureSchema])
+});
+
+export const EvaluationScheduleListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_evaluation_schedule_list_result"),
+  result: z.discriminatedUnion("ok", [EvaluationScheduleListSuccessSchema, EvaluationSchedulerFailureSchema])
+});
+
+export const EvaluationRunResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_evaluation_run_result"),
+  result: z.discriminatedUnion("ok", [EvaluationRunSuccessSchema, EvaluationSchedulerFailureSchema])
+});
+
+export const EvaluationRunDetailResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_evaluation_run_detail_result"),
+  result: z.discriminatedUnion("ok", [EvaluationRunDetailSuccessSchema, EvaluationSchedulerFailureSchema])
+});
+
+export const EvaluationRunListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_evaluation_run_list_result"),
+  result: z.discriminatedUnion("ok", [EvaluationRunListSuccessSchema, EvaluationSchedulerFailureSchema])
 });
 
 export const BrandPipelineAdvanceBodySchema = z.object({
