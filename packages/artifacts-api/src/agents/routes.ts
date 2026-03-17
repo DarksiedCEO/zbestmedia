@@ -13,6 +13,7 @@ import {
   AaliyahFounderPreferencesService,
   AaliyahFollowThroughEngineService,
   AaliyahNotificationEngineService,
+  AaliyahOperatorQueueService,
   AaliyahOpportunityEngineService,
   AaliyahRecommendationEngineService,
   AaliyahSignalCoalescingService,
@@ -136,6 +137,14 @@ import {
   EscalationListQuerySchema,
   EscalationListResponseSchema,
   EscalationResponseSchema,
+  OperatorQueueDetailResponseSchema,
+  OperatorQueueEvaluateBodySchema,
+  OperatorQueueIdParamSchema,
+  OperatorQueueListQuerySchema,
+  OperatorQueueListResponseSchema,
+  OperatorQueueResponseSchema,
+  OperatorQueueTopQuerySchema,
+  OperatorQueueTopResponseSchema,
   OpportunityEvaluateBodySchema,
   OpportunityIdParamSchema,
   OpportunityListQuerySchema,
@@ -270,6 +279,7 @@ export function agentRoutes(opts: {
   aaliyahOpportunityEngineService: AaliyahOpportunityEngineService;
   aaliyahSignalCoalescingService: AaliyahSignalCoalescingService;
   aaliyahEscalationEngineService: AaliyahEscalationEngineService;
+  aaliyahOperatorQueueService: AaliyahOperatorQueueService;
   aaliyahStrategicIntelligenceService: AaliyahStrategicIntelligenceService;
   aaliyahEvaluationSchedulerService: AaliyahEvaluationSchedulerService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
@@ -2606,6 +2616,100 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_escalation_detail_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/operator-queue/evaluate", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = OperatorQueueEvaluateBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahOperatorQueueService.evaluate({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        generatedAt: body.data.generatedAt
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_operator_queue_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/operator-queue/top", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = OperatorQueueTopQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahOperatorQueueService.top({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        immediateLimit: query.data.immediateLimit,
+        overallLimit: query.data.overallLimit
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_operator_queue_top_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/operator-queue/:queueItemId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = OperatorQueueIdParamSchema.safeParse(req.params ?? {});
+      const query = OperatorQueueListQuerySchema.partial({ limit: true, priorityBand: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahOperatorQueueService.getById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        queueItemId: path.data.queueItemId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_operator_queue_detail_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/operator-queue", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = OperatorQueueListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahOperatorQueueService.list({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        limit: query.data.limit,
+        priorityBand: query.data.priorityBand
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_operator_queue_list_result",
         result
       });
     });

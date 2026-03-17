@@ -443,6 +443,29 @@ export type AaliyahEscalationRecord = {
   resolvedAtIso: string | null;
 };
 
+export type AaliyahOperatorQueueRecord = {
+  id: string;
+  tenantId: string;
+  sourceType: "escalation" | "coalesced_signal" | "strategic_insight" | "notification" | "recommendation" | "opportunity";
+  sourceId: string;
+  queueItemType: "immediate_action" | "review_required" | "watch_item" | "summary_item";
+  priorityScore: number;
+  priorityBand: "critical" | "high" | "normal";
+  title: string;
+  summary: string;
+  reason: string;
+  idempotencyKey: string;
+  relatedRecordIds: string[];
+  relatedRecordTypes: string[];
+  actionableCommandType: FounderCommandType | null;
+  actionableTargetType: FounderCommandTargetType | null;
+  actionableTargetId: string | null;
+  auditEventId: string | null;
+  metadata: Record<string, unknown>;
+  createdAtIso: string;
+  evaluatedAtIso: string;
+};
+
 export type AaliyahEvaluationScheduleRecord = {
   id: string;
   tenantId: string;
@@ -1991,6 +2014,95 @@ export function resolveAaliyahEscalation(args: {
   mode?: AaliyahMode;
 }) {
   return postEscalationLifecycle({ ...args, action: "resolve" });
+}
+
+export async function evaluateAaliyahOperatorQueue(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_operator_queue_result";
+  result:
+    | { ok: true; queueItems: AaliyahOperatorQueueRecord[]; replayedCount: number; suppressedCount: number; message: string }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/operator-queue/evaluate`,
+    method: "POST",
+    bearer: args.bearer,
+    body: { mode: args.mode ?? "founder" }
+  });
+}
+
+export async function getAaliyahOperatorQueue(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  limit?: number;
+  priorityBand?: "critical" | "high" | "normal";
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_operator_queue_list_result";
+  result:
+    | { ok: true; queueItems: AaliyahOperatorQueueRecord[]; message: string }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/operator-queue`, {
+      mode: args.mode,
+      limit: args.limit ? String(args.limit) : undefined,
+      priorityBand: args.priorityBand
+    }),
+    bearer: args.bearer
+  });
+}
+
+export async function getAaliyahOperatorQueueItem(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  queueItemId: string;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_operator_queue_detail_result";
+  result:
+    | { ok: true; queueItem: AaliyahOperatorQueueRecord; message: string }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/operator-queue/${args.queueItemId}`, {
+      mode: args.mode
+    }),
+    bearer: args.bearer
+  });
+}
+
+export async function getAaliyahOperatorQueueTop(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  immediateLimit?: number;
+  overallLimit?: number;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_operator_queue_top_result";
+  result:
+    | { ok: true; immediateActions: AaliyahOperatorQueueRecord[]; topQueueItems: AaliyahOperatorQueueRecord[]; message: string }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/operator-queue/top`, {
+      mode: args.mode,
+      immediateLimit: args.immediateLimit ? String(args.immediateLimit) : undefined,
+      overallLimit: args.overallLimit ? String(args.overallLimit) : undefined
+    }),
+    bearer: args.bearer
+  });
 }
 
 export async function getAaliyahFounderPreferenceControls(args: {

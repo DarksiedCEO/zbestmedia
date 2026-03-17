@@ -21,6 +21,7 @@ import {
   AaliyahFounderPreferenceControlsRecordSchema,
   AaliyahCoalescedSignalRecordSchema,
   AaliyahEscalationRecordSchema,
+  AaliyahOperatorQueueRecordSchema,
   AaliyahTaskSchema,
   AaliyahFounderPreferenceRecordSchema,
   EmailAccountConnectionRecordSchema,
@@ -1167,6 +1168,86 @@ export const EscalationListResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_escalation_list_result"),
   result: z.discriminatedUnion("ok", [EscalationListSuccessSchema, EscalationFailureSchema])
+});
+
+export const OperatorQueueEvaluateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  generatedAt: z.string().datetime().optional()
+});
+
+export const OperatorQueueIdParamSchema = z.object({
+  queueItemId: z.string().min(1)
+});
+
+export const OperatorQueueListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  limit: z.coerce.number().int().positive().max(100).default(50),
+  priorityBand: z.enum(["critical", "high", "normal"]).optional()
+});
+
+export const OperatorQueueTopQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  immediateLimit: z.coerce.number().int().positive().max(10).default(3),
+  overallLimit: z.coerce.number().int().positive().max(20).default(5)
+});
+
+const OperatorQueueFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const OperatorQueueSuccessSchema = z.object({
+  ok: z.literal(true),
+  queueItems: z.array(AaliyahOperatorQueueRecordSchema),
+  replayedCount: z.number().int().nonnegative(),
+  suppressedCount: z.number().int().nonnegative(),
+  message: z.string().min(1)
+});
+
+const OperatorQueueDetailSuccessSchema = z.object({
+  ok: z.literal(true),
+  queueItem: AaliyahOperatorQueueRecordSchema,
+  message: z.string().min(1)
+});
+
+const OperatorQueueListSuccessSchema = z.object({
+  ok: z.literal(true),
+  queueItems: z.array(AaliyahOperatorQueueRecordSchema),
+  message: z.string().min(1)
+});
+
+const OperatorQueueTopSuccessSchema = z.object({
+  ok: z.literal(true),
+  immediateActions: z.array(AaliyahOperatorQueueRecordSchema),
+  topQueueItems: z.array(AaliyahOperatorQueueRecordSchema),
+  message: z.string().min(1)
+});
+
+export const OperatorQueueResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_operator_queue_result"),
+  result: z.discriminatedUnion("ok", [OperatorQueueSuccessSchema, OperatorQueueFailureSchema])
+});
+
+export const OperatorQueueDetailResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_operator_queue_detail_result"),
+  result: z.discriminatedUnion("ok", [OperatorQueueDetailSuccessSchema, OperatorQueueFailureSchema])
+});
+
+export const OperatorQueueListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_operator_queue_list_result"),
+  result: z.discriminatedUnion("ok", [OperatorQueueListSuccessSchema, OperatorQueueFailureSchema])
+});
+
+export const OperatorQueueTopResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_operator_queue_top_result"),
+  result: z.discriminatedUnion("ok", [OperatorQueueTopSuccessSchema, OperatorQueueFailureSchema])
 });
 
 export const EvaluationScheduleCreateBodySchema = z.object({

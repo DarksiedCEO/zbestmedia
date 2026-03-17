@@ -84,7 +84,10 @@ export type AaliyahDiagnosticsEventType =
   | "escalation_engine_acknowledged"
   | "escalation_engine_dismissed"
   | "escalation_engine_resolved"
-  | "escalation_engine_noop";
+  | "escalation_engine_noop"
+  | "operator_queue_created"
+  | "operator_queue_replayed"
+  | "operator_queue_noop";
 
 export type AaliyahDiagnosticsEvent = {
   tenantId: string;

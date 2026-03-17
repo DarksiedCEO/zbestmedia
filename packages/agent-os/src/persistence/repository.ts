@@ -29,6 +29,7 @@ import type {
   AaliyahFounderPreferenceControlsRecord,
   AaliyahCoalescedSignalRecord,
   AaliyahEscalationRecord,
+  AaliyahOperatorQueueRecord,
   AaliyahStrategicInsightRecord,
   AaliyahTaskRecord,
   AaliyahMutationIdempotencyRecord,
@@ -545,6 +546,29 @@ type EscalationRow = {
   acknowledged_at: string | Date | null;
   dismissed_at: string | Date | null;
   resolved_at: string | Date | null;
+};
+
+type OperatorQueueRow = {
+  queue_item_id: string;
+  tenant_id: string;
+  source_type: AaliyahOperatorQueueRecord["sourceType"];
+  source_id: string;
+  queue_item_type: AaliyahOperatorQueueRecord["queueItemType"];
+  priority_score: number;
+  priority_band: AaliyahOperatorQueueRecord["priorityBand"];
+  title_text: string;
+  summary_text: string;
+  reason_text: string;
+  idempotency_key: string;
+  related_record_ids_json: string[];
+  related_record_types_json: string[];
+  actionable_command_type: AaliyahOperatorQueueRecord["actionableCommandType"];
+  actionable_target_type: AaliyahOperatorQueueRecord["actionableTargetType"];
+  actionable_target_id: string | null;
+  audit_event_id: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string | Date;
+  evaluated_at: string | Date;
 };
 
 type EvaluationScheduleRow = {
@@ -1367,6 +1391,31 @@ function mapEscalationRow(row: EscalationRow): AaliyahEscalationRecord {
     acknowledgedAtIso: row.acknowledged_at ? toIsoString(row.acknowledged_at) : null,
     dismissedAtIso: row.dismissed_at ? toIsoString(row.dismissed_at) : null,
     resolvedAtIso: row.resolved_at ? toIsoString(row.resolved_at) : null
+  };
+}
+
+function mapOperatorQueueRow(row: OperatorQueueRow): AaliyahOperatorQueueRecord {
+  return {
+    id: row.queue_item_id,
+    tenantId: row.tenant_id,
+    sourceType: row.source_type,
+    sourceId: row.source_id,
+    queueItemType: row.queue_item_type,
+    priorityScore: row.priority_score,
+    priorityBand: row.priority_band,
+    title: row.title_text,
+    summary: row.summary_text,
+    reason: row.reason_text,
+    idempotencyKey: row.idempotency_key,
+    relatedRecordIds: row.related_record_ids_json,
+    relatedRecordTypes: row.related_record_types_json,
+    actionableCommandType: row.actionable_command_type,
+    actionableTargetType: row.actionable_target_type,
+    actionableTargetId: row.actionable_target_id,
+    auditEventId: row.audit_event_id,
+    metadata: row.metadata_json as Record<string, unknown>,
+    createdAtIso: toIsoString(row.created_at),
+    evaluatedAtIso: toIsoString(row.evaluated_at)
   };
 }
 
@@ -5546,6 +5595,147 @@ export class AgentOsRepository {
       )
     );
     return mapEscalationRow(res.rows[0]!);
+  }
+
+  async createOperatorQueueRecord(args: {
+    tenantId: string;
+    queueItemId: string;
+    sourceType: AaliyahOperatorQueueRecord["sourceType"];
+    sourceId: string;
+    queueItemType: AaliyahOperatorQueueRecord["queueItemType"];
+    priorityScore: number;
+    priorityBand: AaliyahOperatorQueueRecord["priorityBand"];
+    title: string;
+    summary: string;
+    reason: string;
+    idempotencyKey: string;
+    relatedRecordIds: string[];
+    relatedRecordTypes: string[];
+    actionableCommandType: AaliyahOperatorQueueRecord["actionableCommandType"];
+    actionableTargetType: AaliyahOperatorQueueRecord["actionableTargetType"];
+    actionableTargetId: string | null;
+    auditEventId: string | null;
+    metadata?: Record<string, unknown>;
+    createdAt?: string;
+    evaluatedAt?: string;
+  }): Promise<AaliyahOperatorQueueRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OperatorQueueRow>(
+        `
+        INSERT INTO aaliyah_operator_queue (
+          queue_item_id, tenant_id, source_type, source_id, queue_item_type,
+          priority_score, priority_band, title_text, summary_text, reason_text,
+          idempotency_key, related_record_ids_json, related_record_types_json,
+          actionable_command_type, actionable_target_type, actionable_target_id,
+          audit_event_id, metadata_json, created_at, evaluated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9, $10,
+          $11, $12::jsonb, $13::jsonb,
+          $14, $15, $16,
+          $17, $18::jsonb, $19, $20
+        )
+        RETURNING queue_item_id, tenant_id, source_type, source_id, queue_item_type,
+                  priority_score, priority_band, title_text, summary_text, reason_text,
+                  idempotency_key, related_record_ids_json, related_record_types_json,
+                  actionable_command_type, actionable_target_type, actionable_target_id,
+                  audit_event_id, metadata_json, created_at, evaluated_at
+        `,
+        [
+          args.queueItemId,
+          args.tenantId,
+          args.sourceType,
+          args.sourceId,
+          args.queueItemType,
+          args.priorityScore,
+          args.priorityBand,
+          args.title,
+          args.summary,
+          args.reason,
+          args.idempotencyKey,
+          JSON.stringify(args.relatedRecordIds),
+          JSON.stringify(args.relatedRecordTypes),
+          args.actionableCommandType,
+          args.actionableTargetType,
+          args.actionableTargetId,
+          args.auditEventId,
+          JSON.stringify(args.metadata ?? {}),
+          createdAt,
+          args.evaluatedAt ?? createdAt
+        ]
+      )
+    );
+    return mapOperatorQueueRow(res.rows[0]!);
+  }
+
+  async getOperatorQueueRecordById(args: { tenantId: string; queueItemId: string }): Promise<AaliyahOperatorQueueRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OperatorQueueRow>(
+        `
+        SELECT queue_item_id, tenant_id, source_type, source_id, queue_item_type,
+               priority_score, priority_band, title_text, summary_text, reason_text,
+               idempotency_key, related_record_ids_json, related_record_types_json,
+               actionable_command_type, actionable_target_type, actionable_target_id,
+               audit_event_id, metadata_json, created_at, evaluated_at
+        FROM aaliyah_operator_queue
+        WHERE tenant_id = $1 AND queue_item_id = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.queueItemId]
+      )
+    );
+    return res.rows[0] ? mapOperatorQueueRow(res.rows[0]) : null;
+  }
+
+  async getOperatorQueueRecordByIdempotencyKey(args: {
+    tenantId: string;
+    idempotencyKey: string;
+  }): Promise<AaliyahOperatorQueueRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OperatorQueueRow>(
+        `
+        SELECT queue_item_id, tenant_id, source_type, source_id, queue_item_type,
+               priority_score, priority_band, title_text, summary_text, reason_text,
+               idempotency_key, related_record_ids_json, related_record_types_json,
+               actionable_command_type, actionable_target_type, actionable_target_id,
+               audit_event_id, metadata_json, created_at, evaluated_at
+        FROM aaliyah_operator_queue
+        WHERE tenant_id = $1 AND idempotency_key = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.idempotencyKey]
+      )
+    );
+    return res.rows[0] ? mapOperatorQueueRow(res.rows[0]) : null;
+  }
+
+  async listOperatorQueueRecords(args: {
+    tenantId: string;
+    limit?: number;
+    priorityBand?: AaliyahOperatorQueueRecord["priorityBand"];
+  }): Promise<AaliyahOperatorQueueRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OperatorQueueRow>(
+        `
+        SELECT queue_item_id, tenant_id, source_type, source_id, queue_item_type,
+               priority_score, priority_band, title_text, summary_text, reason_text,
+               idempotency_key, related_record_ids_json, related_record_types_json,
+               actionable_command_type, actionable_target_type, actionable_target_id,
+               audit_event_id, metadata_json, created_at, evaluated_at
+        FROM aaliyah_operator_queue
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR priority_band = $2)
+        ORDER BY
+          CASE priority_band WHEN 'critical' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,
+          priority_score DESC,
+          created_at DESC
+        LIMIT $3
+        `,
+        [args.tenantId, args.priorityBand ?? null, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapOperatorQueueRow);
   }
 
   async createEvaluationSchedule(args: {

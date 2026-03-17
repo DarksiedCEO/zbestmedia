@@ -150,6 +150,14 @@ import type {
   EscalationType
 } from "../aaliyah/escalation-engine-types.js";
 import type {
+  OperatorQueueActionableCommandType,
+  OperatorQueueActionableTargetType,
+  OperatorQueueItemType,
+  OperatorQueuePriorityBand,
+  OperatorQueueRecord as OperatorQueueRecordShape,
+  OperatorQueueSourceType
+} from "../aaliyah/operator-queue-types.js";
+import type {
   EvaluationCadenceType,
   EvaluationRunRecord as EvaluationRunRecordShape,
   EvaluationRunStatus,
@@ -980,6 +988,74 @@ export const AaliyahEscalationRecordSchema = z.object({
   resolvedAtIso: z.string().datetime().nullable()
 }) satisfies z.ZodType<EscalationRecordShape>;
 export type AaliyahEscalationRecord = z.infer<typeof AaliyahEscalationRecordSchema>;
+
+export const OperatorQueueSourceTypeSchema = z.enum([
+  "escalation",
+  "coalesced_signal",
+  "strategic_insight",
+  "notification",
+  "recommendation",
+  "opportunity"
+]) satisfies z.ZodType<OperatorQueueSourceType>;
+export type OperatorQueueSourceTypeRecord = z.infer<typeof OperatorQueueSourceTypeSchema>;
+
+export const OperatorQueueItemTypeSchema = z.enum([
+  "immediate_action",
+  "review_required",
+  "watch_item",
+  "summary_item"
+]) satisfies z.ZodType<OperatorQueueItemType>;
+export type OperatorQueueItemTypeRecord = z.infer<typeof OperatorQueueItemTypeSchema>;
+
+export const OperatorQueuePriorityBandSchema = z.enum([
+  "critical",
+  "high",
+  "normal"
+]) satisfies z.ZodType<OperatorQueuePriorityBand>;
+export type OperatorQueuePriorityBandRecord = z.infer<typeof OperatorQueuePriorityBandSchema>;
+
+export const OperatorQueueActionableCommandTypeSchema = z.enum([
+  "approve_draft",
+  "create_follow_up",
+  "escalate_task",
+  "override_schedule",
+  "trigger_workflow"
+]) satisfies z.ZodType<OperatorQueueActionableCommandType>;
+export type OperatorQueueActionableCommandTypeRecord = z.infer<typeof OperatorQueueActionableCommandTypeSchema>;
+
+export const OperatorQueueActionableTargetTypeSchema = z.enum([
+  "gmail_draft",
+  "task",
+  "calendar_event",
+  "contact",
+  "account",
+  "workflow"
+]) satisfies z.ZodType<OperatorQueueActionableTargetType>;
+export type OperatorQueueActionableTargetTypeRecord = z.infer<typeof OperatorQueueActionableTargetTypeSchema>;
+
+export const AaliyahOperatorQueueRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  sourceType: OperatorQueueSourceTypeSchema,
+  sourceId: z.string().min(1),
+  queueItemType: OperatorQueueItemTypeSchema,
+  priorityScore: z.number().int(),
+  priorityBand: OperatorQueuePriorityBandSchema,
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  reason: z.string().min(1),
+  idempotencyKey: z.string().min(1),
+  relatedRecordIds: z.array(z.string().min(1)),
+  relatedRecordTypes: z.array(z.string().min(1)),
+  actionableCommandType: OperatorQueueActionableCommandTypeSchema.nullable(),
+  actionableTargetType: OperatorQueueActionableTargetTypeSchema.nullable(),
+  actionableTargetId: z.string().min(1).nullable(),
+  auditEventId: z.string().min(1).nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAtIso: z.string().datetime(),
+  evaluatedAtIso: z.string().datetime()
+}) satisfies z.ZodType<OperatorQueueRecordShape>;
+export type AaliyahOperatorQueueRecord = z.infer<typeof AaliyahOperatorQueueRecordSchema>;
 
 export const ScheduledEngineTypeSchema = z.enum([
   "follow_through",
@@ -1840,7 +1916,10 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "escalation_engine_acknowledged",
   "escalation_engine_dismissed",
   "escalation_engine_resolved",
-  "escalation_engine_noop"
+  "escalation_engine_noop",
+  "operator_queue_created",
+  "operator_queue_replayed",
+  "operator_queue_noop"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 
