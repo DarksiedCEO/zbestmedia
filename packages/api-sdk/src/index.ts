@@ -630,6 +630,39 @@ export type AaliyahFounderBriefItemRecord = {
   createdAtIso: string;
 };
 
+export type AaliyahTimelineEventRecord = {
+  id: string;
+  tenantId: string;
+  eventType:
+    | "queue_item_created"
+    | "queue_item_refreshed"
+    | "queue_item_suppressed"
+    | "queue_item_executed"
+    | "operator_action_failed"
+    | "outcome_recorded"
+    | "issue_resolved"
+    | "issue_reopened"
+    | "brief_generated"
+    | "recommendation_rejected"
+    | "opportunity_converted"
+    | "escalation_persisting";
+  eventAtIso: string;
+  canonicalIssueKey: string | null;
+  queueItemId: string | null;
+  operatorActionLogId: string | null;
+  outcomeFeedbackId: string | null;
+  briefId: string | null;
+  sourceType: "operator_queue" | "operator_action" | "outcome_feedback" | "issue_state" | "founder_brief";
+  sourceId: string;
+  decisionClass: "attention" | "execution" | "outcome" | "briefing" | "resolution" | "suppression";
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  title: string;
+  summary: string;
+  payload: Record<string, unknown>;
+  idempotencyKey: string;
+  createdAtIso: string;
+};
+
 export type AaliyahEvaluationScheduleRecord = {
   id: string;
   tenantId: string;
@@ -2568,6 +2601,128 @@ export async function listAaliyahFounderBriefs(args: {
     url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/founder-briefs`, {
       mode: args.mode,
       briefKind: args.briefKind,
+      limit: args.limit ? String(args.limit) : undefined
+    }),
+    bearer: args.bearer
+  });
+}
+
+export async function listAaliyahTimeline(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  windowStartAtIso?: string;
+  windowEndAtIso?: string;
+  eventTypes?: AaliyahTimelineEventRecord["eventType"][];
+  decisionClass?: AaliyahTimelineEventRecord["decisionClass"];
+  severity?: AaliyahTimelineEventRecord["severity"];
+  limit?: number;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_timeline_list_result";
+  result:
+    | { ok: true; events: AaliyahTimelineEventRecord[]; generatedCount: number; replayedCount: number; message: string }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/timeline`, {
+      mode: args.mode,
+      windowStartAtIso: args.windowStartAtIso,
+      windowEndAtIso: args.windowEndAtIso,
+      eventTypes: args.eventTypes?.length ? args.eventTypes.join(",") : undefined,
+      decisionClass: args.decisionClass,
+      severity: args.severity,
+      limit: args.limit ? String(args.limit) : undefined
+    }),
+    bearer: args.bearer
+  });
+}
+
+export async function getAaliyahTimelineEvent(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  eventId: string;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_timeline_detail_result";
+  result:
+    | { ok: true; event: AaliyahTimelineEventRecord; message: string }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/timeline/${args.eventId}`, {
+      mode: args.mode
+    }),
+    bearer: args.bearer
+  });
+}
+
+export async function getAaliyahTimelineByIssue(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  canonicalIssueKey: string;
+  mode?: AaliyahMode;
+  limit?: number;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_timeline_list_result";
+  result:
+    | { ok: true; events: AaliyahTimelineEventRecord[]; generatedCount: number; replayedCount: number; message: string }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/timeline/issues/${encodeURIComponent(args.canonicalIssueKey)}`, {
+      mode: args.mode,
+      limit: args.limit ? String(args.limit) : undefined
+    }),
+    bearer: args.bearer
+  });
+}
+
+export async function getAaliyahTimelineByBrief(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  briefId: string;
+  mode?: AaliyahMode;
+  limit?: number;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_timeline_list_result";
+  result:
+    | { ok: true; events: AaliyahTimelineEventRecord[]; generatedCount: number; replayedCount: number; message: string }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/timeline/briefs/${args.briefId}`, {
+      mode: args.mode,
+      limit: args.limit ? String(args.limit) : undefined
+    }),
+    bearer: args.bearer
+  });
+}
+
+export async function getAaliyahTimelineByQueueItem(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  queueItemId: string;
+  mode?: AaliyahMode;
+  limit?: number;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_timeline_list_result";
+  result:
+    | { ok: true; events: AaliyahTimelineEventRecord[]; generatedCount: number; replayedCount: number; message: string }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/timeline/queue-items/${args.queueItemId}`, {
+      mode: args.mode,
       limit: args.limit ? String(args.limit) : undefined
     }),
     bearer: args.bearer

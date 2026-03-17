@@ -35,6 +35,7 @@ import type {
   AaliyahIssueStateRecord,
   AaliyahFounderBriefRecord,
   AaliyahFounderBriefItemRecord,
+  AaliyahTimelineEventRecord,
   AaliyahStrategicInsightRecord,
   AaliyahTaskRecord,
   AaliyahMutationIdempotencyRecord,
@@ -673,6 +674,27 @@ type FounderBriefItemRow = {
   priority_score: number;
   delta_type: AaliyahFounderBriefItemRecord["deltaType"];
   payload_json: Record<string, unknown>;
+  created_at: string | Date;
+};
+
+type TimelineEventRow = {
+  timeline_event_id: string;
+  tenant_id: string;
+  event_type: AaliyahTimelineEventRecord["eventType"];
+  event_at: string | Date;
+  canonical_issue_key: string | null;
+  queue_item_id: string | null;
+  operator_action_log_id: string | null;
+  outcome_feedback_id: string | null;
+  brief_id: string | null;
+  source_type: AaliyahTimelineEventRecord["sourceType"];
+  source_id: string;
+  decision_class: AaliyahTimelineEventRecord["decisionClass"];
+  severity: AaliyahTimelineEventRecord["severity"];
+  title_text: string;
+  summary_text: string;
+  payload_json: Record<string, unknown>;
+  idempotency_key: string;
   created_at: string | Date;
 };
 
@@ -1630,6 +1652,29 @@ function mapFounderBriefItemRow(row: FounderBriefItemRow): AaliyahFounderBriefIt
     priorityScore: row.priority_score,
     deltaType: row.delta_type,
     payload: row.payload_json as Record<string, unknown>,
+    createdAtIso: toIsoString(row.created_at)
+  };
+}
+
+function mapTimelineEventRow(row: TimelineEventRow): AaliyahTimelineEventRecord {
+  return {
+    id: row.timeline_event_id,
+    tenantId: row.tenant_id,
+    eventType: row.event_type,
+    eventAtIso: toIsoString(row.event_at),
+    canonicalIssueKey: row.canonical_issue_key,
+    queueItemId: row.queue_item_id,
+    operatorActionLogId: row.operator_action_log_id,
+    outcomeFeedbackId: row.outcome_feedback_id,
+    briefId: row.brief_id,
+    sourceType: row.source_type,
+    sourceId: row.source_id,
+    decisionClass: row.decision_class,
+    severity: row.severity,
+    title: row.title_text,
+    summary: row.summary_text,
+    payload: row.payload_json as Record<string, unknown>,
+    idempotencyKey: row.idempotency_key,
     createdAtIso: toIsoString(row.created_at)
   };
 }
@@ -6720,6 +6765,156 @@ export class AgentOsRepository {
       )
     );
     return res.rows.map(mapFounderBriefItemRow);
+  }
+
+  async createTimelineEvent(args: {
+    tenantId: string;
+    eventId: string;
+    eventType: AaliyahTimelineEventRecord["eventType"];
+    eventAt: string;
+    canonicalIssueKey: string | null;
+    queueItemId: string | null;
+    operatorActionLogId: string | null;
+    outcomeFeedbackId: string | null;
+    briefId: string | null;
+    sourceType: AaliyahTimelineEventRecord["sourceType"];
+    sourceId: string;
+    decisionClass: AaliyahTimelineEventRecord["decisionClass"];
+    severity: AaliyahTimelineEventRecord["severity"];
+    title: string;
+    summary: string;
+    payload: Record<string, unknown>;
+    idempotencyKey: string;
+    createdAt?: string;
+  }): Promise<AaliyahTimelineEventRecord> {
+    const createdAt = args.createdAt ?? args.eventAt;
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<TimelineEventRow>(
+        `
+        INSERT INTO aaliyah_timeline_event (
+          timeline_event_id, tenant_id, event_type, event_at, canonical_issue_key,
+          queue_item_id, operator_action_log_id, outcome_feedback_id, brief_id, source_type,
+          source_id, decision_class, severity, title_text, summary_text,
+          payload_json, idempotency_key, created_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9, $10,
+          $11, $12, $13, $14, $15,
+          $16::jsonb, $17, $18
+        )
+        RETURNING timeline_event_id, tenant_id, event_type, event_at, canonical_issue_key,
+                  queue_item_id, operator_action_log_id, outcome_feedback_id, brief_id, source_type,
+                  source_id, decision_class, severity, title_text, summary_text,
+                  payload_json, idempotency_key, created_at
+        `,
+        [
+          args.eventId,
+          args.tenantId,
+          args.eventType,
+          args.eventAt,
+          args.canonicalIssueKey,
+          args.queueItemId,
+          args.operatorActionLogId,
+          args.outcomeFeedbackId,
+          args.briefId,
+          args.sourceType,
+          args.sourceId,
+          args.decisionClass,
+          args.severity,
+          args.title,
+          args.summary,
+          JSON.stringify(args.payload ?? {}),
+          args.idempotencyKey,
+          createdAt
+        ]
+      )
+    );
+    return mapTimelineEventRow(res.rows[0]!);
+  }
+
+  async getTimelineEventById(args: { tenantId: string; eventId: string }): Promise<AaliyahTimelineEventRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<TimelineEventRow>(
+        `
+        SELECT timeline_event_id, tenant_id, event_type, event_at, canonical_issue_key,
+               queue_item_id, operator_action_log_id, outcome_feedback_id, brief_id, source_type,
+               source_id, decision_class, severity, title_text, summary_text,
+               payload_json, idempotency_key, created_at
+        FROM aaliyah_timeline_event
+        WHERE tenant_id = $1 AND timeline_event_id = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.eventId]
+      )
+    );
+    return res.rows[0] ? mapTimelineEventRow(res.rows[0]) : null;
+  }
+
+  async getTimelineEventByIdempotencyKey(args: { tenantId: string; idempotencyKey: string }): Promise<AaliyahTimelineEventRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<TimelineEventRow>(
+        `
+        SELECT timeline_event_id, tenant_id, event_type, event_at, canonical_issue_key,
+               queue_item_id, operator_action_log_id, outcome_feedback_id, brief_id, source_type,
+               source_id, decision_class, severity, title_text, summary_text,
+               payload_json, idempotency_key, created_at
+        FROM aaliyah_timeline_event
+        WHERE tenant_id = $1 AND idempotency_key = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.idempotencyKey]
+      )
+    );
+    return res.rows[0] ? mapTimelineEventRow(res.rows[0]) : null;
+  }
+
+  async listTimelineEvents(args: {
+    tenantId: string;
+    windowStartAtIso?: string;
+    windowEndAtIso?: string;
+    eventTypes?: AaliyahTimelineEventRecord["eventType"][];
+    decisionClass?: AaliyahTimelineEventRecord["decisionClass"];
+    severity?: AaliyahTimelineEventRecord["severity"];
+    canonicalIssueKey?: string;
+    queueItemId?: string;
+    briefId?: string;
+    limit?: number;
+  }): Promise<AaliyahTimelineEventRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<TimelineEventRow>(
+        `
+        SELECT timeline_event_id, tenant_id, event_type, event_at, canonical_issue_key,
+               queue_item_id, operator_action_log_id, outcome_feedback_id, brief_id, source_type,
+               source_id, decision_class, severity, title_text, summary_text,
+               payload_json, idempotency_key, created_at
+        FROM aaliyah_timeline_event
+        WHERE tenant_id = $1
+          AND ($2::timestamptz IS NULL OR event_at >= $2)
+          AND ($3::timestamptz IS NULL OR event_at <= $3)
+          AND ($4::text[] IS NULL OR event_type = ANY($4))
+          AND ($5::text IS NULL OR decision_class = $5)
+          AND ($6::text IS NULL OR severity = $6)
+          AND ($7::text IS NULL OR canonical_issue_key = $7)
+          AND ($8::text IS NULL OR queue_item_id = $8)
+          AND ($9::text IS NULL OR brief_id = $9)
+        ORDER BY event_at DESC, created_at DESC
+        LIMIT $10
+        `,
+        [
+          args.tenantId,
+          args.windowStartAtIso ?? null,
+          args.windowEndAtIso ?? null,
+          args.eventTypes ?? null,
+          args.decisionClass ?? null,
+          args.severity ?? null,
+          args.canonicalIssueKey ?? null,
+          args.queueItemId ?? null,
+          args.briefId ?? null,
+          args.limit ?? 100
+        ]
+      )
+    );
+    return res.rows.map(mapTimelineEventRow);
   }
 
   async createEvaluationSchedule(args: {

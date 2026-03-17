@@ -62,6 +62,8 @@ import {
   OperatorQueueTopResponseSchema,
   FounderBriefListResponseSchema,
   FounderBriefResponseSchema,
+  TimelineDetailResponseSchema,
+  TimelineListResponseSchema,
   OutcomeFeedbackDetailResponseSchema,
   OutcomeFeedbackListResponseSchema,
   OutcomeFeedbackWriteResponseSchema,
@@ -4010,6 +4012,86 @@ describe("agent routes", () => {
       message: "Loaded 1 founder brief."
     }))
   };
+  const aaliyahTimelineService: any = {
+    list: vi.fn(async () => ({
+      ok: true,
+      events: [
+        {
+          id: "timeline-event:1",
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          eventType: "queue_item_created",
+          eventAtIso: "2026-03-17T08:00:00.000Z",
+          canonicalIssueKey: "account:1|issue:retention_risk|command:create_follow_up",
+          queueItemId: "operator-queue:1",
+          operatorActionLogId: null,
+          outcomeFeedbackId: null,
+          briefId: null,
+          sourceType: "operator_queue",
+          sourceId: "operator-queue:1",
+          decisionClass: "attention",
+          severity: "critical",
+          title: "Retention risk needs founder action",
+          summary: "A high-value account has reopened.",
+          payload: {
+            priorityBand: "critical",
+            queueItemType: "immediate_action"
+          },
+          idempotencyKey: "timeline:queue_item_created:operator_queue:operator-queue:1",
+          createdAtIso: "2026-03-17T08:00:00.000Z"
+        }
+      ],
+      generatedCount: 1,
+      replayedCount: 0,
+      message: "Loaded 1 timeline event."
+    })),
+    getById: vi.fn(async ({ eventId }: { eventId: string }) => ({
+      ok: true,
+      event: {
+        id: eventId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        eventType: "brief_generated",
+        eventAtIso: "2026-03-17T14:00:00.000Z",
+        canonicalIssueKey: "account:1|issue:retention_risk|command:create_follow_up",
+        queueItemId: "operator-queue:1",
+        operatorActionLogId: "operator-action:1",
+        outcomeFeedbackId: "outcome-feedback:1",
+        briefId: "founder-brief:1",
+        sourceType: "founder_brief",
+        sourceId: "founder-brief:1",
+        decisionClass: "briefing",
+        severity: "high",
+        title: "1 immediate action, 1 issue resolved, 1 reopened, 1 opportunity worth review.",
+        summary: "1 immediate action, 1 issue resolved, 1 reopened, 1 opportunity worth review.",
+        payload: {
+          section: "immediate_founder_actions"
+        },
+        idempotencyKey: "timeline:brief_generated:founder_brief:1",
+        createdAtIso: "2026-03-17T14:00:00.000Z"
+      },
+      message: "Loaded founder brief timeline event."
+    })),
+    listByIssueKey: vi.fn(async () => ({
+      ok: true,
+      events: [],
+      generatedCount: 0,
+      replayedCount: 1,
+      message: "Loaded 0 timeline events."
+    })),
+    listByBriefId: vi.fn(async () => ({
+      ok: true,
+      events: [],
+      generatedCount: 0,
+      replayedCount: 1,
+      message: "Loaded 0 timeline events."
+    })),
+    listByQueueItemId: vi.fn(async () => ({
+      ok: true,
+      events: [],
+      generatedCount: 0,
+      replayedCount: 1,
+      message: "Loaded 0 timeline events."
+    }))
+  };
   const aaliyahEvaluationSchedulerService: any = {
     createOrUpdateSchedule: vi.fn(async ({ engineType, cadenceType, cadenceValue }: any) => ({
       ok: true,
@@ -5397,6 +5479,7 @@ describe("agent routes", () => {
         aaliyahOperatorActionService: aaliyahOperatorActionService as never,
         aaliyahOutcomeFeedbackService: aaliyahOutcomeFeedbackService as never,
         aaliyahFounderBriefService: aaliyahFounderBriefService as never,
+        aaliyahTimelineService: aaliyahTimelineService as never,
         aaliyahEvaluationSchedulerService: aaliyahEvaluationSchedulerService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
@@ -6875,6 +6958,56 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(403);
     expect(aaliyahFounderBriefService.generate).not.toHaveBeenCalled();
+  });
+
+  it("exposes founder timeline routes", async () => {
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/timeline?mode=founder&limit=10"
+    });
+    expect(listRes.statusCode).toBe(200);
+    TimelineListResponseSchema.parse(listRes.json());
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/timeline/timeline-event:1?mode=founder"
+    });
+    expect(detailRes.statusCode).toBe(200);
+    TimelineDetailResponseSchema.parse(detailRes.json());
+
+    const issueRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/timeline/issues/account%3A1%7Cissue%3Aretention_risk%7Ccommand%3Acreate_follow_up?mode=founder&limit=10"
+    });
+    expect(issueRes.statusCode).toBe(200);
+    TimelineListResponseSchema.parse(issueRes.json());
+
+    const briefRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/timeline/briefs/founder-brief:1?mode=founder&limit=10"
+    });
+    expect(briefRes.statusCode).toBe(200);
+    TimelineListResponseSchema.parse(briefRes.json());
+
+    const queueItemRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/timeline/queue-items/operator-queue:1?mode=founder&limit=10"
+    });
+    expect(queueItemRes.statusCode).toBe(200);
+    TimelineListResponseSchema.parse(queueItemRes.json());
+  });
+
+  it("rejects founder timeline routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahTimelineService.list.mockClear();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/timeline?mode=founder&limit=10"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahTimelineService.list).not.toHaveBeenCalled();
   });
 
   it("exposes evaluation scheduler routes", async () => {

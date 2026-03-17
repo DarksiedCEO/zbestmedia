@@ -12,6 +12,7 @@ import {
   AaliyahFounderInboxTriageService,
   AaliyahFounderCommandService,
   AaliyahFounderPreferencesService,
+  AaliyahTimelineService,
   AaliyahFollowThroughEngineService,
   AaliyahNotificationEngineService,
   AaliyahOutcomeFeedbackService,
@@ -166,6 +167,13 @@ import {
   FounderBriefListQuerySchema,
   FounderBriefListResponseSchema,
   FounderBriefResponseSchema,
+  TimelineBriefParamSchema,
+  TimelineDetailResponseSchema,
+  TimelineEventIdParamSchema,
+  TimelineIssueParamSchema,
+  TimelineListQuerySchema,
+  TimelineListResponseSchema,
+  TimelineQueueItemParamSchema,
   OpportunityEvaluateBodySchema,
   OpportunityIdParamSchema,
   OpportunityListQuerySchema,
@@ -304,6 +312,7 @@ export function agentRoutes(opts: {
   aaliyahOperatorActionService: AaliyahOperatorActionService;
   aaliyahOutcomeFeedbackService: AaliyahOutcomeFeedbackService;
   aaliyahFounderBriefService: AaliyahFounderBriefService;
+  aaliyahTimelineService: AaliyahTimelineService;
   aaliyahStrategicIntelligenceService: AaliyahStrategicIntelligenceService;
   aaliyahEvaluationSchedulerService: AaliyahEvaluationSchedulerService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
@@ -2968,6 +2977,142 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_founder_brief_list_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/timeline/issues/:canonicalIssueKey", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = TimelineIssueParamSchema.safeParse(req.params ?? {});
+      const query = TimelineListQuerySchema.safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahTimelineService.listByIssueKey({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        canonicalIssueKey: path.data.canonicalIssueKey,
+        filters: query.data
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_timeline_list_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/timeline/briefs/:briefId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = TimelineBriefParamSchema.safeParse(req.params ?? {});
+      const query = TimelineListQuerySchema.safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahTimelineService.listByBriefId({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        briefId: path.data.briefId,
+        filters: query.data
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_timeline_list_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/timeline/queue-items/:queueItemId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = TimelineQueueItemParamSchema.safeParse(req.params ?? {});
+      const query = TimelineListQuerySchema.safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahTimelineService.listByQueueItemId({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        queueItemId: path.data.queueItemId,
+        filters: query.data
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_timeline_list_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/timeline/:eventId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = TimelineEventIdParamSchema.safeParse(req.params ?? {});
+      const query = TimelineListQuerySchema.partial({
+        windowStartAtIso: true,
+        windowEndAtIso: true,
+        eventTypes: true,
+        decisionClass: true,
+        severity: true,
+        limit: true
+      }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahTimelineService.getById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        eventId: path.data.eventId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_timeline_detail_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/timeline", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = TimelineListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahTimelineService.list({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        filters: query.data
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_timeline_list_result",
         result
       });
     });

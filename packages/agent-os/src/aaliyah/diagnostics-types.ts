@@ -98,7 +98,9 @@ export type AaliyahDiagnosticsEventType =
   | "outcome_feedback_replayed"
   | "outcome_feedback_rejected"
   | "founder_brief_generated"
-  | "founder_brief_replayed";
+  | "founder_brief_replayed"
+  | "timeline_composed"
+  | "timeline_replayed";
 
 export type AaliyahDiagnosticsEvent = {
   tenantId: string;
@@ -112,7 +114,8 @@ export type AaliyahDiagnosticsEvent = {
     | "aaliyah_session"
     | "aaliyah_follow_through"
     | "aaliyah_workspace"
-    | "aaliyah_founder_brief";
+    | "aaliyah_founder_brief"
+    | "aaliyah_timeline";
   signalKey: string;
   payload: Record<string, unknown>;
   createdAt: string;

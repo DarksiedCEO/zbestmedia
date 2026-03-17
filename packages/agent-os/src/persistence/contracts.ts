@@ -180,6 +180,13 @@ import type {
   FounderBriefSummary as FounderBriefSummaryShape
 } from "../aaliyah/founder-brief-types.js";
 import type {
+  TimelineDecisionClass,
+  TimelineEventRecord as TimelineEventRecordShape,
+  TimelineEventType,
+  TimelineSeverity,
+  TimelineSourceType
+} from "../aaliyah/timeline-types.js";
+import type {
   EvaluationCadenceType,
   EvaluationRunRecord as EvaluationRunRecordShape,
   EvaluationRunStatus,
@@ -1315,6 +1322,72 @@ export const AaliyahFounderBriefItemRecordSchema = z.object({
 }) satisfies z.ZodType<FounderBriefItemRecordShape>;
 export type AaliyahFounderBriefItemRecord = z.infer<typeof AaliyahFounderBriefItemRecordSchema>;
 
+export const TimelineEventTypeSchema = z.enum([
+  "queue_item_created",
+  "queue_item_refreshed",
+  "queue_item_suppressed",
+  "queue_item_executed",
+  "operator_action_failed",
+  "outcome_recorded",
+  "issue_resolved",
+  "issue_reopened",
+  "brief_generated",
+  "recommendation_rejected",
+  "opportunity_converted",
+  "escalation_persisting"
+]) satisfies z.ZodType<TimelineEventType>;
+export type TimelineEventTypeRecord = z.infer<typeof TimelineEventTypeSchema>;
+
+export const TimelineDecisionClassSchema = z.enum([
+  "attention",
+  "execution",
+  "outcome",
+  "briefing",
+  "resolution",
+  "suppression"
+]) satisfies z.ZodType<TimelineDecisionClass>;
+export type TimelineDecisionClassRecord = z.infer<typeof TimelineDecisionClassSchema>;
+
+export const TimelineSeveritySchema = z.enum([
+  "critical",
+  "high",
+  "medium",
+  "low",
+  "info"
+]) satisfies z.ZodType<TimelineSeverity>;
+export type TimelineSeverityRecord = z.infer<typeof TimelineSeveritySchema>;
+
+export const TimelineSourceTypeSchema = z.enum([
+  "operator_queue",
+  "operator_action",
+  "outcome_feedback",
+  "issue_state",
+  "founder_brief"
+]) satisfies z.ZodType<TimelineSourceType>;
+export type TimelineSourceTypeRecord = z.infer<typeof TimelineSourceTypeSchema>;
+
+export const AaliyahTimelineEventRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  eventType: TimelineEventTypeSchema,
+  eventAtIso: z.string().datetime(),
+  canonicalIssueKey: z.string().min(1).nullable(),
+  queueItemId: z.string().min(1).nullable(),
+  operatorActionLogId: z.string().min(1).nullable(),
+  outcomeFeedbackId: z.string().min(1).nullable(),
+  briefId: z.string().min(1).nullable(),
+  sourceType: TimelineSourceTypeSchema,
+  sourceId: z.string().min(1),
+  decisionClass: TimelineDecisionClassSchema,
+  severity: TimelineSeveritySchema,
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  payload: z.record(z.string(), z.unknown()),
+  idempotencyKey: z.string().min(1),
+  createdAtIso: z.string().datetime()
+}) satisfies z.ZodType<TimelineEventRecordShape>;
+export type AaliyahTimelineEventRecord = z.infer<typeof AaliyahTimelineEventRecordSchema>;
+
 export const ScheduledEngineTypeSchema = z.enum([
   "follow_through",
   "recommendation",
@@ -2188,7 +2261,9 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "outcome_feedback_replayed",
   "outcome_feedback_rejected",
   "founder_brief_generated",
-  "founder_brief_replayed"
+  "founder_brief_replayed",
+  "timeline_composed",
+  "timeline_replayed"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 
@@ -2199,7 +2274,7 @@ export const AaliyahDiagnosticsEventSchema = z.object({
   principalContext: z.enum(["founder", "operator"]),
   activeMode: z.enum(["founder", "zbestmedia"]),
   eventType: AaliyahDiagnosticsEventTypeSchema,
-  eventSource: z.enum(["aaliyah_runtime", "aaliyah_session", "aaliyah_follow_through", "aaliyah_workspace", "aaliyah_founder_brief"]),
+  eventSource: z.enum(["aaliyah_runtime", "aaliyah_session", "aaliyah_follow_through", "aaliyah_workspace", "aaliyah_founder_brief", "aaliyah_timeline"]),
   signalKey: z.string().min(1),
   payload: z.record(z.string(), z.unknown()),
   createdAt: z.string().datetime()

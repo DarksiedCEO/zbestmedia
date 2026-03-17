@@ -23,6 +23,7 @@ import {
   AaliyahEscalationRecordSchema,
   AaliyahFounderBriefItemRecordSchema,
   AaliyahFounderBriefRecordSchema,
+  AaliyahTimelineEventRecordSchema,
   AaliyahOperatorActionLogRecordSchema,
   AaliyahOperatorQueueRecordSchema,
   AaliyahOutcomeFeedbackRecordSchema,
@@ -1455,6 +1456,82 @@ export const FounderBriefListResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_founder_brief_list_result"),
   result: z.discriminatedUnion("ok", [FounderBriefListSuccessSchema, FounderBriefFailureSchema])
+});
+
+export const TimelineEventIdParamSchema = z.object({
+  eventId: z.string().min(1)
+});
+
+export const TimelineIssueParamSchema = z.object({
+  canonicalIssueKey: z.string().min(1)
+});
+
+export const TimelineBriefParamSchema = z.object({
+  briefId: z.string().min(1)
+});
+
+export const TimelineQueueItemParamSchema = z.object({
+  queueItemId: z.string().min(1)
+});
+
+export const TimelineListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  windowStartAtIso: z.string().datetime().optional(),
+  windowEndAtIso: z.string().datetime().optional(),
+  eventTypes: z.preprocess(
+    (value) => typeof value === "string" ? value.split(",").filter(Boolean) : value,
+    z.array(z.enum([
+      "queue_item_created",
+      "queue_item_refreshed",
+      "queue_item_suppressed",
+      "queue_item_executed",
+      "operator_action_failed",
+      "outcome_recorded",
+      "issue_resolved",
+      "issue_reopened",
+      "brief_generated",
+      "recommendation_rejected",
+      "opportunity_converted",
+      "escalation_persisting"
+    ])).optional()
+  ),
+  decisionClass: z.enum(["attention", "execution", "outcome", "briefing", "resolution", "suppression"]).optional(),
+  severity: z.enum(["critical", "high", "medium", "low", "info"]).optional(),
+  limit: z.coerce.number().int().positive().max(200).default(100)
+});
+
+const TimelineFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const TimelineListSuccessSchema = z.object({
+  ok: z.literal(true),
+  events: z.array(AaliyahTimelineEventRecordSchema),
+  generatedCount: z.number().int().nonnegative(),
+  replayedCount: z.number().int().nonnegative(),
+  message: z.string().min(1)
+});
+
+const TimelineDetailSuccessSchema = z.object({
+  ok: z.literal(true),
+  event: AaliyahTimelineEventRecordSchema,
+  message: z.string().min(1)
+});
+
+export const TimelineListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_timeline_list_result"),
+  result: z.discriminatedUnion("ok", [TimelineListSuccessSchema, TimelineFailureSchema])
+});
+
+export const TimelineDetailResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_timeline_detail_result"),
+  result: z.discriminatedUnion("ok", [TimelineDetailSuccessSchema, TimelineFailureSchema])
 });
 
 export const EvaluationScheduleCreateBodySchema = z.object({
