@@ -11,6 +11,7 @@ import {
   AaliyahNotificationRecordSchema,
   AaliyahOpportunityRecordSchema,
   AaliyahRecommendationRecordSchema,
+  AaliyahStrategicInsightRecordSchema,
   AaliyahCrmNoteSchema,
   AaliyahFounderCommandRecordSchema,
   AaliyahTaskSchema,
@@ -817,6 +818,66 @@ export const OpportunityListResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_opportunity_list_result"),
   result: z.discriminatedUnion("ok", [OpportunityListSuccessSchema, OpportunityFailureSchema])
+});
+
+export const StrategicIntelligenceEvaluateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  scope: z.enum(["current", "daily", "weekly"]).default("current")
+});
+
+export const StrategicInsightIdParamSchema = z.object({
+  insightId: z.string().min(1)
+});
+
+export const StrategicInsightListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  limit: z.coerce.number().int().positive().max(100).default(50),
+  status: z.enum(["active", "superseded", "acknowledged", "dismissed"]).optional()
+});
+
+const StrategicInsightFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const StrategicInsightSuccessSchema = z.object({
+  ok: z.literal(true),
+  insights: z.array(AaliyahStrategicInsightRecordSchema),
+  replayedCount: z.number().int().nonnegative(),
+  message: z.string().min(1)
+});
+
+const StrategicInsightDetailSuccessSchema = z.object({
+  ok: z.literal(true),
+  insight: AaliyahStrategicInsightRecordSchema,
+  message: z.string().min(1)
+});
+
+const StrategicInsightListSuccessSchema = z.object({
+  ok: z.literal(true),
+  insights: z.array(AaliyahStrategicInsightRecordSchema),
+  message: z.string().min(1)
+});
+
+export const StrategicInsightResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_strategic_intelligence_result"),
+  result: z.discriminatedUnion("ok", [StrategicInsightSuccessSchema, StrategicInsightFailureSchema])
+});
+
+export const StrategicInsightDetailResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_strategic_intelligence_detail_result"),
+  result: z.discriminatedUnion("ok", [StrategicInsightDetailSuccessSchema, StrategicInsightFailureSchema])
+});
+
+export const StrategicInsightListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_strategic_intelligence_list_result"),
+  result: z.discriminatedUnion("ok", [StrategicInsightListSuccessSchema, StrategicInsightFailureSchema])
 });
 
 export const BrandPipelineAdvanceBodySchema = z.object({

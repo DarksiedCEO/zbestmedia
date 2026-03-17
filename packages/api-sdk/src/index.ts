@@ -344,6 +344,25 @@ export type AaliyahOpportunityRecord = {
   dismissedAtIso: string | null;
 };
 
+export type AaliyahStrategicInsightRecord = {
+  id: string;
+  tenantId: string;
+  insightType: "attention_priority" | "blocked_pattern" | "follow_through_gap" | "opportunity_cluster" | "execution_bottleneck" | "daily_brief" | "weekly_brief" | "noop";
+  status: "active" | "superseded" | "acknowledged" | "dismissed";
+  title: string;
+  summary: string;
+  reason: string;
+  idempotencyKey: string;
+  relatedEntityIds: string[];
+  relatedRecordIds: string[];
+  auditEventId: string | null;
+  metadata: Record<string, unknown>;
+  createdAtIso: string;
+  evaluatedAtIso: string;
+  acknowledgedAtIso: string | null;
+  dismissedAtIso: string | null;
+};
+
 export type FounderCommandRequest = {
   mode: AaliyahMode;
   commandType: FounderCommandType;
@@ -1197,6 +1216,139 @@ export async function dismissAaliyahOpportunity(args: {
 }> {
   return args.fetchClient({
     url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/opportunities/${args.opportunityId}/dismiss`, {
+      mode: args.mode,
+    }),
+    method: "POST",
+    bearer: args.bearer,
+  });
+}
+
+export async function evaluateAaliyahStrategicIntelligence(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  scope?: "current" | "daily" | "weekly";
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_strategic_intelligence_result";
+  result:
+    | {
+        ok: true;
+        insights: AaliyahStrategicInsightRecord[];
+        replayedCount: number;
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/strategic-intelligence/evaluate`,
+    method: "POST",
+    bearer: args.bearer,
+    body: {
+      mode: args.mode ?? "founder",
+      scope: args.scope ?? "current",
+    },
+  });
+}
+
+export async function getAaliyahStrategicInsights(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  limit?: number;
+  status?: "active" | "superseded" | "acknowledged" | "dismissed";
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_strategic_intelligence_list_result";
+  result:
+    | {
+        ok: true;
+        insights: AaliyahStrategicInsightRecord[];
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/strategic-intelligence`, {
+      mode: args.mode,
+      limit: args.limit ? String(args.limit) : undefined,
+      status: args.status,
+    }),
+    bearer: args.bearer,
+  });
+}
+
+export async function acknowledgeAaliyahStrategicInsight(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  insightId: string;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_strategic_intelligence_detail_result";
+  result:
+    | {
+        ok: true;
+        insight: AaliyahStrategicInsightRecord;
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/strategic-intelligence/${args.insightId}/acknowledge`, {
+      mode: args.mode,
+    }),
+    method: "POST",
+    bearer: args.bearer,
+  });
+}
+
+export async function dismissAaliyahStrategicInsight(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  insightId: string;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_strategic_intelligence_detail_result";
+  result:
+    | {
+        ok: true;
+        insight: AaliyahStrategicInsightRecord;
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/strategic-intelligence/${args.insightId}/dismiss`, {
       mode: args.mode,
     }),
     method: "POST",

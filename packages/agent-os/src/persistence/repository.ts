@@ -22,6 +22,7 @@ import type {
   AaliyahNotificationRecord,
   AaliyahOpportunityRecord,
   AaliyahRecommendationRecord,
+  AaliyahStrategicInsightRecord,
   AaliyahTaskRecord,
   AaliyahMutationIdempotencyRecord,
   AaliyahSessionContextRecord,
@@ -432,6 +433,25 @@ type OpportunityRow = {
   idempotency_key: string;
   related_task_id: string | null;
   related_recommendation_id: string | null;
+  audit_event_id: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string | Date;
+  evaluated_at: string | Date;
+  acknowledged_at: string | Date | null;
+  dismissed_at: string | Date | null;
+};
+
+type StrategicInsightRow = {
+  insight_id: string;
+  tenant_id: string;
+  insight_type: AaliyahStrategicInsightRecord["insightType"];
+  insight_status: AaliyahStrategicInsightRecord["status"];
+  title_text: string;
+  summary_text: string;
+  reason_text: string;
+  idempotency_key: string;
+  related_entity_ids_json: string[];
+  related_record_ids_json: string[];
   audit_event_id: string | null;
   metadata_json: Record<string, unknown>;
   created_at: string | Date;
@@ -1101,6 +1121,27 @@ function mapOpportunityRow(row: OpportunityRow): AaliyahOpportunityRecord {
     idempotencyKey: row.idempotency_key,
     relatedTaskId: row.related_task_id,
     relatedRecommendationId: row.related_recommendation_id,
+    auditEventId: row.audit_event_id,
+    metadata: row.metadata_json as Record<string, unknown>,
+    createdAtIso: toIsoString(row.created_at),
+    evaluatedAtIso: toIsoString(row.evaluated_at),
+    acknowledgedAtIso: row.acknowledged_at ? toIsoString(row.acknowledged_at) : null,
+    dismissedAtIso: row.dismissed_at ? toIsoString(row.dismissed_at) : null
+  };
+}
+
+function mapStrategicInsightRow(row: StrategicInsightRow): AaliyahStrategicInsightRecord {
+  return {
+    id: row.insight_id,
+    tenantId: row.tenant_id,
+    insightType: row.insight_type,
+    status: row.insight_status,
+    title: row.title_text,
+    summary: row.summary_text,
+    reason: row.reason_text,
+    idempotencyKey: row.idempotency_key,
+    relatedEntityIds: row.related_entity_ids_json,
+    relatedRecordIds: row.related_record_ids_json,
     auditEventId: row.audit_event_id,
     metadata: row.metadata_json as Record<string, unknown>,
     createdAtIso: toIsoString(row.created_at),
@@ -4436,6 +4477,150 @@ export class AgentOsRepository {
       )
     );
     return mapOpportunityRow(res.rows[0]!);
+  }
+
+  async createStrategicInsight(args: {
+    tenantId: string;
+    insightId: string;
+    insightType: AaliyahStrategicInsightRecord["insightType"];
+    insightStatus: AaliyahStrategicInsightRecord["status"];
+    title: string;
+    summary: string;
+    reason: string;
+    idempotencyKey: string;
+    relatedEntityIds: string[];
+    relatedRecordIds: string[];
+    auditEventId: string | null;
+    metadata?: Record<string, unknown>;
+    createdAt?: string;
+    evaluatedAt?: string;
+  }): Promise<AaliyahStrategicInsightRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<StrategicInsightRow>(
+        `
+        INSERT INTO aaliyah_strategic_insights (
+          insight_id, tenant_id, insight_type, insight_status, title_text,
+          summary_text, reason_text, idempotency_key, related_entity_ids_json,
+          related_record_ids_json, audit_event_id, metadata_json, created_at, evaluated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9::jsonb,
+          $10::jsonb, $11, $12::jsonb, $13, $14
+        )
+        RETURNING insight_id, tenant_id, insight_type, insight_status, title_text,
+                  summary_text, reason_text, idempotency_key, related_entity_ids_json,
+                  related_record_ids_json, audit_event_id, metadata_json,
+                  created_at, evaluated_at, acknowledged_at, dismissed_at
+        `,
+        [
+          args.insightId,
+          args.tenantId,
+          args.insightType,
+          args.insightStatus,
+          args.title,
+          args.summary,
+          args.reason,
+          args.idempotencyKey,
+          JSON.stringify(args.relatedEntityIds),
+          JSON.stringify(args.relatedRecordIds),
+          args.auditEventId,
+          JSON.stringify(args.metadata ?? {}),
+          createdAt,
+          args.evaluatedAt ?? createdAt
+        ]
+      )
+    );
+    return mapStrategicInsightRow(res.rows[0]!);
+  }
+
+  async getStrategicInsightById(args: { tenantId: string; insightId: string }): Promise<AaliyahStrategicInsightRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<StrategicInsightRow>(
+        `
+        SELECT insight_id, tenant_id, insight_type, insight_status, title_text,
+               summary_text, reason_text, idempotency_key, related_entity_ids_json,
+               related_record_ids_json, audit_event_id, metadata_json,
+               created_at, evaluated_at, acknowledged_at, dismissed_at
+        FROM aaliyah_strategic_insights
+        WHERE tenant_id = $1 AND insight_id = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.insightId]
+      )
+    );
+    return res.rows[0] ? mapStrategicInsightRow(res.rows[0]) : null;
+  }
+
+  async getStrategicInsightByIdempotencyKey(args: {
+    tenantId: string;
+    idempotencyKey: string;
+  }): Promise<AaliyahStrategicInsightRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<StrategicInsightRow>(
+        `
+        SELECT insight_id, tenant_id, insight_type, insight_status, title_text,
+               summary_text, reason_text, idempotency_key, related_entity_ids_json,
+               related_record_ids_json, audit_event_id, metadata_json,
+               created_at, evaluated_at, acknowledged_at, dismissed_at
+        FROM aaliyah_strategic_insights
+        WHERE tenant_id = $1 AND idempotency_key = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.idempotencyKey]
+      )
+    );
+    return res.rows[0] ? mapStrategicInsightRow(res.rows[0]) : null;
+  }
+
+  async listStrategicInsights(args: {
+    tenantId: string;
+    limit?: number;
+    status?: AaliyahStrategicInsightRecord["status"];
+  }): Promise<AaliyahStrategicInsightRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<StrategicInsightRow>(
+        `
+        SELECT insight_id, tenant_id, insight_type, insight_status, title_text,
+               summary_text, reason_text, idempotency_key, related_entity_ids_json,
+               related_record_ids_json, audit_event_id, metadata_json,
+               created_at, evaluated_at, acknowledged_at, dismissed_at
+        FROM aaliyah_strategic_insights
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR insight_status = $2)
+        ORDER BY created_at DESC
+        LIMIT $3
+        `,
+        [args.tenantId, args.status ?? null, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapStrategicInsightRow);
+  }
+
+  async updateStrategicInsightStatus(args: {
+    tenantId: string;
+    insightId: string;
+    status: "acknowledged" | "dismissed";
+    changedAt?: string;
+  }): Promise<AaliyahStrategicInsightRecord> {
+    const changedAt = args.changedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<StrategicInsightRow>(
+        `
+        UPDATE aaliyah_strategic_insights
+        SET insight_status = $3,
+            acknowledged_at = CASE WHEN $3 = 'acknowledged' THEN $4 ELSE acknowledged_at END,
+            dismissed_at = CASE WHEN $3 = 'dismissed' THEN $4 ELSE dismissed_at END
+        WHERE tenant_id = $1 AND insight_id = $2
+        RETURNING insight_id, tenant_id, insight_type, insight_status, title_text,
+                  summary_text, reason_text, idempotency_key, related_entity_ids_json,
+                  related_record_ids_json, audit_event_id, metadata_json,
+                  created_at, evaluated_at, acknowledged_at, dismissed_at
+        `,
+        [args.tenantId, args.insightId, args.status, changedAt]
+      )
+    );
+    return mapStrategicInsightRow(res.rows[0]!);
   }
 
   async createAaliyahFounderPreference(args: {

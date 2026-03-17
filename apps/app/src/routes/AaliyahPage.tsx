@@ -2,9 +2,11 @@ import React from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   acknowledgeAaliyahOpportunity,
+  acknowledgeAaliyahStrategicInsight,
   acknowledgeAaliyahNotification,
   createFetchClient,
   dismissAaliyahOpportunity,
+  dismissAaliyahStrategicInsight,
   dismissAaliyahNotification,
   executeFounderCommand,
   getAaliyahCommandSurface,
@@ -12,6 +14,7 @@ import {
   getAaliyahInbox,
   getAaliyahNotifications,
   getAaliyahOpportunities,
+  getAaliyahStrategicInsights,
   getAaliyahRecommendations,
   getAaliyahOpenTasks,
   getAaliyahSessionSnapshot,
@@ -26,6 +29,7 @@ import {
   type AaliyahNotificationRecord,
   type AaliyahOpportunityRecord,
   type AaliyahRecommendationRecord,
+  type AaliyahStrategicInsightRecord,
   type AaliyahMode,
   type AaliyahQuickAction,
   type AaliyahRuntimeResponse,
@@ -119,7 +123,7 @@ export default function AaliyahPage() {
 
   const activeMode = sessionQuery.data?.session.activeModeState.activeMode ?? "founder";
 
-  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery, opportunitiesQuery] = useQueries({
+  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery, opportunitiesQuery, strategicInsightsQuery] = useQueries({
     queries: [
       {
         queryKey: ["aaliyah", "command-surface", activeMode],
@@ -215,6 +219,20 @@ export default function AaliyahPage() {
         enabled: Boolean(envData.env && envData.appApiBaseUrl),
         queryFn: async () =>
           getAaliyahOpportunities({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            mode: activeMode,
+            limit: 20,
+            status: "active",
+        }),
+        refetchInterval: 20_000,
+      },
+      {
+        queryKey: ["aaliyah", "strategic-intelligence", activeMode],
+        enabled: Boolean(envData.env && envData.appApiBaseUrl),
+        queryFn: async () =>
+          getAaliyahStrategicInsights({
             baseUrl: envData.appApiBaseUrl!,
             bearer: envData.env!.VITE_POLICY_BEARER,
             fetchClient,
@@ -355,6 +373,34 @@ export default function AaliyahPage() {
     },
   });
 
+  const strategicInsightMutation = useMutation({
+    mutationFn: async (input: { insightId: string; action: "acknowledge" | "dismiss" }) =>
+      input.action === "acknowledge"
+        ? acknowledgeAaliyahStrategicInsight({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            insightId: input.insightId,
+            mode: activeMode,
+          })
+        : dismissAaliyahStrategicInsight({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            insightId: input.insightId,
+            mode: activeMode,
+          }),
+    onSuccess: async (response) => {
+      setCommandError(null);
+      setCommandNotice(response.result.message);
+      await queryClient.invalidateQueries({ queryKey: ["aaliyah", "strategic-intelligence"] });
+    },
+    onError: (error) => {
+      setCommandNotice(null);
+      setCommandError((error as Error).message);
+    },
+  });
+
   const resetMutation = useMutation({
     mutationFn: async (scope: "soft" | "hard") =>
       resetAaliyahSession({
@@ -377,8 +423,8 @@ export default function AaliyahPage() {
     },
   });
 
-  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading || opportunitiesQuery.isLoading;
-  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError || opportunitiesQuery.isError;
+  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading || opportunitiesQuery.isLoading || strategicInsightsQuery.isLoading;
+  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError || opportunitiesQuery.isError || strategicInsightsQuery.isError;
   const errorMessage =
     envData.error ??
     (sessionQuery.error as Error | undefined)?.message ??
@@ -390,6 +436,7 @@ export default function AaliyahPage() {
     (recommendationsQuery.error as Error | undefined)?.message ??
     (notificationsQuery.error as Error | undefined)?.message ??
     (opportunitiesQuery.error as Error | undefined)?.message ??
+    (strategicInsightsQuery.error as Error | undefined)?.message ??
     null;
 
   const shell = shellQuery.data?.shell;
@@ -401,6 +448,7 @@ export default function AaliyahPage() {
   const recommendations = recommendationsQuery.data?.result.ok ? recommendationsQuery.data.result.recommendations : [];
   const notifications = notificationsQuery.data?.result.ok ? notificationsQuery.data.result.notifications : [];
   const opportunities = opportunitiesQuery.data?.result.ok ? opportunitiesQuery.data.result.opportunities : [];
+  const strategicInsights = strategicInsightsQuery.data?.result.ok ? strategicInsightsQuery.data.result.insights : [];
 
   async function executeIntent(intent: string, parameters?: Record<string, unknown>, mode?: AaliyahMode) {
     await runtimeMutation.mutateAsync({ intent, parameters, mode });
@@ -509,6 +557,14 @@ export default function AaliyahPage() {
 
   async function dismissOpportunity(opportunityId: string) {
     await opportunityMutation.mutateAsync({ opportunityId, action: "dismiss" });
+  }
+
+  async function acknowledgeStrategicInsight(insightId: string) {
+    await strategicInsightMutation.mutateAsync({ insightId, action: "acknowledge" });
+  }
+
+  async function dismissStrategicInsight(insightId: string) {
+    await strategicInsightMutation.mutateAsync({ insightId, action: "dismiss" });
   }
 
   async function actOnRecommendation(recommendation: AaliyahRecommendationRecord) {
@@ -847,6 +903,13 @@ export default function AaliyahPage() {
                     onAct={(opportunity) => void actOnOpportunity(opportunity)}
                     onAcknowledge={(opportunityId) => void acknowledgeOpportunity(opportunityId)}
                     onDismiss={(opportunityId) => void dismissOpportunity(opportunityId)}
+                  />
+
+                  <StrategicIntelligencePanel
+                    insights={strategicInsights}
+                    busy={strategicInsightMutation.isPending}
+                    onAcknowledge={(insightId) => void acknowledgeStrategicInsight(insightId)}
+                    onDismiss={(insightId) => void dismissStrategicInsight(insightId)}
                   />
                 </div>
               </Section>
@@ -1738,6 +1801,76 @@ function OpportunitiesPanel(args: {
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function strategicInsightTone(type: AaliyahStrategicInsightRecord["insightType"]) {
+  switch (type) {
+    case "attention_priority":
+    case "execution_bottleneck":
+      return "filled" as const;
+    default:
+      return "outline" as const;
+  }
+}
+
+function StrategicIntelligencePanel(args: {
+  insights: AaliyahStrategicInsightRecord[];
+  busy: boolean;
+  onAcknowledge: (insightId: string) => void;
+  onDismiss: (insightId: string) => void;
+}) {
+  const topPriorities = args.insights.filter((item) => item.insightType === "attention_priority").length;
+  const bottlenecks = args.insights.filter((item) => item.insightType === "execution_bottleneck").length;
+  const clusters = args.insights.filter((item) => item.insightType === "opportunity_cluster").length;
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ fontWeight: 700 }}>Strategic Intelligence</div>
+      {args.insights.length === 0 ? (
+        <EmptyState text="No strategic intelligence records are persisted right now." />
+      ) : (
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+            <MetricMini label="Top priorities" value={topPriorities} />
+            <MetricMini label="Bottlenecks" value={bottlenecks} />
+            <MetricMini label="Clusters" value={clusters} />
+            <MetricMini label="Total records" value={args.insights.length} />
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {args.insights.map((insight) => (
+              <div key={insight.id} style={compactPanelStyle}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontWeight: 650 }}>{insight.title}</div>
+                    <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>{insight.summary}</div>
+                    <div style={{ marginTop: 6, fontSize: 12, color: tokens.colors.muted }}>{insight.reason}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <Tag label={insight.insightType.replaceAll("_", " ")} tone={strategicInsightTone(insight.insightType)} />
+                    <Tag label={insight.status} tone="outline" />
+                  </div>
+                </div>
+                <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                  <DataBlock label="Entities" value={insight.relatedEntityIds.length ? insight.relatedEntityIds.map(shortId).join(", ") : "None"} />
+                  <DataBlock label="Records" value={String(insight.relatedRecordIds.length)} />
+                  <DataBlock label="Evaluated" value={new Date(insight.evaluatedAtIso).toLocaleString()} />
+                  <DataBlock label="Created" value={new Date(insight.createdAtIso).toLocaleString()} />
+                </div>
+                <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button style={primaryButtonStyle} disabled={args.busy} onClick={() => args.onAcknowledge(insight.id)}>
+                    Acknowledge
+                  </button>
+                  <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onDismiss(insight.id)}>
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

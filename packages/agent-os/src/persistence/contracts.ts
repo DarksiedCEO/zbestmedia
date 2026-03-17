@@ -122,6 +122,11 @@ import type {
   OpportunityType
 } from "../aaliyah/opportunity-engine-types.js";
 import type {
+  StrategicInsightRecord as StrategicInsightRecordShape,
+  StrategicInsightStatus,
+  StrategicInsightType
+} from "../aaliyah/strategic-intelligence-types.js";
+import type {
   AssignmentPolicyDecision,
   AssignmentRecord,
   ExecutionRunRecord,
@@ -713,6 +718,46 @@ export const AaliyahOpportunityRecordSchema = z.object({
   dismissedAtIso: z.string().datetime().nullable()
 }) satisfies z.ZodType<OpportunityRecordShape>;
 export type AaliyahOpportunityRecord = z.infer<typeof AaliyahOpportunityRecordSchema>;
+
+export const StrategicInsightTypeSchema = z.enum([
+  "attention_priority",
+  "blocked_pattern",
+  "follow_through_gap",
+  "opportunity_cluster",
+  "execution_bottleneck",
+  "daily_brief",
+  "weekly_brief",
+  "noop"
+]) satisfies z.ZodType<StrategicInsightType>;
+export type StrategicInsightTypeRecord = z.infer<typeof StrategicInsightTypeSchema>;
+
+export const StrategicInsightStatusSchema = z.enum([
+  "active",
+  "superseded",
+  "acknowledged",
+  "dismissed"
+]) satisfies z.ZodType<StrategicInsightStatus>;
+export type StrategicInsightStatusRecord = z.infer<typeof StrategicInsightStatusSchema>;
+
+export const AaliyahStrategicInsightRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  insightType: StrategicInsightTypeSchema,
+  status: StrategicInsightStatusSchema,
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  reason: z.string().min(1),
+  idempotencyKey: z.string().min(1),
+  relatedEntityIds: z.array(z.string().min(1)),
+  relatedRecordIds: z.array(z.string().min(1)),
+  auditEventId: z.string().min(1).nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAtIso: z.string().datetime(),
+  evaluatedAtIso: z.string().datetime(),
+  acknowledgedAtIso: z.string().datetime().nullable(),
+  dismissedAtIso: z.string().datetime().nullable()
+}) satisfies z.ZodType<StrategicInsightRecordShape>;
+export type AaliyahStrategicInsightRecord = z.infer<typeof AaliyahStrategicInsightRecordSchema>;
 
 
 const EmailRoutingTargetSchema = z.union([
@@ -1412,7 +1457,12 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "opportunity_engine_replayed",
   "opportunity_engine_acknowledged",
   "opportunity_engine_dismissed",
-  "opportunity_engine_noop"
+  "opportunity_engine_noop",
+  "strategic_intelligence_created",
+  "strategic_intelligence_replayed",
+  "strategic_intelligence_acknowledged",
+  "strategic_intelligence_dismissed",
+  "strategic_intelligence_noop"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 

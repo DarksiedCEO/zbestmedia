@@ -46,6 +46,9 @@ import {
   NotificationResponseSchema,
   OpportunityListResponseSchema,
   OpportunityResponseSchema,
+  StrategicInsightDetailResponseSchema,
+  StrategicInsightListResponseSchema,
+  StrategicInsightResponseSchema,
   RecommendationListResponseSchema,
   RecommendationResponseSchema,
   AaliyahTaskListResponseSchema,
@@ -2999,6 +3002,123 @@ describe("agent routes", () => {
       message: "Opportunity dismissed."
     }))
   };
+  const aaliyahStrategicIntelligenceService: any = {
+    evaluate: vi.fn(async ({ scope }: { scope: string }) => ({
+      ok: true,
+      insights: [
+        {
+          id: "strategic-insight:1",
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          insightType: scope === "weekly" ? "weekly_brief" : "attention_priority",
+          status: "active",
+          title: "Founder attention is needed now",
+          summary: "Critical signal is accumulating and needs founder attention before momentum slips.",
+          reason: "Critical notifications and active recommendation pressure are stacking up faster than founder acknowledgement.",
+          idempotencyKey: "si:attention_priority:founder:abc",
+          relatedEntityIds: ["crm-account:1"],
+          relatedRecordIds: ["notification:1", "recommendation:1"],
+          auditEventId: "aaliyah-diagnostics:event-6",
+          metadata: { stage: "review" },
+          createdAtIso: "2026-03-16T18:25:00.000Z",
+          evaluatedAtIso: "2026-03-16T18:25:00.000Z",
+          acknowledgedAtIso: null,
+          dismissedAtIso: null
+        }
+      ],
+      replayedCount: 0,
+      message: "Created 1 strategic insight."
+    })),
+    getById: vi.fn(async ({ insightId }: { insightId: string }) => ({
+      ok: true,
+      insight: {
+        id: insightId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        insightType: "attention_priority",
+        status: "active",
+        title: "Founder attention is needed now",
+        summary: "Critical signal is accumulating and needs founder attention before momentum slips.",
+        reason: "Critical notifications and active recommendation pressure are stacking up faster than founder acknowledgement.",
+        idempotencyKey: "si:attention_priority:founder:abc",
+        relatedEntityIds: ["crm-account:1"],
+        relatedRecordIds: ["notification:1", "recommendation:1"],
+        auditEventId: "aaliyah-diagnostics:event-6",
+        metadata: { stage: "review" },
+        createdAtIso: "2026-03-16T18:25:00.000Z",
+        evaluatedAtIso: "2026-03-16T18:25:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: null
+      },
+      message: "Critical signal is accumulating and needs founder attention before momentum slips."
+    })),
+    list: vi.fn(async () => ({
+      ok: true,
+      insights: [
+        {
+          id: "strategic-insight:1",
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          insightType: "attention_priority",
+          status: "active",
+          title: "Founder attention is needed now",
+          summary: "Critical signal is accumulating and needs founder attention before momentum slips.",
+          reason: "Critical notifications and active recommendation pressure are stacking up faster than founder acknowledgement.",
+          idempotencyKey: "si:attention_priority:founder:abc",
+          relatedEntityIds: ["crm-account:1"],
+          relatedRecordIds: ["notification:1", "recommendation:1"],
+          auditEventId: "aaliyah-diagnostics:event-6",
+          metadata: { stage: "review" },
+          createdAtIso: "2026-03-16T18:25:00.000Z",
+          evaluatedAtIso: "2026-03-16T18:25:00.000Z",
+          acknowledgedAtIso: null,
+          dismissedAtIso: null
+        }
+      ],
+      message: "Loaded 1 strategic intelligence record."
+    })),
+    acknowledge: vi.fn(async ({ insightId }: { insightId: string }) => ({
+      ok: true,
+      insight: {
+        id: insightId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        insightType: "attention_priority",
+        status: "acknowledged",
+        title: "Founder attention is needed now",
+        summary: "Critical signal is accumulating and needs founder attention before momentum slips.",
+        reason: "Critical notifications and active recommendation pressure are stacking up faster than founder acknowledgement.",
+        idempotencyKey: "si:attention_priority:founder:abc",
+        relatedEntityIds: ["crm-account:1"],
+        relatedRecordIds: ["notification:1", "recommendation:1"],
+        auditEventId: "aaliyah-diagnostics:event-6",
+        metadata: { stage: "review" },
+        createdAtIso: "2026-03-16T18:25:00.000Z",
+        evaluatedAtIso: "2026-03-16T18:25:00.000Z",
+        acknowledgedAtIso: "2026-03-16T18:26:00.000Z",
+        dismissedAtIso: null
+      },
+      message: "Critical signal is accumulating and needs founder attention before momentum slips."
+    })),
+    dismiss: vi.fn(async ({ insightId }: { insightId: string }) => ({
+      ok: true,
+      insight: {
+        id: insightId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        insightType: "attention_priority",
+        status: "dismissed",
+        title: "Founder attention is needed now",
+        summary: "Critical signal is accumulating and needs founder attention before momentum slips.",
+        reason: "Critical notifications and active recommendation pressure are stacking up faster than founder acknowledgement.",
+        idempotencyKey: "si:attention_priority:founder:abc",
+        relatedEntityIds: ["crm-account:1"],
+        relatedRecordIds: ["notification:1", "recommendation:1"],
+        auditEventId: "aaliyah-diagnostics:event-6",
+        metadata: { stage: "review" },
+        createdAtIso: "2026-03-16T18:25:00.000Z",
+        evaluatedAtIso: "2026-03-16T18:25:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: "2026-03-16T18:26:00.000Z"
+      },
+      message: "Critical signal is accumulating and needs founder attention before momentum slips."
+    }))
+  };
   const aaliyahMemoryBoundaryService = {
     getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
       generatedAt: "2026-03-15T00:00:00.000Z",
@@ -3940,6 +4060,7 @@ describe("agent routes", () => {
         aaliyahRecommendationEngineService: aaliyahRecommendationEngineService as never,
         aaliyahNotificationEngineService: aaliyahNotificationEngineService as never,
         aaliyahOpportunityEngineService: aaliyahOpportunityEngineService as never,
+        aaliyahStrategicIntelligenceService: aaliyahStrategicIntelligenceService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
         aaliyahFollowThroughService: aaliyahFollowThroughService as never,
@@ -5037,6 +5158,61 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(403);
     expect(aaliyahOpportunityEngineService.listOpportunities).not.toHaveBeenCalled();
+  });
+
+  it("exposes strategic intelligence routes", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/strategic-intelligence/evaluate",
+      payload: {
+        mode: "founder",
+        scope: "daily"
+      }
+    });
+
+    expect(createRes.statusCode).toBe(201);
+    StrategicInsightResponseSchema.parse(createRes.json());
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/strategic-intelligence/strategic-insight:1?mode=founder"
+    });
+    expect(detailRes.statusCode).toBe(200);
+    StrategicInsightDetailResponseSchema.parse(detailRes.json());
+
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/strategic-intelligence?mode=founder&limit=10&status=active"
+    });
+    expect(listRes.statusCode).toBe(200);
+    StrategicInsightListResponseSchema.parse(listRes.json());
+
+    const ackRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/strategic-intelligence/strategic-insight:1/acknowledge?mode=founder"
+    });
+    expect(ackRes.statusCode).toBe(200);
+    StrategicInsightDetailResponseSchema.parse(ackRes.json());
+
+    const dismissRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/strategic-intelligence/strategic-insight:1/dismiss?mode=founder"
+    });
+    expect(dismissRes.statusCode).toBe(200);
+    StrategicInsightDetailResponseSchema.parse(dismissRes.json());
+  });
+
+  it("rejects strategic intelligence routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahStrategicIntelligenceService.list.mockClear();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/strategic-intelligence?mode=founder&limit=10"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahStrategicIntelligenceService.list).not.toHaveBeenCalled();
   });
 
   it("exposes founder preference mutation routes", async () => {

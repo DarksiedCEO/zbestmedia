@@ -11,6 +11,7 @@ import {
   AaliyahNotificationEngineService,
   AaliyahOpportunityEngineService,
   AaliyahRecommendationEngineService,
+  AaliyahStrategicIntelligenceService,
   AaliyahCalendarService,
   AaliyahCrmService,
   AaliyahTasksService,
@@ -108,6 +109,12 @@ import {
   OpportunityEvaluateBodySchema,
   OpportunityIdParamSchema,
   OpportunityListQuerySchema,
+  StrategicInsightDetailResponseSchema,
+  StrategicInsightIdParamSchema,
+  StrategicInsightListQuerySchema,
+  StrategicInsightListResponseSchema,
+  StrategicInsightResponseSchema,
+  StrategicIntelligenceEvaluateBodySchema,
   NotificationListResponseSchema,
   NotificationResponseSchema,
   AaliyahTaskUpdateBodySchema,
@@ -218,6 +225,7 @@ export function agentRoutes(opts: {
   aaliyahRecommendationEngineService: AaliyahRecommendationEngineService;
   aaliyahNotificationEngineService: AaliyahNotificationEngineService;
   aaliyahOpportunityEngineService: AaliyahOpportunityEngineService;
+  aaliyahStrategicIntelligenceService: AaliyahStrategicIntelligenceService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
   aaliyahTriageService: AaliyahFounderInboxTriageService;
   aaliyahFollowThroughService: AaliyahFollowThroughService;
@@ -1918,6 +1926,129 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_opportunity_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/strategic-intelligence/evaluate", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = StrategicIntelligenceEvaluateBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahStrategicIntelligenceService.evaluate({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        scope: body.data.scope
+      });
+
+      return reply.code(201).send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_strategic_intelligence_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/strategic-intelligence/:insightId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = StrategicInsightIdParamSchema.safeParse(req.params ?? {});
+      const query = StrategicInsightListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahStrategicIntelligenceService.getById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        insightId: path.data.insightId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_strategic_intelligence_detail_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/strategic-intelligence", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = StrategicInsightListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahStrategicIntelligenceService.list({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        limit: query.data.limit,
+        status: query.data.status
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_strategic_intelligence_list_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/strategic-intelligence/:insightId/acknowledge", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = StrategicInsightIdParamSchema.safeParse(req.params ?? {});
+      const query = StrategicInsightListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahStrategicIntelligenceService.acknowledge({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        insightId: path.data.insightId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_strategic_intelligence_detail_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/strategic-intelligence/:insightId/dismiss", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = StrategicInsightIdParamSchema.safeParse(req.params ?? {});
+      const query = StrategicInsightListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahStrategicIntelligenceService.dismiss({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        insightId: path.data.insightId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_strategic_intelligence_detail_result",
         result
       });
     });
