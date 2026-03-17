@@ -149,6 +149,7 @@ function createRepository() {
         dismissedAtIso: null
       }
     ]),
+    getIssueStateByCanonicalIssueKey: vi.fn(async () => null),
     getOperatorQueueRecordByIdempotencyKey: vi.fn(async () => null),
     createOperatorQueueRecord: vi.fn(async (args: any) => {
       const record = {
@@ -171,7 +172,18 @@ function createRepository() {
         auditEventId: args.auditEventId,
         metadata: args.metadata ?? {},
         createdAtIso: args.createdAt,
-        evaluatedAtIso: args.evaluatedAt
+        evaluatedAtIso: args.evaluatedAt,
+        status: args.status,
+        rankingVersion: args.rankingVersion,
+        staleAfterAtIso: args.staleAfterAt,
+        canonicalIssueKey: args.canonicalIssueKey,
+        supersededByQueueItemId: args.supersededByQueueItemId,
+        lastRefreshedAtIso: args.lastRefreshedAt ?? null,
+        lastExecutedAtIso: args.lastExecutedAt ?? null,
+        issueState: args.issueState ?? null,
+        lastOutcomeType: args.lastOutcomeType ?? null,
+        lastOutcomeStatus: args.lastOutcomeStatus ?? null,
+        lastOutcomeAtIso: args.lastOutcomeAt ?? null
       };
       created.push(record);
       return record;
@@ -238,6 +250,11 @@ describe('Aaliyah operator queue service', () => {
       queueItemType: 'immediate_action',
       priorityScore: 100,
       priorityBand: 'critical',
+      status: 'active',
+      rankingVersion: 1,
+      staleAfterAtIso: '2026-03-17T12:45:00.000Z',
+      canonicalIssueKey: 'task:1|issue:stale_critical_escalation|command:none',
+      supersededByQueueItemId: null,
       title: 'Critical issue crossed the escalation line',
       summary: 'Critical stale work has stayed open too long.',
       reason: 'Critical notification remained unresolved.',
@@ -250,7 +267,13 @@ describe('Aaliyah operator queue service', () => {
       auditEventId: 'diag:oq:1',
       metadata: {},
       createdAtIso: '2026-03-17T12:30:00.000Z',
-      evaluatedAtIso: '2026-03-17T12:30:00.000Z'
+      evaluatedAtIso: '2026-03-17T12:30:00.000Z',
+      lastRefreshedAtIso: null,
+      lastExecutedAtIso: null,
+      issueState: null,
+      lastOutcomeType: null,
+      lastOutcomeStatus: null,
+      lastOutcomeAtIso: null
     }));
 
     const service = new AaliyahOperatorQueueService(repository, createDiagnostics());

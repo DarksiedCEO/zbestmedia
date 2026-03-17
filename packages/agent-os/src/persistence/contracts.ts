@@ -164,6 +164,13 @@ import type {
   OperatorActionLogRecord as OperatorActionLogRecordShape
 } from "../aaliyah/operator-action-types.js";
 import type {
+  CanonicalIssueState,
+  IssueStateRecord as IssueStateRecordShape,
+  OutcomeFeedbackRecord as OutcomeFeedbackRecordShape,
+  OutcomeFeedbackStatus,
+  OutcomeFeedbackType
+} from "../aaliyah/outcome-feedback-types.js";
+import type {
   EvaluationCadenceType,
   EvaluationRunRecord as EvaluationRunRecordShape,
   EvaluationRunStatus,
@@ -1075,7 +1082,23 @@ export const AaliyahOperatorQueueRecordSchema = z.object({
   createdAtIso: z.string().datetime(),
   evaluatedAtIso: z.string().datetime(),
   lastRefreshedAtIso: z.string().datetime().nullable(),
-  lastExecutedAtIso: z.string().datetime().nullable()
+  lastExecutedAtIso: z.string().datetime().nullable(),
+  issueState: z.enum(["open", "in_progress", "resolved", "unresolved", "reopened", "dismissed"]).nullable(),
+  lastOutcomeType: z.enum([
+    "issue_resolved",
+    "issue_unresolved",
+    "issue_reopened",
+    "opportunity_converted",
+    "opportunity_lost",
+    "recommendation_accepted",
+    "recommendation_rejected",
+    "escalation_cleared",
+    "escalation_persisting",
+    "action_failed_downstream",
+    "action_deferred"
+  ]).nullable(),
+  lastOutcomeStatus: z.enum(["confirmed", "partial", "rejected", "needs_follow_through"]).nullable(),
+  lastOutcomeAtIso: z.string().datetime().nullable()
 }) satisfies z.ZodType<OperatorQueueRecordShape>;
 export type AaliyahOperatorQueueRecord = z.infer<typeof AaliyahOperatorQueueRecordSchema>;
 
@@ -1119,6 +1142,83 @@ export const AaliyahOperatorActionLogRecordSchema = z.object({
   createdAtIso: z.string().datetime()
 }) satisfies z.ZodType<OperatorActionLogRecordShape>;
 export type AaliyahOperatorActionLogRecord = z.infer<typeof AaliyahOperatorActionLogRecordSchema>;
+
+export const OutcomeFeedbackTypeSchema = z.enum([
+  "issue_resolved",
+  "issue_unresolved",
+  "issue_reopened",
+  "opportunity_converted",
+  "opportunity_lost",
+  "recommendation_accepted",
+  "recommendation_rejected",
+  "escalation_cleared",
+  "escalation_persisting",
+  "action_failed_downstream",
+  "action_deferred"
+]) satisfies z.ZodType<OutcomeFeedbackType>;
+export type OutcomeFeedbackTypeRecord = z.infer<typeof OutcomeFeedbackTypeSchema>;
+
+export const OutcomeFeedbackStatusSchema = z.enum([
+  "confirmed",
+  "partial",
+  "rejected",
+  "needs_follow_through"
+]) satisfies z.ZodType<OutcomeFeedbackStatus>;
+export type OutcomeFeedbackStatusRecord = z.infer<typeof OutcomeFeedbackStatusSchema>;
+
+export const CanonicalIssueStateSchema = z.enum([
+  "open",
+  "in_progress",
+  "resolved",
+  "unresolved",
+  "reopened",
+  "dismissed"
+]) satisfies z.ZodType<CanonicalIssueState>;
+export type CanonicalIssueStateRecord = z.infer<typeof CanonicalIssueStateSchema>;
+
+export const AaliyahOutcomeFeedbackRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  queueItemId: z.string().min(1),
+  operatorActionLogId: z.string().min(1).nullable(),
+  commandId: z.string().min(1).nullable(),
+  canonicalIssueKey: z.string().min(1),
+  sourceType: OperatorQueueSourceTypeSchema,
+  sourceId: z.string().min(1),
+  outcomeType: OutcomeFeedbackTypeSchema,
+  outcomeStatus: OutcomeFeedbackStatusSchema,
+  reasonCode: z.string().min(1).nullable(),
+  notes: z.string().min(1).nullable(),
+  reportedByFounderActorId: z.string().min(1),
+  reportedAtIso: z.string().datetime(),
+  auditEventId: z.string().min(1).nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  idempotencyKey: z.string().min(1),
+  createdAtIso: z.string().datetime()
+}) satisfies z.ZodType<OutcomeFeedbackRecordShape>;
+export type AaliyahOutcomeFeedbackRecord = z.infer<typeof AaliyahOutcomeFeedbackRecordSchema>;
+
+export const AaliyahIssueStateRecordSchema = z.object({
+  tenantId: z.string().uuid(),
+  canonicalIssueKey: z.string().min(1),
+  currentState: CanonicalIssueStateSchema,
+  lastOutcomeType: OutcomeFeedbackTypeSchema.nullable(),
+  lastOutcomeStatus: OutcomeFeedbackStatusSchema.nullable(),
+  lastQueueItemId: z.string().min(1).nullable(),
+  lastOperatorActionLogId: z.string().min(1).nullable(),
+  lastCommandId: z.string().min(1).nullable(),
+  lastUpdatedAtIso: z.string().datetime(),
+  lastOutcomeAtIso: z.string().datetime().nullable(),
+  reopenCount: z.number().int().nonnegative(),
+  resolutionCount: z.number().int().nonnegative(),
+  metadata: z.object({
+    lastReasonCode: z.string().min(1).nullable(),
+    wasRecentlyRejected: z.boolean(),
+    wasRecentlyResolved: z.boolean(),
+    hasRepeatedFailure: z.boolean()
+  })
+}) satisfies z.ZodType<IssueStateRecordShape>;
+export type AaliyahIssueStateRecord = z.infer<typeof AaliyahIssueStateRecordSchema>;
 
 export const ScheduledEngineTypeSchema = z.enum([
   "follow_through",
@@ -1988,7 +2088,10 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "operator_queue_suppressed",
   "operator_action_executed",
   "operator_action_failed",
-  "operator_action_replayed"
+  "operator_action_replayed",
+  "outcome_feedback_recorded",
+  "outcome_feedback_replayed",
+  "outcome_feedback_rejected"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 

@@ -66,6 +66,12 @@ export class AaliyahOperatorQueueService {
       const queueItems = [] as Awaited<ReturnType<AgentOsRepository['createOperatorQueueRecord']>>[];
       let replayedCount = 0;
       for (const draft of drafts) {
+        const issueState = draft.canonicalIssueKey
+          ? await this.repository.getIssueStateByCanonicalIssueKey({
+              tenantId: args.tenantId,
+              canonicalIssueKey: draft.canonicalIssueKey
+            })
+          : null;
         const existing = await this.repository.getOperatorQueueRecordByIdempotencyKey({
           tenantId: args.tenantId,
           idempotencyKey: draft.idempotencyKey
@@ -151,7 +157,11 @@ export class AaliyahOperatorQueueService {
           createdAt: generatedAt,
           evaluatedAt: draft.evaluatedAtIso,
           lastRefreshedAt: null,
-          lastExecutedAt: null
+          lastExecutedAt: null,
+          issueState: issueState?.currentState ?? null,
+          lastOutcomeType: issueState?.lastOutcomeType ?? null,
+          lastOutcomeStatus: issueState?.lastOutcomeStatus ?? null,
+          lastOutcomeAt: issueState?.lastOutcomeAtIso ?? null
         });
         queueItems.push(created);
       }

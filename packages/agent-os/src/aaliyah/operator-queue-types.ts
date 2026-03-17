@@ -64,11 +64,36 @@ export type OperatorQueueRecord = {
   evaluatedAtIso: string;
   lastRefreshedAtIso: string | null;
   lastExecutedAtIso: string | null;
+  issueState: 'open' | 'in_progress' | 'resolved' | 'unresolved' | 'reopened' | 'dismissed' | null;
+  lastOutcomeType:
+    | 'issue_resolved'
+    | 'issue_unresolved'
+    | 'issue_reopened'
+    | 'opportunity_converted'
+    | 'opportunity_lost'
+    | 'recommendation_accepted'
+    | 'recommendation_rejected'
+    | 'escalation_cleared'
+    | 'escalation_persisting'
+    | 'action_failed_downstream'
+    | 'action_deferred'
+    | null;
+  lastOutcomeStatus: 'confirmed' | 'partial' | 'rejected' | 'needs_follow_through' | null;
+  lastOutcomeAtIso: string | null;
 };
 
 export type OperatorQueueDraft = Omit<
   OperatorQueueRecord,
-  'id' | 'tenantId' | 'auditEventId' | 'createdAtIso' | 'lastRefreshedAtIso' | 'lastExecutedAtIso'
+  'id'
+  | 'tenantId'
+  | 'auditEventId'
+  | 'createdAtIso'
+  | 'lastRefreshedAtIso'
+  | 'lastExecutedAtIso'
+  | 'issueState'
+  | 'lastOutcomeType'
+  | 'lastOutcomeStatus'
+  | 'lastOutcomeAtIso'
 >;
 
 export type OperatorQueueFailureResult = {

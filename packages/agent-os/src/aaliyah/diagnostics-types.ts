@@ -93,7 +93,10 @@ export type AaliyahDiagnosticsEventType =
   | "operator_queue_suppressed"
   | "operator_action_executed"
   | "operator_action_failed"
-  | "operator_action_replayed";
+  | "operator_action_replayed"
+  | "outcome_feedback_recorded"
+  | "outcome_feedback_replayed"
+  | "outcome_feedback_rejected";
 
 export type AaliyahDiagnosticsEvent = {
   tenantId: string;

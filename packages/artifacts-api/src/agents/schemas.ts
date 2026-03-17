@@ -23,6 +23,8 @@ import {
   AaliyahEscalationRecordSchema,
   AaliyahOperatorActionLogRecordSchema,
   AaliyahOperatorQueueRecordSchema,
+  AaliyahOutcomeFeedbackRecordSchema,
+  AaliyahIssueStateRecordSchema,
   AaliyahTaskSchema,
   AaliyahFounderPreferenceRecordSchema,
   EmailAccountConnectionRecordSchema,
@@ -1308,6 +1310,95 @@ export const OperatorQueueRefreshAllResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_operator_queue_refresh_all_result"),
   result: z.discriminatedUnion("ok", [OperatorQueueRefreshAllSuccessSchema, OperatorQueueFailureSchema])
+});
+
+export const OutcomeFeedbackCreateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  queueItemId: z.string().min(1),
+  operatorActionLogId: z.string().min(1).nullable(),
+  outcomeType: z.enum([
+    "issue_resolved",
+    "issue_unresolved",
+    "issue_reopened",
+    "opportunity_converted",
+    "opportunity_lost",
+    "recommendation_accepted",
+    "recommendation_rejected",
+    "escalation_cleared",
+    "escalation_persisting",
+    "action_failed_downstream",
+    "action_deferred"
+  ]),
+  outcomeStatus: z.enum(["confirmed", "partial", "rejected", "needs_follow_through"]),
+  reasonCode: z.string().min(1).nullable().optional(),
+  notes: z.string().min(1).nullable().optional(),
+  idempotencyKey: z.string().min(1),
+  reportedAtIso: z.string().datetime().optional()
+});
+
+export const OutcomeFeedbackIdParamSchema = z.object({
+  outcomeId: z.string().min(1)
+});
+
+export const OutcomeFeedbackIssueParamSchema = z.object({
+  canonicalIssueKey: z.string().min(1)
+});
+
+export const OutcomeFeedbackQueueItemParamSchema = z.object({
+  queueItemId: z.string().min(1)
+});
+
+export const OutcomeFeedbackListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  limit: z.coerce.number().int().positive().max(100).default(50)
+});
+
+const OutcomeFeedbackFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const OutcomeFeedbackWriteSuccessSchema = z.object({
+  ok: z.literal(true),
+  outcome: AaliyahOutcomeFeedbackRecordSchema,
+  issueState: AaliyahIssueStateRecordSchema,
+  replayed: z.boolean(),
+  message: z.string().min(1)
+});
+
+const OutcomeFeedbackDetailSuccessSchema = z.object({
+  ok: z.literal(true),
+  outcome: AaliyahOutcomeFeedbackRecordSchema,
+  issueState: AaliyahIssueStateRecordSchema.nullable(),
+  message: z.string().min(1)
+});
+
+const OutcomeFeedbackListSuccessSchema = z.object({
+  ok: z.literal(true),
+  outcomes: z.array(AaliyahOutcomeFeedbackRecordSchema),
+  issueState: AaliyahIssueStateRecordSchema.nullable(),
+  message: z.string().min(1)
+});
+
+export const OutcomeFeedbackWriteResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_outcome_feedback_result"),
+  result: z.discriminatedUnion("ok", [OutcomeFeedbackWriteSuccessSchema, OutcomeFeedbackFailureSchema])
+});
+
+export const OutcomeFeedbackDetailResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_outcome_feedback_detail_result"),
+  result: z.discriminatedUnion("ok", [OutcomeFeedbackDetailSuccessSchema, OutcomeFeedbackFailureSchema])
+});
+
+export const OutcomeFeedbackListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_outcome_feedback_list_result"),
+  result: z.discriminatedUnion("ok", [OutcomeFeedbackListSuccessSchema, OutcomeFeedbackFailureSchema])
 });
 
 export const EvaluationScheduleCreateBodySchema = z.object({

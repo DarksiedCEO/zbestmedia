@@ -60,6 +60,9 @@ import {
   OperatorQueueRefreshResponseSchema,
   OperatorQueueResponseSchema,
   OperatorQueueTopResponseSchema,
+  OutcomeFeedbackDetailResponseSchema,
+  OutcomeFeedbackListResponseSchema,
+  OutcomeFeedbackWriteResponseSchema,
   NotificationListResponseSchema,
   NotificationResponseSchema,
   OpportunityListResponseSchema,
@@ -3448,7 +3451,11 @@ describe("agent routes", () => {
         createdAtIso: "2026-03-17T13:10:00.000Z",
         evaluatedAtIso: "2026-03-17T13:10:00.000Z",
         lastRefreshedAtIso: null,
-        lastExecutedAtIso: null
+        lastExecutedAtIso: null,
+        issueState: null,
+        lastOutcomeType: null,
+        lastOutcomeStatus: null,
+        lastOutcomeAtIso: null
       }],
       replayedCount: 0,
       suppressedCount: 2,
@@ -3483,7 +3490,11 @@ describe("agent routes", () => {
         createdAtIso: "2026-03-17T13:10:00.000Z",
         evaluatedAtIso: "2026-03-17T13:10:00.000Z",
         lastRefreshedAtIso: null,
-        lastExecutedAtIso: null
+        lastExecutedAtIso: null,
+        issueState: null,
+        lastOutcomeType: null,
+        lastOutcomeStatus: null,
+        lastOutcomeAtIso: null
       },
       message: "Critical stale work has remained active too long."
     })),
@@ -3516,7 +3527,11 @@ describe("agent routes", () => {
         createdAtIso: "2026-03-17T13:10:00.000Z",
         evaluatedAtIso: "2026-03-17T13:10:00.000Z",
         lastRefreshedAtIso: null,
-        lastExecutedAtIso: null
+        lastExecutedAtIso: null,
+        issueState: null,
+        lastOutcomeType: null,
+        lastOutcomeStatus: null,
+        lastOutcomeAtIso: null
       }],
       message: "Operator queue contains 1 ranked founder item."
     })),
@@ -3549,7 +3564,11 @@ describe("agent routes", () => {
         createdAtIso: "2026-03-17T13:10:00.000Z",
         evaluatedAtIso: "2026-03-17T13:10:00.000Z",
         lastRefreshedAtIso: null,
-        lastExecutedAtIso: null
+        lastExecutedAtIso: null,
+        issueState: null,
+        lastOutcomeType: null,
+        lastOutcomeStatus: null,
+        lastOutcomeAtIso: null
       }],
       topQueueItems: [{
         id: "operator-queue:1",
@@ -3578,7 +3597,11 @@ describe("agent routes", () => {
         createdAtIso: "2026-03-17T13:10:00.000Z",
         evaluatedAtIso: "2026-03-17T13:10:00.000Z",
         lastRefreshedAtIso: null,
-        lastExecutedAtIso: null
+        lastExecutedAtIso: null,
+        issueState: null,
+        lastOutcomeType: null,
+        lastOutcomeStatus: null,
+        lastOutcomeAtIso: null
       }],
       message: "Operator queue top view contains 1 immediate actions and 1 ranked items."
     })),
@@ -3611,7 +3634,11 @@ describe("agent routes", () => {
         createdAtIso: "2026-03-17T13:10:00.000Z",
         evaluatedAtIso: "2026-03-17T13:25:00.000Z",
         lastRefreshedAtIso: "2026-03-17T13:25:00.000Z",
-        lastExecutedAtIso: null
+        lastExecutedAtIso: null,
+        issueState: null,
+        lastOutcomeType: null,
+        lastOutcomeStatus: null,
+        lastOutcomeAtIso: null
       },
       refreshed: true,
       invalidated: false,
@@ -3652,6 +3679,109 @@ describe("agent routes", () => {
         executedAtIso: "2026-03-17T13:30:00.000Z",
         createdAtIso: "2026-03-17T13:30:00.000Z"
       }
+    }))
+  };
+  const aaliyahOutcomeFeedbackService: any = {
+    record: vi.fn(async ({ request }: any) => ({
+      ok: true,
+      replayed: false,
+      outcome: {
+        id: "outcome-feedback:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        queueItemId: request.queueItemId,
+        operatorActionLogId: request.operatorActionLogId,
+        commandId: "founder-command:1",
+        canonicalIssueKey: "task:1|issue:stale_critical_escalation|command:none",
+        sourceType: "escalation",
+        sourceId: "escalation:1",
+        outcomeType: request.outcomeType,
+        outcomeStatus: request.outcomeStatus,
+        reasonCode: request.reasonCode ?? null,
+        notes: request.notes ?? null,
+        reportedByFounderActorId: "actor-1",
+        reportedAtIso: request.reportedAtIso ?? "2026-03-17T13:40:00.000Z",
+        auditEventId: "aaliyah-diagnostics:event-outcome-1",
+        metadata: {},
+        idempotencyKey: request.idempotencyKey,
+        createdAtIso: "2026-03-17T13:40:00.000Z"
+      },
+      issueState: {
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        canonicalIssueKey: "task:1|issue:stale_critical_escalation|command:none",
+        currentState: "resolved",
+        lastOutcomeType: request.outcomeType,
+        lastOutcomeStatus: request.outcomeStatus,
+        lastQueueItemId: request.queueItemId,
+        lastOperatorActionLogId: request.operatorActionLogId,
+        lastCommandId: "founder-command:1",
+        lastUpdatedAtIso: request.reportedAtIso ?? "2026-03-17T13:40:00.000Z",
+        lastOutcomeAtIso: request.reportedAtIso ?? "2026-03-17T13:40:00.000Z",
+        reopenCount: 0,
+        resolutionCount: 1,
+        metadata: {
+          lastReasonCode: request.reasonCode ?? null,
+          wasRecentlyRejected: false,
+          wasRecentlyResolved: true,
+          hasRepeatedFailure: false
+        }
+      },
+      message: "issue resolved recorded as confirmed."
+    })),
+    getById: vi.fn(async ({ outcomeId }: { outcomeId: string }) => ({
+      ok: true,
+      outcome: {
+        id: outcomeId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        queueItemId: "operator-queue:1",
+        operatorActionLogId: "operator-action:1",
+        commandId: "founder-command:1",
+        canonicalIssueKey: "task:1|issue:stale_critical_escalation|command:none",
+        sourceType: "escalation",
+        sourceId: "escalation:1",
+        outcomeType: "issue_resolved",
+        outcomeStatus: "confirmed",
+        reasonCode: "founder_confirmed_resolution",
+        notes: null,
+        reportedByFounderActorId: "actor-1",
+        reportedAtIso: "2026-03-17T13:40:00.000Z",
+        auditEventId: "aaliyah-diagnostics:event-outcome-1",
+        metadata: {},
+        idempotencyKey: "outcome:1",
+        createdAtIso: "2026-03-17T13:40:00.000Z"
+      },
+      issueState: {
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        canonicalIssueKey: "task:1|issue:stale_critical_escalation|command:none",
+        currentState: "resolved",
+        lastOutcomeType: "issue_resolved",
+        lastOutcomeStatus: "confirmed",
+        lastQueueItemId: "operator-queue:1",
+        lastOperatorActionLogId: "operator-action:1",
+        lastCommandId: "founder-command:1",
+        lastUpdatedAtIso: "2026-03-17T13:40:00.000Z",
+        lastOutcomeAtIso: "2026-03-17T13:40:00.000Z",
+        reopenCount: 0,
+        resolutionCount: 1,
+        metadata: {
+          lastReasonCode: "founder_confirmed_resolution",
+          wasRecentlyRejected: false,
+          wasRecentlyResolved: true,
+          hasRepeatedFailure: false
+        }
+      },
+      message: "issue resolved recorded for task:1|issue:stale_critical_escalation|command:none."
+    })),
+    listByIssueKey: vi.fn(async () => ({
+      ok: true,
+      outcomes: [],
+      issueState: null,
+      message: "Loaded 0 outcome feedback records."
+    })),
+    listByQueueItem: vi.fn(async () => ({
+      ok: true,
+      outcomes: [],
+      issueState: null,
+      message: "Loaded 0 outcome feedback records."
     }))
   };
   const aaliyahEvaluationSchedulerService: any = {
@@ -5039,6 +5169,7 @@ describe("agent routes", () => {
         aaliyahEscalationEngineService: aaliyahEscalationEngineService as never,
         aaliyahOperatorQueueService: aaliyahOperatorQueueService as never,
         aaliyahOperatorActionService: aaliyahOperatorActionService as never,
+        aaliyahOutcomeFeedbackService: aaliyahOutcomeFeedbackService as never,
         aaliyahEvaluationSchedulerService: aaliyahEvaluationSchedulerService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
@@ -6404,6 +6535,67 @@ describe("agent routes", () => {
 
     expect(executeRes.statusCode).toBe(403);
     expect(aaliyahOperatorActionService.execute).not.toHaveBeenCalled();
+  });
+
+  it("exposes outcome feedback routes", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/outcomes",
+      payload: {
+        mode: "founder",
+        queueItemId: "operator-queue:1",
+        operatorActionLogId: "operator-action:1",
+        outcomeType: "issue_resolved",
+        outcomeStatus: "confirmed",
+        reasonCode: "founder_confirmed_resolution",
+        idempotencyKey: "outcome-feedback:1"
+      }
+    });
+
+    expect(createRes.statusCode).toBe(200);
+    OutcomeFeedbackWriteResponseSchema.parse(createRes.json());
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/outcomes/outcome-feedback:1?mode=founder"
+    });
+    expect(detailRes.statusCode).toBe(200);
+    OutcomeFeedbackDetailResponseSchema.parse(detailRes.json());
+
+    const issueRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/outcomes/issue/task%3A1%7Cissue%3Astale_critical_escalation%7Ccommand%3Anone?mode=founder&limit=10"
+    });
+    expect(issueRes.statusCode).toBe(200);
+    OutcomeFeedbackListResponseSchema.parse(issueRes.json());
+
+    const queueItemRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/outcomes/queue-item/operator-queue:1?mode=founder&limit=10"
+    });
+    expect(queueItemRes.statusCode).toBe(200);
+    OutcomeFeedbackListResponseSchema.parse(queueItemRes.json());
+  });
+
+  it("rejects outcome feedback routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahOutcomeFeedbackService.record.mockClear();
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/outcomes",
+      payload: {
+        mode: "founder",
+        queueItemId: "operator-queue:1",
+        operatorActionLogId: "operator-action:1",
+        outcomeType: "issue_resolved",
+        outcomeStatus: "confirmed",
+        idempotencyKey: "outcome-feedback:blocked"
+      }
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahOutcomeFeedbackService.record).not.toHaveBeenCalled();
   });
 
   it("exposes evaluation scheduler routes", async () => {
