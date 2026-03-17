@@ -18,7 +18,8 @@ export function normalizeFounderPreferencesInput(input: FounderPreferencesInput)
     opportunity: input.opportunity,
     recommendation: input.recommendation,
     scheduler: input.scheduler,
-    delivery: input.delivery
+    delivery: input.delivery,
+    escalation: input.escalation
   };
 }
 
@@ -46,5 +47,21 @@ export function validateFounderPreferences(record: FounderPreferencesRecord) {
 
   if (!record.delivery.consoleEnabled && !record.delivery.emailEnabled) {
     throw new FounderPreferencesValidationError('At least one delivery channel must remain enabled.');
+  }
+
+  if (record.escalation.criticalEscalationHours < 1 || record.escalation.criticalEscalationHours > 24 * 30) {
+    throw new FounderPreferencesValidationError('Critical escalation hours must be between 1 and 720.');
+  }
+  if (record.escalation.blockedPatternEscalationCount < 1 || record.escalation.blockedPatternEscalationCount > 25) {
+    throw new FounderPreferencesValidationError('Blocked pattern escalation count must be between 1 and 25.');
+  }
+  if (record.escalation.clusterPressureThreshold < 2 || record.escalation.clusterPressureThreshold > 25) {
+    throw new FounderPreferencesValidationError('Cluster pressure threshold must be between 2 and 25.');
+  }
+  if (record.escalation.missedFollowUpEscalationHours < 1 || record.escalation.missedFollowUpEscalationHours > 24 * 60) {
+    throw new FounderPreferencesValidationError('Missed follow-up escalation hours must be between 1 and 1440.');
+  }
+  if (record.escalation.attentionOverloadThreshold < 1 || record.escalation.attentionOverloadThreshold > 50) {
+    throw new FounderPreferencesValidationError('Attention overload threshold must be between 1 and 50.');
   }
 }

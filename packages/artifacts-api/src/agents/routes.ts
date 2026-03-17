@@ -6,6 +6,7 @@ import {
   AaliyahDeliveryRouterService,
   AaliyahDigestComposerService,
   AaliyahDiagnosticsService,
+  AaliyahEscalationEngineService,
   AaliyahFounderBriefingService,
   AaliyahFounderInboxTriageService,
   AaliyahFounderCommandService,
@@ -129,6 +130,12 @@ import {
   CoalescedSignalListQuerySchema,
   CoalescedSignalListResponseSchema,
   CoalescedSignalResponseSchema,
+  EscalationDetailResponseSchema,
+  EscalationEvaluateBodySchema,
+  EscalationIdParamSchema,
+  EscalationListQuerySchema,
+  EscalationListResponseSchema,
+  EscalationResponseSchema,
   OpportunityEvaluateBodySchema,
   OpportunityIdParamSchema,
   OpportunityListQuerySchema,
@@ -262,6 +269,7 @@ export function agentRoutes(opts: {
   aaliyahNotificationEngineService: AaliyahNotificationEngineService;
   aaliyahOpportunityEngineService: AaliyahOpportunityEngineService;
   aaliyahSignalCoalescingService: AaliyahSignalCoalescingService;
+  aaliyahEscalationEngineService: AaliyahEscalationEngineService;
   aaliyahStrategicIntelligenceService: AaliyahStrategicIntelligenceService;
   aaliyahEvaluationSchedulerService: AaliyahEvaluationSchedulerService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
@@ -2449,6 +2457,155 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_coalesced_signal_detail_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/escalations/evaluate", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = EscalationEvaluateBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahEscalationEngineService.evaluate({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        generatedAt: body.data.generatedAt
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_escalation_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/escalations/:escalationId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = EscalationIdParamSchema.safeParse(req.params ?? {});
+      const query = EscalationListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahEscalationEngineService.getById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        escalationId: path.data.escalationId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_escalation_detail_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/escalations", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = EscalationListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahEscalationEngineService.list({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        limit: query.data.limit,
+        status: query.data.status
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_escalation_list_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/escalations/:escalationId/acknowledge", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = EscalationIdParamSchema.safeParse(req.params ?? {});
+      const query = EscalationListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahEscalationEngineService.acknowledge({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        escalationId: path.data.escalationId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_escalation_detail_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/escalations/:escalationId/dismiss", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = EscalationIdParamSchema.safeParse(req.params ?? {});
+      const query = EscalationListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahEscalationEngineService.dismiss({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        escalationId: path.data.escalationId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_escalation_detail_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/escalations/:escalationId/resolve", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = EscalationIdParamSchema.safeParse(req.params ?? {});
+      const query = EscalationListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahEscalationEngineService.resolve({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        escalationId: path.data.escalationId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_escalation_detail_result",
         result
       });
     });

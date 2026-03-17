@@ -2,6 +2,7 @@ import React from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   acknowledgeAaliyahCoalescedSignal,
+  acknowledgeAaliyahEscalation,
   acknowledgeAaliyahOpportunity,
   acknowledgeAaliyahStrategicInsight,
   acknowledgeAaliyahNotification,
@@ -9,15 +10,18 @@ import {
   createFetchClient,
   composeAaliyahDigest,
   dismissAaliyahCoalescedSignal,
+  dismissAaliyahEscalation,
   dismissAaliyahOpportunity,
   dismissAaliyahStrategicInsight,
   dismissAaliyahNotification,
   evaluateAaliyahCoalescedSignals,
+  evaluateAaliyahEscalations,
   executeFounderCommand,
   getAaliyahCommandSurface,
   getAaliyahCoalescedSignals,
   getAaliyahDeliveries,
   getAaliyahDigests,
+  getAaliyahEscalations,
   getAaliyahFounderPreferenceControls,
   getAaliyahFollowThroughEngineRecords,
   getAaliyahInbox,
@@ -34,6 +38,7 @@ import {
   resolveAppApiBaseUrl,
   readApiEnv,
   retryAaliyahDelivery,
+  resolveAaliyahEscalation,
   sendAaliyahDigest,
   putAaliyahFounderPreferenceControls,
   runAaliyahRuntime,
@@ -45,6 +50,7 @@ import {
   type AaliyahCoalescedSignalRecord,
   type AaliyahDeliveryRecord,
   type AaliyahDigestRecord,
+  type AaliyahEscalationRecord,
   type AaliyahFollowThroughEngineRecord,
   type AaliyahNotificationRecord,
   type AaliyahOpportunityRecord,
@@ -161,7 +167,7 @@ export default function AaliyahPage() {
     refetchInterval: 20_000,
   });
 
-  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery, deliveriesQuery, digestsQuery, opportunitiesQuery, strategicInsightsQuery, coalescedSignalsQuery, evaluationSchedulesQuery, evaluationRunsQuery] = useQueries({
+  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery, deliveriesQuery, digestsQuery, opportunitiesQuery, strategicInsightsQuery, coalescedSignalsQuery, escalationsQuery, evaluationSchedulesQuery, evaluationRunsQuery] = useQueries({
     queries: [
       {
         queryKey: ["aaliyah", "command-surface", activeMode],
@@ -312,6 +318,20 @@ export default function AaliyahPage() {
         enabled: Boolean(envData.env && envData.appApiBaseUrl),
         queryFn: async () =>
           getAaliyahCoalescedSignals({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            mode: activeMode,
+            limit: 20,
+            status: "active",
+        }),
+        refetchInterval: 20_000,
+      },
+      {
+        queryKey: ["aaliyah", "escalations", activeMode],
+        enabled: Boolean(envData.env && envData.appApiBaseUrl),
+        queryFn: async () =>
+          getAaliyahEscalations({
             baseUrl: envData.appApiBaseUrl!,
             bearer: envData.env!.VITE_POLICY_BEARER,
             fetchClient,
@@ -556,6 +576,62 @@ export default function AaliyahPage() {
     },
   });
 
+  const escalationMutation = useMutation({
+    mutationFn: async (
+      input:
+        | { action: "evaluate" }
+        | { action: "acknowledge" | "dismiss" | "resolve"; escalationId: string }
+    ) => {
+      if (input.action === "evaluate") {
+        return evaluateAaliyahEscalations({
+          baseUrl: envData.appApiBaseUrl!,
+          bearer: envData.env!.VITE_POLICY_BEARER,
+          fetchClient,
+          mode: activeMode,
+        });
+      }
+      if (input.action === "acknowledge") {
+        return acknowledgeAaliyahEscalation({
+          baseUrl: envData.appApiBaseUrl!,
+          bearer: envData.env!.VITE_POLICY_BEARER,
+          fetchClient,
+          escalationId: input.escalationId,
+          mode: activeMode,
+        });
+      }
+      if (input.action === "dismiss") {
+        return dismissAaliyahEscalation({
+          baseUrl: envData.appApiBaseUrl!,
+          bearer: envData.env!.VITE_POLICY_BEARER,
+          fetchClient,
+          escalationId: input.escalationId,
+          mode: activeMode,
+        });
+      }
+      return resolveAaliyahEscalation({
+        baseUrl: envData.appApiBaseUrl!,
+        bearer: envData.env!.VITE_POLICY_BEARER,
+        fetchClient,
+        escalationId: input.escalationId,
+        mode: activeMode,
+      });
+    },
+    onSuccess: async (response) => {
+      if (response.result.ok) {
+        setCommandError(null);
+        setCommandNotice(response.result.message);
+      } else {
+        setCommandNotice(null);
+        setCommandError(response.result.message);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["aaliyah"] });
+    },
+    onError: (error) => {
+      setCommandNotice(null);
+      setCommandError((error as Error).message);
+    },
+  });
+
   const deliveryRetryMutation = useMutation({
     mutationFn: async (deliveryId: string) =>
       retryAaliyahDelivery({
@@ -729,8 +805,8 @@ export default function AaliyahPage() {
     },
   });
 
-  const isLoading = sessionQuery.isLoading || founderPreferencesQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading || deliveriesQuery.isLoading || digestsQuery.isLoading || opportunitiesQuery.isLoading || strategicInsightsQuery.isLoading || coalescedSignalsQuery.isLoading || evaluationSchedulesQuery.isLoading || evaluationRunsQuery.isLoading;
-  const isError = Boolean(envData.error) || sessionQuery.isError || founderPreferencesQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError || deliveriesQuery.isError || digestsQuery.isError || opportunitiesQuery.isError || strategicInsightsQuery.isError || coalescedSignalsQuery.isError || evaluationSchedulesQuery.isError || evaluationRunsQuery.isError;
+  const isLoading = sessionQuery.isLoading || founderPreferencesQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading || deliveriesQuery.isLoading || digestsQuery.isLoading || opportunitiesQuery.isLoading || strategicInsightsQuery.isLoading || coalescedSignalsQuery.isLoading || escalationsQuery.isLoading || evaluationSchedulesQuery.isLoading || evaluationRunsQuery.isLoading;
+  const isError = Boolean(envData.error) || sessionQuery.isError || founderPreferencesQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError || deliveriesQuery.isError || digestsQuery.isError || opportunitiesQuery.isError || strategicInsightsQuery.isError || coalescedSignalsQuery.isError || escalationsQuery.isError || evaluationSchedulesQuery.isError || evaluationRunsQuery.isError;
   const errorMessage =
     envData.error ??
     (sessionQuery.error as Error | undefined)?.message ??
@@ -747,6 +823,7 @@ export default function AaliyahPage() {
     (opportunitiesQuery.error as Error | undefined)?.message ??
     (strategicInsightsQuery.error as Error | undefined)?.message ??
     (coalescedSignalsQuery.error as Error | undefined)?.message ??
+    (escalationsQuery.error as Error | undefined)?.message ??
     (evaluationSchedulesQuery.error as Error | undefined)?.message ??
     (evaluationRunsQuery.error as Error | undefined)?.message ??
     null;
@@ -764,6 +841,7 @@ export default function AaliyahPage() {
   const opportunities = opportunitiesQuery.data?.result.ok ? opportunitiesQuery.data.result.opportunities : [];
   const strategicInsights = strategicInsightsQuery.data?.result.ok ? strategicInsightsQuery.data.result.insights : [];
   const coalescedSignals = coalescedSignalsQuery.data?.result.ok ? coalescedSignalsQuery.data.result.signals : [];
+  const escalations = escalationsQuery.data?.result.ok ? escalationsQuery.data.result.escalations : [];
   const evaluationSchedules = evaluationSchedulesQuery.data?.result.ok ? evaluationSchedulesQuery.data.result.schedules : [];
   const evaluationRuns = evaluationRunsQuery.data?.result.ok ? evaluationRunsQuery.data.result.runs : [];
   const founderPreferences = founderPreferencesQuery.data?.result.ok ? founderPreferencesQuery.data.result.preferences : null;
@@ -929,6 +1007,22 @@ export default function AaliyahPage() {
 
   async function dismissCoalescedSignal(signalId: string) {
     await coalescedSignalMutation.mutateAsync({ action: "dismiss", signalId });
+  }
+
+  async function refreshEscalations() {
+    await escalationMutation.mutateAsync({ action: "evaluate" });
+  }
+
+  async function acknowledgeEscalation(escalationId: string) {
+    await escalationMutation.mutateAsync({ action: "acknowledge", escalationId });
+  }
+
+  async function dismissEscalation(escalationId: string) {
+    await escalationMutation.mutateAsync({ action: "dismiss", escalationId });
+  }
+
+  async function resolveEscalation(escalationId: string) {
+    await escalationMutation.mutateAsync({ action: "resolve", escalationId });
   }
 
   async function saveEvaluationSchedule() {
@@ -1312,6 +1406,15 @@ export default function AaliyahPage() {
                     onRefresh={() => void refreshPriorityClusters()}
                     onAcknowledge={(signalId) => void acknowledgeCoalescedSignal(signalId)}
                     onDismiss={(signalId) => void dismissCoalescedSignal(signalId)}
+                  />
+
+                  <EscalationsPanel
+                    escalations={escalations}
+                    busy={escalationMutation.isPending}
+                    onRefresh={() => void refreshEscalations()}
+                    onAcknowledge={(escalationId) => void acknowledgeEscalation(escalationId)}
+                    onDismiss={(escalationId) => void dismissEscalation(escalationId)}
+                    onResolve={(escalationId) => void resolveEscalation(escalationId)}
                   />
 
                   <EvaluationSchedulerPanel
@@ -2462,6 +2565,86 @@ function PriorityClustersPanel(args: {
   );
 }
 
+function escalationTone(level: AaliyahEscalationRecord["escalationLevel"]) {
+  switch (level) {
+    case "critical":
+      return "filled" as const;
+    case "high":
+      return "filled" as const;
+    default:
+      return "outline" as const;
+  }
+}
+
+function EscalationsPanel(args: {
+  escalations: AaliyahEscalationRecord[];
+  busy: boolean;
+  onRefresh: () => void;
+  onAcknowledge: (escalationId: string) => void;
+  onDismiss: (escalationId: string) => void;
+  onResolve: (escalationId: string) => void;
+}) {
+  const criticalCount = args.escalations.filter((item) => item.escalationLevel === "critical").length;
+  const activeCount = args.escalations.filter((item) => item.status === "active").length;
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ fontWeight: 700 }}>Escalations</div>
+        <button style={primaryButtonStyle} disabled={args.busy} onClick={args.onRefresh}>
+          Evaluate escalations
+        </button>
+      </div>
+      {args.escalations.length === 0 ? (
+        <EmptyState text="No escalation records have crossed a founder threshold yet." />
+      ) : (
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+            <MetricMini label="Active" value={activeCount} />
+            <MetricMini label="Critical" value={criticalCount} />
+            <MetricMini label="Total records" value={args.escalations.length} />
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {args.escalations.map((escalation) => (
+              <div key={escalation.id} style={compactPanelStyle}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontWeight: 650 }}>{escalation.title}</div>
+                    <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>{escalation.summary}</div>
+                    <div style={{ marginTop: 6, fontSize: 12, color: tokens.colors.muted }}>{escalation.reason}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <Tag label={escalation.escalationLevel} tone={escalationTone(escalation.escalationLevel)} />
+                    <Tag label={escalation.escalationType.split("_").join(" ")} tone="outline" />
+                    <Tag label={escalation.status} tone="outline" />
+                  </div>
+                </div>
+                <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                  <DataBlock label="Sources" value={String(escalation.sourceRecordIds.length)} />
+                  <DataBlock label="Cluster" value={shortId(escalation.relatedClusterId)} />
+                  <DataBlock label="Created" value={new Date(escalation.createdAtIso).toLocaleString()} />
+                  <DataBlock label="Evaluated" value={new Date(escalation.evaluatedAtIso).toLocaleString()} />
+                </div>
+                <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button style={primaryButtonStyle} disabled={args.busy || escalation.status !== "active"} onClick={() => args.onAcknowledge(escalation.id)}>
+                    Acknowledge
+                  </button>
+                  <button style={ghostButtonStyle} disabled={args.busy || escalation.status !== "active"} onClick={() => args.onDismiss(escalation.id)}>
+                    Dismiss
+                  </button>
+                  <button style={ghostButtonStyle} disabled={args.busy || (escalation.status !== "active" && escalation.status !== "acknowledged")} onClick={() => args.onResolve(escalation.id)}>
+                    Resolve
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EvaluationSchedulerPanel(args: {
   schedules: AaliyahEvaluationScheduleRecord[];
   runs: AaliyahEvaluationRunRecord[];
@@ -2702,6 +2885,72 @@ function FounderPreferencesControlsPanel(args: {
               onChange={(event) => args.onChange({
                 ...preferences,
                 opportunity: { ...preferences.opportunity, recurringBlockThreshold: Number(event.target.value || 0) }
+              })}
+            />
+          </label>
+        </div>
+      </div>
+
+      <div style={compactPanelStyle}>
+        <div style={{ fontWeight: 650 }}>Escalation thresholds</div>
+        <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+          <label style={fieldLabelStyle}>
+            <span>Critical escalation hours</span>
+            <input
+              type="number"
+              style={inputStyle}
+              value={preferences.escalation.criticalEscalationHours}
+              onChange={(event) => args.onChange({
+                ...preferences,
+                escalation: { ...preferences.escalation, criticalEscalationHours: Number(event.target.value || 0) }
+              })}
+            />
+          </label>
+          <label style={fieldLabelStyle}>
+            <span>Blocked pattern count</span>
+            <input
+              type="number"
+              style={inputStyle}
+              value={preferences.escalation.blockedPatternEscalationCount}
+              onChange={(event) => args.onChange({
+                ...preferences,
+                escalation: { ...preferences.escalation, blockedPatternEscalationCount: Number(event.target.value || 0) }
+              })}
+            />
+          </label>
+          <label style={fieldLabelStyle}>
+            <span>Cluster pressure threshold</span>
+            <input
+              type="number"
+              style={inputStyle}
+              value={preferences.escalation.clusterPressureThreshold}
+              onChange={(event) => args.onChange({
+                ...preferences,
+                escalation: { ...preferences.escalation, clusterPressureThreshold: Number(event.target.value || 0) }
+              })}
+            />
+          </label>
+          <label style={fieldLabelStyle}>
+            <span>Missed follow-up escalation hours</span>
+            <input
+              type="number"
+              style={inputStyle}
+              value={preferences.escalation.missedFollowUpEscalationHours}
+              onChange={(event) => args.onChange({
+                ...preferences,
+                escalation: { ...preferences.escalation, missedFollowUpEscalationHours: Number(event.target.value || 0) }
+              })}
+            />
+          </label>
+          <label style={fieldLabelStyle}>
+            <span>Attention overload threshold</span>
+            <input
+              type="number"
+              style={inputStyle}
+              value={preferences.escalation.attentionOverloadThreshold}
+              onChange={(event) => args.onChange({
+                ...preferences,
+                escalation: { ...preferences.escalation, attentionOverloadThreshold: Number(event.target.value || 0) }
               })}
             />
           </label>

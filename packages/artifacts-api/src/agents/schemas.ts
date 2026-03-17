@@ -20,6 +20,7 @@ import {
   AaliyahFounderCommandRecordSchema,
   AaliyahFounderPreferenceControlsRecordSchema,
   AaliyahCoalescedSignalRecordSchema,
+  AaliyahEscalationRecordSchema,
   AaliyahTaskSchema,
   AaliyahFounderPreferenceRecordSchema,
   EmailAccountConnectionRecordSchema,
@@ -907,6 +908,13 @@ export const FounderPreferencesBodySchema = z.object({
     delivery: z.object({
       emailEnabled: z.boolean().optional(),
       consoleEnabled: z.boolean().optional()
+    }).optional(),
+    escalation: z.object({
+      criticalEscalationHours: z.number().int().positive().optional(),
+      blockedPatternEscalationCount: z.number().int().positive().optional(),
+      clusterPressureThreshold: z.number().int().positive().optional(),
+      missedFollowUpEscalationHours: z.number().int().positive().optional(),
+      attentionOverloadThreshold: z.number().int().positive().optional()
     }).optional()
   })
 });
@@ -1099,6 +1107,66 @@ export const CoalescedSignalListResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_coalesced_signal_list_result"),
   result: z.discriminatedUnion("ok", [CoalescedSignalListSuccessSchema, CoalescedSignalFailureSchema])
+});
+
+export const EscalationEvaluateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  generatedAt: z.string().datetime().optional()
+});
+
+export const EscalationIdParamSchema = z.object({
+  escalationId: z.string().min(1)
+});
+
+export const EscalationListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  limit: z.coerce.number().int().positive().max(100).default(50),
+  status: z.enum(["active", "acknowledged", "dismissed", "resolved"]).optional()
+});
+
+const EscalationFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const EscalationSuccessSchema = z.object({
+  ok: z.literal(true),
+  escalations: z.array(AaliyahEscalationRecordSchema),
+  replayedCount: z.number().int().nonnegative(),
+  message: z.string().min(1)
+});
+
+const EscalationDetailSuccessSchema = z.object({
+  ok: z.literal(true),
+  escalation: AaliyahEscalationRecordSchema,
+  message: z.string().min(1)
+});
+
+const EscalationListSuccessSchema = z.object({
+  ok: z.literal(true),
+  escalations: z.array(AaliyahEscalationRecordSchema),
+  message: z.string().min(1)
+});
+
+export const EscalationResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_escalation_result"),
+  result: z.discriminatedUnion("ok", [EscalationSuccessSchema, EscalationFailureSchema])
+});
+
+export const EscalationDetailResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_escalation_detail_result"),
+  result: z.discriminatedUnion("ok", [EscalationDetailSuccessSchema, EscalationFailureSchema])
+});
+
+export const EscalationListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_escalation_list_result"),
+  result: z.discriminatedUnion("ok", [EscalationListSuccessSchema, EscalationFailureSchema])
 });
 
 export const EvaluationScheduleCreateBodySchema = z.object({

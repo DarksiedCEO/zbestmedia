@@ -78,7 +78,13 @@ export type AaliyahDiagnosticsEventType =
   | "digest_composer_composed"
   | "digest_composer_sent"
   | "digest_composer_replayed"
-  | "digest_composer_skipped";
+  | "digest_composer_skipped"
+  | "escalation_engine_created"
+  | "escalation_engine_replayed"
+  | "escalation_engine_acknowledged"
+  | "escalation_engine_dismissed"
+  | "escalation_engine_resolved"
+  | "escalation_engine_noop";
 
 export type AaliyahDiagnosticsEvent = {
   tenantId: string;

@@ -50,6 +50,9 @@ import {
   CoalescedSignalDetailResponseSchema,
   CoalescedSignalListResponseSchema,
   CoalescedSignalResponseSchema,
+  EscalationDetailResponseSchema,
+  EscalationListResponseSchema,
+  EscalationResponseSchema,
   NotificationListResponseSchema,
   NotificationResponseSchema,
   OpportunityListResponseSchema,
@@ -3255,6 +3258,159 @@ describe("agent routes", () => {
       message: "2 related blocked records point to the same execution problem."
     }))
   };
+  const aaliyahEscalationEngineService: any = {
+    evaluate: vi.fn(async () => ({
+      ok: true,
+      escalations: [{
+        id: "escalation:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        escalationType: "stale_critical_escalation",
+        status: "active",
+        title: "Critical issue crossed the escalation line",
+        summary: "Critical stale work has remained active too long.",
+        reason: "Critical notification remained unresolved past threshold.",
+        escalationLevel: "critical",
+        idempotencyKey: "esc:stale_critical_escalation:task:1:abc",
+        sourceRecordIds: ["notification:1"],
+        sourceRecordTypes: ["notification"],
+        relatedClusterId: null,
+        auditEventId: "aaliyah-diagnostics:event-esc-1",
+        metadata: { clusterEntityId: "task:1" },
+        createdAtIso: "2026-03-17T13:00:00.000Z",
+        evaluatedAtIso: "2026-03-17T13:00:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: null,
+        resolvedAtIso: null
+      }],
+      replayedCount: 0,
+      message: "Escalation created successfully."
+    })),
+    getById: vi.fn(async ({ escalationId }: { escalationId: string }) => ({
+      ok: true,
+      escalation: {
+        id: escalationId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        escalationType: "stale_critical_escalation",
+        status: "active",
+        title: "Critical issue crossed the escalation line",
+        summary: "Critical stale work has remained active too long.",
+        reason: "Critical notification remained unresolved past threshold.",
+        escalationLevel: "critical",
+        idempotencyKey: "esc:stale_critical_escalation:task:1:abc",
+        sourceRecordIds: ["notification:1"],
+        sourceRecordTypes: ["notification"],
+        relatedClusterId: null,
+        auditEventId: "aaliyah-diagnostics:event-esc-1",
+        metadata: { clusterEntityId: "task:1" },
+        createdAtIso: "2026-03-17T13:00:00.000Z",
+        evaluatedAtIso: "2026-03-17T13:00:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: null,
+        resolvedAtIso: null
+      },
+      message: "Critical stale work has remained active too long."
+    })),
+    list: vi.fn(async () => ({
+      ok: true,
+      escalations: [{
+        id: "escalation:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        escalationType: "stale_critical_escalation",
+        status: "active",
+        title: "Critical issue crossed the escalation line",
+        summary: "Critical stale work has remained active too long.",
+        reason: "Critical notification remained unresolved past threshold.",
+        escalationLevel: "critical",
+        idempotencyKey: "esc:stale_critical_escalation:task:1:abc",
+        sourceRecordIds: ["notification:1"],
+        sourceRecordTypes: ["notification"],
+        relatedClusterId: null,
+        auditEventId: "aaliyah-diagnostics:event-esc-1",
+        metadata: { clusterEntityId: "task:1" },
+        createdAtIso: "2026-03-17T13:00:00.000Z",
+        evaluatedAtIso: "2026-03-17T13:00:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: null,
+        resolvedAtIso: null
+      }],
+      message: "Escalation loaded successfully."
+    })),
+    acknowledge: vi.fn(async ({ escalationId }: { escalationId: string }) => ({
+      ok: true,
+      escalation: {
+        id: escalationId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        escalationType: "stale_critical_escalation",
+        status: "acknowledged",
+        title: "Critical issue crossed the escalation line",
+        summary: "Critical stale work has remained active too long.",
+        reason: "Critical notification remained unresolved past threshold.",
+        escalationLevel: "critical",
+        idempotencyKey: "esc:stale_critical_escalation:task:1:abc",
+        sourceRecordIds: ["notification:1"],
+        sourceRecordTypes: ["notification"],
+        relatedClusterId: null,
+        auditEventId: "aaliyah-diagnostics:event-esc-1",
+        metadata: { clusterEntityId: "task:1" },
+        createdAtIso: "2026-03-17T13:00:00.000Z",
+        evaluatedAtIso: "2026-03-17T13:00:00.000Z",
+        acknowledgedAtIso: "2026-03-17T13:05:00.000Z",
+        dismissedAtIso: null,
+        resolvedAtIso: null
+      },
+      message: "Critical stale work has remained active too long."
+    })),
+    dismiss: vi.fn(async ({ escalationId }: { escalationId: string }) => ({
+      ok: true,
+      escalation: {
+        id: escalationId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        escalationType: "stale_critical_escalation",
+        status: "dismissed",
+        title: "Critical issue crossed the escalation line",
+        summary: "Critical stale work has remained active too long.",
+        reason: "Critical notification remained unresolved past threshold.",
+        escalationLevel: "critical",
+        idempotencyKey: "esc:stale_critical_escalation:task:1:abc",
+        sourceRecordIds: ["notification:1"],
+        sourceRecordTypes: ["notification"],
+        relatedClusterId: null,
+        auditEventId: "aaliyah-diagnostics:event-esc-1",
+        metadata: { clusterEntityId: "task:1" },
+        createdAtIso: "2026-03-17T13:00:00.000Z",
+        evaluatedAtIso: "2026-03-17T13:00:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: "2026-03-17T13:05:00.000Z",
+        resolvedAtIso: null
+      },
+      message: "Critical stale work has remained active too long."
+    })),
+    resolve: vi.fn(async ({ escalationId }: { escalationId: string }) => ({
+      ok: true,
+      escalation: {
+        id: escalationId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        escalationType: "stale_critical_escalation",
+        status: "resolved",
+        title: "Critical issue crossed the escalation line",
+        summary: "Critical stale work has remained active too long.",
+        reason: "Critical notification remained unresolved past threshold.",
+        escalationLevel: "critical",
+        idempotencyKey: "esc:stale_critical_escalation:task:1:abc",
+        sourceRecordIds: ["notification:1"],
+        sourceRecordTypes: ["notification"],
+        relatedClusterId: null,
+        auditEventId: "aaliyah-diagnostics:event-esc-1",
+        metadata: { clusterEntityId: "task:1" },
+        createdAtIso: "2026-03-17T13:00:00.000Z",
+        evaluatedAtIso: "2026-03-17T13:00:00.000Z",
+        acknowledgedAtIso: "2026-03-17T13:05:00.000Z",
+        dismissedAtIso: null,
+        resolvedAtIso: "2026-03-17T13:06:00.000Z"
+      },
+      message: "Critical stale work has remained active too long."
+    }))
+  };
   const aaliyahEvaluationSchedulerService: any = {
     createOrUpdateSchedule: vi.fn(async ({ engineType, cadenceType, cadenceValue }: any) => ({
       ok: true,
@@ -3631,6 +3787,13 @@ describe("agent routes", () => {
           emailEnabled: true,
           consoleEnabled: true
         },
+        escalation: {
+          criticalEscalationHours: 24,
+          blockedPatternEscalationCount: 3,
+          clusterPressureThreshold: 4,
+          missedFollowUpEscalationHours: 72,
+          attentionOverloadThreshold: 5
+        },
         createdAtIso: "2026-03-17T08:00:00.000Z",
         updatedAtIso: "2026-03-17T08:00:00.000Z"
       },
@@ -3670,6 +3833,13 @@ describe("agent routes", () => {
         delivery: {
           emailEnabled: true,
           consoleEnabled: true
+        },
+        escalation: {
+          criticalEscalationHours: 24,
+          blockedPatternEscalationCount: 4,
+          clusterPressureThreshold: 5,
+          missedFollowUpEscalationHours: 96,
+          attentionOverloadThreshold: 6
         },
         createdAtIso: "2026-03-17T08:00:00.000Z",
         updatedAtIso: "2026-03-17T09:00:00.000Z"
@@ -4623,6 +4793,7 @@ describe("agent routes", () => {
         aaliyahOpportunityEngineService: aaliyahOpportunityEngineService as never,
         aaliyahStrategicIntelligenceService: aaliyahStrategicIntelligenceService as never,
         aaliyahSignalCoalescingService: aaliyahSignalCoalescingService as never,
+        aaliyahEscalationEngineService: aaliyahEscalationEngineService as never,
         aaliyahEvaluationSchedulerService: aaliyahEvaluationSchedulerService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
@@ -5831,6 +6002,67 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(403);
     expect(aaliyahSignalCoalescingService.list).not.toHaveBeenCalled();
+  });
+
+  it("exposes escalation routes", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/escalations/evaluate",
+      payload: {
+        mode: "founder"
+      }
+    });
+
+    expect(createRes.statusCode).toBe(200);
+    EscalationResponseSchema.parse(createRes.json());
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/escalations/escalation:1?mode=founder"
+    });
+    expect(detailRes.statusCode).toBe(200);
+    EscalationDetailResponseSchema.parse(detailRes.json());
+
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/escalations?mode=founder&limit=10&status=active"
+    });
+    expect(listRes.statusCode).toBe(200);
+    EscalationListResponseSchema.parse(listRes.json());
+
+    const ackRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/escalations/escalation:1/acknowledge?mode=founder"
+    });
+    expect(ackRes.statusCode).toBe(200);
+    EscalationDetailResponseSchema.parse(ackRes.json());
+
+    const dismissRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/escalations/escalation:1/dismiss?mode=founder"
+    });
+    expect(dismissRes.statusCode).toBe(200);
+    EscalationDetailResponseSchema.parse(dismissRes.json());
+
+    const resolveRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/escalations/escalation:1/resolve?mode=founder"
+    });
+    expect(resolveRes.statusCode).toBe(200);
+    EscalationDetailResponseSchema.parse(resolveRes.json());
+  });
+
+  it("rejects escalation routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahEscalationEngineService.list.mockClear();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/escalations?mode=founder&limit=10"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahEscalationEngineService.list).not.toHaveBeenCalled();
   });
 
   it("exposes evaluation scheduler routes", async () => {

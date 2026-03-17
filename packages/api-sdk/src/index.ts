@@ -421,6 +421,28 @@ export type AaliyahCoalescedSignalRecord = {
   dismissedAtIso: string | null;
 };
 
+export type AaliyahEscalationRecord = {
+  id: string;
+  tenantId: string;
+  escalationType: "stale_critical_escalation" | "blocked_pattern_escalation" | "cluster_pressure_escalation" | "missed_follow_up_escalation" | "attention_overload_escalation" | "noop";
+  status: "active" | "acknowledged" | "dismissed" | "resolved";
+  title: string;
+  summary: string;
+  reason: string;
+  escalationLevel: "warning" | "high" | "critical";
+  idempotencyKey: string;
+  sourceRecordIds: string[];
+  sourceRecordTypes: Array<"notification" | "recommendation" | "opportunity" | "strategic_insight" | "coalesced_signal" | "follow_through_record">;
+  relatedClusterId: string | null;
+  auditEventId: string | null;
+  metadata: Record<string, unknown>;
+  createdAtIso: string;
+  evaluatedAtIso: string;
+  acknowledgedAtIso: string | null;
+  dismissedAtIso: string | null;
+  resolvedAtIso: string | null;
+};
+
 export type AaliyahEvaluationScheduleRecord = {
   id: string;
   tenantId: string;
@@ -482,6 +504,13 @@ export type AaliyahFounderPreferenceControlsRecord = {
   delivery: {
     emailEnabled: boolean;
     consoleEnabled: boolean;
+  };
+  escalation: {
+    criticalEscalationHours: number;
+    blockedPatternEscalationCount: number;
+    clusterPressureThreshold: number;
+    missedFollowUpEscalationHours: number;
+    attentionOverloadThreshold: number;
   };
   createdAtIso: string;
   updatedAtIso: string;
@@ -1865,6 +1894,103 @@ export async function sendAaliyahDigest(args: {
     method: "POST",
     bearer: args.bearer
   });
+}
+
+export async function evaluateAaliyahEscalations(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_escalation_result";
+  result:
+    | { ok: true; escalations: AaliyahEscalationRecord[]; replayedCount: number; message: string }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/escalations/evaluate`,
+    method: "POST",
+    bearer: args.bearer,
+    body: { mode: args.mode ?? "founder" }
+  });
+}
+
+export async function getAaliyahEscalations(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  limit?: number;
+  status?: "active" | "acknowledged" | "dismissed" | "resolved";
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_escalation_list_result";
+  result:
+    | { ok: true; escalations: AaliyahEscalationRecord[]; message: string }
+    | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/escalations`, {
+      mode: args.mode,
+      limit: args.limit ? String(args.limit) : undefined,
+      status: args.status
+    }),
+    bearer: args.bearer
+  });
+}
+
+async function postEscalationLifecycle(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  escalationId: string;
+  action: "acknowledge" | "dismiss" | "resolve";
+  mode?: AaliyahMode;
+}) {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/escalations/${args.escalationId}/${args.action}`, {
+      mode: args.mode
+    }),
+    method: "POST",
+    bearer: args.bearer
+  }) as Promise<{
+    manifestVersion: string;
+    resourceType: "aaliyah_escalation_detail_result";
+    result:
+      | { ok: true; escalation: AaliyahEscalationRecord; message: string }
+      | { ok: false; denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null; errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null; retryable: boolean; message: string };
+  }>;
+}
+
+export function acknowledgeAaliyahEscalation(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  escalationId: string;
+  mode?: AaliyahMode;
+}) {
+  return postEscalationLifecycle({ ...args, action: "acknowledge" });
+}
+
+export function dismissAaliyahEscalation(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  escalationId: string;
+  mode?: AaliyahMode;
+}) {
+  return postEscalationLifecycle({ ...args, action: "dismiss" });
+}
+
+export function resolveAaliyahEscalation(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  escalationId: string;
+  mode?: AaliyahMode;
+}) {
+  return postEscalationLifecycle({ ...args, action: "resolve" });
 }
 
 export async function getAaliyahFounderPreferenceControls(args: {

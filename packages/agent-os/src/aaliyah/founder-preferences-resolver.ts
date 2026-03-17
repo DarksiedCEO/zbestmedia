@@ -49,6 +49,10 @@ export function mergeFounderPreferences(args: {
       ...current.delivery,
       ...(args.input?.delivery ?? {})
     },
+    escalation: {
+      ...current.escalation,
+      ...(args.input?.escalation ?? {})
+    },
     updatedAtIso: args.timestamp
   };
 }

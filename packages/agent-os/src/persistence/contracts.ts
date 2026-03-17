@@ -37,6 +37,7 @@ import type {
 import type {
   FounderDeliveryPreferences,
   FounderDigestPreferences,
+  FounderEscalationPreferences,
   FounderNotificationPreferences,
   FounderOpportunityPreferences,
   FounderPreferencesRecord as FounderPreferencesRecordShape,
@@ -141,6 +142,13 @@ import type {
   CoalescedSignalType,
   CoalescedSourceRecordType
 } from "../aaliyah/signal-coalescing-types.js";
+import type {
+  EscalationLevel,
+  EscalationRecord as EscalationRecordShape,
+  EscalationSourceRecordType,
+  EscalationStatus,
+  EscalationType
+} from "../aaliyah/escalation-engine-types.js";
 import type {
   EvaluationCadenceType,
   EvaluationRunRecord as EvaluationRunRecordShape,
@@ -915,6 +923,64 @@ export const AaliyahCoalescedSignalRecordSchema = z.object({
 }) satisfies z.ZodType<CoalescedSignalRecordShape>;
 export type AaliyahCoalescedSignalRecord = z.infer<typeof AaliyahCoalescedSignalRecordSchema>;
 
+export const EscalationTypeSchema = z.enum([
+  "stale_critical_escalation",
+  "blocked_pattern_escalation",
+  "cluster_pressure_escalation",
+  "missed_follow_up_escalation",
+  "attention_overload_escalation",
+  "noop"
+]) satisfies z.ZodType<EscalationType>;
+export type EscalationTypeRecord = z.infer<typeof EscalationTypeSchema>;
+
+export const EscalationStatusSchema = z.enum([
+  "active",
+  "acknowledged",
+  "dismissed",
+  "resolved"
+]) satisfies z.ZodType<EscalationStatus>;
+export type EscalationStatusRecord = z.infer<typeof EscalationStatusSchema>;
+
+export const EscalationLevelSchema = z.enum([
+  "warning",
+  "high",
+  "critical"
+]) satisfies z.ZodType<EscalationLevel>;
+export type EscalationLevelRecord = z.infer<typeof EscalationLevelSchema>;
+
+export const EscalationSourceRecordTypeSchema = z.enum([
+  "notification",
+  "recommendation",
+  "opportunity",
+  "strategic_insight",
+  "coalesced_signal",
+  "follow_through_record"
+]) satisfies z.ZodType<EscalationSourceRecordType>;
+export type EscalationSourceRecordTypeRecord = z.infer<typeof EscalationSourceRecordTypeSchema>;
+
+export const AaliyahEscalationRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  escalationType: EscalationTypeSchema,
+  status: EscalationStatusSchema,
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  reason: z.string().min(1),
+  escalationLevel: EscalationLevelSchema,
+  idempotencyKey: z.string().min(1),
+  sourceRecordIds: z.array(z.string().min(1)),
+  sourceRecordTypes: z.array(EscalationSourceRecordTypeSchema),
+  relatedClusterId: z.string().min(1).nullable(),
+  auditEventId: z.string().min(1).nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAtIso: z.string().datetime(),
+  evaluatedAtIso: z.string().datetime(),
+  acknowledgedAtIso: z.string().datetime().nullable(),
+  dismissedAtIso: z.string().datetime().nullable(),
+  resolvedAtIso: z.string().datetime().nullable()
+}) satisfies z.ZodType<EscalationRecordShape>;
+export type AaliyahEscalationRecord = z.infer<typeof AaliyahEscalationRecordSchema>;
+
 export const ScheduledEngineTypeSchema = z.enum([
   "follow_through",
   "recommendation",
@@ -1288,6 +1354,15 @@ export const FounderDeliveryPreferencesSchema = z.object({
 }) satisfies z.ZodType<FounderDeliveryPreferences>;
 export type { FounderDeliveryPreferences };
 
+export const FounderEscalationPreferencesSchema = z.object({
+  criticalEscalationHours: z.number().int().positive(),
+  blockedPatternEscalationCount: z.number().int().positive(),
+  clusterPressureThreshold: z.number().int().positive(),
+  missedFollowUpEscalationHours: z.number().int().positive(),
+  attentionOverloadThreshold: z.number().int().positive()
+}) satisfies z.ZodType<FounderEscalationPreferences>;
+export type { FounderEscalationPreferences };
+
 export const AaliyahFounderPreferenceControlsRecordSchema = z.object({
   id: z.string().min(1),
   tenantId: z.string().uuid(),
@@ -1298,6 +1373,7 @@ export const AaliyahFounderPreferenceControlsRecordSchema = z.object({
   recommendation: FounderRecommendationPreferencesSchema,
   scheduler: FounderSchedulerPreferencesSchema,
   delivery: FounderDeliveryPreferencesSchema,
+  escalation: FounderEscalationPreferencesSchema,
   createdAtIso: z.string().datetime(),
   updatedAtIso: z.string().datetime()
 }) satisfies z.ZodType<FounderPreferencesRecordShape>;
@@ -1758,7 +1834,13 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "digest_composer_composed",
   "digest_composer_sent",
   "digest_composer_replayed",
-  "digest_composer_skipped"
+  "digest_composer_skipped",
+  "escalation_engine_created",
+  "escalation_engine_replayed",
+  "escalation_engine_acknowledged",
+  "escalation_engine_dismissed",
+  "escalation_engine_resolved",
+  "escalation_engine_noop"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 

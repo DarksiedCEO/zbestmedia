@@ -101,6 +101,7 @@ export class AaliyahFounderPreferencesService {
         recommendation: merged.recommendation,
         scheduler: merged.scheduler,
         delivery: merged.delivery,
+        escalation: merged.escalation,
         createdAt: existing?.createdAtIso ?? generatedAt,
         updatedAt: generatedAt
       });
@@ -118,7 +119,8 @@ export class AaliyahFounderPreferencesService {
           opportunity: preferences.opportunity,
           recommendation: preferences.recommendation,
           scheduler: preferences.scheduler,
-          delivery: preferences.delivery
+          delivery: preferences.delivery,
+          escalation: preferences.escalation
         }
       });
 

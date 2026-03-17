@@ -36,6 +36,14 @@ export interface FounderDeliveryPreferences {
   consoleEnabled: boolean;
 }
 
+export interface FounderEscalationPreferences {
+  criticalEscalationHours: number;
+  blockedPatternEscalationCount: number;
+  clusterPressureThreshold: number;
+  missedFollowUpEscalationHours: number;
+  attentionOverloadThreshold: number;
+}
+
 export interface FounderPreferencesRecord {
   id: string;
   tenantId: string;
@@ -46,6 +54,7 @@ export interface FounderPreferencesRecord {
   recommendation: FounderRecommendationPreferences;
   scheduler: FounderSchedulerPreferences;
   delivery: FounderDeliveryPreferences;
+  escalation: FounderEscalationPreferences;
   createdAtIso: string;
   updatedAtIso: string;
 }
@@ -57,6 +66,7 @@ export interface FounderPreferencesInput {
   recommendation?: Partial<FounderRecommendationPreferences>;
   scheduler?: Partial<FounderSchedulerPreferences>;
   delivery?: Partial<FounderDeliveryPreferences>;
+  escalation?: Partial<FounderEscalationPreferences>;
 }
 
 export interface FounderPreferencesSuccessResult {

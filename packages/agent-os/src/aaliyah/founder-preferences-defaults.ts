@@ -29,5 +29,12 @@ export const DEFAULT_FOUNDER_PREFERENCES: Omit<FounderPreferencesRecord, 'id' | 
   delivery: {
     emailEnabled: true,
     consoleEnabled: true
+  },
+  escalation: {
+    criticalEscalationHours: 24,
+    blockedPatternEscalationCount: 3,
+    clusterPressureThreshold: 4,
+    missedFollowUpEscalationHours: 72,
+    attentionOverloadThreshold: 5
   }
 };

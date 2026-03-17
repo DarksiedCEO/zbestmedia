@@ -19,6 +19,7 @@ function createRepository() {
         recommendation: args.recommendation,
         scheduler: args.scheduler,
         delivery: args.delivery,
+        escalation: args.escalation,
         createdAtIso: args.createdAt,
         updatedAtIso: args.updatedAt
       };
@@ -42,6 +43,7 @@ describe("Aaliyah founder preference controls", () => {
     expect(result.preferences.notification.minimumEmailSeverity).toBe("critical");
     expect(result.preferences.digest.dailyDigestEnabled).toBe(true);
     expect(result.preferences.scheduler.allowAutomaticRuns).toBe(true);
+    expect(result.preferences.escalation.criticalEscalationHours).toBe(24);
   });
 
   it("persists overrides on top of defaults", async () => {
@@ -54,7 +56,8 @@ describe("Aaliyah founder preference controls", () => {
       input: {
         notification: { minimumEmailSeverity: "warning" },
         digest: { dailyDigestEnabled: false },
-        delivery: { emailEnabled: false }
+        delivery: { emailEnabled: false },
+        escalation: { attentionOverloadThreshold: 7 }
       }
     });
 
@@ -64,6 +67,7 @@ describe("Aaliyah founder preference controls", () => {
     expect(result.preferences.digest.dailyDigestEnabled).toBe(false);
     expect(result.preferences.delivery.emailEnabled).toBe(false);
     expect(result.preferences.delivery.consoleEnabled).toBe(true);
+    expect(result.preferences.escalation.attentionOverloadThreshold).toBe(7);
   });
 
   it("rejects invalid delivery configuration", async () => {

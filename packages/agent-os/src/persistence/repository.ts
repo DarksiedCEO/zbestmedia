@@ -28,6 +28,7 @@ import type {
   AaliyahEvaluationScheduleRecord,
   AaliyahFounderPreferenceControlsRecord,
   AaliyahCoalescedSignalRecord,
+  AaliyahEscalationRecord,
   AaliyahStrategicInsightRecord,
   AaliyahTaskRecord,
   AaliyahMutationIdempotencyRecord,
@@ -524,6 +525,28 @@ type CoalescedSignalRow = {
   dismissed_at: string | Date | null;
 };
 
+type EscalationRow = {
+  escalation_id: string;
+  tenant_id: string;
+  escalation_type: AaliyahEscalationRecord["escalationType"];
+  escalation_status: AaliyahEscalationRecord["status"];
+  escalation_level: AaliyahEscalationRecord["escalationLevel"];
+  title_text: string;
+  summary_text: string;
+  reason_text: string;
+  idempotency_key: string;
+  source_record_ids_json: string[];
+  source_record_types_json: AaliyahEscalationRecord["sourceRecordTypes"];
+  related_cluster_id: string | null;
+  audit_event_id: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string | Date;
+  evaluated_at: string | Date;
+  acknowledged_at: string | Date | null;
+  dismissed_at: string | Date | null;
+  resolved_at: string | Date | null;
+};
+
 type EvaluationScheduleRow = {
   schedule_id: string;
   tenant_id: string;
@@ -628,6 +651,7 @@ type FounderPreferenceControlsRow = {
   recommendation_json: AaliyahFounderPreferenceControlsRecord["recommendation"];
   scheduler_json: AaliyahFounderPreferenceControlsRecord["scheduler"];
   delivery_json: AaliyahFounderPreferenceControlsRecord["delivery"];
+  escalation_json: AaliyahFounderPreferenceControlsRecord["escalation"];
   created_at: string | Date;
   updated_at: string | Date;
 };
@@ -1322,6 +1346,30 @@ function mapCoalescedSignalRow(row: CoalescedSignalRow): AaliyahCoalescedSignalR
   };
 }
 
+function mapEscalationRow(row: EscalationRow): AaliyahEscalationRecord {
+  return {
+    id: row.escalation_id,
+    tenantId: row.tenant_id,
+    escalationType: row.escalation_type,
+    status: row.escalation_status,
+    title: row.title_text,
+    summary: row.summary_text,
+    reason: row.reason_text,
+    escalationLevel: row.escalation_level,
+    idempotencyKey: row.idempotency_key,
+    sourceRecordIds: row.source_record_ids_json,
+    sourceRecordTypes: row.source_record_types_json,
+    relatedClusterId: row.related_cluster_id,
+    auditEventId: row.audit_event_id,
+    metadata: row.metadata_json as Record<string, unknown>,
+    createdAtIso: toIsoString(row.created_at),
+    evaluatedAtIso: toIsoString(row.evaluated_at),
+    acknowledgedAtIso: row.acknowledged_at ? toIsoString(row.acknowledged_at) : null,
+    dismissedAtIso: row.dismissed_at ? toIsoString(row.dismissed_at) : null,
+    resolvedAtIso: row.resolved_at ? toIsoString(row.resolved_at) : null
+  };
+}
+
 function mapEvaluationScheduleRow(row: EvaluationScheduleRow): AaliyahEvaluationScheduleRecord {
   return {
     id: row.schedule_id,
@@ -1437,6 +1485,7 @@ function mapFounderPreferenceControlsRow(row: FounderPreferenceControlsRow): Aal
     recommendation: row.recommendation_json,
     scheduler: row.scheduler_json,
     delivery: row.delivery_json,
+    escalation: row.escalation_json,
     createdAtIso: toIsoString(row.created_at)!,
     updatedAtIso: toIsoString(row.updated_at)!
   };
@@ -5348,6 +5397,157 @@ export class AgentOsRepository {
     return mapCoalescedSignalRow(res.rows[0]!);
   }
 
+  async createEscalation(args: {
+    tenantId: string;
+    escalationId: string;
+    escalationType: AaliyahEscalationRecord["escalationType"];
+    escalationStatus: AaliyahEscalationRecord["status"];
+    escalationLevel: AaliyahEscalationRecord["escalationLevel"];
+    title: string;
+    summary: string;
+    reason: string;
+    idempotencyKey: string;
+    sourceRecordIds: string[];
+    sourceRecordTypes: AaliyahEscalationRecord["sourceRecordTypes"];
+    relatedClusterId: string | null;
+    auditEventId: string | null;
+    metadata?: Record<string, unknown>;
+    createdAt?: string;
+    evaluatedAt?: string;
+  }): Promise<AaliyahEscalationRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EscalationRow>(
+        `
+        INSERT INTO aaliyah_escalations (
+          escalation_id, tenant_id, escalation_type, escalation_status, escalation_level,
+          title_text, summary_text, reason_text, idempotency_key, source_record_ids_json,
+          source_record_types_json, related_cluster_id, audit_event_id, metadata_json,
+          created_at, evaluated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9, $10::jsonb,
+          $11::jsonb, $12, $13, $14::jsonb,
+          $15, $16
+        )
+        RETURNING escalation_id, tenant_id, escalation_type, escalation_status, escalation_level,
+                  title_text, summary_text, reason_text, idempotency_key, source_record_ids_json,
+                  source_record_types_json, related_cluster_id, audit_event_id, metadata_json,
+                  created_at, evaluated_at, acknowledged_at, dismissed_at, resolved_at
+        `,
+        [
+          args.escalationId,
+          args.tenantId,
+          args.escalationType,
+          args.escalationStatus,
+          args.escalationLevel,
+          args.title,
+          args.summary,
+          args.reason,
+          args.idempotencyKey,
+          JSON.stringify(args.sourceRecordIds),
+          JSON.stringify(args.sourceRecordTypes),
+          args.relatedClusterId,
+          args.auditEventId,
+          JSON.stringify(args.metadata ?? {}),
+          createdAt,
+          args.evaluatedAt ?? createdAt
+        ]
+      )
+    );
+    return mapEscalationRow(res.rows[0]!);
+  }
+
+  async getEscalationById(args: { tenantId: string; escalationId: string }): Promise<AaliyahEscalationRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EscalationRow>(
+        `
+        SELECT escalation_id, tenant_id, escalation_type, escalation_status, escalation_level,
+               title_text, summary_text, reason_text, idempotency_key, source_record_ids_json,
+               source_record_types_json, related_cluster_id, audit_event_id, metadata_json,
+               created_at, evaluated_at, acknowledged_at, dismissed_at, resolved_at
+        FROM aaliyah_escalations
+        WHERE tenant_id = $1 AND escalation_id = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.escalationId]
+      )
+    );
+    return res.rows[0] ? mapEscalationRow(res.rows[0]) : null;
+  }
+
+  async getEscalationByIdempotencyKey(args: {
+    tenantId: string;
+    idempotencyKey: string;
+  }): Promise<AaliyahEscalationRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EscalationRow>(
+        `
+        SELECT escalation_id, tenant_id, escalation_type, escalation_status, escalation_level,
+               title_text, summary_text, reason_text, idempotency_key, source_record_ids_json,
+               source_record_types_json, related_cluster_id, audit_event_id, metadata_json,
+               created_at, evaluated_at, acknowledged_at, dismissed_at, resolved_at
+        FROM aaliyah_escalations
+        WHERE tenant_id = $1 AND idempotency_key = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.idempotencyKey]
+      )
+    );
+    return res.rows[0] ? mapEscalationRow(res.rows[0]) : null;
+  }
+
+  async listEscalations(args: {
+    tenantId: string;
+    limit?: number;
+    status?: AaliyahEscalationRecord["status"];
+  }): Promise<AaliyahEscalationRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EscalationRow>(
+        `
+        SELECT escalation_id, tenant_id, escalation_type, escalation_status, escalation_level,
+               title_text, summary_text, reason_text, idempotency_key, source_record_ids_json,
+               source_record_types_json, related_cluster_id, audit_event_id, metadata_json,
+               created_at, evaluated_at, acknowledged_at, dismissed_at, resolved_at
+        FROM aaliyah_escalations
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR escalation_status = $2)
+        ORDER BY created_at DESC
+        LIMIT $3
+        `,
+        [args.tenantId, args.status ?? null, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapEscalationRow);
+  }
+
+  async updateEscalationStatus(args: {
+    tenantId: string;
+    escalationId: string;
+    status: "acknowledged" | "dismissed" | "resolved";
+    changedAt?: string;
+  }): Promise<AaliyahEscalationRecord> {
+    const changedAt = args.changedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<EscalationRow>(
+        `
+        UPDATE aaliyah_escalations
+        SET escalation_status = $3,
+            acknowledged_at = CASE WHEN $3 = 'acknowledged' THEN $4 ELSE acknowledged_at END,
+            dismissed_at = CASE WHEN $3 = 'dismissed' THEN $4 ELSE dismissed_at END,
+            resolved_at = CASE WHEN $3 = 'resolved' THEN $4 ELSE resolved_at END
+        WHERE tenant_id = $1 AND escalation_id = $2
+        RETURNING escalation_id, tenant_id, escalation_type, escalation_status, escalation_level,
+                  title_text, summary_text, reason_text, idempotency_key, source_record_ids_json,
+                  source_record_types_json, related_cluster_id, audit_event_id, metadata_json,
+                  created_at, evaluated_at, acknowledged_at, dismissed_at, resolved_at
+        `,
+        [args.tenantId, args.escalationId, args.status, changedAt]
+      )
+    );
+    return mapEscalationRow(res.rows[0]!);
+  }
+
   async createEvaluationSchedule(args: {
     tenantId: string;
     scheduleId: string;
@@ -5796,7 +5996,7 @@ export class AgentOsRepository {
       client.query<FounderPreferenceControlsRow>(
         `
         SELECT id, tenant_id, actor_user_id, notification_json, digest_json, opportunity_json,
-               recommendation_json, scheduler_json, delivery_json, created_at, updated_at
+               recommendation_json, scheduler_json, delivery_json, escalation_json, created_at, updated_at
         FROM aaliyah_founder_preference_controls
         WHERE tenant_id = $1
         LIMIT 1
@@ -5817,6 +6017,7 @@ export class AgentOsRepository {
     recommendation: AaliyahFounderPreferenceControlsRecord["recommendation"];
     scheduler: AaliyahFounderPreferenceControlsRecord["scheduler"];
     delivery: AaliyahFounderPreferenceControlsRecord["delivery"];
+    escalation: AaliyahFounderPreferenceControlsRecord["escalation"];
     createdAt: string;
     updatedAt: string;
   }): Promise<AaliyahFounderPreferenceControlsRecord> {
@@ -5825,9 +6026,9 @@ export class AgentOsRepository {
         `
         INSERT INTO aaliyah_founder_preference_controls (
           id, tenant_id, actor_user_id, notification_json, digest_json, opportunity_json,
-          recommendation_json, scheduler_json, delivery_json, created_at, updated_at
+          recommendation_json, scheduler_json, delivery_json, escalation_json, created_at, updated_at
         ) VALUES (
-          $1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11
+          $1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12
         )
         ON CONFLICT (tenant_id) DO UPDATE
         SET actor_user_id = EXCLUDED.actor_user_id,
@@ -5837,9 +6038,10 @@ export class AgentOsRepository {
             recommendation_json = EXCLUDED.recommendation_json,
             scheduler_json = EXCLUDED.scheduler_json,
             delivery_json = EXCLUDED.delivery_json,
+            escalation_json = EXCLUDED.escalation_json,
             updated_at = EXCLUDED.updated_at
         RETURNING id, tenant_id, actor_user_id, notification_json, digest_json, opportunity_json,
-                  recommendation_json, scheduler_json, delivery_json, created_at, updated_at
+                  recommendation_json, scheduler_json, delivery_json, escalation_json, created_at, updated_at
         `,
         [
           args.preferencesId,
@@ -5851,6 +6053,7 @@ export class AgentOsRepository {
           JSON.stringify(args.recommendation),
           JSON.stringify(args.scheduler),
           JSON.stringify(args.delivery),
+          JSON.stringify(args.escalation),
           args.createdAt,
           args.updatedAt
         ]
