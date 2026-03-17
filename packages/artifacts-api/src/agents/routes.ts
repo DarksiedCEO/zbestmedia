@@ -4,6 +4,7 @@ import {
   AgentAdminService,
   AaliyahCommandSurfaceService,
   AaliyahDeliveryRouterService,
+  AaliyahDigestComposerService,
   AaliyahDiagnosticsService,
   AaliyahFounderBriefingService,
   AaliyahFounderInboxTriageService,
@@ -113,6 +114,11 @@ import {
   DeliveryListResponseSchema,
   DeliveryResponseSchema,
   DeliverySendBodySchema,
+  DigestComposeBodySchema,
+  DigestIdParamSchema,
+  DigestListQuerySchema,
+  DigestListResponseSchema,
+  DigestResponseSchema,
   OpportunityEvaluateBodySchema,
   OpportunityIdParamSchema,
   OpportunityListQuerySchema,
@@ -241,6 +247,7 @@ export function agentRoutes(opts: {
   aaliyahFollowThroughEngineService: AaliyahFollowThroughEngineService;
   aaliyahRecommendationEngineService: AaliyahRecommendationEngineService;
   aaliyahDeliveryRouterService: AaliyahDeliveryRouterService;
+  aaliyahDigestComposerService: AaliyahDigestComposerService;
   aaliyahNotificationEngineService: AaliyahNotificationEngineService;
   aaliyahOpportunityEngineService: AaliyahOpportunityEngineService;
   aaliyahStrategicIntelligenceService: AaliyahStrategicIntelligenceService;
@@ -1922,6 +1929,103 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_delivery_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/digests/compose", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = DigestComposeBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahDigestComposerService.compose({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        digestType: body.data.digestType
+      });
+
+      return reply.code(201).send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_digest_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/digests/:digestId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = DigestIdParamSchema.safeParse(req.params ?? {});
+      const query = DigestListQuerySchema.partial({ limit: true, digestType: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahDigestComposerService.getById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        digestId: path.data.digestId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_digest_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/digests", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = DigestListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahDigestComposerService.list({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        limit: query.data.limit,
+        digestType: query.data.digestType
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_digest_list_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/digests/:digestId/send", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = DigestIdParamSchema.safeParse(req.params ?? {});
+      const query = DigestListQuerySchema.partial({ limit: true, digestType: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahDigestComposerService.send({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        digestId: path.data.digestId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_digest_result",
         result
       });
     });

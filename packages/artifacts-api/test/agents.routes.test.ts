@@ -44,6 +44,8 @@ import {
   FounderCommandResponseSchema,
   DeliveryListResponseSchema,
   DeliveryResponseSchema,
+  DigestListResponseSchema,
+  DigestResponseSchema,
   NotificationListResponseSchema,
   NotificationResponseSchema,
   OpportunityListResponseSchema,
@@ -3361,6 +3363,111 @@ describe("agent routes", () => {
       message: "Sent email delivery."
     }))
   };
+  const aaliyahDigestComposerService: any = {
+    compose: vi.fn(async ({ digestType }: any) => ({
+      ok: true,
+      digest: {
+        id: "digest:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        digestType,
+        digestStatus: "composed",
+        title: "Daily founder digest — 2026-03-17",
+        summary: "Founder attention is needed on the latest priorities and opportunities.",
+        bodyText: "Top priorities",
+        idempotencyKey: `digest:${digestType}:2026-03-17:hash`,
+        relatedNotificationIds: ["notification:1"],
+        relatedOpportunityIds: [],
+        relatedInsightIds: ["strategic-insight:1"],
+        relatedRecommendationIds: ["recommendation:1"],
+        relatedFollowThroughIds: ["follow-through:1"],
+        deliveryRecordIds: [],
+        auditEventId: "aaliyah-diagnostics:event-digest-1",
+        metadata: {},
+        createdAtIso: "2026-03-17T08:00:00.000Z",
+        composedAtIso: "2026-03-17T08:00:00.000Z",
+        sentAtIso: null
+      },
+      replayed: false,
+      message: "Daily founder digest composed successfully."
+    })),
+    getById: vi.fn(async ({ digestId }: any) => ({
+      ok: true,
+      digest: {
+        id: digestId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        digestType: "daily_founder_digest",
+        digestStatus: "sent",
+        title: "Daily founder digest — 2026-03-17",
+        summary: "Founder attention is needed on the latest priorities and opportunities.",
+        bodyText: "Top priorities",
+        idempotencyKey: "digest:daily_founder_digest:2026-03-17:hash",
+        relatedNotificationIds: ["notification:1"],
+        relatedOpportunityIds: [],
+        relatedInsightIds: ["strategic-insight:1"],
+        relatedRecommendationIds: ["recommendation:1"],
+        relatedFollowThroughIds: ["follow-through:1"],
+        deliveryRecordIds: ["delivery:1"],
+        auditEventId: "aaliyah-diagnostics:event-digest-1",
+        metadata: {},
+        createdAtIso: "2026-03-17T08:00:00.000Z",
+        composedAtIso: "2026-03-17T08:00:00.000Z",
+        sentAtIso: "2026-03-17T08:05:00.000Z"
+      },
+      replayed: false,
+      message: "Founder attention is needed on the latest priorities and opportunities."
+    })),
+    list: vi.fn(async () => ({
+      ok: true,
+      digests: [{
+        id: "digest:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        digestType: "daily_founder_digest",
+        digestStatus: "sent",
+        title: "Daily founder digest — 2026-03-17",
+        summary: "Founder attention is needed on the latest priorities and opportunities.",
+        bodyText: "Top priorities",
+        idempotencyKey: "digest:daily_founder_digest:2026-03-17:hash",
+        relatedNotificationIds: ["notification:1"],
+        relatedOpportunityIds: [],
+        relatedInsightIds: ["strategic-insight:1"],
+        relatedRecommendationIds: ["recommendation:1"],
+        relatedFollowThroughIds: ["follow-through:1"],
+        deliveryRecordIds: ["delivery:1"],
+        auditEventId: "aaliyah-diagnostics:event-digest-1",
+        metadata: {},
+        createdAtIso: "2026-03-17T08:00:00.000Z",
+        composedAtIso: "2026-03-17T08:00:00.000Z",
+        sentAtIso: "2026-03-17T08:05:00.000Z"
+      }],
+      message: "Loaded 1 digest."
+    })),
+    send: vi.fn(async ({ digestId }: any) => ({
+      ok: true,
+      digest: {
+        id: digestId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        digestType: "daily_founder_digest",
+        digestStatus: "sent",
+        title: "Daily founder digest — 2026-03-17",
+        summary: "Founder attention is needed on the latest priorities and opportunities.",
+        bodyText: "Top priorities",
+        idempotencyKey: "digest:daily_founder_digest:2026-03-17:hash",
+        relatedNotificationIds: ["notification:1"],
+        relatedOpportunityIds: [],
+        relatedInsightIds: ["strategic-insight:1"],
+        relatedRecommendationIds: ["recommendation:1"],
+        relatedFollowThroughIds: ["follow-through:1"],
+        deliveryRecordIds: ["delivery:1"],
+        auditEventId: "aaliyah-diagnostics:event-digest-1",
+        metadata: {},
+        createdAtIso: "2026-03-17T08:00:00.000Z",
+        composedAtIso: "2026-03-17T08:00:00.000Z",
+        sentAtIso: "2026-03-17T08:05:00.000Z"
+      },
+      replayed: false,
+      message: "Daily founder digest sent through the delivery router."
+    }))
+  };
   const aaliyahMemoryBoundaryService = {
     getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
       generatedAt: "2026-03-15T00:00:00.000Z",
@@ -4301,6 +4408,7 @@ describe("agent routes", () => {
         aaliyahFollowThroughEngineService: aaliyahFollowThroughEngineService as never,
         aaliyahRecommendationEngineService: aaliyahRecommendationEngineService as never,
         aaliyahDeliveryRouterService: aaliyahDeliveryRouterService as never,
+        aaliyahDigestComposerService: aaliyahDigestComposerService as never,
         aaliyahNotificationEngineService: aaliyahNotificationEngineService as never,
         aaliyahOpportunityEngineService: aaliyahOpportunityEngineService as never,
         aaliyahStrategicIntelligenceService: aaliyahStrategicIntelligenceService as never,
@@ -5587,6 +5695,58 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(403);
     expect(aaliyahDeliveryRouterService.listDeliveries).not.toHaveBeenCalled();
+  });
+
+  it("exposes digest composer routes", async () => {
+    const composeRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/digests/compose",
+      payload: {
+        mode: "founder",
+        digestType: "daily_founder_digest",
+        generatedAt: "2026-03-17T08:00:00.000Z"
+      }
+    });
+
+    expect(composeRes.statusCode).toBe(201);
+    DigestResponseSchema.parse(composeRes.json());
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/digests/digest:1?mode=founder"
+    });
+    expect(detailRes.statusCode).toBe(200);
+    DigestResponseSchema.parse(detailRes.json());
+
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/digests?mode=founder&limit=10"
+    });
+    expect(listRes.statusCode).toBe(200);
+    DigestListResponseSchema.parse(listRes.json());
+
+    const sendRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/digests/digest:1/send?mode=founder",
+      payload: {
+        generatedAt: "2026-03-17T08:05:00.000Z"
+      }
+    });
+    expect(sendRes.statusCode).toBe(200);
+    DigestResponseSchema.parse(sendRes.json());
+  });
+
+  it("rejects digest composer routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahDigestComposerService.list.mockClear();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/digests?mode=founder&limit=10"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahDigestComposerService.list).not.toHaveBeenCalled();
   });
 
   it("exposes founder preference mutation routes", async () => {

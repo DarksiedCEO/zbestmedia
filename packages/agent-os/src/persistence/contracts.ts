@@ -141,6 +141,11 @@ import type {
   DeliveryStatus
 } from "../aaliyah/delivery-router-types.js";
 import type {
+  DigestRecord as DigestRecordShape,
+  DigestStatus,
+  DigestType
+} from "../aaliyah/digest-composer-types.js";
+import type {
   AssignmentPolicyDecision,
   AssignmentRecord,
   ExecutionRunRecord,
@@ -715,6 +720,44 @@ export const AaliyahDeliveryRecordSchema = z.object({
   sentAtIso: z.string().datetime().nullable()
 }) satisfies z.ZodType<DeliveryRecordShape>;
 export type AaliyahDeliveryRecord = z.infer<typeof AaliyahDeliveryRecordSchema>;
+
+export const DigestTypeSchema = z.enum([
+  "daily_founder_digest",
+  "weekly_founder_brief",
+  "critical_digest"
+]) satisfies z.ZodType<DigestType>;
+export type DigestTypeRecord = z.infer<typeof DigestTypeSchema>;
+
+export const DigestStatusSchema = z.enum([
+  "composed",
+  "sent",
+  "skipped",
+  "replayed"
+]) satisfies z.ZodType<DigestStatus>;
+export type DigestStatusRecord = z.infer<typeof DigestStatusSchema>;
+
+export const AaliyahDigestRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  digestType: DigestTypeSchema,
+  digestStatus: DigestStatusSchema,
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  bodyText: z.string().min(1),
+  idempotencyKey: z.string().min(1),
+  relatedNotificationIds: z.array(z.string().min(1)),
+  relatedOpportunityIds: z.array(z.string().min(1)),
+  relatedInsightIds: z.array(z.string().min(1)),
+  relatedRecommendationIds: z.array(z.string().min(1)),
+  relatedFollowThroughIds: z.array(z.string().min(1)),
+  deliveryRecordIds: z.array(z.string().min(1)),
+  auditEventId: z.string().min(1).nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAtIso: z.string().datetime(),
+  composedAtIso: z.string().datetime(),
+  sentAtIso: z.string().datetime().nullable()
+}) satisfies z.ZodType<DigestRecordShape>;
+export type AaliyahDigestRecord = z.infer<typeof AaliyahDigestRecordSchema>;
 
 export const OpportunityTypeSchema = z.enum([
   "dormant_contact",
@@ -1585,7 +1628,11 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "evaluation_run_replayed",
   "delivery_router_sent",
   "delivery_router_failed",
-  "delivery_router_replayed"
+  "delivery_router_replayed",
+  "digest_composer_composed",
+  "digest_composer_sent",
+  "digest_composer_replayed",
+  "digest_composer_skipped"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 

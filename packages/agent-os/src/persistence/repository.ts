@@ -17,6 +17,7 @@ import type {
   AaliyahCrmContactRecord,
   AaliyahCrmNoteRecord,
   AaliyahDiagnosticsEventRecord,
+  AaliyahDigestRecord,
   AaliyahDeliveryRecord,
   AaliyahFollowThroughEngineRecord,
   AaliyahFounderCommandRecord,
@@ -436,6 +437,28 @@ type DeliveryRow = {
   idempotency_key: string;
   metadata_json: Record<string, unknown>;
   created_at: string | Date;
+  sent_at: string | Date | null;
+};
+
+type DigestRow = {
+  digest_id: string;
+  tenant_id: string;
+  digest_type: AaliyahDigestRecord["digestType"];
+  digest_status: AaliyahDigestRecord["digestStatus"];
+  title_text: string;
+  summary_text: string;
+  body_text: string;
+  idempotency_key: string;
+  related_notification_ids_json: string[];
+  related_opportunity_ids_json: string[];
+  related_insight_ids_json: string[];
+  related_recommendation_ids_json: string[];
+  related_follow_through_ids_json: string[];
+  delivery_record_ids_json: string[];
+  audit_event_id: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string | Date;
+  composed_at: string | Date;
   sent_at: string | Date | null;
 };
 
@@ -1166,6 +1189,30 @@ function mapDeliveryRow(row: DeliveryRow): AaliyahDeliveryRecord {
     idempotencyKey: row.idempotency_key,
     metadata: row.metadata_json as Record<string, unknown>,
     createdAtIso: toIsoString(row.created_at),
+    sentAtIso: row.sent_at ? toIsoString(row.sent_at) : null
+  };
+}
+
+function mapDigestRow(row: DigestRow): AaliyahDigestRecord {
+  return {
+    id: row.digest_id,
+    tenantId: row.tenant_id,
+    digestType: row.digest_type,
+    digestStatus: row.digest_status,
+    title: row.title_text,
+    summary: row.summary_text,
+    bodyText: row.body_text,
+    idempotencyKey: row.idempotency_key,
+    relatedNotificationIds: row.related_notification_ids_json,
+    relatedOpportunityIds: row.related_opportunity_ids_json,
+    relatedInsightIds: row.related_insight_ids_json,
+    relatedRecommendationIds: row.related_recommendation_ids_json,
+    relatedFollowThroughIds: row.related_follow_through_ids_json,
+    deliveryRecordIds: row.delivery_record_ids_json,
+    auditEventId: row.audit_event_id,
+    metadata: row.metadata_json as Record<string, unknown>,
+    createdAtIso: toIsoString(row.created_at),
+    composedAtIso: toIsoString(row.composed_at),
     sentAtIso: row.sent_at ? toIsoString(row.sent_at) : null
   };
 }
@@ -4553,6 +4600,178 @@ export class AgentOsRepository {
       )
     );
     return mapDeliveryRow(res.rows[0]!);
+  }
+
+  async createDigest(args: {
+    tenantId: string;
+    digestId: string;
+    digestType: AaliyahDigestRecord["digestType"];
+    digestStatus: AaliyahDigestRecord["digestStatus"];
+    title: string;
+    summary: string;
+    bodyText: string;
+    idempotencyKey: string;
+    relatedNotificationIds: string[];
+    relatedOpportunityIds: string[];
+    relatedInsightIds: string[];
+    relatedRecommendationIds: string[];
+    relatedFollowThroughIds: string[];
+    deliveryRecordIds: string[];
+    auditEventId: string | null;
+    metadata?: Record<string, unknown>;
+    createdAt?: string;
+    composedAt?: string;
+    sentAt?: string | null;
+  }): Promise<AaliyahDigestRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<DigestRow>(
+        `
+        INSERT INTO aaliyah_digests (
+          digest_id, tenant_id, digest_type, digest_status, title_text,
+          summary_text, body_text, idempotency_key, related_notification_ids_json,
+          related_opportunity_ids_json, related_insight_ids_json, related_recommendation_ids_json,
+          related_follow_through_ids_json, delivery_record_ids_json, audit_event_id,
+          metadata_json, created_at, composed_at, sent_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9::jsonb,
+          $10::jsonb, $11::jsonb, $12::jsonb,
+          $13::jsonb, $14::jsonb, $15,
+          $16::jsonb, $17, $18, $19
+        )
+        RETURNING digest_id, tenant_id, digest_type, digest_status, title_text,
+                  summary_text, body_text, idempotency_key, related_notification_ids_json,
+                  related_opportunity_ids_json, related_insight_ids_json, related_recommendation_ids_json,
+                  related_follow_through_ids_json, delivery_record_ids_json, audit_event_id,
+                  metadata_json, created_at, composed_at, sent_at
+        `,
+        [
+          args.digestId,
+          args.tenantId,
+          args.digestType,
+          args.digestStatus,
+          args.title,
+          args.summary,
+          args.bodyText,
+          args.idempotencyKey,
+          JSON.stringify(args.relatedNotificationIds),
+          JSON.stringify(args.relatedOpportunityIds),
+          JSON.stringify(args.relatedInsightIds),
+          JSON.stringify(args.relatedRecommendationIds),
+          JSON.stringify(args.relatedFollowThroughIds),
+          JSON.stringify(args.deliveryRecordIds),
+          args.auditEventId,
+          JSON.stringify(args.metadata ?? {}),
+          createdAt,
+          args.composedAt ?? createdAt,
+          args.sentAt ?? null
+        ]
+      )
+    );
+    return mapDigestRow(res.rows[0]!);
+  }
+
+  async getDigestById(args: { tenantId: string; digestId: string }): Promise<AaliyahDigestRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<DigestRow>(
+        `
+        SELECT digest_id, tenant_id, digest_type, digest_status, title_text,
+               summary_text, body_text, idempotency_key, related_notification_ids_json,
+               related_opportunity_ids_json, related_insight_ids_json, related_recommendation_ids_json,
+               related_follow_through_ids_json, delivery_record_ids_json, audit_event_id,
+               metadata_json, created_at, composed_at, sent_at
+        FROM aaliyah_digests
+        WHERE tenant_id = $1 AND digest_id = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.digestId]
+      )
+    );
+    return res.rows[0] ? mapDigestRow(res.rows[0]) : null;
+  }
+
+  async getDigestByIdempotencyKey(args: { tenantId: string; idempotencyKey: string }): Promise<AaliyahDigestRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<DigestRow>(
+        `
+        SELECT digest_id, tenant_id, digest_type, digest_status, title_text,
+               summary_text, body_text, idempotency_key, related_notification_ids_json,
+               related_opportunity_ids_json, related_insight_ids_json, related_recommendation_ids_json,
+               related_follow_through_ids_json, delivery_record_ids_json, audit_event_id,
+               metadata_json, created_at, composed_at, sent_at
+        FROM aaliyah_digests
+        WHERE tenant_id = $1 AND idempotency_key = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.idempotencyKey]
+      )
+    );
+    return res.rows[0] ? mapDigestRow(res.rows[0]) : null;
+  }
+
+  async listDigests(args: {
+    tenantId: string;
+    limit?: number;
+    digestType?: AaliyahDigestRecord["digestType"];
+  }): Promise<AaliyahDigestRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<DigestRow>(
+        `
+        SELECT digest_id, tenant_id, digest_type, digest_status, title_text,
+               summary_text, body_text, idempotency_key, related_notification_ids_json,
+               related_opportunity_ids_json, related_insight_ids_json, related_recommendation_ids_json,
+               related_follow_through_ids_json, delivery_record_ids_json, audit_event_id,
+               metadata_json, created_at, composed_at, sent_at
+        FROM aaliyah_digests
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR digest_type = $2)
+        ORDER BY created_at DESC
+        LIMIT $3
+        `,
+        [args.tenantId, args.digestType ?? null, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapDigestRow);
+  }
+
+  async updateDigestAfterSend(args: {
+    tenantId: string;
+    digestId: string;
+    digestStatus: "sent" | "replayed";
+    deliveryRecordIds: string[];
+    auditEventId: string | null;
+    sentAt?: string | null;
+  }): Promise<AaliyahDigestRecord> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<DigestRow>(
+        `
+        UPDATE aaliyah_digests
+        SET digest_status = $3,
+            delivery_record_ids_json = $4::jsonb,
+            audit_event_id = $5,
+            sent_at = CASE
+              WHEN $6::timestamptz IS NULL THEN sent_at
+              ELSE $6::timestamptz
+            END
+        WHERE tenant_id = $1 AND digest_id = $2
+        RETURNING digest_id, tenant_id, digest_type, digest_status, title_text,
+                  summary_text, body_text, idempotency_key, related_notification_ids_json,
+                  related_opportunity_ids_json, related_insight_ids_json, related_recommendation_ids_json,
+                  related_follow_through_ids_json, delivery_record_ids_json, audit_event_id,
+                  metadata_json, created_at, composed_at, sent_at
+        `,
+        [
+          args.tenantId,
+          args.digestId,
+          args.digestStatus,
+          JSON.stringify(args.deliveryRecordIds),
+          args.auditEventId,
+          args.sentAt ?? null
+        ]
+      )
+    );
+    return mapDigestRow(res.rows[0]!);
   }
 
   async getDeliveryById(args: { tenantId: string; deliveryId: string }): Promise<AaliyahDeliveryRecord | null> {

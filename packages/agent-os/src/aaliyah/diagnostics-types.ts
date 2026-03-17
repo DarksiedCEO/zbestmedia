@@ -67,7 +67,11 @@ export type AaliyahDiagnosticsEventType =
   | "evaluation_run_replayed"
   | "delivery_router_sent"
   | "delivery_router_failed"
-  | "delivery_router_replayed";
+  | "delivery_router_replayed"
+  | "digest_composer_composed"
+  | "digest_composer_sent"
+  | "digest_composer_replayed"
+  | "digest_composer_skipped";
 
 export type AaliyahDiagnosticsEvent = {
   tenantId: string;

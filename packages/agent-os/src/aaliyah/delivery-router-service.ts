@@ -14,14 +14,17 @@ import {
 import { AaliyahDeliveryRouterHandlers } from './delivery-router-handlers.js';
 import {
   buildDeliveryIdempotencyKey,
+  isChannelEligibleForDigest,
   isChannelEligibleForNotification
 } from './delivery-router-policy.js';
 import { assertRetryable, nextAttemptCount } from './delivery-router-retry.js';
 import { buildDeliveryListMessage, buildDeliveryMessage } from './delivery-router-summary.js';
 import type { DeliveryChannel, DeliveryListResult, DeliveryResult, DeliverySourceType } from './delivery-router-types.js';
+import type { DigestRecord } from './digest-composer-types.js';
 import type { NotificationRecord } from './notification-engine-types.js';
 import type { AgentOsRepository } from '../persistence/repository.js';
 import type { EmailAssistantService } from '../email/service.js';
+import { renderDigestHtml } from './digest-composer-renderer.js';
 
 export class AaliyahDeliveryRouterService {
   private readonly access = new AaliyahAccessControlService();
@@ -63,7 +66,11 @@ export class AaliyahDeliveryRouterService {
     generatedAt?: string;
   }): Promise<DeliveryResult[]> {
     const generatedAt = args.generatedAt ?? new Date().toISOString();
-    const notification = await this.requireNotification({ tenantId: args.tenantId, sourceId: args.notificationId });
+    const source = await this.requireSource({ tenantId: args.tenantId, sourceId: args.notificationId, sourceType: 'notification' });
+    if (source.sourceType !== 'notification') {
+      throw new DeliveryRouterValidationError('Notification routing requires a notification source.');
+    }
+    const notification = source.notification;
     const results: DeliveryResult[] = [];
     results.push(
       await this.deliver({
@@ -182,12 +189,22 @@ export class AaliyahDeliveryRouterService {
       attemptCount: number;
     } & Awaited<ReturnType<AgentOsRepository['getDeliveryById']>>;
     notification?: NotificationRecord;
+    digest?: DigestRecord;
   }): Promise<DeliveryResult> {
     try {
       this.assertFounderModeAccess(args.principalContext, args.mode);
-      const notification = args.notification ?? await this.requireNotification({ tenantId: args.tenantId, sourceId: args.sourceId, sourceType: args.sourceType });
-      if (!isChannelEligibleForNotification({ channel: args.channel, notification })) {
+      const source = await this.requireSource({
+        tenantId: args.tenantId,
+        sourceId: args.sourceId,
+        sourceType: args.sourceType,
+        notification: args.notification,
+        digest: args.digest
+      });
+      if (source.sourceType === 'notification' && !isChannelEligibleForNotification({ channel: args.channel, notification: source.notification })) {
         throw new DeliveryRouterValidationError(`Delivery channel ${args.channel} is not allowed for this notification.`);
+      }
+      if (source.sourceType === 'digest' && !isChannelEligibleForDigest({ channel: args.channel, digest: source.digest })) {
+        throw new DeliveryRouterValidationError(`Delivery channel ${args.channel} is not allowed for this digest.`);
       }
 
       const idempotencyKey = buildDeliveryIdempotencyKey({
@@ -226,13 +243,15 @@ export class AaliyahDeliveryRouterService {
       }
 
       const attemptCount = existing ? nextAttemptCount(existing) : 1;
-      const deliveryId = existing?.id ?? `delivery:${randomUUID()}`;
-      try {
-        const metadata = await this.handlers.send({
-          tenantId: args.tenantId,
-          channel: args.channel,
-          notification
-        });
+        const deliveryId = existing?.id ?? `delivery:${randomUUID()}`;
+        try {
+          const metadata = await this.handlers.send({
+            tenantId: args.tenantId,
+            channel: args.channel,
+            source: source.sourceType === 'notification'
+              ? source
+              : { sourceType: 'digest', digest: source.digest, html: renderDigestHtml(source.digest) }
+          });
         const auditEventId = await this.audit.record({
           eventType: 'aaliyah.delivery.sent',
           principalId: args.actorId,
@@ -328,19 +347,28 @@ export class AaliyahDeliveryRouterService {
     }
   }
 
-  private async requireNotification(args: {
+  private async requireSource(args: {
     tenantId: string;
     sourceId: string;
     sourceType?: DeliverySourceType;
-  }) {
-    if ((args.sourceType ?? 'notification') !== 'notification') {
-      throw new DeliveryRouterValidationError('Digest delivery is not implemented yet.');
+    notification?: NotificationRecord;
+    digest?: DigestRecord;
+  }): Promise<
+    | { sourceType: 'notification'; notification: NotificationRecord }
+    | { sourceType: 'digest'; digest: DigestRecord }
+  > {
+    if ((args.sourceType ?? 'notification') === 'notification') {
+      const notification = args.notification ?? await this.repository.getNotificationById({ tenantId: args.tenantId, notificationId: args.sourceId });
+      if (!notification) {
+        throw new DeliveryRouterNotFoundError('Notification source was not found.');
+      }
+      return { sourceType: 'notification', notification };
     }
-    const notification = await this.repository.getNotificationById({ tenantId: args.tenantId, notificationId: args.sourceId });
-    if (!notification) {
-      throw new DeliveryRouterNotFoundError('Notification source was not found.');
+    const digest = args.digest ?? await this.repository.getDigestById({ tenantId: args.tenantId, digestId: args.sourceId });
+    if (!digest) {
+      throw new DeliveryRouterNotFoundError('Digest source was not found.');
     }
-    return notification;
+    return { sourceType: 'digest', digest };
   }
 
   private assertFounderModeAccess(principalContext: 'founder' | 'operator', mode: FounderBriefingMode) {

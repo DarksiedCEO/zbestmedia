@@ -6,12 +6,14 @@ import {
   acknowledgeAaliyahNotification,
   createAaliyahEvaluationSchedule,
   createFetchClient,
+  composeAaliyahDigest,
   dismissAaliyahOpportunity,
   dismissAaliyahStrategicInsight,
   dismissAaliyahNotification,
   executeFounderCommand,
   getAaliyahCommandSurface,
   getAaliyahDeliveries,
+  getAaliyahDigests,
   getAaliyahFollowThroughEngineRecords,
   getAaliyahInbox,
   getAaliyahNotifications,
@@ -27,6 +29,7 @@ import {
   resolveAppApiBaseUrl,
   readApiEnv,
   retryAaliyahDelivery,
+  sendAaliyahDigest,
   runAaliyahRuntime,
   runAaliyahEvaluationSchedule,
   pauseAaliyahEvaluationSchedule,
@@ -34,6 +37,7 @@ import {
   type AaliyahInboxItem,
   type AaliyahCommandSurface,
   type AaliyahDeliveryRecord,
+  type AaliyahDigestRecord,
   type AaliyahFollowThroughEngineRecord,
   type AaliyahNotificationRecord,
   type AaliyahOpportunityRecord,
@@ -136,7 +140,7 @@ export default function AaliyahPage() {
 
   const activeMode = sessionQuery.data?.session.activeModeState.activeMode ?? "founder";
 
-  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery, deliveriesQuery, opportunitiesQuery, strategicInsightsQuery, evaluationSchedulesQuery, evaluationRunsQuery] = useQueries({
+  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery, deliveriesQuery, digestsQuery, opportunitiesQuery, strategicInsightsQuery, evaluationSchedulesQuery, evaluationRunsQuery] = useQueries({
     queries: [
       {
         queryKey: ["aaliyah", "command-surface", activeMode],
@@ -238,6 +242,19 @@ export default function AaliyahPage() {
             mode: activeMode,
             limit: 50,
             sourceType: "notification",
+        }),
+        refetchInterval: 20_000,
+      },
+      {
+        queryKey: ["aaliyah", "digests", activeMode],
+        enabled: Boolean(envData.env && envData.appApiBaseUrl),
+        queryFn: async () =>
+          getAaliyahDigests({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            mode: activeMode,
+            limit: 20,
           }),
         refetchInterval: 20_000,
       },
@@ -482,6 +499,43 @@ export default function AaliyahPage() {
     },
   });
 
+  const digestMutation = useMutation({
+    mutationFn: async (
+      input:
+        | { action: "compose"; digestType: AaliyahDigestRecord["digestType"] }
+        | { action: "send"; digestId: string }
+    ) =>
+      input.action === "compose"
+        ? composeAaliyahDigest({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            mode: activeMode,
+            digestType: input.digestType,
+          })
+        : sendAaliyahDigest({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            digestId: input.digestId,
+            mode: activeMode,
+          }),
+    onSuccess: async (response) => {
+      if (response.result.ok) {
+        setCommandError(null);
+        setCommandNotice(response.result.message);
+      } else {
+        setCommandNotice(null);
+        setCommandError(response.result.message);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["aaliyah"] });
+    },
+    onError: (error) => {
+      setCommandNotice(null);
+      setCommandError((error as Error).message);
+    },
+  });
+
   const schedulerMutation = useMutation<
     { manifestVersion: string; resourceType: "aaliyah_evaluation_schedule_result"; result: AaliyahEvaluationScheduleMutationResult }
     | { manifestVersion: string; resourceType: "aaliyah_evaluation_run_result"; result: AaliyahEvaluationRunMutationResult },
@@ -567,8 +621,8 @@ export default function AaliyahPage() {
     },
   });
 
-  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading || deliveriesQuery.isLoading || opportunitiesQuery.isLoading || strategicInsightsQuery.isLoading || evaluationSchedulesQuery.isLoading || evaluationRunsQuery.isLoading;
-  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError || deliveriesQuery.isError || opportunitiesQuery.isError || strategicInsightsQuery.isError || evaluationSchedulesQuery.isError || evaluationRunsQuery.isError;
+  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading || deliveriesQuery.isLoading || digestsQuery.isLoading || opportunitiesQuery.isLoading || strategicInsightsQuery.isLoading || evaluationSchedulesQuery.isLoading || evaluationRunsQuery.isLoading;
+  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError || deliveriesQuery.isError || digestsQuery.isError || opportunitiesQuery.isError || strategicInsightsQuery.isError || evaluationSchedulesQuery.isError || evaluationRunsQuery.isError;
   const errorMessage =
     envData.error ??
     (sessionQuery.error as Error | undefined)?.message ??
@@ -580,6 +634,7 @@ export default function AaliyahPage() {
     (recommendationsQuery.error as Error | undefined)?.message ??
     (notificationsQuery.error as Error | undefined)?.message ??
     (deliveriesQuery.error as Error | undefined)?.message ??
+    (digestsQuery.error as Error | undefined)?.message ??
     (opportunitiesQuery.error as Error | undefined)?.message ??
     (strategicInsightsQuery.error as Error | undefined)?.message ??
     (evaluationSchedulesQuery.error as Error | undefined)?.message ??
@@ -595,6 +650,7 @@ export default function AaliyahPage() {
   const recommendations = recommendationsQuery.data?.result.ok ? recommendationsQuery.data.result.recommendations : [];
   const notifications = notificationsQuery.data?.result.ok ? notificationsQuery.data.result.notifications : [];
   const deliveries = deliveriesQuery.data?.result.ok ? deliveriesQuery.data.result.deliveries : [];
+  const digests = digestsQuery.data?.result.ok ? digestsQuery.data.result.digests : [];
   const opportunities = opportunitiesQuery.data?.result.ok ? opportunitiesQuery.data.result.opportunities : [];
   const strategicInsights = strategicInsightsQuery.data?.result.ok ? strategicInsightsQuery.data.result.insights : [];
   const evaluationSchedules = evaluationSchedulesQuery.data?.result.ok ? evaluationSchedulesQuery.data.result.schedules : [];
@@ -713,6 +769,14 @@ export default function AaliyahPage() {
 
   async function retryDelivery(deliveryId: string) {
     await deliveryRetryMutation.mutateAsync(deliveryId);
+  }
+
+  async function composeDigest(digestType: AaliyahDigestRecord["digestType"]) {
+    await digestMutation.mutateAsync({ action: "compose", digestType });
+  }
+
+  async function sendDigest(digestId: string) {
+    await digestMutation.mutateAsync({ action: "send", digestId });
   }
 
   async function acknowledgeOpportunity(opportunityId: string) {
@@ -1082,6 +1146,13 @@ export default function AaliyahPage() {
                     onAcknowledge={(notificationId) => void acknowledgeNotification(notificationId)}
                     onDismiss={(notificationId) => void dismissNotification(notificationId)}
                     onRetryDelivery={(deliveryId) => void retryDelivery(deliveryId)}
+                  />
+
+                  <DigestsPanel
+                    digests={digests}
+                    busy={digestMutation.isPending}
+                    onCompose={(digestType) => void composeDigest(digestType)}
+                    onSend={(digestId) => void sendDigest(digestId)}
                   />
 
                   <OpportunitiesPanel
@@ -1943,6 +2014,70 @@ function NotificationsPanel(args: {
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DigestsPanel(args: {
+  digests: AaliyahDigestRecord[];
+  busy: boolean;
+  onCompose: (digestType: AaliyahDigestRecord["digestType"]) => void;
+  onSend: (digestId: string) => void;
+}) {
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ fontWeight: 700 }}>Digests</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onCompose("daily_founder_digest")}>
+            Compose daily
+          </button>
+          <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onCompose("weekly_founder_brief")}>
+            Compose weekly
+          </button>
+          <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onCompose("critical_digest")}>
+            Compose critical
+          </button>
+        </div>
+      </div>
+      {args.digests.length === 0 ? (
+        <EmptyState text="No digests have been composed yet." />
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          {args.digests.map((digest) => (
+            <div key={digest.id} style={compactPanelStyle}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 650 }}>{digest.title}</div>
+                  <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>{digest.summary}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <Tag label={digest.digestType.replace(/_/g, " ")} tone="outline" />
+                  <Tag label={digest.digestStatus} tone={digest.digestStatus === "sent" ? "filled" : "outline"} />
+                </div>
+              </div>
+              <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                <DataBlock label="Composed" value={new Date(digest.composedAtIso).toLocaleString()} />
+                <DataBlock label="Sent" value={digest.sentAtIso ? new Date(digest.sentAtIso).toLocaleString() : "Not sent"} />
+                <DataBlock label="Deliveries" value={String(digest.deliveryRecordIds.length)} />
+              </div>
+              <details style={{ marginTop: 8 }}>
+                <summary style={{ cursor: "pointer", color: tokens.colors.muted }}>View digest body</summary>
+                <pre style={{ marginTop: 8, whiteSpace: "pre-wrap", fontSize: 12 }}>{digest.bodyText}</pre>
+              </details>
+              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  style={primaryButtonStyle}
+                  disabled={args.busy || digest.digestStatus === "sent" || digest.digestStatus === "skipped"}
+                  onClick={() => args.onSend(digest.id)}
+                >
+                  {digest.digestStatus === "sent" ? "Sent" : "Send"}
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

@@ -8,6 +8,7 @@ import {
   AaliyahCrmAccountSchema,
   AaliyahCrmContactSchema,
   AaliyahDeliveryRecordSchema,
+  AaliyahDigestRecordSchema,
   AaliyahFollowThroughEngineRecordSchema,
   AaliyahNotificationRecordSchema,
   AaliyahOpportunityRecordSchema,
@@ -823,6 +824,54 @@ export const DeliveryListResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_delivery_list_result"),
   result: z.discriminatedUnion("ok", [DeliveryListSuccessSchema, DeliveryFailureSchema])
+});
+
+export const DigestComposeBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  digestType: z.enum(["daily_founder_digest", "weekly_founder_brief", "critical_digest"])
+});
+
+export const DigestIdParamSchema = z.object({
+  digestId: z.string().min(1)
+});
+
+export const DigestListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  limit: z.coerce.number().int().positive().max(100).default(50),
+  digestType: z.enum(["daily_founder_digest", "weekly_founder_brief", "critical_digest"]).optional()
+});
+
+const DigestFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const DigestSuccessSchema = z.object({
+  ok: z.literal(true),
+  digest: AaliyahDigestRecordSchema,
+  replayed: z.boolean(),
+  message: z.string().min(1)
+});
+
+const DigestListSuccessSchema = z.object({
+  ok: z.literal(true),
+  digests: z.array(AaliyahDigestRecordSchema),
+  message: z.string().min(1)
+});
+
+export const DigestResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_digest_result"),
+  result: z.discriminatedUnion("ok", [DigestSuccessSchema, DigestFailureSchema])
+});
+
+export const DigestListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_digest_list_result"),
+  result: z.discriminatedUnion("ok", [DigestListSuccessSchema, DigestFailureSchema])
 });
 
 export const OpportunityEvaluateBodySchema = z.object({

@@ -1,5 +1,6 @@
 import type { EmailAssistantService } from '../email/service.js';
 import type { DeliveryChannel } from './delivery-router-types.js';
+import type { DigestRecord } from './digest-composer-types.js';
 import type { NotificationRecord } from './notification-engine-types.js';
 
 export class AaliyahDeliveryRouterHandlers {
@@ -8,19 +9,28 @@ export class AaliyahDeliveryRouterHandlers {
   async send(args: {
     tenantId: string;
     channel: DeliveryChannel;
-    notification: NotificationRecord;
+    source:
+      | { sourceType: 'notification'; notification: NotificationRecord }
+      | { sourceType: 'digest'; digest: DigestRecord; html: string };
   }): Promise<Record<string, unknown>> {
     if (args.channel === 'console') {
       return {
         transport: 'console',
         visibleInConsole: true,
-        deliveredNotificationId: args.notification.id
+        deliveredSourceType: args.source.sourceType,
+        deliveredSourceId: args.source.sourceType === 'notification' ? args.source.notification.id : args.source.digest.id
       };
     }
 
-    const subject = `[Aaliyah] ${args.notification.title}`;
-    const bodyText = [args.notification.summary, '', args.notification.reason].join('\n');
-    const bodyHtml = `<p>${escapeHtml(args.notification.summary)}</p><p>${escapeHtml(args.notification.reason)}</p>`;
+    const subject = args.source.sourceType === 'notification'
+      ? `[Aaliyah] ${args.source.notification.title}`
+      : `[Aaliyah] ${args.source.digest.title}`;
+    const bodyText = args.source.sourceType === 'notification'
+      ? [args.source.notification.summary, '', args.source.notification.reason].join('\n')
+      : args.source.digest.bodyText;
+    const bodyHtml = args.source.sourceType === 'notification'
+      ? `<p>${escapeHtml(args.source.notification.summary)}</p><p>${escapeHtml(args.source.notification.reason)}</p>`
+      : args.source.html;
     const sent = await this.emailService.sendSystemEmail({
       tenantId: args.tenantId,
       subject,
