@@ -1,14 +1,17 @@
 import React from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  acknowledgeAaliyahOpportunity,
   acknowledgeAaliyahNotification,
   createFetchClient,
+  dismissAaliyahOpportunity,
   dismissAaliyahNotification,
   executeFounderCommand,
   getAaliyahCommandSurface,
   getAaliyahFollowThroughEngineRecords,
   getAaliyahInbox,
   getAaliyahNotifications,
+  getAaliyahOpportunities,
   getAaliyahRecommendations,
   getAaliyahOpenTasks,
   getAaliyahSessionSnapshot,
@@ -21,6 +24,7 @@ import {
   type AaliyahCommandSurface,
   type AaliyahFollowThroughEngineRecord,
   type AaliyahNotificationRecord,
+  type AaliyahOpportunityRecord,
   type AaliyahRecommendationRecord,
   type AaliyahMode,
   type AaliyahQuickAction,
@@ -115,7 +119,7 @@ export default function AaliyahPage() {
 
   const activeMode = sessionQuery.data?.session.activeModeState.activeMode ?? "founder";
 
-  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery] = useQueries({
+  const [shellQuery, inboxQuery, tasksQuery, commandHistoryQuery, followThroughEngineQuery, recommendationsQuery, notificationsQuery, opportunitiesQuery] = useQueries({
     queries: [
       {
         queryKey: ["aaliyah", "command-surface", activeMode],
@@ -197,6 +201,20 @@ export default function AaliyahPage() {
         enabled: Boolean(envData.env && envData.appApiBaseUrl),
         queryFn: async () =>
           getAaliyahNotifications({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            mode: activeMode,
+            limit: 20,
+            status: "active",
+          }),
+        refetchInterval: 20_000,
+      },
+      {
+        queryKey: ["aaliyah", "opportunities", activeMode],
+        enabled: Boolean(envData.env && envData.appApiBaseUrl),
+        queryFn: async () =>
+          getAaliyahOpportunities({
             baseUrl: envData.appApiBaseUrl!,
             bearer: envData.env!.VITE_POLICY_BEARER,
             fetchClient,
@@ -309,6 +327,34 @@ export default function AaliyahPage() {
     },
   });
 
+  const opportunityMutation = useMutation({
+    mutationFn: async (input: { opportunityId: string; action: "acknowledge" | "dismiss" }) =>
+      input.action === "acknowledge"
+        ? acknowledgeAaliyahOpportunity({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            opportunityId: input.opportunityId,
+            mode: activeMode,
+          })
+        : dismissAaliyahOpportunity({
+            baseUrl: envData.appApiBaseUrl!,
+            bearer: envData.env!.VITE_POLICY_BEARER,
+            fetchClient,
+            opportunityId: input.opportunityId,
+            mode: activeMode,
+          }),
+    onSuccess: async (response) => {
+      setCommandError(null);
+      setCommandNotice(response.result.message);
+      await queryClient.invalidateQueries({ queryKey: ["aaliyah", "opportunities"] });
+    },
+    onError: (error) => {
+      setCommandNotice(null);
+      setCommandError((error as Error).message);
+    },
+  });
+
   const resetMutation = useMutation({
     mutationFn: async (scope: "soft" | "hard") =>
       resetAaliyahSession({
@@ -331,8 +377,8 @@ export default function AaliyahPage() {
     },
   });
 
-  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading;
-  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError;
+  const isLoading = sessionQuery.isLoading || shellQuery.isLoading || inboxQuery.isLoading || tasksQuery.isLoading || commandHistoryQuery.isLoading || followThroughEngineQuery.isLoading || recommendationsQuery.isLoading || notificationsQuery.isLoading || opportunitiesQuery.isLoading;
+  const isError = Boolean(envData.error) || sessionQuery.isError || shellQuery.isError || inboxQuery.isError || tasksQuery.isError || commandHistoryQuery.isError || followThroughEngineQuery.isError || recommendationsQuery.isError || notificationsQuery.isError || opportunitiesQuery.isError;
   const errorMessage =
     envData.error ??
     (sessionQuery.error as Error | undefined)?.message ??
@@ -343,6 +389,7 @@ export default function AaliyahPage() {
     (followThroughEngineQuery.error as Error | undefined)?.message ??
     (recommendationsQuery.error as Error | undefined)?.message ??
     (notificationsQuery.error as Error | undefined)?.message ??
+    (opportunitiesQuery.error as Error | undefined)?.message ??
     null;
 
   const shell = shellQuery.data?.shell;
@@ -353,6 +400,7 @@ export default function AaliyahPage() {
   const followThroughRecords = followThroughEngineQuery.data?.result.ok ? followThroughEngineQuery.data.result.records : [];
   const recommendations = recommendationsQuery.data?.result.ok ? recommendationsQuery.data.result.recommendations : [];
   const notifications = notificationsQuery.data?.result.ok ? notificationsQuery.data.result.notifications : [];
+  const opportunities = opportunitiesQuery.data?.result.ok ? opportunitiesQuery.data.result.opportunities : [];
 
   async function executeIntent(intent: string, parameters?: Record<string, unknown>, mode?: AaliyahMode) {
     await runtimeMutation.mutateAsync({ intent, parameters, mode });
@@ -455,6 +503,14 @@ export default function AaliyahPage() {
     await notificationMutation.mutateAsync({ notificationId, action: "dismiss" });
   }
 
+  async function acknowledgeOpportunity(opportunityId: string) {
+    await opportunityMutation.mutateAsync({ opportunityId, action: "acknowledge" });
+  }
+
+  async function dismissOpportunity(opportunityId: string) {
+    await opportunityMutation.mutateAsync({ opportunityId, action: "dismiss" });
+  }
+
   async function actOnRecommendation(recommendation: AaliyahRecommendationRecord) {
     const targetType = typeof recommendation.metadata.targetType === "string" ? recommendation.metadata.targetType : null;
     const targetId = typeof recommendation.metadata.targetId === "string" ? recommendation.metadata.targetId : null;
@@ -500,6 +556,64 @@ export default function AaliyahPage() {
 
     setCommandNotice(null);
     setCommandError("This recommendation is advisory only right now and has no Pack 34 command mapping.");
+  }
+
+  async function actOnOpportunity(opportunity: AaliyahOpportunityRecord) {
+    const targetType = typeof opportunity.metadata.targetType === "string" ? opportunity.metadata.targetType : null;
+    const targetId = typeof opportunity.metadata.targetId === "string" ? opportunity.metadata.targetId : null;
+
+    switch (opportunity.opportunityType) {
+      case "dormant_contact":
+      case "engagement_spike":
+        if (targetType === "contact" && targetId) {
+          await createFollowUpFromTarget("contact", targetId, "Re-engage this contact");
+          return;
+        }
+        if (targetType === "account" && targetId) {
+          await createFollowUpFromTarget("account", targetId, "Re-engage this account");
+          return;
+        }
+        break;
+      case "missed_follow_up_window":
+        if (targetType === "calendar_event" && targetId) {
+          await submitFounderCommand({
+            commandType: "override_schedule",
+            target: { targetType: "calendar_event", targetId },
+            payload: {
+              overrideMode: "reschedule",
+              reason: "Opportunity engine surfaced a missed follow-up window.",
+            },
+            idempotencySeed: `override_schedule:calendar:${targetId}`,
+          });
+          return;
+        }
+        if (targetType === "contact" && targetId) {
+          await createFollowUpFromTarget("contact", targetId, "Create the missed follow-up now");
+          return;
+        }
+        if (targetType === "task" && targetId) {
+          await createFollowUpFromTarget("task", targetId, "Create the missed follow-up now");
+          return;
+        }
+        break;
+      case "stalled_pipeline":
+      case "recurring_block_pattern":
+        if (targetType === "task" && targetId) {
+          await escalateTask(targetId);
+          return;
+        }
+        if (targetType === "contact" && targetId) {
+          await createFollowUpFromTarget("contact", targetId, "Break the stall with a concrete follow-up");
+          return;
+        }
+        break;
+      case "noop":
+      default:
+        break;
+    }
+
+    setCommandNotice(null);
+    setCommandError("This opportunity is advisory only right now and has no Pack 34 command mapping.");
   }
 
   async function handleQueueAction(item: AaliyahInboxItem, action: string) {
@@ -725,6 +839,14 @@ export default function AaliyahPage() {
                     busy={notificationMutation.isPending}
                     onAcknowledge={(notificationId) => void acknowledgeNotification(notificationId)}
                     onDismiss={(notificationId) => void dismissNotification(notificationId)}
+                  />
+
+                  <OpportunitiesPanel
+                    opportunities={opportunities}
+                    busy={founderCommandMutation.isPending || opportunityMutation.isPending}
+                    onAct={(opportunity) => void actOnOpportunity(opportunity)}
+                    onAcknowledge={(opportunityId) => void acknowledgeOpportunity(opportunityId)}
+                    onDismiss={(opportunityId) => void dismissOpportunity(opportunityId)}
                   />
                 </div>
               </Section>
@@ -1531,6 +1653,86 @@ function NotificationsPanel(args: {
                   Acknowledge
                 </button>
                 <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onDismiss(notification.id)}>
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function opportunityActionLabel(opportunity: AaliyahOpportunityRecord) {
+  switch (opportunity.opportunityType) {
+    case "dormant_contact":
+      return "Create follow-up";
+    case "stalled_pipeline":
+      return "Unblock now";
+    case "missed_follow_up_window":
+      return "Schedule next";
+    case "engagement_spike":
+      return "Reach out";
+    case "recurring_block_pattern":
+      return "Escalate";
+    case "noop":
+    default:
+      return "Advisory";
+  }
+}
+
+function opportunityTone(type: AaliyahOpportunityRecord["opportunityType"]) {
+  switch (type) {
+    case "recurring_block_pattern":
+    case "stalled_pipeline":
+      return "filled" as const;
+    default:
+      return "outline" as const;
+  }
+}
+
+function OpportunitiesPanel(args: {
+  opportunities: AaliyahOpportunityRecord[];
+  busy: boolean;
+  onAct: (opportunity: AaliyahOpportunityRecord) => void;
+  onAcknowledge: (opportunityId: string) => void;
+  onDismiss: (opportunityId: string) => void;
+}) {
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ fontWeight: 700 }}>Opportunities</div>
+      {args.opportunities.length === 0 ? (
+        <EmptyState text="No active opportunities are persisted right now." />
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          {args.opportunities.map((opportunity) => (
+            <div key={opportunity.id} style={compactPanelStyle}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 650 }}>{opportunity.summary}</div>
+                  <div style={{ marginTop: 4, fontSize: 13, color: tokens.colors.muted }}>{opportunity.reason}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <Tag label={opportunity.opportunityType.replaceAll("_", " ")} tone={opportunityTone(opportunity.opportunityType)} />
+                  <Tag label={opportunity.status} tone="outline" />
+                  <Tag label={opportunity.source.sourceType.replaceAll("_", " ")} tone="outline" />
+                </div>
+              </div>
+              <div style={{ marginTop: 8, display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                <DataBlock label="Source" value={shortId(opportunity.source.sourceId)} />
+                <DataBlock label="Task" value={shortId(opportunity.relatedTaskId)} />
+                <DataBlock label="Recommendation" value={shortId(opportunity.relatedRecommendationId)} />
+                <DataBlock label="Evaluated" value={new Date(opportunity.evaluatedAtIso).toLocaleString()} />
+              </div>
+              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button style={primaryButtonStyle} disabled={args.busy || opportunity.opportunityType === "noop"} onClick={() => args.onAct(opportunity)}>
+                  {opportunityActionLabel(opportunity)}
+                </button>
+                <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onAcknowledge(opportunity.id)}>
+                  Acknowledge
+                </button>
+                <button style={ghostButtonStyle} disabled={args.busy} onClick={() => args.onDismiss(opportunity.id)}>
                   Dismiss
                 </button>
               </div>

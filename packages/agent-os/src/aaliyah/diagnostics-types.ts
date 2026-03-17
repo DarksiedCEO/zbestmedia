@@ -46,7 +46,12 @@ export type AaliyahDiagnosticsEventType =
   | "notification_engine_replayed"
   | "notification_engine_acknowledged"
   | "notification_engine_dismissed"
-  | "notification_engine_noop";
+  | "notification_engine_noop"
+  | "opportunity_engine_created"
+  | "opportunity_engine_replayed"
+  | "opportunity_engine_acknowledged"
+  | "opportunity_engine_dismissed"
+  | "opportunity_engine_noop";
 
 export type AaliyahDiagnosticsEvent = {
   tenantId: string;

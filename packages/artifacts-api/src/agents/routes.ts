@@ -9,6 +9,7 @@ import {
   AaliyahFounderCommandService,
   AaliyahFollowThroughEngineService,
   AaliyahNotificationEngineService,
+  AaliyahOpportunityEngineService,
   AaliyahRecommendationEngineService,
   AaliyahCalendarService,
   AaliyahCrmService,
@@ -104,6 +105,9 @@ import {
   NotificationEvaluateBodySchema,
   NotificationIdParamSchema,
   NotificationListQuerySchema,
+  OpportunityEvaluateBodySchema,
+  OpportunityIdParamSchema,
+  OpportunityListQuerySchema,
   NotificationListResponseSchema,
   NotificationResponseSchema,
   AaliyahTaskUpdateBodySchema,
@@ -213,6 +217,7 @@ export function agentRoutes(opts: {
   aaliyahFollowThroughEngineService: AaliyahFollowThroughEngineService;
   aaliyahRecommendationEngineService: AaliyahRecommendationEngineService;
   aaliyahNotificationEngineService: AaliyahNotificationEngineService;
+  aaliyahOpportunityEngineService: AaliyahOpportunityEngineService;
   aaliyahReviewQueueService: AaliyahFounderReviewQueueService;
   aaliyahTriageService: AaliyahFounderInboxTriageService;
   aaliyahFollowThroughService: AaliyahFollowThroughService;
@@ -1790,6 +1795,129 @@ export function agentRoutes(opts: {
       return reply.send({
         manifestVersion: orgManifestVersion,
         resourceType: "aaliyah_notification_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/opportunities/evaluate", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const body = OpportunityEvaluateBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send({ error: "invalid_body", details: body.error.flatten() });
+      }
+
+      const result = await opts.aaliyahOpportunityEngineService.evaluateSource({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: body.data.mode,
+        source: body.data.source
+      });
+
+      return reply.code(201).send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_opportunity_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/opportunities/:opportunityId", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = OpportunityIdParamSchema.safeParse(req.params ?? {});
+      const query = OpportunityListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahOpportunityEngineService.getOpportunityById({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        opportunityId: path.data.opportunityId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_opportunity_result",
+        result
+      });
+    });
+
+    app.get("/v1/agent-os/aaliyah/opportunities", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const query = OpportunityListQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahOpportunityEngineService.listOpportunities({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode,
+        limit: query.data.limit,
+        status: query.data.status
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_opportunity_list_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/opportunities/:opportunityId/acknowledge", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = OpportunityIdParamSchema.safeParse(req.params ?? {});
+      const query = OpportunityListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahOpportunityEngineService.acknowledgeOpportunity({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        opportunityId: path.data.opportunityId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_opportunity_result",
+        result
+      });
+    });
+
+    app.post("/v1/agent-os/aaliyah/opportunities/:opportunityId/dismiss", async (req, reply) => {
+      requireAaliyahFounderRole(req);
+      const path = OpportunityIdParamSchema.safeParse(req.params ?? {});
+      const query = OpportunityListQuerySchema.partial({ limit: true, status: true }).safeParse(req.query ?? {});
+      if (!path.success) {
+        return reply.code(400).send({ error: "invalid_path", details: path.error.flatten() });
+      }
+      if (!query.success) {
+        return reply.code(400).send({ error: "invalid_query", details: query.error.flatten() });
+      }
+
+      const result = await opts.aaliyahOpportunityEngineService.dismissOpportunity({
+        tenantId: req.auth.tenantId,
+        actorId: req.auth.actorId,
+        principalContext: "founder",
+        mode: query.data.mode ?? "founder",
+        opportunityId: path.data.opportunityId
+      });
+
+      return reply.send({
+        manifestVersion: orgManifestVersion,
+        resourceType: "aaliyah_opportunity_result",
         result
       });
     });

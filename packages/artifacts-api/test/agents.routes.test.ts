@@ -44,6 +44,8 @@ import {
   FounderCommandResponseSchema,
   NotificationListResponseSchema,
   NotificationResponseSchema,
+  OpportunityListResponseSchema,
+  OpportunityResponseSchema,
   RecommendationListResponseSchema,
   RecommendationResponseSchema,
   AaliyahTaskListResponseSchema,
@@ -2873,6 +2875,130 @@ describe("agent routes", () => {
       message: "A stale high-priority item needs founder attention now."
     }))
   };
+  const aaliyahOpportunityEngineService: any = {
+    evaluateSource: vi.fn(async ({ source }: { source: { sourceType: string; sourceId: string } }) => ({
+      ok: true,
+      opportunity: {
+        id: "opportunity:1",
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        source,
+        opportunityType: "dormant_contact",
+        status: "active",
+        reason: "This relationship has prior value but has gone quiet with no active follow-up.",
+        summary: "A previously active relationship has gone quiet long enough to justify outreach.",
+        idempotencyKey: "opp:dormant_contact:contact:crm-contact:1:abc",
+        relatedTaskId: null,
+        relatedRecommendationId: null,
+        auditEventId: "aaliyah-diagnostics:event-5",
+        metadata: { targetType: "contact", targetId: "crm-contact:1" },
+        createdAtIso: "2026-03-16T18:15:00.000Z",
+        evaluatedAtIso: "2026-03-16T18:15:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: null
+      },
+      replayed: false,
+      message: "A previously active relationship has gone quiet long enough to justify outreach."
+    })),
+    getOpportunityById: vi.fn(async ({ opportunityId }: { opportunityId: string }) => ({
+      ok: true,
+      opportunity: {
+        id: opportunityId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        source: {
+          sourceType: "contact",
+          sourceId: "crm-contact:1"
+        },
+        opportunityType: "dormant_contact",
+        status: "active",
+        reason: "This relationship has prior value but has gone quiet with no active follow-up.",
+        summary: "A previously active relationship has gone quiet long enough to justify outreach.",
+        idempotencyKey: "opp:dormant_contact:contact:crm-contact:1:abc",
+        relatedTaskId: null,
+        relatedRecommendationId: null,
+        auditEventId: "aaliyah-diagnostics:event-5",
+        metadata: { targetType: "contact", targetId: "crm-contact:1" },
+        createdAtIso: "2026-03-16T18:15:00.000Z",
+        evaluatedAtIso: "2026-03-16T18:15:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: null
+      },
+      replayed: false,
+      message: "Opportunity loaded successfully."
+    })),
+    listOpportunities: vi.fn(async () => ({
+      ok: true,
+      opportunities: [
+        {
+          id: "opportunity:1",
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          source: {
+            sourceType: "contact",
+            sourceId: "crm-contact:1"
+          },
+          opportunityType: "dormant_contact",
+          status: "active",
+          reason: "This relationship has prior value but has gone quiet with no active follow-up.",
+          summary: "A previously active relationship has gone quiet long enough to justify outreach.",
+          idempotencyKey: "opp:dormant_contact:contact:crm-contact:1:abc",
+          relatedTaskId: null,
+          relatedRecommendationId: null,
+          auditEventId: "aaliyah-diagnostics:event-5",
+          metadata: { targetType: "contact", targetId: "crm-contact:1" },
+          createdAtIso: "2026-03-16T18:15:00.000Z",
+          evaluatedAtIso: "2026-03-16T18:15:00.000Z",
+          acknowledgedAtIso: null,
+          dismissedAtIso: null
+        }
+      ],
+      message: "Opportunities loaded successfully."
+    })),
+    acknowledgeOpportunity: vi.fn(async ({ opportunityId }: { opportunityId: string }) => ({
+      ok: true,
+      opportunity: {
+        id: opportunityId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        source: { sourceType: "contact", sourceId: "crm-contact:1" },
+        opportunityType: "dormant_contact",
+        status: "acknowledged",
+        reason: "This relationship has prior value but has gone quiet with no active follow-up.",
+        summary: "A previously active relationship has gone quiet long enough to justify outreach.",
+        idempotencyKey: "opp:dormant_contact:contact:crm-contact:1:abc",
+        relatedTaskId: null,
+        relatedRecommendationId: null,
+        auditEventId: "aaliyah-diagnostics:event-5",
+        metadata: { targetType: "contact", targetId: "crm-contact:1" },
+        createdAtIso: "2026-03-16T18:15:00.000Z",
+        evaluatedAtIso: "2026-03-16T18:15:00.000Z",
+        acknowledgedAtIso: "2026-03-16T18:16:00.000Z",
+        dismissedAtIso: null
+      },
+      replayed: false,
+      message: "Opportunity acknowledged."
+    })),
+    dismissOpportunity: vi.fn(async ({ opportunityId }: { opportunityId: string }) => ({
+      ok: true,
+      opportunity: {
+        id: opportunityId,
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        source: { sourceType: "contact", sourceId: "crm-contact:1" },
+        opportunityType: "dormant_contact",
+        status: "dismissed",
+        reason: "This relationship has prior value but has gone quiet with no active follow-up.",
+        summary: "A previously active relationship has gone quiet long enough to justify outreach.",
+        idempotencyKey: "opp:dormant_contact:contact:crm-contact:1:abc",
+        relatedTaskId: null,
+        relatedRecommendationId: null,
+        auditEventId: "aaliyah-diagnostics:event-5",
+        metadata: { targetType: "contact", targetId: "crm-contact:1" },
+        createdAtIso: "2026-03-16T18:15:00.000Z",
+        evaluatedAtIso: "2026-03-16T18:15:00.000Z",
+        acknowledgedAtIso: null,
+        dismissedAtIso: "2026-03-16T18:16:00.000Z"
+      },
+      replayed: false,
+      message: "Opportunity dismissed."
+    }))
+  };
   const aaliyahMemoryBoundaryService = {
     getSummary: vi.fn(({ activeMode }: { activeMode: "founder" | "zbestmedia" }) => ({
       generatedAt: "2026-03-15T00:00:00.000Z",
@@ -3813,6 +3939,7 @@ describe("agent routes", () => {
         aaliyahFollowThroughEngineService: aaliyahFollowThroughEngineService as never,
         aaliyahRecommendationEngineService: aaliyahRecommendationEngineService as never,
         aaliyahNotificationEngineService: aaliyahNotificationEngineService as never,
+        aaliyahOpportunityEngineService: aaliyahOpportunityEngineService as never,
         aaliyahTriageService: aaliyahTriageService as never,
         aaliyahReviewQueueService: aaliyahReviewQueueService as never,
         aaliyahFollowThroughService: aaliyahFollowThroughService as never,
@@ -4851,6 +4978,65 @@ describe("agent routes", () => {
 
     expect(res.statusCode).toBe(403);
     expect(aaliyahNotificationEngineService.listNotifications).not.toHaveBeenCalled();
+  });
+
+  it("exposes opportunity engine routes", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/opportunities/evaluate",
+      payload: {
+        mode: "founder",
+        source: {
+          sourceType: "contact",
+          sourceId: "crm-contact:1"
+        }
+      }
+    });
+
+    expect(createRes.statusCode).toBe(201);
+    const created = OpportunityResponseSchema.parse(createRes.json());
+    expect(created.result.ok).toBe(true);
+
+    const detailRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/opportunities/opportunity:1?mode=founder"
+    });
+    expect(detailRes.statusCode).toBe(200);
+    OpportunityResponseSchema.parse(detailRes.json());
+
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/opportunities?mode=founder&limit=10&status=active"
+    });
+    expect(listRes.statusCode).toBe(200);
+    OpportunityListResponseSchema.parse(listRes.json());
+
+    const ackRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/opportunities/opportunity:1/acknowledge?mode=founder"
+    });
+    expect(ackRes.statusCode).toBe(200);
+    OpportunityResponseSchema.parse(ackRes.json());
+
+    const dismissRes = await app.inject({
+      method: "POST",
+      url: "/v1/agent-os/aaliyah/opportunities/opportunity:1/dismiss?mode=founder"
+    });
+    expect(dismissRes.statusCode).toBe(200);
+    OpportunityResponseSchema.parse(dismissRes.json());
+  });
+
+  it("rejects opportunity engine routes for non-founder callers", async () => {
+    authRoles = ["admin"];
+    aaliyahOpportunityEngineService.listOpportunities.mockClear();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/v1/agent-os/aaliyah/opportunities?mode=founder&limit=10"
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(aaliyahOpportunityEngineService.listOpportunities).not.toHaveBeenCalled();
   });
 
   it("exposes founder preference mutation routes", async () => {

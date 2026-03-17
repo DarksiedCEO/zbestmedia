@@ -322,6 +322,28 @@ export type AaliyahNotificationRecord = {
   dismissedAtIso: string | null;
 };
 
+export type AaliyahOpportunityRecord = {
+  id: string;
+  tenantId: string;
+  source: {
+    sourceType: "contact" | "account" | "task" | "calendar_event" | "follow_through_record" | "recommendation" | "founder_command";
+    sourceId: string;
+  };
+  opportunityType: "dormant_contact" | "stalled_pipeline" | "missed_follow_up_window" | "engagement_spike" | "recurring_block_pattern" | "noop";
+  status: "active" | "acknowledged" | "converted" | "dismissed" | "noop";
+  reason: string;
+  summary: string;
+  idempotencyKey: string;
+  relatedTaskId: string | null;
+  relatedRecommendationId: string | null;
+  auditEventId: string | null;
+  metadata: Record<string, unknown>;
+  createdAtIso: string;
+  evaluatedAtIso: string;
+  acknowledgedAtIso: string | null;
+  dismissedAtIso: string | null;
+};
+
 export type FounderCommandRequest = {
   mode: AaliyahMode;
   commandType: FounderCommandType;
@@ -1037,6 +1059,144 @@ export async function dismissAaliyahNotification(args: {
 }> {
   return args.fetchClient({
     url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/notifications/${args.notificationId}/dismiss`, {
+      mode: args.mode,
+    }),
+    method: "POST",
+    bearer: args.bearer,
+  });
+}
+
+export async function evaluateAaliyahOpportunity(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  source: {
+    sourceType: "contact" | "account" | "task" | "calendar_event" | "follow_through_record" | "recommendation" | "founder_command";
+    sourceId: string;
+  };
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_opportunity_result";
+  result:
+    | {
+        ok: true;
+        opportunity: AaliyahOpportunityRecord;
+        replayed: boolean;
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: `${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/opportunities/evaluate`,
+    method: "POST",
+    bearer: args.bearer,
+    body: {
+      mode: args.mode ?? "founder",
+      source: args.source,
+    },
+  });
+}
+
+export async function getAaliyahOpportunities(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  mode?: AaliyahMode;
+  limit?: number;
+  status?: "active" | "acknowledged" | "converted" | "dismissed" | "noop";
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_opportunity_list_result";
+  result:
+    | {
+        ok: true;
+        opportunities: AaliyahOpportunityRecord[];
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/opportunities`, {
+      mode: args.mode,
+      limit: args.limit ? String(args.limit) : undefined,
+      status: args.status,
+    }),
+    bearer: args.bearer,
+  });
+}
+
+export async function acknowledgeAaliyahOpportunity(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  opportunityId: string;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_opportunity_result";
+  result:
+    | {
+        ok: true;
+        opportunity: AaliyahOpportunityRecord;
+        replayed: boolean;
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/opportunities/${args.opportunityId}/acknowledge`, {
+      mode: args.mode,
+    }),
+    method: "POST",
+    bearer: args.bearer,
+  });
+}
+
+export async function dismissAaliyahOpportunity(args: {
+  baseUrl: string;
+  bearer: string;
+  fetchClient: FetchClient;
+  opportunityId: string;
+  mode?: AaliyahMode;
+}): Promise<{
+  manifestVersion: string;
+  resourceType: "aaliyah_opportunity_result";
+  result:
+    | {
+        ok: true;
+        opportunity: AaliyahOpportunityRecord;
+        replayed: boolean;
+        message: string;
+      }
+    | {
+        ok: false;
+        denialCode: "ACCESS_DENIED" | "INVALID_MODE" | null;
+        errorCode: "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR" | null;
+        retryable: boolean;
+        message: string;
+      };
+}> {
+  return args.fetchClient({
+    url: withQuery(`${args.baseUrl.replace(/\/+$/, "")}/v1/agent-os/aaliyah/opportunities/${args.opportunityId}/dismiss`, {
       mode: args.mode,
     }),
     method: "POST",

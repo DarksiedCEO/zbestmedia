@@ -116,6 +116,12 @@ import type {
   NotificationType
 } from "../aaliyah/notification-engine-types.js";
 import type {
+  OpportunityRecord as OpportunityRecordShape,
+  OpportunitySourceType,
+  OpportunityStatus,
+  OpportunityType
+} from "../aaliyah/opportunity-engine-types.js";
+import type {
   AssignmentPolicyDecision,
   AssignmentRecord,
   ExecutionRunRecord,
@@ -654,6 +660,59 @@ export const AaliyahNotificationRecordSchema = z.object({
   dismissedAtIso: z.string().datetime().nullable()
 }) satisfies z.ZodType<NotificationRecordShape>;
 export type AaliyahNotificationRecord = z.infer<typeof AaliyahNotificationRecordSchema>;
+
+export const OpportunityTypeSchema = z.enum([
+  "dormant_contact",
+  "stalled_pipeline",
+  "missed_follow_up_window",
+  "engagement_spike",
+  "recurring_block_pattern",
+  "noop"
+]) satisfies z.ZodType<OpportunityType>;
+export type OpportunityTypeRecord = z.infer<typeof OpportunityTypeSchema>;
+
+export const OpportunityStatusSchema = z.enum([
+  "active",
+  "acknowledged",
+  "converted",
+  "dismissed",
+  "noop"
+]) satisfies z.ZodType<OpportunityStatus>;
+export type OpportunityStatusRecord = z.infer<typeof OpportunityStatusSchema>;
+
+export const OpportunitySourceTypeSchema = z.enum([
+  "contact",
+  "account",
+  "task",
+  "calendar_event",
+  "follow_through_record",
+  "recommendation",
+  "founder_command"
+]) satisfies z.ZodType<OpportunitySourceType>;
+export type OpportunitySourceTypeRecord = z.infer<typeof OpportunitySourceTypeSchema>;
+
+export const AaliyahOpportunityRecordSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().uuid(),
+  source: z.object({
+    sourceType: OpportunitySourceTypeSchema,
+    sourceId: z.string().min(1)
+  }),
+  opportunityType: OpportunityTypeSchema,
+  status: OpportunityStatusSchema,
+  reason: z.string().min(1),
+  summary: z.string().min(1),
+  idempotencyKey: z.string().min(1),
+  relatedTaskId: z.string().min(1).nullable(),
+  relatedRecommendationId: z.string().min(1).nullable(),
+  auditEventId: z.string().min(1).nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAtIso: z.string().datetime(),
+  evaluatedAtIso: z.string().datetime(),
+  acknowledgedAtIso: z.string().datetime().nullable(),
+  dismissedAtIso: z.string().datetime().nullable()
+}) satisfies z.ZodType<OpportunityRecordShape>;
+export type AaliyahOpportunityRecord = z.infer<typeof AaliyahOpportunityRecordSchema>;
 
 
 const EmailRoutingTargetSchema = z.union([
@@ -1348,7 +1407,12 @@ export const AaliyahDiagnosticsEventTypeSchema = z.enum([
   "notification_engine_replayed",
   "notification_engine_acknowledged",
   "notification_engine_dismissed",
-  "notification_engine_noop"
+  "notification_engine_noop",
+  "opportunity_engine_created",
+  "opportunity_engine_replayed",
+  "opportunity_engine_acknowledged",
+  "opportunity_engine_dismissed",
+  "opportunity_engine_noop"
 ]) satisfies z.ZodType<AaliyahDiagnosticsEventType>;
 export type AaliyahDiagnosticsEventTypeRecord = z.infer<typeof AaliyahDiagnosticsEventTypeSchema>;
 

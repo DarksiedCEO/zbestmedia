@@ -20,6 +20,7 @@ import type {
   AaliyahFollowThroughEngineRecord,
   AaliyahFounderCommandRecord,
   AaliyahNotificationRecord,
+  AaliyahOpportunityRecord,
   AaliyahRecommendationRecord,
   AaliyahTaskRecord,
   AaliyahMutationIdempotencyRecord,
@@ -411,6 +412,26 @@ type NotificationRow = {
   idempotency_key: string;
   related_recommendation_id: string | null;
   related_task_id: string | null;
+  audit_event_id: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string | Date;
+  evaluated_at: string | Date;
+  acknowledged_at: string | Date | null;
+  dismissed_at: string | Date | null;
+};
+
+type OpportunityRow = {
+  opportunity_id: string;
+  tenant_id: string;
+  source_type: AaliyahOpportunityRecord["source"]["sourceType"];
+  source_id: string;
+  opportunity_type: AaliyahOpportunityRecord["opportunityType"];
+  opportunity_status: AaliyahOpportunityRecord["status"];
+  reason_text: string;
+  summary_text: string;
+  idempotency_key: string;
+  related_task_id: string | null;
+  related_recommendation_id: string | null;
   audit_event_id: string | null;
   metadata_json: Record<string, unknown>;
   created_at: string | Date;
@@ -1056,6 +1077,30 @@ function mapNotificationRow(row: NotificationRow): AaliyahNotificationRecord {
     idempotencyKey: row.idempotency_key,
     relatedRecommendationId: row.related_recommendation_id,
     relatedTaskId: row.related_task_id,
+    auditEventId: row.audit_event_id,
+    metadata: row.metadata_json as Record<string, unknown>,
+    createdAtIso: toIsoString(row.created_at),
+    evaluatedAtIso: toIsoString(row.evaluated_at),
+    acknowledgedAtIso: row.acknowledged_at ? toIsoString(row.acknowledged_at) : null,
+    dismissedAtIso: row.dismissed_at ? toIsoString(row.dismissed_at) : null
+  };
+}
+
+function mapOpportunityRow(row: OpportunityRow): AaliyahOpportunityRecord {
+  return {
+    id: row.opportunity_id,
+    tenantId: row.tenant_id,
+    source: {
+      sourceType: row.source_type,
+      sourceId: row.source_id
+    },
+    opportunityType: row.opportunity_type,
+    status: row.opportunity_status,
+    reason: row.reason_text,
+    summary: row.summary_text,
+    idempotencyKey: row.idempotency_key,
+    relatedTaskId: row.related_task_id,
+    relatedRecommendationId: row.related_recommendation_id,
     auditEventId: row.audit_event_id,
     metadata: row.metadata_json as Record<string, unknown>,
     createdAtIso: toIsoString(row.created_at),
@@ -4246,6 +4291,151 @@ export class AgentOsRepository {
       )
     );
     return mapNotificationRow(res.rows[0]!);
+  }
+
+  async createOpportunity(args: {
+    tenantId: string;
+    opportunityId: string;
+    sourceType: AaliyahOpportunityRecord["source"]["sourceType"];
+    sourceId: string;
+    opportunityType: AaliyahOpportunityRecord["opportunityType"];
+    opportunityStatus: AaliyahOpportunityRecord["status"];
+    reason: string;
+    summary: string;
+    idempotencyKey: string;
+    relatedTaskId: string | null;
+    relatedRecommendationId: string | null;
+    auditEventId: string | null;
+    metadata?: Record<string, unknown>;
+    createdAt?: string;
+    evaluatedAt?: string;
+  }): Promise<AaliyahOpportunityRecord> {
+    const createdAt = args.createdAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OpportunityRow>(
+        `
+        INSERT INTO aaliyah_opportunities (
+          opportunity_id, tenant_id, source_type, source_id, opportunity_type,
+          opportunity_status, reason_text, summary_text, idempotency_key,
+          related_task_id, related_recommendation_id, audit_event_id,
+          metadata_json, created_at, evaluated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8, $9,
+          $10, $11, $12,
+          $13::jsonb, $14, $15
+        )
+        RETURNING opportunity_id, tenant_id, source_type, source_id, opportunity_type,
+                  opportunity_status, reason_text, summary_text, idempotency_key,
+                  related_task_id, related_recommendation_id, audit_event_id,
+                  metadata_json, created_at, evaluated_at, acknowledged_at, dismissed_at
+        `,
+        [
+          args.opportunityId,
+          args.tenantId,
+          args.sourceType,
+          args.sourceId,
+          args.opportunityType,
+          args.opportunityStatus,
+          args.reason,
+          args.summary,
+          args.idempotencyKey,
+          args.relatedTaskId,
+          args.relatedRecommendationId,
+          args.auditEventId,
+          JSON.stringify(args.metadata ?? {}),
+          createdAt,
+          args.evaluatedAt ?? createdAt
+        ]
+      )
+    );
+    return mapOpportunityRow(res.rows[0]!);
+  }
+
+  async getOpportunityById(args: { tenantId: string; opportunityId: string }): Promise<AaliyahOpportunityRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OpportunityRow>(
+        `
+        SELECT opportunity_id, tenant_id, source_type, source_id, opportunity_type,
+               opportunity_status, reason_text, summary_text, idempotency_key,
+               related_task_id, related_recommendation_id, audit_event_id,
+               metadata_json, created_at, evaluated_at, acknowledged_at, dismissed_at
+        FROM aaliyah_opportunities
+        WHERE tenant_id = $1 AND opportunity_id = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.opportunityId]
+      )
+    );
+    return res.rows[0] ? mapOpportunityRow(res.rows[0]) : null;
+  }
+
+  async getOpportunityByIdempotencyKey(args: { tenantId: string; idempotencyKey: string }): Promise<AaliyahOpportunityRecord | null> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OpportunityRow>(
+        `
+        SELECT opportunity_id, tenant_id, source_type, source_id, opportunity_type,
+               opportunity_status, reason_text, summary_text, idempotency_key,
+               related_task_id, related_recommendation_id, audit_event_id,
+               metadata_json, created_at, evaluated_at, acknowledged_at, dismissed_at
+        FROM aaliyah_opportunities
+        WHERE tenant_id = $1 AND idempotency_key = $2
+        LIMIT 1
+        `,
+        [args.tenantId, args.idempotencyKey]
+      )
+    );
+    return res.rows[0] ? mapOpportunityRow(res.rows[0]) : null;
+  }
+
+  async listOpportunities(args: {
+    tenantId: string;
+    limit?: number;
+    status?: AaliyahOpportunityRecord["status"];
+  }): Promise<AaliyahOpportunityRecord[]> {
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OpportunityRow>(
+        `
+        SELECT opportunity_id, tenant_id, source_type, source_id, opportunity_type,
+               opportunity_status, reason_text, summary_text, idempotency_key,
+               related_task_id, related_recommendation_id, audit_event_id,
+               metadata_json, created_at, evaluated_at, acknowledged_at, dismissed_at
+        FROM aaliyah_opportunities
+        WHERE tenant_id = $1
+          AND ($2::text IS NULL OR opportunity_status = $2)
+        ORDER BY created_at DESC
+        LIMIT $3
+        `,
+        [args.tenantId, args.status ?? null, args.limit ?? 50]
+      )
+    );
+    return res.rows.map(mapOpportunityRow);
+  }
+
+  async updateOpportunityStatus(args: {
+    tenantId: string;
+    opportunityId: string;
+    status: 'acknowledged' | 'dismissed';
+    changedAt?: string;
+  }): Promise<AaliyahOpportunityRecord> {
+    const changedAt = args.changedAt ?? new Date().toISOString();
+    const res = await this.runWithTenant(this.pool, args.tenantId, (client) =>
+      client.query<OpportunityRow>(
+        `
+        UPDATE aaliyah_opportunities
+        SET opportunity_status = $3,
+            acknowledged_at = CASE WHEN $3 = 'acknowledged' THEN $4 ELSE acknowledged_at END,
+            dismissed_at = CASE WHEN $3 = 'dismissed' THEN $4 ELSE dismissed_at END
+        WHERE tenant_id = $1 AND opportunity_id = $2
+        RETURNING opportunity_id, tenant_id, source_type, source_id, opportunity_type,
+                  opportunity_status, reason_text, summary_text, idempotency_key,
+                  related_task_id, related_recommendation_id, audit_event_id,
+                  metadata_json, created_at, evaluated_at, acknowledged_at, dismissed_at
+        `,
+        [args.tenantId, args.opportunityId, args.status, changedAt]
+      )
+    );
+    return mapOpportunityRow(res.rows[0]!);
   }
 
   async createAaliyahFounderPreference(args: {

@@ -9,6 +9,7 @@ import {
   AaliyahCrmContactSchema,
   AaliyahFollowThroughEngineRecordSchema,
   AaliyahNotificationRecordSchema,
+  AaliyahOpportunityRecordSchema,
   AaliyahRecommendationRecordSchema,
   AaliyahCrmNoteSchema,
   AaliyahFounderCommandRecordSchema,
@@ -765,6 +766,57 @@ export const NotificationListResponseSchema = z.object({
   manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
   resourceType: z.literal("aaliyah_notification_list_result"),
   result: z.discriminatedUnion("ok", [NotificationListSuccessSchema, NotificationFailureSchema])
+});
+
+export const OpportunityEvaluateBodySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  source: z.object({
+    sourceType: z.enum(["contact", "account", "task", "calendar_event", "follow_through_record", "recommendation", "founder_command"]),
+    sourceId: z.string().min(1)
+  })
+});
+
+export const OpportunityIdParamSchema = z.object({
+  opportunityId: z.string().min(1)
+});
+
+export const OpportunityListQuerySchema = z.object({
+  mode: z.enum(["founder", "zbestmedia"]).default("founder"),
+  limit: z.coerce.number().int().positive().max(100).default(50),
+  status: z.enum(["active", "acknowledged", "converted", "dismissed", "noop"]).optional()
+});
+
+const OpportunityFailureSchema = z.object({
+  ok: z.literal(false),
+  denialCode: z.enum(["ACCESS_DENIED", "INVALID_MODE"]).nullable(),
+  errorCode: z.enum(["INVALID_INPUT", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR"]).nullable(),
+  retryable: z.boolean(),
+  message: z.string().min(1)
+});
+
+const OpportunitySuccessSchema = z.object({
+  ok: z.literal(true),
+  opportunity: AaliyahOpportunityRecordSchema,
+  replayed: z.boolean(),
+  message: z.string().min(1)
+});
+
+const OpportunityListSuccessSchema = z.object({
+  ok: z.literal(true),
+  opportunities: z.array(AaliyahOpportunityRecordSchema),
+  message: z.string().min(1)
+});
+
+export const OpportunityResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_opportunity_result"),
+  result: z.discriminatedUnion("ok", [OpportunitySuccessSchema, OpportunityFailureSchema])
+});
+
+export const OpportunityListResponseSchema = z.object({
+  manifestVersion: z.literal(AGENT_ORG_MANIFEST_VERSION),
+  resourceType: z.literal("aaliyah_opportunity_list_result"),
+  result: z.discriminatedUnion("ok", [OpportunityListSuccessSchema, OpportunityFailureSchema])
 });
 
 export const BrandPipelineAdvanceBodySchema = z.object({
