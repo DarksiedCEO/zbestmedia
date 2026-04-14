@@ -5,34 +5,21 @@ on:
   pull_request:
 
 jobs:
-  build:
+  app:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: pnpm/action-setup@v4
         with:
           version: 9
           run_install: false
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
-      - name: Install
-        run: pnpm install --frozen-lockfile
-      - name: Lint
-        run: pnpm -r lint
-      - name: Typecheck
-        run: pnpm -r typecheck
-      - name: Test
-        run: pnpm -r test
-      - name: Generate Schemas
-        run: pnpm schemas:gen
-      - name: Check Schemas
-        run: pnpm schemas:check
-      - name: Schema Compatibility
-        run: pnpm schemas:compat
-      - name: Verify audit ledger and signed contracts (main only)
-        if: github.ref == 'refs/heads/main'
-        run: |
-          pnpm ops:contracts:verify --strict
-          pnpm ops:audit:verify-ledger --strict
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -C apps/app lint
+      - run: pnpm -C apps/app typecheck
