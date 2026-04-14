@@ -1,7 +1,18 @@
 import { z } from "zod";
+import { ContentCategorySchema, ContentStatusSchema, PrePostCheckSchema } from "../content/types";
 
 export const PlatformSchema = z.enum(["x", "linkedin", "instagram", "facebook", "tiktok", "youtube"]);
-export type Platform = z.infer<typeof PlatformSchema>;
+export type Platform = z.output<typeof PlatformSchema>;
+
+export const CategoryPerformanceSchema = z.object({
+  category: ContentCategorySchema,
+  avgScore: z.number().default(0),
+  sampleCount: z.number().int().nonnegative().default(0),
+  lowScoreStreak: z.number().int().nonnegative().default(0),
+  outputMultiplier: z.number().default(1),
+  updatedAtIso: z.string().datetime().optional(),
+});
+export type CategoryPerformance = z.output<typeof CategoryPerformanceSchema>;
 
 export const ScheduleItemSchema = z.object({
   id: z.string().min(6),
@@ -14,14 +25,19 @@ export const ScheduleItemSchema = z.object({
   publishWindow: z.string().min(3),
   tags: z.array(z.string()).optional(),
   notes: z.string().optional(),
+  contentStatus: ContentStatusSchema.default("draft"),
+  contentCategory: ContentCategorySchema.default("traffic"),
+  scaleCount: z.number().int().nonnegative().default(0),
+  prePostCheck: PrePostCheckSchema.default({ firstFrameMatchesHook: false }),
   createdAtIso: z.string().datetime(),
   updatedAtIso: z.string().datetime(),
 });
 
-export type ScheduleItem = z.infer<typeof ScheduleItemSchema>;
+export type ScheduleItem = z.output<typeof ScheduleItemSchema>;
 
 export const ScheduleStateSchema = z.object({
   items: z.array(ScheduleItemSchema),
+  categoryPerformance: z.array(CategoryPerformanceSchema).default([]),
 });
 
-export type ScheduleState = z.infer<typeof ScheduleStateSchema>;
+export type ScheduleState = z.output<typeof ScheduleStateSchema>;

@@ -9,7 +9,18 @@ import { CalendarMonth } from "../scheduler/CalendarMonth";
 import { CalendarWeek } from "../scheduler/CalendarWeek";
 import { Filters, type SchedulerFilters } from "../scheduler/Filters";
 import { Queue } from "../scheduler/Queue";
-import { loadSchedule, removeItem, reorder as reorderStore, saveSchedule, upsertItem } from "../scheduler/store";
+import {
+  MIN_BUFFER_DAYS,
+  MIN_POSTS_PER_DAY,
+  MAX_POSTS_PER_DAY,
+  assertDailyPostingCap,
+  getBufferHealth,
+  loadSchedule,
+  removeItem,
+  reorder as reorderStore,
+  saveSchedule,
+  upsertItem,
+} from "../scheduler/store";
 import type { ScheduleItem } from "../scheduler/types";
 import { useRuntime } from "../state/runtime";
 import { makeKey } from "../state/storage";
@@ -98,6 +109,7 @@ export default function SchedulerPage() {
   const [createPlatform, setCreatePlatform] = React.useState<ScheduleItem["platform"]>("x");
   const [createStatus, setCreateStatus] = React.useState<ScheduleItem["status"]>("pending_approval");
   const [createPublishWindow, setCreatePublishWindow] = React.useState("09:00-17:00");
+  const [createFirstFrameMatchesHook, setCreateFirstFrameMatchesHook] = React.useState(false);
 
   const [confirm, setConfirm] = React.useState<null | {
     title: string;
@@ -112,6 +124,7 @@ export default function SchedulerPage() {
     const statusOk = filters.status === "all" ? true : item.status === filters.status;
     return platformOk && statusOk;
   });
+  const bufferHealth = getBufferHealth(state);
 
   function persist(next: typeof state, meta: Record<string, unknown>) {
     setState(next);
@@ -146,35 +159,51 @@ export default function SchedulerPage() {
   }
 
   function applyStatus(ids: string[], status: ScheduleItem["status"], reason: string) {
-    let next = state;
-    const ts = nowIso();
-    for (const id of ids) {
-      const item = next.items.find((x) => x.id === id);
-      if (!item) {
-        continue;
+    try {
+      let next = state;
+      const ts = nowIso();
+      for (const id of ids) {
+        const item = next.items.find((x) => x.id === id);
+        if (!item) {
+          continue;
+        }
+        if ((status === "scheduled" || status === "posted") && !item.prePostCheck.firstFrameMatchesHook) {
+          throw new Error("Posting blocked: first-frame hook check failed");
+        }
+        if (status === "scheduled" || status === "posted") {
+          assertDailyPostingCap(next, item.scheduledAtIso, item.id);
+        }
+        next = upsertItem(next, { ...item, status, updatedAtIso: ts });
       }
-      next = upsertItem(next, { ...item, status, updatedAtIso: ts });
+      persist(next, { event: "batch_status", ids, status, reason });
+      clearSelected();
+    } catch (err) {
+      setToast((err as Error).message);
     }
-    persist(next, { event: "batch_status", ids, status, reason });
-    clearSelected();
   }
 
   function shiftSchedule(ids: string[], deltaMinutes: number, reason: string) {
-    let next = state;
-    const ts = nowIso();
-    for (const id of ids) {
-      const item = next.items.find((x) => x.id === id);
-      if (!item) {
-        continue;
+    try {
+      let next = state;
+      const ts = nowIso();
+      for (const id of ids) {
+        const item = next.items.find((x) => x.id === id);
+        if (!item) {
+          continue;
+        }
+        const shiftedIso = addMinutes(new Date(item.scheduledAtIso), deltaMinutes).toISOString();
+        assertDailyPostingCap(next, shiftedIso, item.id);
+        next = upsertItem(next, {
+          ...item,
+          scheduledAtIso: shiftedIso,
+          updatedAtIso: ts,
+        });
       }
-      next = upsertItem(next, {
-        ...item,
-        scheduledAtIso: addMinutes(new Date(item.scheduledAtIso), deltaMinutes).toISOString(),
-        updatedAtIso: ts,
-      });
+      persist(next, { event: "batch_reschedule", ids, deltaMinutes, reason });
+      clearSelected();
+    } catch (err) {
+      setToast((err as Error).message);
     }
-    persist(next, { event: "batch_reschedule", ids, deltaMinutes, reason });
-    clearSelected();
   }
 
   function deleteItems(ids: string[], reason: string) {
@@ -204,25 +233,35 @@ export default function SchedulerPage() {
   }
 
   function createItem(reason: string) {
-    const ts = nowIso();
-    const item: ScheduleItem = {
-      id: newId(),
-      title: createTitle.trim() || "Untitled",
-      platform: createPlatform,
-      scheduledAtIso: anchor.toISOString(),
-      status: createStatus,
-      publishWindow: createPublishWindow,
-      approvalRequired: true,
-      tags: [],
-      notes: `reason=${reason}`,
-      createdAtIso: ts,
-      updatedAtIso: ts,
-    };
-    const next = upsertItem(state, item);
-    persist(next, { event: "create", reason, itemId: item.id });
-    setToast(`Scheduled successfully: ${item.id}`);
-    setCreateOpen(false);
-    setCreateTitle("");
+    try {
+      const ts = nowIso();
+      assertDailyPostingCap(state, anchor.toISOString());
+      const item: ScheduleItem = {
+        id: newId(),
+        title: createTitle.trim() || "Untitled",
+        platform: createPlatform,
+        scheduledAtIso: anchor.toISOString(),
+        status: createStatus,
+        publishWindow: createPublishWindow,
+        approvalRequired: true,
+        tags: [],
+        notes: `reason=${reason}`,
+        contentStatus: "draft",
+        contentCategory: "traffic",
+        scaleCount: 0,
+        prePostCheck: { firstFrameMatchesHook: createFirstFrameMatchesHook },
+        createdAtIso: ts,
+        updatedAtIso: ts,
+      };
+      const next = upsertItem(state, item);
+      persist(next, { event: "create", reason, itemId: item.id });
+      setToast(`Scheduled successfully: ${item.id}`);
+      setCreateOpen(false);
+      setCreateTitle("");
+      setCreateFirstFrameMatchesHook(false);
+    } catch (err) {
+      setToast((err as Error).message);
+    }
   }
 
   function viewCalendar() {
@@ -290,6 +329,21 @@ export default function SchedulerPage() {
   return (
     <AppShell title="Scheduler">
       <div style={{ display: "grid", gap: 12 }}>
+        {bufferHealth.isBelowMinimum ? (
+          <div style={alertStyle}>
+            Buffer low: {bufferHealth.coveredDays}/{MIN_BUFFER_DAYS} days covered. Keep {MIN_POSTS_PER_DAY} to {MAX_POSTS_PER_DAY} posts per day and rebuild the queue.
+          </div>
+        ) : null}
+
+        {state.categoryPerformance.some((entry) => entry.outputMultiplier < 1) ? (
+          <div style={softPanelStyle}>
+            {state.categoryPerformance
+              .filter((entry) => entry.outputMultiplier < 1)
+              .map((entry) => `${entry.category} reduced to ${entry.outputMultiplier}x after ${entry.lowScoreStreak} low-score runs`)
+              .join(" • ")}
+          </div>
+        ) : null}
+
         {selected.size > 1 ? (
           <div
             style={{
@@ -412,7 +466,9 @@ export default function SchedulerPage() {
               </button>
             </div>
 
-            <div style={{ marginTop: 10, color: tokens.colors.muted, fontSize: 12 }}>Click View to select items for batch actions.</div>
+            <div style={{ marginTop: 10, color: tokens.colors.muted, fontSize: 12 }}>
+              Click View to select items for batch actions. Approval blocks posting when first-frame checks fail or the day cap is full.
+            </div>
 
             <div style={{ marginTop: 12 }}>
               <Queue items={filteredItems} onReorder={onReorderQueue} onSelect={(id) => toggleSelect(id)} selectedIds={selected} />
@@ -522,39 +578,29 @@ export default function SchedulerPage() {
                 <option value="youtube">YouTube</option>
               </select>
             </div>
-
             <div>
               <label style={{ display: "block", fontSize: 12, color: tokens.colors.muted }}>Status</label>
               <select value={createStatus} onChange={(e) => setCreateStatus(e.target.value as ScheduleItem["status"])} style={fieldStyle}>
-                <option value="pending_approval">pending_approval</option>
-                <option value="scheduled">scheduled</option>
-                <option value="draft">draft</option>
+                <option value="pending_approval">Pending approval</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="draft">Draft</option>
               </select>
             </div>
           </div>
 
-          <label style={{ display: "block", marginTop: 10, fontSize: 12, color: tokens.colors.muted }}>Publish Window</label>
-          <input value={createPublishWindow} onChange={(e) => setCreatePublishWindow(e.target.value)} placeholder="09:00-17:00" style={fieldStyle} />
+          <label style={{ display: "block", marginTop: 10, fontSize: 12, color: tokens.colors.muted }}>Publish window</label>
+          <input value={createPublishWindow} onChange={(e) => setCreatePublishWindow(e.target.value)} style={fieldStyle} />
+
+          <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12, fontSize: 13 }}>
+            <input type="checkbox" checked={createFirstFrameMatchesHook} onChange={(e) => setCreateFirstFrameMatchesHook(e.target.checked)} />
+            First frame matches hook
+          </label>
 
           <div style={{ marginTop: 10, fontSize: 12, color: tokens.colors.muted }}>
-            Scheduled at: <span style={{ color: tokens.colors.text }}>{anchor.toLocaleString()}</span>
+            Daily cap: {MIN_POSTS_PER_DAY}-{MAX_POSTS_PER_DAY} posts | Minimum buffer: {MIN_BUFFER_DAYS} days
           </div>
         </div>
       ) : null}
-
-      <ConfirmActionModal
-        open={Boolean(confirm)}
-        title={confirm?.title ?? ""}
-        description={confirm?.desc ?? ""}
-        confirmText={confirm?.confirmText ?? "Confirm"}
-        danger={confirm?.danger}
-        onCancel={() => setConfirm(null)}
-        onConfirm={(reason) => {
-          const action = confirm?.action;
-          setConfirm(null);
-          action?.(reason);
-        }}
-      />
     </AppShell>
   );
 }
@@ -567,8 +613,8 @@ const fieldStyle: React.CSSProperties = {
   background: tokens.colors.surface,
   color: tokens.colors.text,
   padding: "10px 12px",
-  outline: "none",
 };
+
 const quickButton: React.CSSProperties = {
   borderRadius: 12,
   border: `1px solid ${tokens.colors.border}`,
@@ -576,14 +622,35 @@ const quickButton: React.CSSProperties = {
   color: tokens.colors.text,
   padding: "8px 10px",
   cursor: "pointer",
+  fontWeight: 650,
   fontSize: 12,
 };
+
 const mobileAction: React.CSSProperties = {
   borderRadius: 12,
   border: `1px solid ${tokens.colors.border}`,
   background: tokens.colors.gold,
   color: tokens.colors.bg,
-  padding: "8px 12px",
+  padding: "8px 10px",
   cursor: "pointer",
-  fontWeight: 650,
+  fontWeight: 700,
+  fontSize: 12,
+};
+
+const alertStyle: React.CSSProperties = {
+  border: `1px solid ${tokens.colors.gold}`,
+  borderRadius: 14,
+  background: tokens.colors.surface,
+  padding: 12,
+  color: tokens.colors.text,
+  fontSize: 13,
+};
+
+const softPanelStyle: React.CSSProperties = {
+  border: `1px solid ${tokens.colors.border}`,
+  borderRadius: 14,
+  background: tokens.colors.surface,
+  padding: 12,
+  color: tokens.colors.muted,
+  fontSize: 12,
 };

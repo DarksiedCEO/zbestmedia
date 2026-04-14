@@ -90,6 +90,11 @@ function Row({ item, onSelect, isSelected }: { item: ScheduleItem; onSelect: (id
           <div style={{ fontSize: 12, color: tokens.colors.muted }}>
             {item.platform.toUpperCase()} | {new Date(item.scheduledAtIso).toLocaleString()} | {item.status}
           </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+            <Chip>{item.contentCategory}</Chip>
+            <Chip>{item.contentStatus}</Chip>
+            <Chip>{item.prePostCheck.firstFrameMatchesHook ? "Hook verified" : "Hook missing"}</Chip>
+          </div>
           {isSelected ? (
             <div style={{ marginTop: 4, fontSize: 11, color: tokens.colors.gold, fontWeight: 650 }}>Selected</div>
           ) : null}
@@ -110,5 +115,21 @@ function Row({ item, onSelect, isSelected }: { item: ScheduleItem; onSelect: (id
         View
       </button>
     </div>
+  );
+}
+
+function Chip({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      style={{
+        border: `1px solid ${tokens.colors.border}`,
+        borderRadius: 999,
+        padding: "4px 8px",
+        fontSize: 11,
+        color: tokens.colors.text,
+      }}
+    >
+      {children}
+    </span>
   );
 }

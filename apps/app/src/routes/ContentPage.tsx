@@ -2,14 +2,15 @@ import React from "react";
 import { createFetchClient, readApiEnv, resolveAppApiBaseUrl, scoreContentDraft } from "@zbest/api-sdk";
 import { tokens } from "@zbest/ui";
 import type { ScheduleItem } from "../scheduler/types";
-import { loadSchedule, saveSchedule, upsertItem } from "../scheduler/store";
+import { assertDailyPostingCap, loadSchedule, saveSchedule, updateCategoryPerformance, upsertItem } from "../scheduler/store";
 import { AppShell } from "../ui/AppShell";
 import { ConfirmActionModal } from "../ui/ConfirmActionModal";
 import { useRuntime } from "../state/runtime";
-import type { Draft } from "../content/types";
-import { loadDrafts, saveDrafts, setActive, upsertDraft } from "../content/store";
+import type { ContentStatus, Draft, ShortformPlatform } from "../content/types";
+import { loadDrafts, saveDrafts, setActive, setDraftStatus, upsertDraft, appendMetric } from "../content/store";
 
 const PLATFORMS: ScheduleItem["platform"][] = ["x", "linkedin", "instagram", "facebook", "tiktok", "youtube"];
+const CATEGORIES: Draft["category"][] = ["traffic", "education", "offer", "authority"];
 
 function nowIso() {
   return new Date().toISOString();
@@ -19,6 +20,12 @@ function newId() {
 }
 function correlationId() {
   return crypto.randomUUID();
+}
+function toShortformPlatform(platform: ScheduleItem["platform"]): ShortformPlatform | null {
+  if (platform === "tiktok") return "tiktok";
+  if (platform === "instagram") return "reels";
+  if (platform === "youtube") return "shorts";
+  return null;
 }
 
 export default function ContentPage() {
@@ -54,6 +61,7 @@ export default function ContentPage() {
   const [score, setScore] = React.useState<unknown>(null);
   const [scoreErr, setScoreErr] = React.useState<string | null>(null);
   const [scoring, setScoring] = React.useState(false);
+  const [opsMessage, setOpsMessage] = React.useState<string | null>(null);
 
   function persist(next: typeof state, meta: Record<string, unknown>) {
     setState(next);
@@ -72,6 +80,11 @@ export default function ContentPage() {
       title: "New Draft",
       baseBody: "",
       variants: {},
+      status: "draft",
+      category: "traffic",
+      scaleCount: 0,
+      prePostCheck: { firstFrameMatchesHook: false },
+      performance: { tiktok: [], reels: [], shorts: [] },
       createdAtIso: ts,
       updatedAtIso: ts,
     };
@@ -112,6 +125,21 @@ export default function ContentPage() {
         body,
       });
       setScore(res);
+
+      const scoreValue = typeof (res as { score?: unknown }).score === "number" ? (res as { score: number }).score : null;
+      const shortformPlatform = toShortformPlatform(activePlatform);
+      if (scoreValue !== null && shortformPlatform) {
+        const nextDrafts = appendMetric(state, activeDraft.id, shortformPlatform, {
+          platform: shortformPlatform,
+          score: scoreValue,
+          capturedAtIso: nowIso(),
+        });
+        persist(nextDrafts, { event: "score_metric_capture", draftId: activeDraft.id, platform: shortformPlatform, score: scoreValue });
+
+        const schedule = loadSchedule(targetId);
+        const nextSchedule = updateCategoryPerformance(schedule, activeDraft.category, scoreValue);
+        saveSchedule(targetId, nextSchedule);
+      }
     } catch (err) {
       setScoreErr((err as Error).message);
     } finally {
@@ -120,27 +148,60 @@ export default function ContentPage() {
   }
 
   function queueToScheduler(reason: string) {
-    const schedule = loadSchedule(targetId);
-    const ts = nowIso();
-    const body = (variantBody || activeDraft.baseBody || "").trim();
-    const item: ScheduleItem = {
-      id: newId(),
-      title: `${activeDraft.title}: ${body.slice(0, 40)}`,
-      platform: activePlatform,
-      scheduledAtIso: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-      status: "pending_approval",
-      approvalRequired: true,
-      publishWindow: "09:00-17:00",
-      tags: ["content-studio"],
-      notes: `fromDraft=${activeDraft.id}; reason=${reason}`,
-      createdAtIso: ts,
-      updatedAtIso: ts,
-    };
+    try {
+      if (activeDraft.status === "dead") {
+        throw new Error("Queue blocked: content marked dead");
+      }
 
-    const next = upsertItem(schedule, item);
-    saveSchedule(targetId, next);
-    console.info("[content->scheduler]", { targetId, reason, draftId: activeDraft.id, itemId: item.id });
+      const schedule = loadSchedule(targetId);
+      const ts = nowIso();
+      const body = (variantBody || activeDraft.baseBody || "").trim();
+      const scheduledAtIso = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      assertDailyPostingCap(schedule, scheduledAtIso);
+
+      const item: ScheduleItem = {
+        id: newId(),
+        title: `${activeDraft.title}: ${body.slice(0, 40)}`,
+        platform: activePlatform,
+        scheduledAtIso,
+        status: "pending_approval",
+        approvalRequired: true,
+        publishWindow: "09:00-17:00",
+        tags: ["content-studio"],
+        notes: `fromDraft=${activeDraft.id}; reason=${reason}`,
+        contentStatus: activeDraft.status,
+        contentCategory: activeDraft.category,
+        scaleCount: activeDraft.scaleCount,
+        prePostCheck: activeDraft.prePostCheck,
+        createdAtIso: ts,
+        updatedAtIso: ts,
+      };
+
+      const next = upsertItem(schedule, item);
+      saveSchedule(targetId, next);
+      setOpsMessage("Queued with scheduler guardrails active.");
+      console.info("[content->scheduler]", { targetId, reason, draftId: activeDraft.id, itemId: item.id });
+    } catch (err) {
+      setOpsMessage((err as Error).message);
+    }
   }
+
+  async function applyLifecycleStatus(status: ContentStatus) {
+    setOpsMessage(null);
+    try {
+      const next = await setDraftStatus(state, activeDraft.id, status);
+      persist({ ...next, activeId: activeDraft.id }, { event: "set_status", id: activeDraft.id, status });
+      setOpsMessage(status === "winner" ? "Winner locked. Variants auto-generated." : `Content marked ${status}.`);
+    } catch (err) {
+      setOpsMessage((err as Error).message);
+    }
+  }
+
+  const performanceCounts = {
+    tiktok: activeDraft.performance.tiktok.length,
+    reels: activeDraft.performance.reels.length,
+    shorts: activeDraft.performance.shorts.length,
+  };
 
   return (
     <AppShell title="Content Studio">
@@ -164,7 +225,19 @@ export default function ContentPage() {
           <button
             onClick={() => {
               const ts = nowIso();
-              const draft: Draft = { id: newId(), title: "New Draft", baseBody: "", variants: {}, createdAtIso: ts, updatedAtIso: ts };
+              const draft: Draft = {
+                id: newId(),
+                title: "New Draft",
+                baseBody: "",
+                variants: {},
+                status: "draft",
+                category: "traffic",
+                scaleCount: 0,
+                prePostCheck: { firstFrameMatchesHook: false },
+                performance: { tiktok: [], reels: [], shorts: [] },
+                createdAtIso: ts,
+                updatedAtIso: ts,
+              };
               const next = upsertDraft(state, draft);
               persist({ ...next, activeId: draft.id }, { event: "create_draft", id: draft.id });
             }}
@@ -182,6 +255,57 @@ export default function ContentPage() {
               ))}
             </select>
           </div>
+        </div>
+
+        <div style={panelStyle}>
+          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+            <div>
+              <label style={labelStyle}>Status</label>
+              <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                <StatusButton active={activeDraft.status === "testing"} onClick={() => void applyLifecycleStatus("testing")}>Testing</StatusButton>
+                <StatusButton active={activeDraft.status === "winner"} onClick={() => void applyLifecycleStatus("winner")}>Winner</StatusButton>
+                <StatusButton active={activeDraft.status === "dead"} danger onClick={() => void applyLifecycleStatus("dead")}>Dead</StatusButton>
+              </div>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Category</label>
+              <select value={activeDraft.category} onChange={(e) => updateDraft({ category: e.target.value as Draft["category"] })} style={{ ...selectStyle, marginTop: 6, minWidth: 0, width: "100%" }}>
+                {CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Scaling</label>
+              <div style={{ marginTop: 10, fontSize: 13, color: tokens.colors.text }}>
+                {activeDraft.scaleCount}/3 scales used
+              </div>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Pre-post check</label>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={activeDraft.prePostCheck.firstFrameMatchesHook}
+                  onChange={(e) => updateDraft({ prePostCheck: { firstFrameMatchesHook: e.target.checked } })}
+                />
+                First frame matches hook
+              </label>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+            <span style={chipStyle}>TikTok {performanceCounts.tiktok}</span>
+            <span style={chipStyle}>Reels {performanceCounts.reels}</span>
+            <span style={chipStyle}>Shorts {performanceCounts.shorts}</span>
+          </div>
+
+          {opsMessage ? <div style={{ marginTop: 12, color: tokens.colors.gold, fontSize: 13 }}>{opsMessage}</div> : null}
         </div>
 
         <div style={panelStyle}>
@@ -251,12 +375,8 @@ export default function ContentPage() {
                       Score {(score as { score: number }).score}
                     </span>
                   ) : null}
-                  {"tone" in (score as Record<string, unknown>) ? (
-                    <span style={chipStyle}>Tone {(score as { tone: string }).tone}</span>
-                  ) : null}
-                  {"risk" in (score as Record<string, unknown>) ? (
-                    <span style={chipStyle}>Risk {(score as { risk: string }).risk}</span>
-                  ) : null}
+                  {"tone" in (score as Record<string, unknown>) ? <span style={chipStyle}>Tone {(score as { tone: string }).tone}</span> : null}
+                  {"risk" in (score as Record<string, unknown>) ? <span style={chipStyle}>Risk {(score as { risk: string }).risk}</span> : null}
                   {"readiness" in (score as Record<string, unknown>) ? (
                     <span style={chipStyle}>Readiness {(score as { readiness: string }).readiness}</span>
                   ) : null}
@@ -286,6 +406,25 @@ export default function ContentPage() {
         }}
       />
     </AppShell>
+  );
+}
+
+function StatusButton({ children, onClick, active, danger }: { children: React.ReactNode; onClick: () => void; active?: boolean; danger?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        borderRadius: 14,
+        border: `1px solid ${tokens.colors.border}`,
+        background: danger ? "#E03131" : active ? tokens.colors.gold : tokens.colors.surface,
+        color: danger ? "#ffffff" : active ? tokens.colors.bg : tokens.colors.text,
+        padding: "8px 10px",
+        cursor: "pointer",
+        fontWeight: 650,
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -341,7 +480,7 @@ const chipStyle: React.CSSProperties = {
 };
 
 function getScoreColor(score: number) {
-  if (score >= 90) return tokens.colors.gold;
-  if (score >= 75) return tokens.colors.text;
-  return tokens.colors.muted;
+  if (score >= 85) return "#2F9E44";
+  if (score >= 70) return tokens.colors.gold;
+  return "#E03131";
 }
