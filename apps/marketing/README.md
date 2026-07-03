@@ -1,3 +1,5 @@
+> ⚠️ **STALE COPY — do not build here.** The live marketing site is in [DarksiedCEO/zbestmedia-ui](https://github.com/DarksiedCEO/zbestmedia-ui) under `/marketing`. This directory is an older, diverged snapshot kept for reference only.
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
