@@ -27,6 +27,7 @@ describe("artifact registry store/seal", () => {
     const input = { prompt: "hello" };
 
     const id1 = deterministicArtifactId({
+      workspaceId: "workspace-1",
       requestId: "req-1",
       artifactType: "BrandBible",
       input,
@@ -34,6 +35,7 @@ describe("artifact registry store/seal", () => {
     });
 
     const id2 = deterministicArtifactId({
+      workspaceId: "workspace-1",
       requestId: "req-1",
       artifactType: "BrandBible",
       input,
@@ -73,6 +75,7 @@ describe("artifact registry store/seal", () => {
     const prisma = createMemoryPrisma();
     const input = { prompt: "seal" };
     const artifactId = deterministicArtifactId({
+      workspaceId: "workspace-1",
       requestId: "req-2",
       artifactType: "BrandBible",
       input,
@@ -103,12 +106,14 @@ describe("artifact registry store/seal", () => {
     });
 
     const firstSeal = await sealArtifact(prisma, mockNc, {
+      workspaceId: "workspace-1",
       artifactId,
       sealedBy: "actor-1",
       sealedReason: "final"
     });
 
     const secondSeal = await sealArtifact(prisma, mockNc, {
+      workspaceId: "workspace-1",
       artifactId,
       sealedBy: "actor-1",
       sealedReason: "final"

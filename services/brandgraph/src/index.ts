@@ -4,6 +4,7 @@ import { createBrandGraphRepo } from "./domain/repo.js";
 import { prisma } from "./db/prisma.js";
 import { createPrismaRotationStore } from "./agents/rotationStore.prisma.js";
 import { ensureBrandTrinityAgentsActive } from "./agents/boot.js";
+import { resolveServiceAuthConfig } from "@zbest/service-auth";
 
 // Brand-trinity lifecycle manifests are platform-level, not customer data —
 // they live under a dedicated system tenant.
@@ -32,7 +33,8 @@ async function main() {
     log: bootLog
   });
 
-  const app = buildServer({ repo: createBrandGraphRepo(), agentManifests });
+  const authConfig = resolveServiceAuthConfig(env.SERVICE_AUTH_TOKENS);
+  const app = buildServer({ repo: createBrandGraphRepo(), agentManifests, authConfig });
   await app.ready();
   if (process.env.NODE_ENV !== "production") {
     app.log.info("\n" + app.printRoutes());

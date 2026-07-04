@@ -182,6 +182,12 @@ importers:
 
   packages/id-core: {}
 
+  packages/service-auth:
+    dependencies:
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+
   services/artifact-registry:
     dependencies:
       '@prisma/client':
@@ -199,6 +205,9 @@ importers:
       '@zbest/id-core':
         specifier: workspace:*
         version: link:../../packages/id-core
+      '@zbest/service-auth':
+        specifier: workspace:*
+        version: link:../../packages/service-auth
       fastify:
         specifier: ^4.28.1
         version: 4.29.1
@@ -233,6 +242,9 @@ importers:
       '@zbest/agent-lifecycle':
         specifier: workspace:*
         version: link:../../packages/agent-lifecycle
+      '@zbest/service-auth':
+        specifier: workspace:*
+        version: link:../../packages/service-auth
       fastify:
         specifier: ^4.28.1
         version: 4.29.1
@@ -1150,6 +1162,7 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
+    deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
   '@vitejs/plugin-react@5.1.3':
     resolution: {integrity: sha512-NVUnA6gQCl8jfoYqKqQU5Clv0aPw14KkZYCsX6T9Lfu9slI0LOU10OTwFHS/WmptsMMpshNd/1tuWsHQ2Uk+cg==}
@@ -3127,6 +3140,14 @@ snapshots:
     optionalDependencies:
       vite: 5.4.21(@types/node@20.19.31)
 
+  '@vitest/mocker@2.1.9(vite@5.4.21(@types/node@24.10.11))':
+    dependencies:
+      '@vitest/spy': 2.1.9
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: 5.4.21(@types/node@24.10.11)
+
   '@vitest/pretty-format@2.1.9':
     dependencies:
       tinyrainbow: 1.2.0
@@ -4167,7 +4188,7 @@ snapshots:
   vitest@2.1.9(@types/node@24.10.11):
     dependencies:
       '@vitest/expect': 2.1.9
-      '@vitest/mocker': 2.1.9(vite@5.4.21(@types/node@20.19.31))
+      '@vitest/mocker': 2.1.9(vite@5.4.21(@types/node@24.10.11))
       '@vitest/pretty-format': 2.1.9
       '@vitest/runner': 2.1.9
       '@vitest/snapshot': 2.1.9

@@ -25,6 +25,7 @@ describe("artifact immutability", () => {
     const prisma = createMemoryPrisma();
     const input = { prompt: "immutable" };
     const artifactId = deterministicArtifactId({
+      workspaceId: "workspace-1",
       requestId: "req-3",
       artifactType: "BrandBible",
       input,
@@ -55,6 +56,7 @@ describe("artifact immutability", () => {
     });
 
     await sealArtifact(prisma, mockNc, {
+      workspaceId: "workspace-1",
       artifactId,
       sealedBy: "actor-1",
       sealedReason: "final"

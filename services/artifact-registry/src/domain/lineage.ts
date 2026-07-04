@@ -37,8 +37,10 @@ async function traverse(prisma: PrismaClient, startId: string, direction: "forwa
   return { ids: Array.from(visited), edges };
 }
 
-export async function getLineage(prisma: PrismaClient, artifactId: string, maxDepth = 10) {
-  const artifact = await prisma.artifact.findUnique({ where: { artifactId } });
+export async function getLineage(prisma: PrismaClient, workspaceId: string, artifactId: string, maxDepth = 10) {
+  // Scoped by workspaceId, matching getArtifact: a wrong-workspace caller
+  // sees NotFound, not another tenant's lineage graph.
+  const artifact = await prisma.artifact.findFirst({ where: { artifactId, workspaceId } });
   if (!artifact) {
     throw Errors.NotFound("artifact not found");
   }
@@ -46,10 +48,23 @@ export async function getLineage(prisma: PrismaClient, artifactId: string, maxDe
   const forward = await traverse(prisma, artifactId, "forward", maxDepth);
   const backward = await traverse(prisma, artifactId, "backward", maxDepth);
 
-  return {
-    artifact,
-    supersedes: forward.ids,
-    supersededBy: backward.ids,
-    edges: [...forward.edges, ...backward.edges]
-  };
+  // Defense in depth: the lineage edge table has no workspace column, so
+  // even though write-time validation now prevents cross-workspace
+  // supersedes links, re-verify every traversed id still belongs to this
+  // workspace before it can appear in the response.
+  const candidateIds = [...new Set([...forward.ids, ...backward.ids])];
+  const scoped = candidateIds.length
+    ? await prisma.artifact.findMany({ where: { artifactId: { in: candidateIds }, workspaceId } })
+    : [];
+  const scopedIds = new Set(scoped.map((record) => record.artifactId));
+
+  const supersedes = forward.ids.filter((id) => scopedIds.has(id));
+  const supersededBy = backward.ids.filter((id) => scopedIds.has(id));
+  const edges = [...forward.edges, ...backward.edges].filter(
+    (edge) =>
+      (edge.from === artifactId || scopedIds.has(edge.from)) &&
+      (edge.to === artifactId || scopedIds.has(edge.to))
+  );
+
+  return { artifact, supersedes, supersededBy, edges };
 }

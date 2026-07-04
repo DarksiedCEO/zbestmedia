@@ -2,10 +2,41 @@ import { describe, expect, it } from "vitest";
 import { deterministicArtifactId } from "../src/deterministicId";
 
 describe("deterministicArtifactId", () => {
+  it("SECURITY: identical requestId+artifactType+input+attempt but different workspaceId produce DIFFERENT ids", () => {
+    // Closes the cross-tenant collision / existence-oracle finding: without
+    // workspaceId in the hash, two tenants submitting the same requestId
+    // (plausible — request IDs are caller-generated) collide onto the same
+    // artifactId, letting one tenant read/overwrite/probe the other's data.
+    const base = {
+      requestId: "req-shared",
+      artifactType: "BrandBible",
+      input: { a: 1 },
+      attempt: 1
+    };
+
+    const idTenantA = deterministicArtifactId({ ...base, workspaceId: "workspace-a" });
+    const idTenantB = deterministicArtifactId({ ...base, workspaceId: "workspace-b" });
+
+    expect(idTenantA).not.toBe(idTenantB);
+  });
+
+  it("is still deterministic for the same workspaceId", () => {
+    const base = {
+      requestId: "req-1",
+      artifactType: "BrandBible",
+      input: { a: 1 },
+      attempt: 1,
+      workspaceId: "workspace-a"
+    };
+
+    expect(deterministicArtifactId(base)).toBe(deterministicArtifactId(base));
+  });
+
   it("ignores object key order", () => {
     const base = {
       requestId: "req-1",
       artifactType: "BrandBible",
+      workspaceId: "workspace-1",
       attempt: 1
     };
 
@@ -26,6 +57,7 @@ describe("deterministicArtifactId", () => {
     const base = {
       requestId: "req-1",
       artifactType: "BrandBible",
+      workspaceId: "workspace-1",
       attempt: 1
     };
 
@@ -46,6 +78,7 @@ describe("deterministicArtifactId", () => {
     const id1 = deterministicArtifactId({
       requestId: "req-1",
       artifactType: "BrandBible",
+      workspaceId: "workspace-1",
       attempt: 1,
       input: { a: 1 }
     });
@@ -53,6 +86,7 @@ describe("deterministicArtifactId", () => {
     const id2 = deterministicArtifactId({
       requestId: "req-1",
       artifactType: "BrandBible",
+      workspaceId: "workspace-1",
       attempt: 2,
       input: { a: 1 }
     });

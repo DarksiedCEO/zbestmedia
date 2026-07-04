@@ -19,6 +19,7 @@ export const StoreRequestSchema = z.object({
 });
 
 export const SealRequestSchema = z.object({
+  workspaceId: Id,
   artifactId: Id,
   sealedBy: z.string().min(1),
   sealedReason: z.string().min(1)
