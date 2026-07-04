@@ -181,4 +181,65 @@ describe("artifact-registry HTTP — authentication and tenant authorization", (
     });
     expect(res.statusCode).toBe(403);
   });
+
+  it("returns 404 (not another tenant's artifact) when workspace-b tries to seal a known workspace-a artifact id through its own legitimate credentials", async () => {
+    const { deterministicArtifactId } = await import("@zbest/id-core");
+    const artifactId = deterministicArtifactId({
+      workspaceId: "workspace-a",
+      requestId: "req-6",
+      artifactType: "BrandBible",
+      input: { prompt: "req-6" },
+      attempt: 1
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/registry/store",
+      headers: { authorization: "Bearer tok-workspace-a" },
+      payload: storePayload({ requestId: "req-6", workspaceId: "workspace-a", artifactId })
+    });
+
+    // workspace-b's own token, its own workspaceId in the body — a fully
+    // legitimate caller for itself, just naming an id it doesn't own.
+    const res = await app.inject({
+      method: "POST",
+      url: "/registry/seal",
+      headers: { authorization: "Bearer tok-workspace-b" },
+      payload: { workspaceId: "workspace-b", artifactId, sealedBy: "attacker", sealedReason: "probe" }
+    });
+    expect(res.statusCode).toBe(404);
+
+    // and it's genuinely unsealed still, from workspace-a's own view
+    const check = await app.inject({
+      method: "GET",
+      url: `/registry/artifacts/${artifactId}`,
+      headers: { authorization: "Bearer tok-workspace-a", "x-workspace-id": "workspace-a" }
+    });
+    expect(check.json().immutableAt).toBeNull();
+  });
+
+  it("returns 404 (not another tenant's lineage graph) when workspace-b requests lineage for a known workspace-a artifact id through its own legitimate credentials", async () => {
+    const { deterministicArtifactId } = await import("@zbest/id-core");
+    const artifactId = deterministicArtifactId({
+      workspaceId: "workspace-a",
+      requestId: "req-7",
+      artifactType: "BrandBible",
+      input: { prompt: "req-7" },
+      attempt: 1
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/registry/store",
+      headers: { authorization: "Bearer tok-workspace-a" },
+      payload: storePayload({ requestId: "req-7", workspaceId: "workspace-a", artifactId })
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/registry/lineage/${artifactId}`,
+      headers: { authorization: "Bearer tok-workspace-b", "x-workspace-id": "workspace-b" }
+    });
+    expect(res.statusCode).toBe(404);
+  });
 });
