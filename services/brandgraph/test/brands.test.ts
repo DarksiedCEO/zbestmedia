@@ -1,12 +1,24 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { resolveServiceAuthConfig } from '@zbest/service-auth';
 import { buildServer } from '../src/server.js';
 import { createInMemoryRepo } from '../src/domain/repo.js';
 import { generateBrandId } from '../src/domain/ids.js';
 
+// Wildcard identity: this suite exercises business logic across many
+// distinct tenant ids, so the "legitimate caller" fixture is authorized for
+// all of them, exactly like an internal trusted-service credential. The
+// dedicated "authentication and authorization" describe block below proves
+// the 401/403 boundaries with tenant-scoped identities instead.
+const TEST_AUTH_ENV = JSON.stringify([
+  { keyId: 'test-suite-caller', token: 'test-token', tenants: ['*'] },
+  { keyId: 'scoped-caller', token: 'scoped-token', tenants: ['only-allowed-tenant'] }
+]);
+const testAuthConfig = resolveServiceAuthConfig(TEST_AUTH_ENV);
+
 describe('BrandGraph CRUD', () => {
   const repo = createInMemoryRepo();
-  const app = buildServer({ repo });
-  const tenant = (id: string) => ({ 'x-tenant-id': id });
+  const app = buildServer({ repo, authConfig: testAuthConfig });
+  const tenant = (id: string) => ({ 'x-tenant-id': id, authorization: 'Bearer test-token' });
 
   beforeAll(async () => {
     await app.ready();
@@ -193,13 +205,69 @@ describe('BrandGraph CRUD', () => {
     expect(graphRes.statusCode).toBe(404);
   });
 
-  it('returns 400 when tenant header is missing', async () => {
+  it('returns 400 when tenant header is missing (but the caller is authenticated)', async () => {
     const response = await app.inject({
       method: 'GET',
       url: '/brandgraph/brands/any-id',
+      headers: { authorization: 'Bearer test-token' },
     });
 
     expect(response.statusCode).toBe(400);
+  });
+
+  describe('Authentication and authorization', () => {
+    it('returns 401 when no Authorization header is present at all', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/brandgraph/brands/any-id',
+        headers: { 'x-tenant-id': 'tenant-no-token' },
+      });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 401 for an unrecognized bearer token', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/brandgraph/brands/any-id',
+        headers: { 'x-tenant-id': 'tenant-bad-token', authorization: 'Bearer not-a-real-token' },
+      });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 403 when a valid token is used to claim a tenant it is not authorized for', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/brandgraph/brands/any-id',
+        headers: { 'x-tenant-id': 'some-other-tenant', authorization: 'Bearer scoped-token' },
+      });
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('accepts a scoped token for the exact tenant it is authorized for', async () => {
+      const brandName = 'Scoped Token Brand';
+      const response = await app.inject({
+        method: 'POST',
+        url: '/brandgraph/brands',
+        headers: { 'x-tenant-id': 'only-allowed-tenant', authorization: 'Bearer scoped-token' },
+        payload: { name: brandName },
+      });
+      expect(response.statusCode).toBe(201);
+    });
+
+    it('rejects the old body.tenantId trust path — a body-supplied tenantId is ignored, not honored', async () => {
+      // Closes the audited finding directly: a caller authorized ONLY for
+      // "only-allowed-tenant" must not be able to write into another tenant
+      // by naming it in the request body instead of the header.
+      const response = await app.inject({
+        method: 'POST',
+        url: '/brandgraph/brands',
+        headers: { authorization: 'Bearer scoped-token' },
+        payload: { name: 'Body Tenant Attempt', tenantId: 'some-other-tenant' },
+      });
+      // No x-tenant-id header at all -> 400, never a silently-accepted
+      // body tenantId.
+      expect(response.statusCode).toBe(400);
+    });
   });
 
   describe('Tenant scoping', () => {

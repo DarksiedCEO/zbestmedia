@@ -33,6 +33,24 @@ export function createMemoryPrisma(): PrismaClient {
       findUnique: async ({ where }: { where: { artifactId: string } }) => {
         return artifacts.get(where.artifactId) ?? null;
       },
+      // Workspace-scoped lookup — the shape the fix uses for every tenant-
+      // sensitive read so a wrong-workspace request finds nothing, same as
+      // a truly nonexistent id.
+      findFirst: async ({ where }: { where: { artifactId?: string; workspaceId?: string } }) => {
+        for (const record of artifacts.values()) {
+          if (where.artifactId && record.artifactId !== where.artifactId) continue;
+          if (where.workspaceId && record.workspaceId !== where.workspaceId) continue;
+          return record;
+        }
+        return null;
+      },
+      findMany: async ({ where }: { where: { artifactId?: { in: string[] }; workspaceId?: string } }) => {
+        return Array.from(artifacts.values()).filter((record) => {
+          if (where.artifactId?.in && !where.artifactId.in.includes(record.artifactId)) return false;
+          if (where.workspaceId && record.workspaceId !== where.workspaceId) return false;
+          return true;
+        });
+      },
       create: async ({ data }: { data: Omit<ArtifactRecord, "createdAt"> }) => {
         const record: ArtifactRecord = {
           ...data,

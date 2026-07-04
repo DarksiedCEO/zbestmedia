@@ -22,12 +22,17 @@ export function sha256Hex(value: string): string {
 }
 
 export function deterministicArtifactId(args: {
+  // Required, not optional: without a tenant/workspace dimension in the
+  // hash, two tenants submitting the same caller-generated requestId
+  // collide onto the same artifactId — a cross-tenant collision and
+  // existence-oracle in one. This field closes that gap at the source.
+  workspaceId: string;
   requestId: string;
   artifactType: string;
   input: unknown;
   attempt: number;
 }): string {
   const canon = canonicalize(args.input);
-  const raw = `${args.requestId}|${args.artifactType}|${canon}|${args.attempt}`;
+  const raw = `${args.workspaceId}|${args.requestId}|${args.artifactType}|${canon}|${args.attempt}`;
   return sha256Hex(raw);
 }

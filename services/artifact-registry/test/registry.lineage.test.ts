@@ -26,6 +26,7 @@ describe("artifact lineage", () => {
 
     const inputA = { prompt: "A" };
     const artifactIdA = deterministicArtifactId({
+      workspaceId: "workspace-1",
       requestId: "req-A",
       artifactType: "BrandBible",
       input: inputA,
@@ -57,6 +58,7 @@ describe("artifact lineage", () => {
 
     const inputB = { prompt: "B" };
     const artifactIdB = deterministicArtifactId({
+      workspaceId: "workspace-1",
       requestId: "req-B",
       artifactType: "BrandBible",
       input: inputB,
@@ -88,12 +90,13 @@ describe("artifact lineage", () => {
     });
 
     await sealArtifact(prisma, mockNc, {
+      workspaceId: "workspace-1",
       artifactId: artifactIdB,
       sealedBy: "actor-1",
       sealedReason: "supersedes"
     });
 
-    const lineage = await getLineage(prisma, artifactIdB, 5);
+    const lineage = await getLineage(prisma, "workspace-1", artifactIdB, 5);
     expect(lineage.supersededBy).toContain(artifactIdA);
     expect(lineage.edges.some((edge) => edge.from === artifactIdA && edge.to === artifactIdB)).toBe(true);
   });

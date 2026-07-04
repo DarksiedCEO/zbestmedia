@@ -26,6 +26,7 @@
     "@zbest/brand-trinity-schemas": "workspace:*",
     "@zbest/eval-gates-schemas": "workspace:*",
     "@zbest/id-core": "workspace:*",
+    "@zbest/service-auth": "workspace:*",
     "fastify": "^4.28.1",
     "pino": "^9.3.2",
     "zod": "^3.23.8",

@@ -63,6 +63,7 @@ export type StoreArgs = {
 };
 
 export type SealArgs = {
+  workspaceId: string;
   artifactId: string;
   sealedBy: string;
   sealedReason: string;
@@ -70,6 +71,7 @@ export type SealArgs = {
 
 export async function storeArtifact(prisma: PrismaClient, nc: NatsConnection, args: StoreArgs) {
   const artifactId = deterministicArtifactId({
+    workspaceId: args.workspaceId,
     requestId: args.requestId,
     artifactType: args.artifactType,
     input: args.input,
@@ -91,6 +93,18 @@ export async function storeArtifact(prisma: PrismaClient, nc: NatsConnection, ar
   let evalReport: unknown | null = null;
   if (args.evalReport) {
     evalReport = EvalReportSchema.parse(args.evalReport);
+  }
+
+  if (args.supersedesArtifactId) {
+    // Cross-tenant link check: without this, a caller could stitch its
+    // artifact into another workspace's lineage chain by guessing/reusing
+    // that workspace's artifactId.
+    const superseded = await prisma.artifact.findFirst({
+      where: { artifactId: args.supersedesArtifactId, workspaceId: args.workspaceId }
+    });
+    if (!superseded) {
+      throw Errors.Validation("supersedesArtifactId must reference an artifact in the same workspace");
+    }
   }
 
   const existing = await prisma.artifact.findUnique({ where: { artifactId } });
@@ -170,7 +184,11 @@ export async function storeArtifact(prisma: PrismaClient, nc: NatsConnection, ar
 }
 
 export async function sealArtifact(prisma: PrismaClient, nc: NatsConnection, args: SealArgs) {
-  const existing = await prisma.artifact.findUnique({ where: { artifactId: args.artifactId } });
+  // Scoped by workspaceId, not just artifactId: a wrong-workspace caller
+  // must see the same NotFound as a nonexistent id — no existence oracle.
+  const existing = await prisma.artifact.findFirst({
+    where: { artifactId: args.artifactId, workspaceId: args.workspaceId }
+  });
   if (!existing) {
     throw Errors.NotFound("artifact not found");
   }
@@ -235,8 +253,10 @@ export async function sealArtifact(prisma: PrismaClient, nc: NatsConnection, arg
   return sealed;
 }
 
-export async function getArtifact(prisma: PrismaClient, artifactId: string) {
-  const artifact = await prisma.artifact.findUnique({ where: { artifactId } });
+export async function getArtifact(prisma: PrismaClient, workspaceId: string, artifactId: string) {
+  // findFirst on (artifactId, workspaceId), not findUnique on artifactId
+  // alone: closes the "global bucket" read + existence-oracle finding.
+  const artifact = await prisma.artifact.findFirst({ where: { artifactId, workspaceId } });
   if (!artifact) {
     throw Errors.NotFound("artifact not found");
   }
