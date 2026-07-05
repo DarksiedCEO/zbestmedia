@@ -4,14 +4,14 @@ import { runBrandTrinityRotationJob } from "../src/agents/rotationJob";
 
 function manifest(overrides: Partial<AgentManifest> = {}): AgentManifest {
   return {
-    agentId: "brandyn-v1",
-    role: "Brand Trinity: Brandyn",
+    agentId: "brandon-v1",
+    role: "Brand Trinity: Brandon",
     version: "v1",
     ownerDomain: "brand-trinity",
     createdAt: new Date("2026-02-01T00:00:00.000Z").toISOString(),
     expiresAt: new Date("2026-02-02T00:00:00.000Z").toISOString(),
     status: "ACTIVE",
-    memoryNamespace: "brand-trinity/brandyn",
+    memoryNamespace: "brand-trinity/brandon",
     ...overrides
   };
 }
@@ -36,8 +36,8 @@ describe("rotation job (brand-trinity)", () => {
     });
 
     expect(res.rotated).toBe(1);
-    expect(created[0]?.agentId).toMatch(/brandyn-v2$/);
-    expect(statuses.some((s) => s.id === "brandyn-v1" && s.status === "RETIRED")).toBe(true);
+    expect(created[0]?.agentId).toMatch(/brandon-v2$/);
+    expect(statuses.some((s) => s.id === "brandon-v1" && s.status === "RETIRED")).toBe(true);
     expect(handoffs.length).toBeGreaterThan(0);
   });
 });

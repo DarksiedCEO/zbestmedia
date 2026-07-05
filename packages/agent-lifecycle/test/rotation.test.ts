@@ -4,14 +4,14 @@ import { runRotation } from "../src/rotation";
 
 function makeManifest(overrides: Partial<AgentManifest> = {}): AgentManifest {
   return {
-    agentId: "brandyn-v1",
-    role: "Brand Trinity: Brandyn",
+    agentId: "brandon-v1",
+    role: "Brand Trinity: Brandon",
     version: "v1",
     ownerDomain: "brand-trinity",
     createdAt: new Date("2026-02-01T00:00:00.000Z").toISOString(),
     expiresAt: new Date("2026-02-02T00:00:00.000Z").toISOString(),
     status: "ACTIVE",
-    memoryNamespace: "brand-trinity/brandyn",
+    memoryNamespace: "brand-trinity/brandon",
     ...overrides
   };
 }
