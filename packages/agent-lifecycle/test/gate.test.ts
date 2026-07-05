@@ -3,14 +3,14 @@ import { assertAgentActive } from "../src/gate";
 import type { AgentManifest } from "../src/manifest";
 
 const base: AgentManifest = {
-  agentId: "agent-brandyn-v1",
-  role: "Brand Trinity: Brandyn",
+  agentId: "agent-brandon-v1",
+  role: "Brand Trinity: Brandon",
   version: "v1",
   ownerDomain: "brand-trinity",
   createdAt: new Date("2026-02-01T00:00:00.000Z").toISOString(),
   expiresAt: new Date("2026-12-31T00:00:00.000Z").toISOString(),
   status: "ACTIVE",
-  memoryNamespace: "brand-trinity/brandyn"
+  memoryNamespace: "brand-trinity/brandon"
 };
 
 describe("agent lifecycle gate", () => {

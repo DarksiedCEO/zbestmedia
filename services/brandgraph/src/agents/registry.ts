@@ -21,11 +21,11 @@ export type BrandTrinityAgentSpec = {
 
 export const BrandTrinityAgentSpecs: BrandTrinityAgentSpec[] = [
   {
-    key: "brandyn",
-    baseAgentId: "brandyn",
-    role: "Brand Trinity: Brandyn",
+    key: "brandon",
+    baseAgentId: "brandon",
+    role: "Brand Trinity: Brandon",
     ownerDomain: "brand-trinity",
-    memoryNamespace: "brand-trinity/brandyn"
+    memoryNamespace: "brand-trinity/brandon"
   },
   {
     key: "kobe",
@@ -35,11 +35,11 @@ export const BrandTrinityAgentSpecs: BrandTrinityAgentSpec[] = [
     memoryNamespace: "brand-trinity/kobe"
   },
   {
-    key: "jordyn",
-    baseAgentId: "jordyn",
-    role: "Brand Trinity: Jordyn",
+    key: "jordan",
+    baseAgentId: "jordan",
+    role: "Brand Trinity: Jordan",
     ownerDomain: "brand-trinity",
-    memoryNamespace: "brand-trinity/jordyn"
+    memoryNamespace: "brand-trinity/jordan"
   },
   {
     key: "agp",
