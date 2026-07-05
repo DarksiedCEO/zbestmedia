@@ -107,7 +107,14 @@ export async function storeArtifact(prisma: PrismaClient, nc: NatsConnection, ar
     }
   }
 
-  const existing = await prisma.artifact.findUnique({ where: { artifactId } });
+  // Workspace-scoped, matching every other Artifact read in this service
+  // (getArtifact, sealArtifact, the supersedes check). Even though the id
+  // hash now embeds workspaceId — so a cross-workspace id match is
+  // cryptographically implausible — scoping this lookup too removes the last
+  // unscoped Artifact access, so no future change to the id scheme or a
+  // caller-supplied-id path can reopen a cross-tenant conflict/existence
+  // oracle here.
+  const existing = await prisma.artifact.findFirst({ where: { artifactId, workspaceId: args.workspaceId } });
   if (existing) {
     if (existing.immutableAt) {
       throw Errors.Immutable("artifact is sealed and cannot be updated");
