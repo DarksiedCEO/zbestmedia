@@ -7,6 +7,52 @@ import { z } from "zod";
 
 export const WILDCARD_TENANT = "*";
 
+// Shared tenant/workspace identifier validator. Both brandgraph (x-tenant-id)
+// and artifact-registry (x-workspace-id) validate the caller-claimed tenant
+// header against THIS schema, so the two services can't drift to different
+// strictness levels (the prior gap: one enforced a charset regex, the other
+// accepted any non-empty string).
+export const tenantIdSchema = z
+  .string()
+  .min(3)
+  .max(128)
+  .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/, "tenant/workspace id must be URL/header safe");
+
+// Fastify delivers a header as string | string[] | undefined. One place that
+// normalizes it, reused by extractBearerToken and readTenantHeader so the
+// unwrap idiom is not re-typed per call site.
+export function extractHeaderValue(raw: string | string[] | undefined): string | undefined {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value ?? undefined;
+}
+
+// 400 boundary: a required tenant/workspace header is missing or malformed.
+// Distinct from ServiceAuthError (401/403) because it is a request-shape
+// problem, not an auth decision. Carries statusCode so Fastify's error
+// handling and both services' error mappers can render it uniformly.
+export class HeaderRequiredError extends Error {
+  public readonly statusCode = 400 as const;
+  public readonly code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
+// Read + validate a tenant/workspace id header in one shared call. Both
+// services use this; only the machine-readable `code` differs per service.
+export function readTenantHeader(
+  raw: string | string[] | undefined,
+  opts: { code: string }
+): string {
+  const value = extractHeaderValue(raw);
+  const parsed = tenantIdSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new HeaderRequiredError(opts.code, "Missing or invalid tenant/workspace id header");
+  }
+  return parsed.data;
+}
+
 const ServiceIdentitySchema = z.object({
   keyId: z.string().min(1),
   token: z.string().min(8),
@@ -116,7 +162,7 @@ export function authenticateAndAuthorize(
 }
 
 export function extractBearerToken(authorizationHeader: string | string[] | undefined): string | null {
-  const header = Array.isArray(authorizationHeader) ? authorizationHeader[0] : authorizationHeader;
+  const header = extractHeaderValue(authorizationHeader);
   if (!header) return null;
   const [scheme, token] = header.split(/\s+/, 2);
   if (!scheme || !token || scheme.toLowerCase() !== "bearer") {

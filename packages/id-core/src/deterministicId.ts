@@ -33,6 +33,18 @@ export function deterministicArtifactId(args: {
   attempt: number;
 }): string {
   const canon = canonicalize(args.input);
-  const raw = `${args.workspaceId}|${args.requestId}|${args.artifactType}|${canon}|${args.attempt}`;
+  // Length-prefix every field ("<byteLen>:<value>") before joining. A plain
+  // "a|b|c" join is ambiguous when a field can itself contain the delimiter
+  // (requestId/artifactType are only validated as non-empty strings), letting
+  // {requestId:"A|B",artifactType:"C"} and {requestId:"A",artifactType:"B|C"}
+  // hash identically. Length-prefixing is unambiguous for arbitrary field
+  // contents, so no field value can be confused with a delimiter boundary.
+  const raw = [args.workspaceId, args.requestId, args.artifactType, canon, String(args.attempt)]
+    .map((field) => `${byteLength(field)}:${field}`)
+    .join("|");
   return sha256Hex(raw);
+}
+
+function byteLength(value: string): number {
+  return Buffer.byteLength(value, "utf8");
 }

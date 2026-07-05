@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import Fastify, { FastifyInstance } from "fastify";
 import { resolveServiceAuthConfig } from "@zbest/service-auth";
-import { registerRoutes } from "../src/http/routes";
+import { registerRoutes, registerServiceAuthHook } from "../src/http/routes";
 import { createMemoryPrisma } from "./helpers";
 
 // Closes: "zero authentication on any route" and "artifact reads are a
@@ -241,5 +241,70 @@ describe("artifact-registry HTTP — authentication and tenant authorization", (
       headers: { authorization: "Bearer tok-workspace-b", "x-workspace-id": "workspace-b" }
     });
     expect(res.statusCode).toBe(404);
+  });
+
+  it("REGRESSION: an unauthenticated request with a malformed body returns 401, not a schema 400 (auth runs before validation)", async () => {
+    // Previously the handler parsed the body before authenticating, so an
+    // anonymous caller could probe the request schema via 400 ZodErrors.
+    // The onRequest hook now authenticates first, so a tokenless caller is
+    // rejected 401 regardless of body shape.
+    const res = await app.inject({
+      method: "POST",
+      url: "/registry/store",
+      payload: { total: "garbage", not: "a valid store body" }
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+describe("artifact-registry HTTP — structural auth guarantee (future routes)", () => {
+  // Proves the fix is structural, not per-handler discipline: any NEW route
+  // registered under the same auth hook is authenticated automatically, so a
+  // future route cannot silently ship unauthenticated.
+  async function buildAppWithNewRoute() {
+    const app = Fastify();
+    const authConfig = resolveServiceAuthConfig(AUTH_ENV);
+    await app.register(async (instance) => {
+      registerServiceAuthHook(instance, authConfig);
+      // A brand-new route the original PR never wrote, added AFTER the hook.
+      instance.get("/registry/some-future-route", async (_request, reply) => {
+        return reply.send({ ok: true });
+      });
+    });
+    // A route OUTSIDE the encapsulated auth context stays open (e.g. health).
+    app.get("/health", async () => ({ status: "ok" }));
+    return app;
+  }
+
+  it("rejects a newly-added protected route with no token (401)", async () => {
+    const app = await buildAppWithNewRoute();
+    const res = await app.inject({ method: "GET", url: "/registry/some-future-route" });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("rejects a newly-added protected route with an unknown token (401)", async () => {
+    const app = await buildAppWithNewRoute();
+    const res = await app.inject({
+      method: "GET",
+      url: "/registry/some-future-route",
+      headers: { authorization: "Bearer not-a-real-token" }
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("allows a newly-added protected route with a valid token (200)", async () => {
+    const app = await buildAppWithNewRoute();
+    const res = await app.inject({
+      method: "GET",
+      url: "/registry/some-future-route",
+      headers: { authorization: "Bearer tok-workspace-a" }
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("leaves routes outside the auth context (health) open", async () => {
+    const app = await buildAppWithNewRoute();
+    const res = await app.inject({ method: "GET", url: "/health" });
+    expect(res.statusCode).toBe(200);
   });
 });

@@ -45,8 +45,12 @@ export async function getLineage(prisma: PrismaClient, workspaceId: string, arti
     throw Errors.NotFound("artifact not found");
   }
 
-  const forward = await traverse(prisma, artifactId, "forward", maxDepth);
-  const backward = await traverse(prisma, artifactId, "backward", maxDepth);
+  // Independent, opposite-direction BFS walks — run concurrently so lineage
+  // latency is max(forward, backward), not their sum.
+  const [forward, backward] = await Promise.all([
+    traverse(prisma, artifactId, "forward", maxDepth),
+    traverse(prisma, artifactId, "backward", maxDepth)
+  ]);
 
   // Defense in depth: the lineage edge table has no workspace column, so
   // even though write-time validation now prevents cross-workspace

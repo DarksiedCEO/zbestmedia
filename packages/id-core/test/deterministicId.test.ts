@@ -20,6 +20,40 @@ describe("deterministicArtifactId", () => {
     expect(idTenantA).not.toBe(idTenantB);
   });
 
+  it("SECURITY: pipe-delimited tuple ambiguity cannot collide two different tuples", () => {
+    // Regression for the delimiter-injection finding: with a naive
+    // `${a}|${b}|...` join and no charset restriction on requestId /
+    // artifactType, {requestId:"A|B", artifactType:"C"} and
+    // {requestId:"A", artifactType:"B|C"} both flatten to "...|A|B|C|..."
+    // and collide onto the same artifactId (a caller-inducible id-squatting
+    // / conflict footgun within a workspace). Encoding must disambiguate.
+    const shared = { workspaceId: "workspace-a", input: { a: 1 }, attempt: 1 };
+    const idA = deterministicArtifactId({ ...shared, requestId: "A|B", artifactType: "C" });
+    const idB = deterministicArtifactId({ ...shared, requestId: "A", artifactType: "B|C" });
+    expect(idA).not.toBe(idB);
+  });
+
+  it("SECURITY: ambiguity across the workspace/requestId boundary cannot collide", () => {
+    // A caller authorized for both "ws" and "ws|A" (or any prefix pair)
+    // must not be able to make a "ws" + "A|..." tuple collide with a
+    // "ws|A" + "..." tuple.
+    const idA = deterministicArtifactId({
+      workspaceId: "ws",
+      requestId: "A|req",
+      artifactType: "T",
+      input: { a: 1 },
+      attempt: 1
+    });
+    const idB = deterministicArtifactId({
+      workspaceId: "ws|A",
+      requestId: "req",
+      artifactType: "T",
+      input: { a: 1 },
+      attempt: 1
+    });
+    expect(idA).not.toBe(idB);
+  });
+
   it("is still deterministic for the same workspaceId", () => {
     const base = {
       requestId: "req-1",

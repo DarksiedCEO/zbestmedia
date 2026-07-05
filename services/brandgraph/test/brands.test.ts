@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import Fastify from 'fastify';
 import { resolveServiceAuthConfig } from '@zbest/service-auth';
 import { buildServer } from '../src/server.js';
+import { registerBrandGraphAuthHook } from '../src/http/routes.js';
 import { createInMemoryRepo } from '../src/domain/repo.js';
 import { generateBrandId } from '../src/domain/ids.js';
 
@@ -267,6 +269,54 @@ describe('BrandGraph CRUD', () => {
       // No x-tenant-id header at all -> 400, never a silently-accepted
       // body tenantId.
       expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe('Structural auth guarantee (future routes)', () => {
+    // Proves auth is enforced by the onRequest hook, not per-handler
+    // discipline: a brand-new route registered under the hook is
+    // authenticated automatically, so a future route cannot ship
+    // unauthenticated by forgetting an auth call.
+    async function buildAppWithNewRoute() {
+      const fresh = Fastify();
+      await fresh.register(
+        async (instance) => {
+          registerBrandGraphAuthHook(instance, testAuthConfig);
+          instance.get('/some-future-route', async (_request, reply) => reply.send({ ok: true }));
+        },
+        { prefix: '/brandgraph' }
+      );
+      fresh.get('/health', async () => ({ ok: true }));
+      return fresh;
+    }
+
+    it('rejects a newly-added protected route with no token (401)', async () => {
+      const fresh = await buildAppWithNewRoute();
+      const res = await fresh.inject({
+        method: 'GET',
+        url: '/brandgraph/some-future-route',
+        headers: { 'x-tenant-id': 'any-tenant' },
+      });
+      expect(res.statusCode).toBe(401);
+      await fresh.close();
+    });
+
+    it('allows a newly-added protected route with a valid, authorized token (200)', async () => {
+      const fresh = await buildAppWithNewRoute();
+      const res = await fresh.inject({
+        method: 'GET',
+        url: '/brandgraph/some-future-route',
+        headers: { 'x-tenant-id': 'any-tenant', authorization: 'Bearer test-token' },
+      });
+      expect(res.statusCode).toBe(200);
+      await fresh.close();
+    });
+
+    it('leaves routes outside the auth context (health) open', async () => {
+      const fresh = await buildAppWithNewRoute();
+      const res = await fresh.inject({ method: 'GET', url: '/health' });
+      expect(res.statusCode).toBe(200);
+      await fresh.close();
     });
   });
 

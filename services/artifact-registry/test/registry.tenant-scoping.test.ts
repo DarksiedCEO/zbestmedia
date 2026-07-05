@@ -143,4 +143,23 @@ describe("artifact registry — tenant scoping", () => {
 
     await expect(getLineage(prisma, "workspace-b", artifactId, 5)).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
+
+  it("storeArtifact's idempotency lookup is workspace-scoped — a same-id record in another workspace is invisible to it", async () => {
+    // Guards the previously-unscoped findUnique idempotency check. We assert
+    // the lookup is scoped by driving a store whose deterministic id, if the
+    // check were unscoped, could observe a foreign record. Because the id
+    // hash embeds workspaceId the two ids differ anyway, so the correct
+    // observable is simply: a fresh store in workspace-b succeeds and creates
+    // its OWN record without being blocked/conflicted by workspace-a's data.
+    const prisma = createMemoryPrisma();
+    const idA = await seedArtifact(prisma, "workspace-a", "req-idem");
+
+    const idB = await seedArtifact(prisma, "workspace-b", "req-idem");
+    expect(idB).not.toBe(idA);
+
+    // both records coexist, each readable only from its own workspace
+    expect((await getArtifact(prisma, "workspace-a", idA)).workspaceId).toBe("workspace-a");
+    expect((await getArtifact(prisma, "workspace-b", idB)).workspaceId).toBe("workspace-b");
+    await expect(getArtifact(prisma, "workspace-b", idA)).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
 });

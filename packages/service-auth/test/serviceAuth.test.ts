@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  HeaderRequiredError,
   ServiceAuthError,
   authenticateBearerToken,
   authorizeTenant,
-  resolveServiceAuthConfig
+  extractHeaderValue,
+  readTenantHeader,
+  resolveServiceAuthConfig,
+  tenantIdSchema
 } from "../src/index";
 
 const VALID_ENV = JSON.stringify([
@@ -86,5 +90,70 @@ describe("authorizeTenant — the 403 boundary (closes the cross-tenant/global-b
 
   it("wildcard '*' identities may access any tenant", () => {
     expect(() => authorizeTenant(admin, "literally-any-tenant-id")).not.toThrow();
+  });
+});
+
+describe("extractHeaderValue — normalizing Fastify header shapes", () => {
+  it("returns undefined for a missing header", () => {
+    expect(extractHeaderValue(undefined)).toBeUndefined();
+  });
+
+  it("returns the string as-is for a single-value header", () => {
+    expect(extractHeaderValue("acme")).toBe("acme");
+  });
+
+  it("returns the first element for a multi-value header array", () => {
+    expect(extractHeaderValue(["acme", "beta"])).toBe("acme");
+  });
+});
+
+describe("tenantIdSchema — the shared tenant/workspace id validator (closes header-schema drift)", () => {
+  it("accepts a well-formed id", () => {
+    expect(tenantIdSchema.safeParse("workspace-a").success).toBe(true);
+  });
+
+  it("rejects too-short ids", () => {
+    expect(tenantIdSchema.safeParse("ab").success).toBe(false);
+  });
+
+  it("rejects ids exceeding the max length", () => {
+    expect(tenantIdSchema.safeParse("a".repeat(129)).success).toBe(false);
+  });
+
+  it("rejects ids with unsafe characters (header-injection shapes)", () => {
+    expect(tenantIdSchema.safeParse("acme\ninjected").success).toBe(false);
+    expect(tenantIdSchema.safeParse("acme|other").success).toBe(false);
+    expect(tenantIdSchema.safeParse(".leading-dot").success).toBe(false);
+  });
+});
+
+describe("readTenantHeader — shared header read+validate (replaces per-service duplication)", () => {
+  it("returns the validated id for a good header", () => {
+    expect(readTenantHeader("workspace-a", { code: "WORKSPACE_ID_REQUIRED" })).toBe("workspace-a");
+  });
+
+  it("unwraps an array-valued header", () => {
+    expect(readTenantHeader(["workspace-a", "x"], { code: "WORKSPACE_ID_REQUIRED" })).toBe("workspace-a");
+  });
+
+  it("throws HeaderRequiredError (400) with the given code for a missing header", () => {
+    try {
+      readTenantHeader(undefined, { code: "WORKSPACE_ID_REQUIRED" });
+      throw new Error("should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(HeaderRequiredError);
+      expect((err as HeaderRequiredError).statusCode).toBe(400);
+      expect((err as HeaderRequiredError).code).toBe("WORKSPACE_ID_REQUIRED");
+    }
+  });
+
+  it("throws HeaderRequiredError for a malformed id, using the caller's code", () => {
+    try {
+      readTenantHeader("bad|value", { code: "TENANT_ID_REQUIRED" });
+      throw new Error("should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(HeaderRequiredError);
+      expect((err as HeaderRequiredError).code).toBe("TENANT_ID_REQUIRED");
+    }
   });
 });

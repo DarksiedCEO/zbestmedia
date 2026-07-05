@@ -1,6 +1,13 @@
-import { FastifyInstance, FastifyRequest } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { authenticateBearerToken, authorizeTenant, extractBearerToken, type ServiceAuthConfig } from '@zbest/service-auth';
+import {
+  HeaderRequiredError,
+  ServiceAuthError,
+  authenticateBearerToken,
+  authorizeTenant,
+  extractBearerToken,
+  type ServiceAuthConfig
+} from '@zbest/service-auth';
 import { generateBrandId, generateEventId, makeEventId } from '../domain/ids.js';
 import type { GraphQueryOptions } from '../domain/graph.js';
 import type { BrandGraphRepo } from '../domain/repo.js';
@@ -8,16 +15,13 @@ import { getTenantId } from './tenant.js';
 import { createArtifactLinkWorkflow } from '../workflows/artifactLink.workflow.js';
 import { WorkflowRunner } from '../workflows/runner.js';
 
-// Single choke point for every route: authenticate the bearer token (401),
-// resolve the tenant id from the header only — never from the request body,
-// which the caller fully controls (400 on missing/malformed), then confirm
-// the authenticated identity is actually authorized for that tenant (403).
-function authenticateAndGetTenantId(request: FastifyRequest, authConfig: ServiceAuthConfig): string {
-  const token = extractBearerToken(request.headers.authorization);
-  const identity = authenticateBearerToken(token, authConfig);
-  const tenantId = getTenantId(request);
-  authorizeTenant(identity, tenantId);
-  return tenantId;
+// The tenant resolved by the onRequest hook. Non-optional because the hook
+// runs before every handler in this plugin and always sets it (or rejects
+// the request), so handlers can read it directly.
+declare module 'fastify' {
+  interface FastifyRequest {
+    tenantId: string;
+  }
 }
 
 const CreateBrandSchema = z.object({
@@ -96,22 +100,50 @@ function parseGraphQueryOptions(query: unknown): GraphQueryOptions {
   };
 }
 
+// Structural auth: one onRequest hook authenticates the bearer token (401),
+// resolves the tenant from the x-tenant-id header ONLY — never the body (400),
+// and authorizes the identity for that tenant (403), before any handler runs.
+// Every route registered on this instance — now or in future — is covered
+// automatically; a new route cannot ship unauthenticated by forgetting a call.
+export function registerBrandGraphAuthHook(
+  app: FastifyInstance,
+  authConfig: ServiceAuthConfig
+): void {
+  app.addHook('onRequest', async (request) => {
+    const token = extractBearerToken(request.headers.authorization);
+    const identity = authenticateBearerToken(token, authConfig); // 401
+    const tenantId = getTenantId(request); // 400 (HeaderRequiredError)
+    authorizeTenant(identity, tenantId); // 403
+    request.tenantId = tenantId;
+  });
+
+  app.setErrorHandler(authErrorHandler);
+}
+
+function authErrorHandler(error: unknown, _request: FastifyRequest, reply: FastifyReply) {
+  if (error instanceof ServiceAuthError) {
+    return reply.code(error.statusCode).send({ error: error.code });
+  }
+  if (error instanceof HeaderRequiredError) {
+    return reply.code(error.statusCode).send({ error: error.code });
+  }
+  // Preserve Fastify's default handling for everything else (Zod errors,
+  // route-level thrown errors, unexpected failures).
+  return reply.send(error as Error);
+}
+
 export async function brandRoutes(
   app: FastifyInstance,
   deps: { repo: BrandGraphRepo; workflowRunner?: WorkflowRunner; authConfig: ServiceAuthConfig }
 ) {
   const { repo, authConfig } = deps;
   const workflowRunner = deps.workflowRunner ?? new WorkflowRunner(repo);
+
+  registerBrandGraphAuthHook(app, authConfig);
+
   // POST /brandgraph/brands
   app.post('/brands', async (request, reply) => {
-    let tenantId: string;
-    try {
-      tenantId = authenticateAndGetTenantId(request, authConfig);
-    } catch (err) {
-      const error = err as { statusCode?: number; code?: string };
-      return reply.code(error.statusCode ?? 400).send({ error: error.code ?? 'TENANT_ID_REQUIRED' });
-    }
-
+    const tenantId = request.tenantId;
     const { name } = CreateBrandSchema.parse(request.body);
     const brandId = generateBrandId(tenantId, name);
 
@@ -130,31 +162,15 @@ export async function brandRoutes(
 
   // GET /brandgraph/brands
   app.get('/brands', async (request, reply) => {
-    let tenantId: string;
-    try {
-      tenantId = authenticateAndGetTenantId(request, authConfig);
-    } catch (err) {
-      const error = err as { statusCode?: number; code?: string };
-      return reply.code(error.statusCode ?? 400).send({ error: error.code ?? 'TENANT_ID_REQUIRED' });
-    }
-
-    const brands = await repo.listBrands(tenantId);
+    const brands = await repo.listBrands(request.tenantId);
     return reply.send(brands);
   });
 
   // GET /brandgraph/brands/:id
   app.get('/brands/:id', async (request, reply) => {
-    let tenantId: string;
-    try {
-      tenantId = authenticateAndGetTenantId(request, authConfig);
-    } catch (err) {
-      const error = err as { statusCode?: number; code?: string };
-      return reply.code(error.statusCode ?? 400).send({ error: error.code ?? 'TENANT_ID_REQUIRED' });
-    }
-
     const { id } = request.params as { id: string };
-    
-    const brand = await repo.getBrand(tenantId, id);
+
+    const brand = await repo.getBrand(request.tenantId, id);
 
     if (!brand) {
       return reply.status(404).send({ error: 'Brand not found' });
@@ -165,14 +181,7 @@ export async function brandRoutes(
 
   // POST /brandgraph/brands/:id/artifacts/link
   app.post('/brands/:id/artifacts/link', async (request, reply) => {
-    let tenantId: string;
-    try {
-      tenantId = authenticateAndGetTenantId(request, authConfig);
-    } catch (err) {
-      const error = err as { statusCode?: number; code?: string };
-      return reply.code(error.statusCode ?? 400).send({ error: error.code ?? 'TENANT_ID_REQUIRED' });
-    }
-
+    const tenantId = request.tenantId;
     const { id: brandId } = request.params as { id: string };
     const body = request.body as { artifactId: string; artifactType?: string };
 
@@ -208,14 +217,7 @@ export async function brandRoutes(
 
   // GET /brandgraph/brands/:id/graph
   app.get('/brands/:id/graph', async (request, reply) => {
-    let tenantId: string;
-    try {
-      tenantId = authenticateAndGetTenantId(request, authConfig);
-    } catch (err) {
-      const error = err as { statusCode?: number; code?: string };
-      return reply.code(error.statusCode ?? 400).send({ error: error.code ?? 'TENANT_ID_REQUIRED' });
-    }
-
+    const tenantId = request.tenantId;
     const { id: brandId } = request.params as { id: string };
 
     const brand = await repo.getBrand(tenantId, brandId);
@@ -232,14 +234,7 @@ export async function brandRoutes(
 
   // GET /brandgraph/graph/:brandId
   app.get('/graph/:brandId', async (request, reply) => {
-    let tenantId: string;
-    try {
-      tenantId = authenticateAndGetTenantId(request, authConfig);
-    } catch (err) {
-      const error = err as { statusCode?: number; code?: string };
-      return reply.code(error.statusCode ?? 400).send({ error: error.code ?? 'TENANT_ID_REQUIRED' });
-    }
-
+    const tenantId = request.tenantId;
     const { brandId } = request.params as { brandId: string };
 
     let options: GraphQueryOptions | undefined;
@@ -269,14 +264,7 @@ export async function brandRoutes(
 
   // GET /brandgraph/graph/:brandId/snapshots
   app.get('/graph/:brandId/snapshots', async (request, reply) => {
-    let tenantId: string;
-    try {
-      tenantId = authenticateAndGetTenantId(request, authConfig);
-    } catch (err) {
-      const error = err as { statusCode?: number; code?: string };
-      return reply.code(error.statusCode ?? 400).send({ error: error.code ?? 'TENANT_ID_REQUIRED' });
-    }
-
+    const tenantId = request.tenantId;
     const { brandId } = request.params as { brandId: string };
 
     let options: GraphQueryOptions | undefined;

@@ -17,7 +17,7 @@ export type HttpOptions = Omit<RequestInit, "body"> & {
   token?: string | null;
 };
 
-const { apiBaseUrl, tenantId } = getEnv();
+const { apiBaseUrl, tenantId, authToken } = getEnv();
 
 export async function http<T>(path: string, options: HttpOptions = {}): Promise<T> {
   const normalizedBase = apiBaseUrl.endsWith("/") ? apiBaseUrl.slice(0, -1) : apiBaseUrl;
@@ -28,8 +28,12 @@ export async function http<T>(path: string, options: HttpOptions = {}): Promise<
   if (!headers.has("Content-Type") && options.body !== undefined) {
     headers.set("Content-Type", "application/json");
   }
-  if (options.token) {
-    headers.set("Authorization", `Bearer ${options.token}`);
+  // Per-call token wins; otherwise fall back to the configured service token
+  // so calls to the secured brandgraph carry a bearer token by default
+  // instead of guaranteed 401s.
+  const bearer = options.token ?? authToken;
+  if (bearer) {
+    headers.set("Authorization", `Bearer ${bearer}`);
   }
   if (tenantId) {
     headers.set("x-tenant-id", tenantId);
