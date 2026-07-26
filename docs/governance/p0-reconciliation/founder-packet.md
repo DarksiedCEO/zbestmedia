@@ -8,7 +8,7 @@
 | Runtime authority candidate | COMPLETE |
 | Canonical 43 documentary registry | COMPLETE |
 | Claimed 32-occurrence quarantine | COMPLETE, IDENTITIES UNREPRODUCIBLE |
-| Cross-repository contract schema | COMPLETE |
+| Cross-repository contract schema | COMPLETE, PENDING INDEPENDENT RE-REVIEW |
 | Promotion contract | COMPLETE |
 | Alias/duplicate recommendations | COMPLETE |
 | Migration plan | COMPLETE |

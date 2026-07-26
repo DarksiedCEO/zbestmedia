@@ -4,7 +4,33 @@
   "title": "Cross-Repository Agent Contract",
   "type": "object",
   "additionalProperties": false,
-  "required": ["agentId","specification","runtime","evidence","promotionStatus"],
+  "required": ["agentId","specification","runtime","tenantAuthorization","tools","evidence","governance","promotionStatus"],
+  "$defs": {
+    "gateResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status","evidenceRef"],
+      "properties": {
+        "status": {"enum":["NOT_RUN","PASS","FAIL"]},
+        "evidenceRef": {"type":["string","null"]}
+      },
+      "allOf": [
+        {
+          "if": {"properties":{"status":{"const":"PASS"}},"required":["status"]},
+          "then": {"properties":{"evidenceRef":{"type":"string","minLength":1}}}
+        }
+      ]
+    },
+    "successfulGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status","evidenceRef"],
+      "properties": {
+        "status": {"const":"PASS"},
+        "evidenceRef": {"type":"string","minLength":1}
+      }
+    }
+  },
   "properties": {
     "agentId": {"type":"string","minLength":1},
     "specification": {
@@ -30,18 +56,129 @@
         "manifestId":{"type":"string","minLength":1}
       }
     },
+    "tenantAuthorization": {
+      "type":"object",
+      "additionalProperties":false,
+      "required":["tenantIsolationMode","authorizationPolicyRef","humanApprovalRequired"],
+      "properties":{
+        "tenantIsolationMode":{"enum":["SINGLE_TENANT","TENANT_SCOPED"]},
+        "authorizationPolicyRef":{"type":"string","minLength":1},
+        "humanApprovalRequired":{"type":"boolean"}
+      }
+    },
+    "tools": {
+      "type":"object",
+      "additionalProperties":false,
+      "required":["allowlist","forbiddenActions"],
+      "properties":{
+        "allowlist":{"type":"array","items":{"type":"string","minLength":1},"uniqueItems":true},
+        "forbiddenActions":{"type":"array","items":{"type":"string","minLength":1},"minItems":1,"uniqueItems":true}
+      }
+    },
     "evidence": {
       "type":"object",
       "additionalProperties":false,
-      "required":["tests","exactShaCi","securityReview","aegisVerdict","supervisedMission"],
+      "required":["tests","exactShaCi","securityReview","reliabilityReview","redTeam","sentinel","aegis","supervisedMission","liveMission"],
       "properties":{
-        "tests":{"type":"array","items":{"type":"string"}},
-        "exactShaCi":{"type":"array","items":{"type":"string"}},
-        "securityReview":{"enum":["NOT_RUN","PASS","FAIL"]},
-        "aegisVerdict":{"enum":["NOT_RUN","GREEN","YELLOW","RED"]},
-        "supervisedMission":{"enum":["NOT_RUN","PASS","FAIL"]}
+        "tests":{"type":"array","items":{"type":"string","minLength":1},"uniqueItems":true},
+        "exactShaCi":{"type":"array","items":{"type":"string","minLength":1},"uniqueItems":true},
+        "securityReview":{"$ref":"#/$defs/gateResult"},
+        "reliabilityReview":{"$ref":"#/$defs/gateResult"},
+        "redTeam":{"$ref":"#/$defs/gateResult"},
+        "sentinel":{"$ref":"#/$defs/gateResult"},
+        "aegis":{"$ref":"#/$defs/gateResult"},
+        "supervisedMission":{"$ref":"#/$defs/gateResult"},
+        "liveMission":{"$ref":"#/$defs/gateResult"}
+      }
+    },
+    "governance": {
+      "type":"object",
+      "additionalProperties":false,
+      "required":["rollbackRef","nextOwner","releaseApproval"],
+      "properties":{
+        "rollbackRef":{"type":"string","minLength":1},
+        "nextOwner":{"type":"string","minLength":1},
+        "releaseApproval":{
+          "type":"object",
+          "additionalProperties":false,
+          "required":["status","approvedBy","approvedAt"],
+          "properties":{
+            "status":{"enum":["NOT_REQUESTED","APPROVED","REJECTED"]},
+            "approvedBy":{"type":["string","null"]},
+            "approvedAt":{"type":["string","null"],"format":"date-time"}
+          },
+          "allOf":[
+            {
+              "if":{"properties":{"status":{"const":"APPROVED"}},"required":["status"]},
+              "then":{
+                "properties":{
+                  "approvedBy":{"type":"string","minLength":1},
+                  "approvedAt":{"type":"string","format":"date-time"}
+                }
+              }
+            }
+          ]
+        }
       }
     },
     "promotionStatus":{"enum":["SPEC_ONLY","RUNTIME_BOUND","TESTED","AEGIS_REVIEWED","SUPERVISED","LIVE_MISSION_PROVEN"]}
-  }
+  },
+  "allOf": [
+    {
+      "if":{"properties":{"promotionStatus":{"enum":["TESTED","AEGIS_REVIEWED","SUPERVISED","LIVE_MISSION_PROVEN"]}},"required":["promotionStatus"]},
+      "then":{
+        "properties":{
+          "evidence":{
+            "properties":{
+              "tests":{"minItems":1},
+              "exactShaCi":{"minItems":1}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if":{"properties":{"promotionStatus":{"enum":["AEGIS_REVIEWED","SUPERVISED","LIVE_MISSION_PROVEN"]}},"required":["promotionStatus"]},
+      "then":{
+        "properties":{
+          "evidence":{
+            "properties":{
+              "securityReview":{"$ref":"#/$defs/successfulGate"},
+              "reliabilityReview":{"$ref":"#/$defs/successfulGate"},
+              "redTeam":{"$ref":"#/$defs/successfulGate"},
+              "sentinel":{"$ref":"#/$defs/successfulGate"},
+              "aegis":{"$ref":"#/$defs/successfulGate"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if":{"properties":{"promotionStatus":{"enum":["SUPERVISED","LIVE_MISSION_PROVEN"]}},"required":["promotionStatus"]},
+      "then":{
+        "properties":{
+          "evidence":{"properties":{"supervisedMission":{"$ref":"#/$defs/successfulGate"}}}
+        }
+      }
+    },
+    {
+      "if":{"properties":{"promotionStatus":{"const":"LIVE_MISSION_PROVEN"}},"required":["promotionStatus"]},
+      "then":{
+        "properties":{
+          "evidence":{"properties":{"liveMission":{"$ref":"#/$defs/successfulGate"}}},
+          "governance":{
+            "properties":{
+              "releaseApproval":{
+                "properties":{
+                  "status":{"const":"APPROVED"},
+                  "approvedBy":{"type":"string","minLength":1},
+                  "approvedAt":{"type":"string","format":"date-time"}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
