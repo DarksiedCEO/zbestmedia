@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0.0",
+  "status": "CLAIM_ONLY_QUARANTINE",
+  "claimedOccurrenceCount": 32,
+  "individuallyReproducedCount": 0,
+  "warning": "The source identities for these 32 claimed occurrences were not reproduced. The slots below preserve the claimed count without fabricating agent identities or lineage.",
+  "allowedDispositions": ["ALIAS","DUPLICATE","LEGACY","EXPIRED","LOCAL_ONLY","CONFLICTING","UNREPRODUCIBLE","REQUIRES_MIGRATION","REQUIRES_FOUNDER_DECISION"],
+  "defaultDisposition": "UNREPRODUCIBLE",
+  "slots": [
+    "unresolved-occurrence-001","unresolved-occurrence-002","unresolved-occurrence-003","unresolved-occurrence-004",
+    "unresolved-occurrence-005","unresolved-occurrence-006","unresolved-occurrence-007","unresolved-occurrence-008",
+    "unresolved-occurrence-009","unresolved-occurrence-010","unresolved-occurrence-011","unresolved-occurrence-012",
+    "unresolved-occurrence-013","unresolved-occurrence-014","unresolved-occurrence-015","unresolved-occurrence-016",
+    "unresolved-occurrence-017","unresolved-occurrence-018","unresolved-occurrence-019","unresolved-occurrence-020",
+    "unresolved-occurrence-021","unresolved-occurrence-022","unresolved-occurrence-023","unresolved-occurrence-024",
+    "unresolved-occurrence-025","unresolved-occurrence-026","unresolved-occurrence-027","unresolved-occurrence-028",
+    "unresolved-occurrence-029","unresolved-occurrence-030","unresolved-occurrence-031","unresolved-occurrence-032"
+  ],
+  "observedCandidatesNotCounted": [
+    {"id":"brandyn-v1","disposition":"EXPIRED","expiresAt":"2026-04-06","reason":"May overlap Brandon; not labeled legacy"},
+    {"id":"kobe-v1","disposition":"EXPIRED","expiresAt":"2026-04-06","reason":"May overlap Kobe; not labeled legacy"},
+    {"id":"jordyn-v1","disposition":"EXPIRED","expiresAt":"2026-04-06","reason":"May overlap Jordan; not labeled legacy"},
+    {"id":"agp-v1","disposition":"EXPIRED","expiresAt":"2026-04-06","reason":"Identity/function reconciliation required"}
+  ]
+}

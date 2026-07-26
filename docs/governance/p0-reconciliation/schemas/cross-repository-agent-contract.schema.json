@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zbestmedia.com/schemas/cross-repository-agent-contract.schema.json",
+  "title": "Cross-Repository Agent Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agentId","specification","runtime","evidence","promotionStatus"],
+  "properties": {
+    "agentId": {"type":"string","minLength":1},
+    "specification": {
+      "type":"object",
+      "additionalProperties":false,
+      "required":["repository","commitSha","path","contractVersion","sourceHash"],
+      "properties":{
+        "repository":{"const":"DarksiedCEO/zbestmedia"},
+        "commitSha":{"type":"string","pattern":"^[0-9a-f]{40}$"},
+        "path":{"type":"string","minLength":1},
+        "contractVersion":{"type":"string","minLength":1},
+        "sourceHash":{"type":"string","minLength":1}
+      }
+    },
+    "runtime": {
+      "type":"object",
+      "additionalProperties":false,
+      "required":["repository","commitSha","bindingPath","manifestId"],
+      "properties":{
+        "repository":{"const":"DarksiedCEO/zbestmedia-ui"},
+        "commitSha":{"type":"string","pattern":"^[0-9a-f]{40}$"},
+        "bindingPath":{"type":"string","minLength":1},
+        "manifestId":{"type":"string","minLength":1}
+      }
+    },
+    "evidence": {
+      "type":"object",
+      "additionalProperties":false,
+      "required":["tests","exactShaCi","securityReview","aegisVerdict","supervisedMission"],
+      "properties":{
+        "tests":{"type":"array","items":{"type":"string"}},
+        "exactShaCi":{"type":"array","items":{"type":"string"}},
+        "securityReview":{"enum":["NOT_RUN","PASS","FAIL"]},
+        "aegisVerdict":{"enum":["NOT_RUN","GREEN","YELLOW","RED"]},
+        "supervisedMission":{"enum":["NOT_RUN","PASS","FAIL"]}
+      }
+    },
+    "promotionStatus":{"enum":["SPEC_ONLY","RUNTIME_BOUND","TESTED","AEGIS_REVIEWED","SUPERVISED","LIVE_MISSION_PROVEN"]}
+  }
+}
