@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agency Operations & Founder Relief Grandmaster"
+  short_description: "Reduce agency workload with founder control."
+  default_prompt: "Use $agency-operations-founder-relief-grandmaster to organize and package this Z Best Media operations workload."

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0.0",
+  "recordVersion": "2026-07-26",
+  "changeAuthority": "Andre Love",
+  "company": {
+    "name": "Z Best Media",
+    "type": "Full-Service Advertising Agency",
+    "founded": 2008,
+    "incorporated": 2011,
+    "website": "https://zbestmedia.com",
+    "phone": "(213) 632-8384",
+    "publicEmail": "hello@zbestmedia.com"
+  },
+  "marketEntry": {
+    "methodology": "Revenue Recovery",
+    "leadOffer": "Revenue Recovery Audit™",
+    "priceUsd": 997,
+    "serviceBoundary": "Revenue Recovery is a market-entry methodology, not the boundary of agency services."
+  },
+  "social": {
+    "x": "https://x.com/ZBestMedia",
+    "instagram": "https://www.instagram.com/zbestmedia/",
+    "facebook": "https://www.facebook.com/ZBestMedia/",
+    "linkedin": null,
+    "linkedinStatus": "Exact canonical public URL requires confirmation."
+  },
+  "brand": {
+    "primaryLogo": "BEST Z MEDIA horizontal logo with flaming Z",
+    "secondaryArtwork": "Flaming horse artwork"
+  },
+  "websiteFinding": {
+    "historicalEmptySpaFinding": "REMEDIATED",
+    "rule": "Do not recommend rebuild or repointing without fresh contrary evidence."
+  }
+}

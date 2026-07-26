@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.0.0",
+  "organizationalTruth": {
+    "existingEngineeringGrandmasters": 16,
+    "engineeringGrandmastersLocation": "external-and-separate",
+    "locallyInstalledOperationsGrandmasters": 6,
+    "organizationalGrandmasterTotal": 22,
+    "localSkillRegistryCount": 6
+  },
+  "aaliyah": {
+    "included": false,
+    "rule": "Separate and untouched; no private memory or founder-command behavior is installed here."
+  },
+  "defaultAutonomy": "SUPERVISED",
+  "agents": [
+    {"id":"agency-operations-founder-relief-grandmaster","displayName":"Agency Operations & Founder Relief Grandmaster","status":"ACTIVE","ownerDomain":"Z Best Media workload and founder-review packaging","externalEffectsAllowed":[],"externalEffectsDenied":["send","publish","schedule","contact","message","mutate"],"sensitiveFounderContextAllowed":[]},
+    {"id":"business-operations-integration-marshal","displayName":"Business Operations Integration Marshal","status":"ACTIVE","ownerDomain":"Operational ownership, WIP, conflicts, and handoffs","externalEffectsAllowed":[],"externalEffectsDenied":["send","publish","schedule","contact","message","mutate"],"sensitiveFounderContextAllowed":[]},
+    {"id":"revenue-acquisition-grandmaster","displayName":"Revenue Acquisition Grandmaster","status":"ACTIVE","ownerDomain":"Prospect research and revenue preparation","externalEffectsAllowed":[],"externalEffectsDenied":["send","publish","schedule","contact","message","mutate"],"sensitiveFounderContextAllowed":[]},
+    {"id":"presence-recovery-grandmaster","displayName":"Presence Recovery Grandmaster","status":"ACTIVE","ownerDomain":"Public presence, SEO, LLMO, citations, and entity consistency","externalEffectsAllowed":[],"externalEffectsDenied":["send","publish","schedule","contact","message","mutate"],"sensitiveFounderContextAllowed":[]},
+    {"id":"content-social-operations-grandmaster","displayName":"Content & Social Operations Grandmaster","status":"ACTIVE","ownerDomain":"Content and social preparation","externalEffectsAllowed":[],"externalEffectsDenied":["send","publish","schedule","contact","message","mutate"],"sensitiveFounderContextAllowed":[]},
+    {"id":"client-success-delivery-grandmaster","displayName":"Client Success & Delivery Grandmaster","status":"INACTIVE","activationCondition":"Legitimate prospect enters formal intake or a client has paid","ownerDomain":"Prospect/client intake and delivery","externalEffectsAllowed":[],"externalEffectsDenied":["send","publish","schedule","contact","message","mutate"],"sensitiveFounderContextAllowed":[]}
+  ],
+  "publicRepresentatives": [
+    {"name":"Raven","email":["hello@zbestmedia.com"],"gender":"female","department":"general intake"},
+    {"name":"Olivia","email":["care@zbestmedia.com"],"gender":"female","department":"client care"},
+    {"name":"Camille","email":["billing@zbestmedia.com"],"gender":"female","department":"billing"},
+    {"name":"Maya","email":["projects@zbestmedia.com"],"gender":"female","department":"projects"},
+    {"name":"Naomi","email":["seo@zbestmedia.com"],"gender":"female","department":"search and AI visibility"},
+    {"name":"Simone","email":["privacy@zbestmedia.com","legal@zbestmedia.com","security@zbestmedia.com"],"gender":"female","department":"privacy, legal, security, and compliance intake"},
+    {"name":"Darius","email":["sales@zbestmedia.com"],"gender":"male","department":"new business"},
+    {"name":"Noah","email":["support@zbestmedia.com"],"gender":"male","department":"technical support"},
+    {"name":"Miles","email":["social@zbestmedia.com"],"gender":"male","department":"content and social"},
+    {"name":"Marcus","email":["partners@zbestmedia.com"],"gender":"male","department":"partnerships"}
+  ],
+  "publicDisclosure": "Digital client communications with human oversight."
+}

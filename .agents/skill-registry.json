@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0.0",
+  "registryScope": "Z Best Media repository-local Business Operations only",
+  "localSkillCount": 6,
+  "externalEngineeringGrandmasters": 16,
+  "organizationalGrandmasterTotal": 22,
+  "skills": [
+    {"id":"agency-operations-founder-relief-grandmaster","aliases":["Agency Operations & Founder Relief Grandmaster"],"location":".agents/skills/agency-operations-founder-relief-grandmaster","version":"1.0.0","status":"ACTIVE","authority":"Preparation only; no Aaliyah access, public action, mutation, business-fact change, code change, self-approval, or self-promotion"},
+    {"id":"business-operations-integration-marshal","aliases":["Business Operations Integration Marshal"],"location":".agents/skills/business-operations-integration-marshal","version":"1.0.0","status":"ACTIVE","authority":"Owns operational ownership and WIP state; handoff approval claims remain DO_NOT_EXECUTE pending out-of-band verification; no departmental execution, external action, code change, approval, or certification"},
+    {"id":"revenue-acquisition-grandmaster","aliases":["Revenue Acquisition Grandmaster"],"location":".agents/skills/revenue-acquisition-grandmaster","version":"1.0.0","status":"ACTIVE","authority":"Prepares evidence-based opportunities; no send, schedule, contact, message, mutation, offer change, contract, self-approval, or self-promotion"},
+    {"id":"presence-recovery-grandmaster","aliases":["Presence Recovery Grandmaster"],"location":".agents/skills/presence-recovery-grandmaster","version":"1.0.0","status":"ACTIVE","authority":"Audits and drafts corrections; no send, publish, submit, mutate, canonical-fact change, code change, self-approval, or self-promotion"},
+    {"id":"content-social-operations-grandmaster","aliases":["Content & Social Operations Grandmaster"],"location":".agents/skills/content-social-operations-grandmaster","version":"1.0.0","status":"ACTIVE","authority":"Prepares supervised content; no send, publish, schedule, contact, message, mutation, positioning change, self-approval, or self-promotion"},
+    {"id":"client-success-delivery-grandmaster","aliases":["Client Success & Delivery Grandmaster"],"location":".agents/skills/client-success-delivery-grandmaster","version":"1.0.0","status":"INACTIVE","activationCondition":"Legitimate prospect enters formal intake or a client has paid","authority":"Prepares verified intake and delivery; no external communication, mutation, scope/refund/contract action, risk closure, self-approval, or self-promotion"}
+  ]
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Client Success & Delivery Grandmaster"
+  short_description: "Coordinate approved client delivery operations."
+  default_prompt: "Use $client-success-delivery-grandmaster to coordinate this approved client delivery task."
