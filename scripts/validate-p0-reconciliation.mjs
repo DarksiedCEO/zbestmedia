@@ -92,6 +92,43 @@ const WORKSPACE = "workspace_agency";
 const HUMAN = "principal:andre.founder";
 const NOW = "2026-07-26T23:00:00.000Z";
 
+function makeSpecification() {
+  return {
+    repository: "DarksiedCEO/zbestmedia",
+    commitSha: SHA,
+    path: "agents/test-agent.json",
+    contractVersion: "1.0.0",
+    sourceHash: `sha256:${"3".repeat(64)}`,
+    artifactId: SPEC_ARTIFACT,
+  };
+}
+
+function makeRuntime() {
+  return {
+    repository: "DarksiedCEO/zbestmedia-ui",
+    commitSha: SHA,
+    bindingPath: "server/agents/test-agent.ts",
+    manifestId: "manifest_test_agent_0001",
+    artifactId: ARTIFACT,
+  };
+}
+
+function makeApproval() {
+  return {
+    approvalStatus: "APPROVED",
+    approvalId: "approval_founder_0001",
+    approvedByPrincipalId: HUMAN,
+    approvedAt: "2026-07-26T22:00:00.000Z",
+    expiresAt: "2026-07-27T22:00:00.000Z",
+    revokedAt: null,
+    approvalScope: "AGENT_LIVE_PROMOTION",
+    subjectSha: SHA,
+    subjectArtifactIds: [SPEC_ARTIFACT, ARTIFACT],
+    tenantId: TENANT,
+    workspaceId: WORKSPACE,
+  };
+}
+
 const context = () => ({
   subjectSha: SHA,
   agentId: AGENT,
@@ -114,6 +151,9 @@ const context = () => ({
       return [evidence.evidenceId, JSON.stringify(evidence)];
     }),
   ),
+  trustedSpecificationBindings: new Map([[AGENT, JSON.stringify(makeSpecification())]]),
+  trustedRuntimeBindings: new Map([[AGENT, JSON.stringify(makeRuntime())]]),
+  trustedApprovalRecords: new Map([["approval_founder_0001", JSON.stringify(makeApproval())]]),
   policies: new Set([
     "policy_tenant_auth_0001",
     "policy_evidence_revocation_0001",
@@ -149,21 +189,8 @@ function makeContract(stage) {
     agentId: AGENT,
     subjectSha: SHA,
     subjectCreatedAt: "2026-07-26T19:00:00.000Z",
-    specification: {
-      repository: "DarksiedCEO/zbestmedia",
-      commitSha: SHA,
-      path: "agents/test-agent.json",
-      contractVersion: "1.0.0",
-      sourceHash: `sha256:${"3".repeat(64)}`,
-      artifactId: SPEC_ARTIFACT,
-    },
-    runtime: runtime ? {
-      repository: "DarksiedCEO/zbestmedia-ui",
-      commitSha: SHA,
-      bindingPath: "server/agents/test-agent.ts",
-      manifestId: "manifest_test_agent_0001",
-      artifactId: ARTIFACT,
-    } : null,
+    specification: makeSpecification(),
+    runtime: runtime ? makeRuntime() : null,
     tenantAuthorization: {
       tenantId: TENANT,
       workspaceId: WORKSPACE,
@@ -181,19 +208,7 @@ function makeContract(stage) {
       readWriteMode: "READ_ONLY",
     }] : [],
     evidence: Array.from({ length: index + 1 }, (_, i) => makeEvidence(i)),
-    approval: live ? {
-      approvalStatus: "APPROVED",
-      approvalId: "approval_founder_0001",
-      approvedByPrincipalId: HUMAN,
-      approvedAt: "2026-07-26T22:00:00.000Z",
-      expiresAt: "2026-07-27T22:00:00.000Z",
-      revokedAt: null,
-      approvalScope: "AGENT_LIVE_PROMOTION",
-      subjectSha: SHA,
-      subjectArtifactIds: [SPEC_ARTIFACT, ARTIFACT],
-      tenantId: TENANT,
-      workspaceId: WORKSPACE,
-    } : {
+    approval: live ? makeApproval() : {
       approvalStatus: "NOT_REQUESTED",
       approvalId: null,
       approvedByPrincipalId: null,
@@ -224,6 +239,13 @@ function semanticErrors(value, ctx) {
   const fail = (message) => errors.push(message);
   if (value.subjectSha !== ctx.subjectSha) fail("wrong subject SHA");
   if (value.agentId !== ctx.agentId) fail("wrong agent");
+  if (ctx.trustedSpecificationBindings.get(value.agentId) !== JSON.stringify(value.specification)) {
+    fail("specification binding is not authenticated");
+  }
+  if (
+    value.runtime &&
+    ctx.trustedRuntimeBindings.get(value.agentId) !== JSON.stringify(value.runtime)
+  ) fail("runtime binding is not authenticated");
   if (ctx.reviewedCommits.get(value.specification.repository) !== value.specification.commitSha) {
     fail("unreviewed specification commit");
   }
@@ -294,6 +316,9 @@ function semanticErrors(value, ctx) {
   if (value.promotionStatus === "LIVE_MISSION_PROVEN") {
     const approval = value.approval;
     if (value.tenantAuthorization.humanApprovalRequired !== true) fail("human approval disabled");
+    if (ctx.trustedApprovalRecords.get(approval.approvalId) !== JSON.stringify(approval)) {
+      fail("approval record is not authenticated");
+    }
     if (!ctx.authorizedHumans.has(approval.approvedByPrincipalId)) fail("unauthorized approver");
     if (approval.approvedByPrincipalId === `principal:${value.agentId}`) fail("self-approval");
     if (ctx.revokedApprovals.has(approval.approvalId)) fail("revoked approval");
@@ -393,6 +418,21 @@ test("reject foreign runtime commit", () => mutate("LIVE_MISSION_PROVEN", (x) =>
 test("reject substituted specification artifact", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.specification.sourceHash = `sha256:${"4".repeat(64)}`; }));
 test("reject unknown runtime artifact", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.runtime.artifactId = "artifact_unknown_runtime_0001"; }));
 test("reject forged trusted-issuer evidence", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.evidence[0].createdAt = "2026-07-26T20:00:01.000Z"; }));
+test("reject forged approval identity", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.approval.approvalId = "approval_forged_0001"; }));
+test("reject cross-agent specification binding", () => {
+  const ctx = context();
+  ctx.artifacts.set("artifact_other_spec_0001", `sha256:${"6".repeat(64)}`);
+  mutate("LIVE_MISSION_PROVEN", (x) => {
+    x.specification.path = "agents/other-agent.json";
+    x.specification.artifactId = "artifact_other_spec_0001";
+    x.specification.sourceHash = `sha256:${"6".repeat(64)}`;
+    x.approval.subjectArtifactIds = ["artifact_other_spec_0001", ARTIFACT];
+  }, ctx);
+});
+test("reject cross-agent runtime binding", () => mutate("LIVE_MISSION_PROVEN", (x) => {
+  x.runtime.bindingPath = "server/agents/other-agent.ts";
+  x.runtime.manifestId = "manifest_other_agent_0001";
+}));
 test("reject wrong-tenant evidence", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.evidence[0].tenantId = "tenant_other"; }));
 test("reject wildcard tool", () => mutate("RUNTIME_IMPLEMENTED", (x) => { x.toolPermissions[0].toolId = "*"; }));
 test("reject production write", () => mutate("RUNTIME_IMPLEMENTED", (x) => { x.toolPermissions[0].allowedActions = ["delete-production"]; x.toolPermissions[0].readWriteMode = "READ_WRITE"; }));
@@ -467,6 +507,8 @@ const REQUIRED = new Set([
   "reject foreign specification commit", "reject foreign runtime commit",
   "reject substituted specification artifact", "reject unknown runtime artifact",
   "reject forged trusted-issuer evidence",
+  "reject forged approval identity", "reject cross-agent specification binding",
+  "reject cross-agent runtime binding",
   "reject wrong-tenant evidence", "reject wildcard tool",
   "reject production write", "reject stage skipping", "reject self-promotion",
   "reject quarantined promotion", "detect duplicate canonical ID",
