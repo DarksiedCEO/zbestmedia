@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { tmpdir } from "node:os";
 import { validateData, validateGit, runPackage } from "./validate-p1a-threat-model.mjs";
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
@@ -55,7 +56,19 @@ const mutations=[
   ["dangling_escalation",()=>{const m=clone(baseModel);m.escalationChains.shift();return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
   ["invalid_authority_owner",()=>{const m=clone(baseModel);m.authorityPolicy.rules[0].approvalOwnerActorId="ACT-999";return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
   ["missing_retry_threat",()=>{const m=clone(baseModel);m.threats.pop();return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
-  ["boundary_doc_conflict",()=>validateData(baseModel,baseEvidence,baseManifest,baseMarkdown.replace("`BND-004`, ",""))]
+  ["boundary_doc_conflict",()=>validateData(baseModel,baseEvidence,baseManifest,baseMarkdown.replace("`BND-004`, ",""))],
+  ["unauthorized_deletion",()=>{
+    const dir=mkdtempSync(path.join(tmpdir(),"p1a-delete-"));
+    const g=(...args)=>execFileSync("git",args,{cwd:dir,stdio:"ignore"});
+    try{
+      g("init");g("config","user.email","p1a@example.invalid");g("config","user.name","P1-A Test");
+      writeFileSync(path.join(dir,"keep.txt"),"base\n");writeFileSync(path.join(dir,"victim.txt"),"evidence\n");
+      g("add",".");g("commit","-m","base");const base=execFileSync("git",["rev-parse","HEAD"],{cwd:dir,encoding:"utf8"}).trim();
+      writeFileSync(path.join(dir,"keep.txt"),"candidate\n");rmSync(path.join(dir,"victim.txt"));g("add","-A");g("commit","-m","candidate");
+      const candidate=execFileSync("git",["rev-parse","HEAD"],{cwd:dir,encoding:"utf8"}).trim();
+      return validateGit({authorizedBaseSha:base,allowedRemediationFiles:["keep.txt"],requiredFiles:["keep.txt"]},candidate,dir);
+    } finally {rmSync(dir,{recursive:true,force:true});}
+  }]
 ];
 
 let passed=0;

@@ -126,6 +126,14 @@ export function validateData(model, evidence, manifest, markdown, opts = {}) {
     for(const key of ["detectionOwnerActorId","triageOwnerActorId","containmentOwnerActorId","remediationOwnerActorId","approvalOwnerActorId","certificationOwnerActorId","closureAuthorityActorId"]) assert.ok(actorIds.has(e[key]),`${e.id}: missing ${key}`);
     assert.ok(e.detectionSignal&&e.recoveryOrRollback&&e.founderEscalationCondition&&e.closureEvidenceRequired.length,`${e.id}: incomplete escalation`);
   }
+  unique(model.escalationChains.map((x)=>x.detectionSignal),"escalation detection signals");
+  unique(model.escalationChains.map((x)=>x.recoveryOrRollback),"escalation recovery postures");
+  assert.equal(model.retryPolicy.status,"PROPOSED_CONTROL_NOT_IMPLEMENTED");
+  assert.deepEqual(model.retryPolicy.classes.map((x)=>x.class),["PERMANENT","TRANSIENT","THROTTLED","UNKNOWN"]);
+  assert.ok(model.retryPolicy.classes.every((x)=>x.examples.length&&x.action));
+  assert.ok(model.retryPolicy.backoff.maxAttempts>0&&model.retryPolicy.backoff.capMs>=model.retryPolicy.backoff.baseMs);
+  assert.ok(model.retryPolicy.budget.exhaustionAction&&model.retryPolicy.quarantine.releaseCriteria.length>=4);
+  assert.equal(model.retryPolicy.implementationClaim,false);
 
   const match=markdown.match(/```json p1a-summary\n([^\n]+)\n```/);
   assert.ok(match,"documentation summary absent");
@@ -141,19 +149,20 @@ export function validateData(model, evidence, manifest, markdown, opts = {}) {
   return { authorityRules:model.actors.length*model.actions.length, decision };
 }
 
-export function validateGit(manifest, candidateSha) {
+export function validateGit(manifest, candidateSha, repoRoot=root) {
+  const g=(...args)=>execFileSync("git",args,{cwd:repoRoot,encoding:"utf8"}).trim();
   assert.ok(candidateSha, "candidate SHA absent");
-  const before=git("rev-parse","HEAD");
+  const before=g("rev-parse","HEAD");
   assert.equal(candidateSha,before,"candidate SHA does not equal checked-out HEAD");
-  assert.equal(git("merge-base","--is-ancestor",manifest.authorizedBaseSha,before),"","authorized base is not ancestor");
-  const changed=git("diff","--name-only","--diff-filter=ACMRT",`${manifest.authorizedBaseSha}..${before}`).split("\n").filter(Boolean).sort();
+  assert.equal(g("merge-base","--is-ancestor",manifest.authorizedBaseSha,before),"","authorized base is not ancestor");
+  const changed=g("diff","--name-only","--diff-filter=ACMRTD",`${manifest.authorizedBaseSha}..${before}`).split("\n").filter(Boolean).sort();
   assert.deepEqual(changed,[...manifest.allowedRemediationFiles].sort(),"unauthorized extra file in scope or required diff file absent");
   for(const file of manifest.requiredFiles) {
-    const stat=lstatSync(path.join(root,file));
+    const stat=lstatSync(path.join(repoRoot,file));
     assert.ok(stat.isFile() && !stat.isSymbolicLink(),`${file}: missing or unsafe`);
   }
-  assert.equal(git("status","--porcelain"),"","dirty worktree");
-  assert.equal(git("rev-parse","HEAD"),before,"HEAD moved during validation");
+  assert.equal(g("status","--porcelain"),"","dirty worktree");
+  assert.equal(g("rev-parse","HEAD"),before,"HEAD moved during validation");
   return before;
 }
 
@@ -167,18 +176,48 @@ export function runPackage({candidateSha, runGit=true}={}) {
   return {model,evidence,manifest,head,...result};
 }
 
+function loadContext(candidate){
+  return {candidate,model:load("docs/security/p1-a/model.json"),evidence:load("docs/security/p1-a/evidence-register.json"),manifest:load("docs/security/p1-a/validation-manifest.json"),markdown:readFileSync(path.join(root,"docs/security/p1-a/threat-model.md"),"utf8")};
+}
+function runNamedCheck(name,c){
+  const {model,evidence,manifest,markdown,candidate}=c;
+  switch(name){
+    case "manifest_identity":
+      assert.equal(model.sources.specification.revision,manifest.authorizedBaseSha);assert.equal(model.sources.runtime.revision,manifest.runtimeEvidenceSha);assert.deepEqual(manifest.requiredTests,REQUIRED_CHECKS);return;
+    case "file_scope": c.head=validateGit(manifest,candidate);return;
+    case "evidence_integrity":
+      for(const r of evidence.references){assert.match(r.lines,/^\d+-\d+$/);assert.ok([manifest.authorizedBaseSha,manifest.runtimeEvidenceSha].includes(r.sha));assert.ok(r.path&&r.claim&&r.category);}return;
+    case "required_coverage": assert.deepEqual(model.actors.map(x=>x.name),REQUIRED_ACTORS);assert.deepEqual(model.threats.map(x=>x.name),REQUIRED_THREATS);return;
+    case "id_uniqueness":
+      for(const rows of [model.actors,model.actions,model.assets,model.boundaries,model.flows,model.sourceToSinkPaths,model.tenantPropagation,model.controls,model.threats,model.escalationChains,evidence.references]) unique(rows.map(x=>x.id),"named check IDs");return;
+    case "cross_references": validateData(model,evidence,manifest,markdown);return;
+    case "authority_completeness": assert.equal(model.authorityPolicy.rules.length,616);unique(model.authorityPolicy.rules.map(r=>`${r.actorId}:${r.actionId}`),"authority pairs");return;
+    case "separation_rules": validateData(model,evidence,manifest,markdown);assert.equal(model.authorityPolicy.separationRules.length,9);return;
+    case "tenant_operations": assert.equal(model.tenantOperations.length,18);assert.equal(model.tenantPropagation.length,7);assert.equal(model.tenantOperationPolicy.denialBehavior,"DENY_AND_LOG");return;
+    case "credential_custody": assert.equal(model.credentialClasses.length,10);assert.ok(model.credentialClasses.every(x=>x.storageBoundary&&x.rotationAuthorityActorIds.length&&x.evidenceRefs.length));return;
+    case "escalation_completeness": assert.equal(model.escalationChains.length,model.threats.length);unique(model.escalationChains.map(x=>x.detectionSignal),"signals");assert.equal(model.retryPolicy.classes.length,4);return;
+    case "documentation_consistency": validateData(model,evidence,manifest,markdown);return;
+    case "negative_controls": {
+      const source=readFileSync(path.join(root,"scripts/test-p1a-threat-model.mjs"),"utf8");
+      for(const id of ["wrong_candidate_sha","unauthorized_deletion","dangling_escalation","boundary_doc_conflict","invalid_authority_owner"]) assert.ok(source.includes(id),`missing negative control ${id}`);
+      return;
+    }
+    default: throw new Error(`unknown required check ${name}`);
+  }
+}
+
 function main(){
   const arg=process.argv.indexOf("--candidate-sha");
   const candidate=arg>=0?process.argv[arg+1]:process.env.P1A_CANDIDATE_SHA;
   const names=[...REQUIRED_CHECKS];
   const totals={required:names.length,executed:0,passed:0,failed:0,skipped:0,cancelled:0,neutral:0,stale:0};
-  let out;
+  const context=loadContext(candidate);
   for(const name of names){
     totals.executed++;
-    try { out=runPackage({candidateSha:candidate,runGit:true}); totals.passed++; console.log(`PASS ${name}`); }
+    try { runNamedCheck(name,context); totals.passed++; console.log(`PASS ${name}`); }
     catch(error){totals.failed++;console.error(`FAIL ${name}: ${error.message}`);}
   }
-  console.log(JSON.stringify({suite:"p1-a-threat-model",candidateSha:out?.head??candidate??null,...totals,authorityRules:out?.authorityRules??null,threats:out?.model.threats.length??null,controls:out?.model.controls.length??null}));
+  console.log(JSON.stringify({suite:"p1-a-threat-model",candidateSha:context.head??candidate??null,...totals,authorityRules:context.model.authorityPolicy.rules.length,threats:context.model.threats.length,controls:context.model.controls.length}));
   if(totals.executed!==totals.required||totals.passed!==totals.required||totals.failed||totals.skipped||totals.cancelled||totals.neutral||totals.stale) process.exitCode=1;
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)) main();

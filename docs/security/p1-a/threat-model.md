@@ -78,7 +78,9 @@ The 10 credential classes preserve unresolved production custody under `DEC-002`
 
 Each HIGH/CRITICAL threat has a distinct `ESC-THR-*` record with detection signal, detection/triage/containment/remediation/approval/certification/closure owners, rollback posture, founder escalation condition, and exact closure evidence. External Master Sentinel remains unbuilt and is never treated as a current control.
 
-Five source-to-sink paths make entry, intermediate hops, sink, consequence, flow, threats, and evidence explicit. Seven tenant-propagation records trace context through authenticated and public APIs, workers, database, artifacts, evidence, and providers. Retry classification, bounded attempts, backoff/jitter, throttling, quarantine/dead-letter handling, and exhaustion escalation remain proposed under `CTL-013`, not implemented claims.
+Five source-to-sink paths make entry, intermediate hops, sink, consequence, flow, threats, and evidence explicit. Seven tenant-propagation records trace context through authenticated and public APIs, workers, database, artifacts, evidence, and providers.
+
+`RTP-001` classifies permanent refusals as non-retryable, transient failures under a three-attempt budget, throttling under bounded `Retry-After` and circuit/backpressure behavior, and unknown failures as fail-closed quarantine. The proposed backoff is exponential full jitter from 1s to a 30s cap. Exhaustion quarantines/dead-letters the operation and requires tenant-context revalidation, preserved idempotency, healthy provider/budget evidence, Reliability review, founder approval, and an evidence event before release. This is a `CTL-013` design contract, not an implementation claim.
 
 ## Limitations
 
