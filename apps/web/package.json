@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "echo 'apps/web: no unit tests yet \u2014 covered by service-level suites'"
+    "test": "node ../../scripts/validate-p0-reconciliation.mjs --aggregate"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.20",

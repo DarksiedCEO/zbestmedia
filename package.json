@@ -15,23 +15,19 @@
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
-
     "ci:lint": "pnpm -r --if-present lint",
     "ci:typecheck": "pnpm -r --if-present typecheck",
     "ci:test": "pnpm -r --if-present test",
     "ci:all": "pnpm run ci:lint && pnpm run ci:typecheck && pnpm run ci:test",
-
     "guard:eslint": "node -e \"const v=require('eslint/package.json').version; if(!v.startsWith('8.')){console.error('ESLint must be v8.x, got '+v); process.exit(1)}\"",
     "verify": "pnpm run guard:eslint && pnpm run ci:all && pnpm run test:artifact-registry && pnpm run test:brandgraph && pnpm run test:agent-lifecycle",
     "verify:full": "pnpm run verify && pnpm run schemas:check && pnpm run prisma:generate:all",
-
     "repo:doctor": "tsx scripts/repo-doctor.ts",
     "prisma:generate:all": "tsx scripts/prisma-generate-all.ts",
-
     "test:artifact-registry": "pnpm -C services/artifact-registry run test",
     "test:brandgraph": "pnpm -C services/brandgraph run test",
     "test:agent-lifecycle": "pnpm -C packages/agent-lifecycle run test",
-
+    "test:p0-reconciliation": "node scripts/validate-p0-reconciliation.mjs",
     "schemas:gen": "tsx scripts/generate-json-schemas.ts",
     "schemas:check": "tsx scripts/generate-json-schemas.ts --check && git diff --exit-code -- packages/brand-trinity-schemas/schemas packages/eval-gates-schemas/schemas packages/brand-events-contracts/schemas",
     "schemas:compat": "tsx scripts/check-schema-compat.ts"
@@ -40,6 +36,8 @@
     "@types/node": "^20.14.9",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
     "eslint": "8.57.1",
     "semver": "^7.6.3",
     "tsx": "^4.19.1",

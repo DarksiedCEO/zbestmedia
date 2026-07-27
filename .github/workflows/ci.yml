@@ -16,6 +16,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # PR workflows otherwise check out GitHub's synthetic merge commit,
+          # which cannot be used as exact candidate identity.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -64,6 +68,11 @@ jobs:
         run: |
           pnpm schemas:gen
           pnpm schemas:check
+
+      - name: P0 reconciliation fail-closed aggregate
+        env:
+          P0_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: pnpm test:p0-reconciliation
 
       - name: Quality Gates
         run: |
