@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "scope": "P1-A_THREAT_MODEL_ONLY",
+  "sources": {
+    "specification": {"repository": "DarksiedCEO/zbestmedia", "revision": "7056ea4ce24379c93549f0ac9b45ddd7a2600dd6"},
+    "runtime": {"repository": "DarksiedCEO/zbestmedia-ui", "revision": "94376718e07df2e9d44864ed0394d58219224e61"}
+  },
+  "authority": [
+    {"subject": "agent specifications and construction", "authority": "DarksiedCEO/zbestmedia", "status": "PROVISIONAL_FOUNDER_AUTHORIZED"},
+    {"subject": "application and runtime", "authority": "DarksiedCEO/zbestmedia-ui", "status": "PROVISIONAL_FOUNDER_AUTHORIZED"},
+    {"subject": "Search Intelligence", "authority": "separate repository", "status": "UNBUILT_NOT_AUTHORIZED"},
+    {"subject": "Master Sentinel", "authority": "separate repository", "status": "UNBUILT_NOT_AUTHORIZED"}
+  ],
+  "assets": ["tenant data and PII", "operator identities and sessions", "credentials and signing secrets", "orders and subscription state", "assessment and department decisions", "evidence events and revisions", "source and CI provenance", "agent specifications"],
+  "attackers": ["anonymous internet attacker", "malicious or compromised tenant user", "compromised operator credential", "malicious website owner", "poisoned external tool or model", "malicious contributor or dependency", "compromised CI runner", "insider with repository or environment access"],
+  "boundaries": [
+    {"id": "B1", "from": "anonymous browser", "to": "public lead and checkout APIs", "controls": ["Zod validation", "rate limits", "honeypot", "server product catalog"], "status": "PARTIAL"},
+    {"id": "B2", "from": "operator client", "to": "authenticated API", "controls": ["HMAC session", "credential revocation recheck", "role and tenant membership"], "status": "PARTIAL"},
+    {"id": "B3", "from": "API and workers", "to": "PostgreSQL", "controls": ["application query scoping", "transactions", "selected immutability triggers"], "status": "PARTIAL_NO_RLS_PROVEN"},
+    {"id": "B4", "from": "attacker-controlled website URL", "to": "server egress and fetched content", "controls": ["http/https scheme", "timeouts", "byte cap", "robots handling"], "status": "SSRF_CONTROLS_INCOMPLETE"},
+    {"id": "B5", "from": "runtime", "to": "Anthropic Resend webhook Stripe", "controls": ["environment credentials", "Stripe webhook HMAC"], "status": "PARTIAL"},
+    {"id": "B6", "from": "contributors and CI", "to": "candidate evidence and merge", "controls": ["exact-head checkout", "CI", "independent review", "founder gate"], "status": "DOCUMENTED_AND_PARTIALLY_AUTOMATED"},
+    {"id": "B7", "from": "specification repository", "to": "runtime repository", "controls": ["P0 promotion contract"], "status": "DOCUMENTED_ONLY"}
+  ],
+  "tenantPropagation": [
+    {"path": "session principal -> x-tenant-id -> membership check -> tenant-scoped query", "status": "IMPLEMENTED_PARTIAL", "risk": "tenant is client-selected and database RLS is not proven"},
+    {"path": "session principal workspaceId -> evidence reads and runtime events", "status": "IMPLEMENTED_PARTIAL", "risk": "jobs and several flows hard-code marketing-site or omit workspace filtering"},
+    {"path": "public lead or Stripe event -> configured LEAD_CAPTURE_TENANT_ID", "status": "IMPLEMENTED_SINGLE_CONFIG", "risk": "multi-tenant attribution and webhook-to-tenant binding are not proven"}
+  ],
+  "credentialCustody": [
+    {"credential": "bootstrap operator tokens and session secret", "custodian": "runtime environment", "control": "JSON env configuration and HMAC", "unknown": "secret manager, rotation, MFA and access audit"},
+    {"credential": "Anthropic Resend Stripe and webhook secrets", "custodian": "runtime environment", "control": "environment variables", "unknown": "production storage, rotation, least privilege and exfiltration detection"},
+    {"credential": "CI and production verification secrets", "custodian": "GitHub repository settings", "control": "workflow secret reference", "unknown": "environment protection, approvers and branch rules"}
+  ],
+  "flows": [
+    {"id": "F1", "path": "anonymous lead -> validation -> Lead/EvidenceEvent/AssessmentJob transaction -> notification -> website fetch -> Anthropic -> revision -> approvals -> department jobs", "sinks": ["database", "webhook/Resend", "network egress", "model provider"]},
+    {"id": "F2", "path": "bootstrap token -> signed session -> tenant header -> tenant-scoped reads and decisions", "sinks": ["lead data", "evidence", "assessment and department state"]},
+    {"id": "F3", "path": "anonymous checkout -> Stripe -> signed webhook -> configured tenant -> order/subscription/evidence", "sinks": ["Stripe", "database"]},
+    {"id": "F4", "path": "PR commit -> exact-head CI -> independent verdicts -> human approval -> merge", "sinks": ["repository history", "evidence claims"]}
+  ],
+  "threats": [
+    {"id":"T01","title":"SSRF, redirects, DNS rebinding and cloud metadata access","boundaries":["B4"],"severity":"CRITICAL","status":"OPEN_P1B","control":"Resolve and pin public IPs; block loopback/private/link-local/metadata ranges before every hop; egress allow policy; adversarial tests."},
+    {"id":"T02","title":"Tenant spoofing or cross-tenant data access","boundaries":["B2","B3"],"severity":"CRITICAL","status":"OPEN_P1B","control":"Bind tenant server-side; repository-wide scoped access layer; DB-enforced isolation; negative matrix."},
+    {"id":"T03","title":"Privilege escalation, confused deputy and reviewer impersonation","boundaries":["B2","B6"],"severity":"HIGH","status":"OPEN_P1B","control":"Central authorization; separate human identities and reviewer roles; non-self-certification checks."},
+    {"id":"T04","title":"Credential leakage or overbroad custody","boundaries":["B5","B6"],"severity":"CRITICAL","status":"OPEN_P1B","control":"Managed secrets, rotation, least privilege, redaction, leak scanning and revocation drills."},
+    {"id":"T05","title":"Prompt injection and poisoned website or tool results","boundaries":["B4","B5"],"severity":"HIGH","status":"OPEN_P1B","control":"Treat content as data; constrained schemas; provenance; instruction stripping; human decision gates."},
+    {"id":"T06","title":"Artifact substitution, enumeration or stale revision approval","boundaries":["B3","B6","B7"],"severity":"HIGH","status":"PARTIAL_OPEN","control":"Immutable hashes and current-revision checks exist for assessments; extend exact binding and opaque scoped identifiers to all artifacts/jobs."},
+    {"id":"T07","title":"Approval or evidence forgery, replay, rollback or audit tampering","boundaries":["B3","B6"],"severity":"CRITICAL","status":"OPEN_P1B","control":"Signed append-only evidence, monotonic decisions, replay keys, independent custody and restore verification."},
+    {"id":"T08","title":"Job forgery, duplicate processing, races and crash-window replay","boundaries":["B3"],"severity":"HIGH","status":"PARTIAL_OPEN","control":"Atomic claims exist; add durable queue, leases, idempotency, fencing, deterministic retries and duplicate tests."},
+    {"id":"T09","title":"SHA or CI bypass and malicious PR or tool","boundaries":["B6"],"severity":"CRITICAL","status":"PARTIAL_OPEN","control":"Exact-head CI exists; require protected branches, pinned trusted actions, provenance, review separation and fail-closed merge policy."},
+    {"id":"T10","title":"Sentinel suppression or fabricated health","boundaries":["B3","B6"],"severity":"HIGH","status":"OPEN_P1B","control":"Independent liveness, alert delivery, immutable telemetry and suppression detection; current status endpoint is not certification."},
+    {"id":"T11","title":"Outbound PII exfiltration through configured webhook or model","boundaries":["B5"],"severity":"HIGH","status":"OPEN_P1B","control":"Destination allowlist, data minimization, signed webhook, tenant policy, audit and provider contracts."},
+    {"id":"T12","title":"Malicious dependency or CI runner compromises source and evidence","boundaries":["B6"],"severity":"HIGH","status":"OPEN_P1B","control":"Pin actions and dependencies, SBOM/license review, isolated runners, minimal tokens and artifact attestations."}
+  ],
+  "abuseCases": ["submit internal or metadata URL as customer website", "select another authorized tenant to confuse workspace attribution", "reuse stale decision payload against changed draft", "forge successful evidence after an external side effect failed", "cause worker crash after publish before completion mark", "inject instructions into fetched content", "open malicious PR that weakens exact-SHA gates", "suppress or spoof health and reviewer evidence"],
+  "assumptions": ["source reflects the two pinned revisions only", "live environment and deployed SHA are not proven", "documentation is not runtime evidence", "fetched content and tool output are hostile data", "human merge and destructive-action gates remain external"],
+  "knownUnknowns": ["MASTER_BLUEPRINT.md is absent", "live topology, deployed SHA, WAF, DNS and egress policy", "secret storage, rotation and access audit", "branch protection and required reviewer configuration", "database RLS, backups, retention and restore evidence", "actual tenants, workspaces and external webhook destination", "provider data handling and model retention settings", "full Sentinel, Red Team and tamper-evident ledger implementation"],
+  "founderDecisions": [
+    {"id":"D1","question":"Approve the authoritative tenant/workspace derivation and isolation architecture before implementation?","status":"UNRESOLVED_BLOCKS_P1B"},
+    {"id":"D2","question":"Approve the production credential custodian and rotation authority before credential work?","status":"UNRESOLVED_BLOCKS_P1B"},
+    {"id":"D3","question":"Approve outbound egress and third-party data policy before implementing fetch/model/webhook controls?","status":"UNRESOLVED_BLOCKS_P1B"}
+  ],
+  "traceability": [
+    {"threat":"T01","nextPackage":"P1-B","verification":"SSRF/DNS-rebinding/metadata destructive suite"},
+    {"threat":"T02","nextPackage":"P1-B","verification":"cross-tenant negative matrix and DB isolation proof"},
+    {"threat":"T03","nextPackage":"P1-C","verification":"RBAC and reviewer-separation tests"},
+    {"threat":"T04","nextPackage":"P1-D","verification":"custody inventory, leak scan and revocation drill"},
+    {"threat":"T05","nextPackage":"P1-E","verification":"poisoned-content and tool-result suite"},
+    {"threat":"T06","nextPackage":"P1-F","verification":"artifact substitution and stale-approval tests"},
+    {"threat":"T07","nextPackage":"P1-F","verification":"replay, rollback and audit-tamper tests"},
+    {"threat":"T08","nextPackage":"P1-G","verification":"duplicate, race and recovery suite"},
+    {"threat":"T09","nextPackage":"P1-H","verification":"protected exact-SHA release evidence"},
+    {"threat":"T10","nextPackage":"P1-G","verification":"suppression and false-health tests"},
+    {"threat":"T11","nextPackage":"P1-D","verification":"egress and data-minimization tests"},
+    {"threat":"T12","nextPackage":"P1-H","verification":"dependency and CI provenance review"}
+  ],
+  "gate": {"runtimeChanged": false, "productionClaimed": false, "p1bAuthorized": false, "selfCertified": false}
+}

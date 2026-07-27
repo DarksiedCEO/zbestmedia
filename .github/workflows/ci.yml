@@ -74,6 +74,9 @@ jobs:
           P0_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: pnpm test:p0-reconciliation
 
+      - name: P1-A threat-model contract
+        run: pnpm test:p1a-threat-model
+
       - name: Quality Gates
         run: |
           pnpm -r lint
