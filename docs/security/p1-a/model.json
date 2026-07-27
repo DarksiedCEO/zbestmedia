@@ -11446,6 +11446,14 @@
       "threatIds": [
         "THR-030"
       ]
+    },
+    {
+      "id": "CTL-013",
+      "name": "bounded classified retries with jitter throttling quarantine and exhaustion escalation",
+      "status": "PROPOSED_CONTROL",
+      "threatIds": [
+        "THR-031"
+      ]
     }
   ],
   "threats": [
@@ -12269,6 +12277,36 @@
         "CTL-012"
       ],
       "escalationId": "ESC-THR-030"
+    },
+    {
+      "id": "THR-031",
+      "name": "retry amplification exhaustion or permanent-failure loop",
+      "severity": "HIGH",
+      "assets": [
+        "AST-003",
+        "AST-004",
+        "AST-005",
+        "AST-006"
+      ],
+      "attackers": [
+        "ATK-001",
+        "ATK-005"
+      ],
+      "boundaries": [
+        "BND-003",
+        "BND-005"
+      ],
+      "flows": [
+        "FLW-005"
+      ],
+      "evidenceRefs": [
+        "EV-RUNTIME-WORKERS"
+      ],
+      "controlIds": [
+        "CTL-008",
+        "CTL-013"
+      ],
+      "escalationId": "ESC-THR-031"
     }
   ],
   "tenantOperations": [
@@ -12381,61 +12419,341 @@
       "id": "CRED-001",
       "name": "local development credentials",
       "environment": "LOCAL",
-      "status": "PARTIAL"
+      "status": "PARTIAL",
+      "custodianActorId": "ACT-019",
+      "creatorActorIds": [
+        "ACT-019"
+      ],
+      "authorizedReaderActorIds": [],
+      "authorizedUserActorIds": [
+        "ACT-006",
+        "ACT-016"
+      ],
+      "rotationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019"
+      ],
+      "revocationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019",
+        "ACT-020"
+      ],
+      "storageBoundary": "developer or CI managed boundary; exact custody NOT_PROVEN",
+      "deliveryMechanism": "scoped environment injection",
+      "lifetime": "bounded value not proven",
+      "auditEvent": "credential_lifecycle_event",
+      "emergencyProcedure": "time-limited logged revoked independently reviewed",
+      "evidenceRefs": [
+        "EV-RUNTIME-CREDENTIALS",
+        "EV-UNKNOWN-LIVE"
+      ],
+      "founderDecisionId": "DEC-002"
     },
     {
       "id": "CRED-002",
       "name": "CI credentials",
       "environment": "CI",
-      "status": "PARTIAL"
+      "status": "PARTIAL",
+      "custodianActorId": "ACT-019",
+      "creatorActorIds": [
+        "ACT-019"
+      ],
+      "authorizedReaderActorIds": [],
+      "authorizedUserActorIds": [
+        "ACT-006",
+        "ACT-016"
+      ],
+      "rotationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019"
+      ],
+      "revocationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019",
+        "ACT-020"
+      ],
+      "storageBoundary": "developer or CI managed boundary; exact custody NOT_PROVEN",
+      "deliveryMechanism": "scoped environment injection",
+      "lifetime": "bounded value not proven",
+      "auditEvent": "credential_lifecycle_event",
+      "emergencyProcedure": "time-limited logged revoked independently reviewed",
+      "evidenceRefs": [
+        "EV-RUNTIME-CREDENTIALS",
+        "EV-UNKNOWN-LIVE"
+      ],
+      "founderDecisionId": "DEC-002"
     },
     {
       "id": "CRED-003",
       "name": "staging credentials",
       "environment": "STAGING",
-      "status": "FOUNDER_DECISION_REQUIRED"
+      "status": "FOUNDER_DECISION_REQUIRED",
+      "custodianActorId": "ACT-019",
+      "creatorActorIds": [
+        "ACT-019"
+      ],
+      "authorizedReaderActorIds": [],
+      "authorizedUserActorIds": [
+        "ACT-016",
+        "ACT-017"
+      ],
+      "rotationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019"
+      ],
+      "revocationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019",
+        "ACT-020"
+      ],
+      "storageBoundary": "FOUNDER_DECISION_REQUIRED",
+      "deliveryMechanism": "FOUNDER_DECISION_REQUIRED",
+      "lifetime": "FOUNDER_DECISION_REQUIRED",
+      "auditEvent": "credential_lifecycle_event",
+      "emergencyProcedure": "time-limited logged revoked independently reviewed",
+      "evidenceRefs": [
+        "EV-RUNTIME-CREDENTIALS",
+        "EV-UNKNOWN-LIVE"
+      ],
+      "founderDecisionId": "DEC-002"
     },
     {
       "id": "CRED-004",
       "name": "production credentials",
       "environment": "PRODUCTION",
-      "status": "FOUNDER_DECISION_REQUIRED"
+      "status": "FOUNDER_DECISION_REQUIRED",
+      "custodianActorId": "ACT-019",
+      "creatorActorIds": [
+        "ACT-019"
+      ],
+      "authorizedReaderActorIds": [],
+      "authorizedUserActorIds": [
+        "ACT-016",
+        "ACT-017"
+      ],
+      "rotationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019"
+      ],
+      "revocationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019",
+        "ACT-020"
+      ],
+      "storageBoundary": "FOUNDER_DECISION_REQUIRED",
+      "deliveryMechanism": "FOUNDER_DECISION_REQUIRED",
+      "lifetime": "FOUNDER_DECISION_REQUIRED",
+      "auditEvent": "credential_lifecycle_event",
+      "emergencyProcedure": "time-limited logged revoked independently reviewed",
+      "evidenceRefs": [
+        "EV-RUNTIME-CREDENTIALS",
+        "EV-UNKNOWN-LIVE"
+      ],
+      "founderDecisionId": "DEC-002"
     },
     {
       "id": "CRED-005",
       "name": "database credentials",
       "environment": "ALL",
-      "status": "FOUNDER_DECISION_REQUIRED"
+      "status": "FOUNDER_DECISION_REQUIRED",
+      "custodianActorId": "ACT-019",
+      "creatorActorIds": [
+        "ACT-019"
+      ],
+      "authorizedReaderActorIds": [],
+      "authorizedUserActorIds": [
+        "ACT-016",
+        "ACT-017"
+      ],
+      "rotationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019"
+      ],
+      "revocationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019",
+        "ACT-020"
+      ],
+      "storageBoundary": "FOUNDER_DECISION_REQUIRED",
+      "deliveryMechanism": "FOUNDER_DECISION_REQUIRED",
+      "lifetime": "FOUNDER_DECISION_REQUIRED",
+      "auditEvent": "credential_lifecycle_event",
+      "emergencyProcedure": "time-limited logged revoked independently reviewed",
+      "evidenceRefs": [
+        "EV-RUNTIME-CREDENTIALS",
+        "EV-UNKNOWN-LIVE"
+      ],
+      "founderDecisionId": "DEC-002"
     },
     {
       "id": "CRED-006",
       "name": "provider API keys",
       "environment": "ALL",
-      "status": "FOUNDER_DECISION_REQUIRED"
+      "status": "FOUNDER_DECISION_REQUIRED",
+      "custodianActorId": "ACT-019",
+      "creatorActorIds": [
+        "ACT-019"
+      ],
+      "authorizedReaderActorIds": [],
+      "authorizedUserActorIds": [
+        "ACT-016",
+        "ACT-017"
+      ],
+      "rotationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019"
+      ],
+      "revocationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019",
+        "ACT-020"
+      ],
+      "storageBoundary": "FOUNDER_DECISION_REQUIRED",
+      "deliveryMechanism": "FOUNDER_DECISION_REQUIRED",
+      "lifetime": "FOUNDER_DECISION_REQUIRED",
+      "auditEvent": "credential_lifecycle_event",
+      "emergencyProcedure": "time-limited logged revoked independently reviewed",
+      "evidenceRefs": [
+        "EV-RUNTIME-CREDENTIALS",
+        "EV-UNKNOWN-LIVE"
+      ],
+      "founderDecisionId": "DEC-002"
     },
     {
       "id": "CRED-007",
       "name": "signing keys",
       "environment": "ALL",
-      "status": "FOUNDER_DECISION_REQUIRED"
+      "status": "FOUNDER_DECISION_REQUIRED",
+      "custodianActorId": "ACT-019",
+      "creatorActorIds": [
+        "ACT-019"
+      ],
+      "authorizedReaderActorIds": [],
+      "authorizedUserActorIds": [
+        "ACT-016",
+        "ACT-017"
+      ],
+      "rotationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019"
+      ],
+      "revocationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019",
+        "ACT-020"
+      ],
+      "storageBoundary": "FOUNDER_DECISION_REQUIRED",
+      "deliveryMechanism": "FOUNDER_DECISION_REQUIRED",
+      "lifetime": "FOUNDER_DECISION_REQUIRED",
+      "auditEvent": "credential_lifecycle_event",
+      "emergencyProcedure": "time-limited logged revoked independently reviewed",
+      "evidenceRefs": [
+        "EV-RUNTIME-CREDENTIALS",
+        "EV-UNKNOWN-LIVE"
+      ],
+      "founderDecisionId": "DEC-002"
     },
     {
       "id": "CRED-008",
       "name": "webhook secrets",
       "environment": "ALL",
-      "status": "FOUNDER_DECISION_REQUIRED"
+      "status": "FOUNDER_DECISION_REQUIRED",
+      "custodianActorId": "ACT-019",
+      "creatorActorIds": [
+        "ACT-019"
+      ],
+      "authorizedReaderActorIds": [],
+      "authorizedUserActorIds": [
+        "ACT-016",
+        "ACT-017"
+      ],
+      "rotationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019"
+      ],
+      "revocationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019",
+        "ACT-020"
+      ],
+      "storageBoundary": "FOUNDER_DECISION_REQUIRED",
+      "deliveryMechanism": "FOUNDER_DECISION_REQUIRED",
+      "lifetime": "FOUNDER_DECISION_REQUIRED",
+      "auditEvent": "credential_lifecycle_event",
+      "emergencyProcedure": "time-limited logged revoked independently reviewed",
+      "evidenceRefs": [
+        "EV-RUNTIME-CREDENTIALS",
+        "EV-UNKNOWN-LIVE"
+      ],
+      "founderDecisionId": "DEC-002"
     },
     {
       "id": "CRED-009",
       "name": "artifact-storage credentials",
       "environment": "ALL",
-      "status": "FOUNDER_DECISION_REQUIRED"
+      "status": "FOUNDER_DECISION_REQUIRED",
+      "custodianActorId": "ACT-019",
+      "creatorActorIds": [
+        "ACT-019"
+      ],
+      "authorizedReaderActorIds": [],
+      "authorizedUserActorIds": [
+        "ACT-016",
+        "ACT-017"
+      ],
+      "rotationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019"
+      ],
+      "revocationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019",
+        "ACT-020"
+      ],
+      "storageBoundary": "FOUNDER_DECISION_REQUIRED",
+      "deliveryMechanism": "FOUNDER_DECISION_REQUIRED",
+      "lifetime": "FOUNDER_DECISION_REQUIRED",
+      "auditEvent": "credential_lifecycle_event",
+      "emergencyProcedure": "time-limited logged revoked independently reviewed",
+      "evidenceRefs": [
+        "EV-RUNTIME-CREDENTIALS",
+        "EV-UNKNOWN-LIVE"
+      ],
+      "founderDecisionId": "DEC-002"
     },
     {
       "id": "CRED-010",
       "name": "emergency credentials",
       "environment": "PRODUCTION",
-      "status": "FOUNDER_DECISION_REQUIRED"
+      "status": "FOUNDER_DECISION_REQUIRED",
+      "custodianActorId": "ACT-019",
+      "creatorActorIds": [
+        "ACT-019"
+      ],
+      "authorizedReaderActorIds": [],
+      "authorizedUserActorIds": [
+        "ACT-016",
+        "ACT-017"
+      ],
+      "rotationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019"
+      ],
+      "revocationAuthorityActorIds": [
+        "ACT-001",
+        "ACT-019",
+        "ACT-020"
+      ],
+      "storageBoundary": "FOUNDER_DECISION_REQUIRED",
+      "deliveryMechanism": "FOUNDER_DECISION_REQUIRED",
+      "lifetime": "FOUNDER_DECISION_REQUIRED",
+      "auditEvent": "credential_lifecycle_event",
+      "emergencyProcedure": "time-limited logged revoked independently reviewed",
+      "evidenceRefs": [
+        "EV-RUNTIME-CREDENTIALS",
+        "EV-UNKNOWN-LIVE"
+      ],
+      "founderDecisionId": "DEC-002"
     }
   ],
   "credentialPolicy": {
@@ -12535,5 +12853,930 @@
     "productionClaimed": false,
     "p1bAuthorized": false,
     "selfCertified": false
-  }
+  },
+  "sourceToSinkPaths": [
+    {
+      "id": "PATH-001",
+      "source": "anonymous lead websiteUrl",
+      "entryBoundaryId": "BND-001",
+      "hops": [
+        "validation",
+        "PostgreSQL job",
+        "background worker",
+        "HTTP redirect chain"
+      ],
+      "sink": "network destination and fetched content",
+      "consequence": "internal-service access or poisoned model input",
+      "flowId": "FLW-001",
+      "threatIds": [
+        "THR-001",
+        "THR-002",
+        "THR-003",
+        "THR-026"
+      ],
+      "evidenceRefs": [
+        "EV-RUNTIME-INTAKE",
+        "EV-RUNTIME-FETCH"
+      ]
+    },
+    {
+      "id": "PATH-002",
+      "source": "operator session and x-tenant-id hint",
+      "entryBoundaryId": "BND-002",
+      "hops": [
+        "session verification",
+        "membership check",
+        "application query"
+      ],
+      "sink": "tenant database rows and decisions",
+      "consequence": "cross-tenant disclosure or unauthorized decision",
+      "flowId": "FLW-002",
+      "threatIds": [
+        "THR-004",
+        "THR-005",
+        "THR-006",
+        "THR-007",
+        "THR-008"
+      ],
+      "evidenceRefs": [
+        "EV-RUNTIME-AUTH",
+        "EV-RUNTIME-DB"
+      ]
+    },
+    {
+      "id": "PATH-003",
+      "source": "queued tenant-bearing job",
+      "entryBoundaryId": "BND-003",
+      "hops": [
+        "poll",
+        "conditional claim",
+        "provider calls",
+        "state transition",
+        "evidence append"
+      ],
+      "sink": "assessment department and evidence state",
+      "consequence": "forged context duplicate effect race or retry amplification",
+      "flowId": "FLW-005",
+      "threatIds": [
+        "THR-011",
+        "THR-027",
+        "THR-028",
+        "THR-031"
+      ],
+      "evidenceRefs": [
+        "EV-RUNTIME-WORKERS",
+        "EV-RUNTIME-EVIDENCE"
+      ]
+    },
+    {
+      "id": "PATH-004",
+      "source": "pull-request commit",
+      "entryBoundaryId": "BND-006",
+      "hops": [
+        "exact-head checkout",
+        "validation",
+        "independent verdicts",
+        "human gate"
+      ],
+      "sink": "repository merge history",
+      "consequence": "malicious or substituted candidate accepted",
+      "flowId": "FLW-004",
+      "threatIds": [
+        "THR-018",
+        "THR-019",
+        "THR-020",
+        "THR-023",
+        "THR-024"
+      ],
+      "evidenceRefs": [
+        "EV-SPEC-CI",
+        "EV-SPEC-PROMOTION"
+      ]
+    },
+    {
+      "id": "PATH-005",
+      "source": "runtime environment and tenant PII",
+      "entryBoundaryId": "BND-005",
+      "hops": [
+        "application service",
+        "provider client or webhook"
+      ],
+      "sink": "third-party provider",
+      "consequence": "credential abuse or unauthorized data disclosure",
+      "flowId": "FLW-001",
+      "threatIds": [
+        "THR-021",
+        "THR-022",
+        "THR-025"
+      ],
+      "evidenceRefs": [
+        "EV-RUNTIME-CREDENTIALS",
+        "EV-RUNTIME-APP"
+      ]
+    }
+  ],
+  "tenantPropagation": [
+    {
+      "id": "TPR-001",
+      "stage": "authenticated API",
+      "trustedSource": "server-verified session principal",
+      "tenantDerivation": "client hint constrained by principal membership",
+      "workspaceDerivation": "principal workspace",
+      "status": "PARTIAL",
+      "next": "PostgreSQL query",
+      "threatIds": [
+        "THR-004",
+        "THR-005",
+        "THR-006"
+      ],
+      "evidenceRefs": [
+        "EV-RUNTIME-AUTH"
+      ]
+    },
+    {
+      "id": "TPR-002",
+      "stage": "public lead intake",
+      "trustedSource": "configured application tenant",
+      "tenantDerivation": "server configuration",
+      "workspaceDerivation": "marketing-site constant",
+      "status": "PARTIAL",
+      "next": "Lead EvidenceEvent AssessmentJob",
+      "threatIds": [
+        "THR-004",
+        "THR-011"
+      ],
+      "evidenceRefs": [
+        "EV-RUNTIME-INTAKE"
+      ]
+    },
+    {
+      "id": "TPR-003",
+      "stage": "background job",
+      "trustedSource": "persisted job tenant context",
+      "tenantDerivation": "job row",
+      "workspaceDerivation": "not consistently carried",
+      "status": "NOT_PROVEN",
+      "next": "worker provider and state transition",
+      "threatIds": [
+        "THR-011",
+        "THR-027",
+        "THR-028"
+      ],
+      "evidenceRefs": [
+        "EV-RUNTIME-WORKERS",
+        "EV-RUNTIME-DB"
+      ]
+    },
+    {
+      "id": "TPR-004",
+      "stage": "database",
+      "trustedSource": "application query context",
+      "tenantDerivation": "application filters",
+      "workspaceDerivation": "model-dependent",
+      "status": "NO_RLS_PROVEN",
+      "next": "tenant rows",
+      "threatIds": [
+        "THR-006"
+      ],
+      "evidenceRefs": [
+        "EV-RUNTIME-DB"
+      ]
+    },
+    {
+      "id": "TPR-005",
+      "stage": "artifact registry",
+      "trustedSource": "service identity membership",
+      "tenantDerivation": "workspace header or body authorized against identity",
+      "workspaceDerivation": "caller value membership-checked",
+      "status": "PARTIAL",
+      "next": "artifact and lineage",
+      "threatIds": [
+        "THR-005",
+        "THR-012",
+        "THR-013"
+      ],
+      "evidenceRefs": [
+        "EV-SPEC-ARTIFACT-ROUTES",
+        "EV-SPEC-ARTIFACT-DB"
+      ]
+    },
+    {
+      "id": "TPR-006",
+      "stage": "evidence ledger",
+      "trustedSource": "application-supplied tenant and workspace",
+      "tenantDerivation": "caller service context",
+      "workspaceDerivation": "caller service context",
+      "status": "PARTIAL",
+      "next": "EvidenceEvent",
+      "threatIds": [
+        "THR-006",
+        "THR-014"
+      ],
+      "evidenceRefs": [
+        "EV-RUNTIME-EVIDENCE"
+      ]
+    },
+    {
+      "id": "TPR-007",
+      "stage": "provider export or tool call",
+      "trustedSource": "tenant-bearing application workflow",
+      "tenantDerivation": "not provider-enforced",
+      "workspaceDerivation": "not proven",
+      "status": "FOUNDER_DECISION_REQUIRED",
+      "next": "approved external provider",
+      "threatIds": [
+        "THR-009",
+        "THR-021",
+        "THR-025"
+      ],
+      "evidenceRefs": [
+        "EV-RUNTIME-APP",
+        "EV-UNKNOWN-LIVE"
+      ]
+    }
+  ],
+  "escalationChains": [
+    {
+      "id": "ESC-THR-001",
+      "threatId": "THR-001",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-002",
+      "threatId": "THR-002",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-003",
+      "threatId": "THR-003",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-004",
+      "threatId": "THR-004",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-005",
+      "threatId": "THR-005",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-006",
+      "threatId": "THR-006",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-007",
+      "threatId": "THR-007",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-008",
+      "threatId": "THR-008",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-009",
+      "threatId": "THR-009",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-010",
+      "threatId": "THR-010",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-011",
+      "threatId": "THR-011",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-012",
+      "threatId": "THR-012",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-013",
+      "threatId": "THR-013",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-014",
+      "threatId": "THR-014",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-015",
+      "threatId": "THR-015",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-016",
+      "threatId": "THR-016",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-017",
+      "threatId": "THR-017",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-018",
+      "threatId": "THR-018",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-019",
+      "threatId": "THR-019",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-020",
+      "threatId": "THR-020",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-021",
+      "threatId": "THR-021",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-022",
+      "threatId": "THR-022",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-023",
+      "threatId": "THR-023",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-024",
+      "threatId": "THR-024",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-025",
+      "threatId": "THR-025",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-026",
+      "threatId": "THR-026",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-027",
+      "threatId": "THR-027",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-009",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-028",
+      "threatId": "THR-028",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-009",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-029",
+      "threatId": "THR-029",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-009",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-030",
+      "threatId": "THR-030",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-008",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    },
+    {
+      "id": "ESC-THR-031",
+      "threatId": "THR-031",
+      "detectionOwnerActorId": "ACT-014",
+      "detectionSignal": "tenant-safe security reliability or evidence-integrity alert; implementation NOT_PROVEN",
+      "triageOwnerActorId": "ACT-009",
+      "containmentOwnerActorId": "ACT-002",
+      "remediationOwnerActorId": "ACT-006",
+      "approvalOwnerActorId": "ACT-001",
+      "certificationOwnerActorId": "ACT-012",
+      "recoveryOrRollback": "stop affected execution preserve evidence and use reviewed rollback or revocation",
+      "founderEscalationCondition": "any confirmed HIGH/CRITICAL control failure or missing closure evidence",
+      "closureAuthorityActorId": "ACT-001",
+      "closureEvidenceRequired": [
+        "exact subject SHA",
+        "reproduction or denial test",
+        "remediation evidence",
+        "independent verdict",
+        "AEGIS verdict when required"
+      ],
+      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+    }
+  ]
 }

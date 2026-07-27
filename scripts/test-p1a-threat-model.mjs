@@ -14,13 +14,14 @@ const baseManifest=load("docs/security/p1-a/validation-manifest.json");
 const baseMarkdown=readFileSync(path.join(root,"docs/security/p1-a/threat-model.md"),"utf8");
 const head=execFileSync("git",["rev-parse","HEAD"],{cwd:root,encoding:"utf8"}).trim();
 
+validateData(baseModel,baseEvidence,baseManifest,baseMarkdown);
 const positives=[
-  ["complete_threat_trace",()=>validateData(baseModel,baseEvidence,baseManifest,baseMarkdown)],
-  ["valid_authority_rule_set",()=>validateData(baseModel,baseEvidence,baseManifest,baseMarkdown)],
-  ["valid_credential_entry",()=>validateData(baseModel,baseEvidence,baseManifest,baseMarkdown)],
-  ["valid_tenant_operation",()=>validateData(baseModel,baseEvidence,baseManifest,baseMarkdown)],
-  ["complete_escalation_chain",()=>validateData(baseModel,baseEvidence,baseManifest,baseMarkdown)],
-  ["consistent_package",()=>validateData(baseModel,baseEvidence,baseManifest,baseMarkdown)]
+  ["complete_threat_trace",()=>assert.ok(baseModel.threats[0].assets.length&&baseModel.threats[0].evidenceRefs.length&&baseModel.threats[0].controlIds.length)],
+  ["valid_authority_rule_set",()=>assert.equal(baseModel.authorityPolicy.rules.length,616)],
+  ["valid_credential_entry",()=>assert.ok(baseModel.credentialClasses[0].rotationAuthorityActorIds.length&&baseModel.credentialClasses[0].evidenceRefs.length)],
+  ["valid_tenant_operation",()=>assert.equal(baseModel.tenantOperationPolicy.denialBehavior,"DENY_AND_LOG")],
+  ["complete_escalation_chain",()=>assert.equal(baseModel.escalationChains.find(x=>x.threatId==="THR-001").closureEvidenceRequired.length,5)],
+  ["consistent_package",()=>assert.equal(JSON.parse(baseMarkdown.match(/```json p1a-summary\n([^\n]+)\n```/)[1]).threats,baseModel.threats.length)]
 ];
 const mutations=[
   ["wrong_candidate_sha",()=>runPackage({candidateSha:"0".repeat(40)})],
@@ -47,7 +48,14 @@ const mutations=[
   ["missing_required_threat",()=>{const m=clone(baseModel);m.threats[0].name="other";return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
   ["skipped_required_check",()=>{const m=clone(baseManifest);m.requiredTests.pop();return validateData(baseModel,baseEvidence,m,baseMarkdown)}],
   ["stale_evidence",()=>{const e=clone(baseEvidence);e.references[0].sha="1".repeat(40);return validateData(baseModel,e,baseManifest,baseMarkdown)}],
-  ["unauthorized_extra_file",()=>{const m=clone(baseManifest);m.allowedRemediationFiles=[];return validateGit(m,head)}]
+  ["unauthorized_extra_file",()=>{const m=clone(baseManifest);m.allowedRemediationFiles=[];return validateGit(m,head)}],
+  ["missing_source_to_sink",()=>{const m=clone(baseModel);m.sourceToSinkPaths[0].sink="";return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
+  ["missing_tenant_propagation",()=>{const m=clone(baseModel);m.tenantPropagation.pop();return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
+  ["missing_credential_field",()=>{const m=clone(baseModel);delete m.credentialClasses[0].lifetime;return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
+  ["dangling_escalation",()=>{const m=clone(baseModel);m.escalationChains.shift();return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
+  ["invalid_authority_owner",()=>{const m=clone(baseModel);m.authorityPolicy.rules[0].approvalOwnerActorId="ACT-999";return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
+  ["missing_retry_threat",()=>{const m=clone(baseModel);m.threats.pop();return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
+  ["boundary_doc_conflict",()=>validateData(baseModel,baseEvidence,baseManifest,baseMarkdown.replace("`BND-004`, ",""))]
 ];
 
 let passed=0;
