@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { REQUIRED_ACTORS, REQUIRED_THREATS, validateData, runPackage } from "./validate-p1a-threat-model.mjs";
+import { validateData, validateGit, runPackage } from "./validate-p1a-threat-model.mjs";
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const load=(p)=>JSON.parse(readFileSync(path.join(root,p),"utf8"));
@@ -47,7 +47,7 @@ const mutations=[
   ["missing_required_threat",()=>{const m=clone(baseModel);m.threats[0].name="other";return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
   ["skipped_required_check",()=>{const m=clone(baseManifest);m.requiredTests.pop();return validateData(baseModel,baseEvidence,m,baseMarkdown)}],
   ["stale_evidence",()=>{const e=clone(baseEvidence);e.references[0].sha="1".repeat(40);return validateData(baseModel,e,baseManifest,baseMarkdown)}],
-  ["unauthorized_extra_file",()=>{const m=clone(baseManifest);m.allowedRemediationFiles=[];return runPackage({candidateSha:head})}]
+  ["unauthorized_extra_file",()=>{const m=clone(baseManifest);m.allowedRemediationFiles=[];return validateGit(m,head)}]
 ];
 
 let passed=0;
