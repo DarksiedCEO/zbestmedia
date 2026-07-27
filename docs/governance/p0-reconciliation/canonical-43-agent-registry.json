@@ -3,6 +3,13 @@
   "status": "DOCUMENTARY_CANDIDATE_NOT_RUNTIME_ACTIVE",
   "sourceRepository": "DarksiedCEO/zbestmedia-ui",
   "sourceCommitSha": "94376718e07df2e9d44864ed0394d58219224e61",
+  "sourceEvidence": {
+    "specialistDirectory": "docs/agent-bench/agents/core",
+    "specialistDirectoryTreeOid": "2f2dacfbec217dccd142b1e598108b327ab967a7",
+    "departmentLeadsPath": "docs/agent-bench/foundation/department-leads.json",
+    "departmentLeadsBlobOid": "9af16a1aff96b070588cf38d9308d821ec3c3d65",
+    "countingRule": "Each unique specialist JSON object is counted once; each unique department-lead array record is counted once; departments.json is corroborative and is not added to the entity count."
+  },
   "counts": {
     "specialistSpecifications": 25,
     "departmentLeads": 18,

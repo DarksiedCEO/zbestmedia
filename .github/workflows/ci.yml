@@ -65,6 +65,11 @@ jobs:
           pnpm schemas:gen
           pnpm schemas:check
 
+      - name: P0 reconciliation fail-closed aggregate
+        env:
+          P0_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: pnpm test:p0-reconciliation
+
       - name: Quality Gates
         run: |
           pnpm -r lint

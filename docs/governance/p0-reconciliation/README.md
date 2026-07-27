@@ -22,6 +22,8 @@ This package implements the founder-authorized P0 authority decision as document
 - [Claimed 32-Occurrence Quarantine Ledger](quarantined-32-record-ledger.json)
 - [Cross-Repository Agent Contract Schema](schemas/cross-repository-agent-contract.schema.json)
 - [Source-to-Runtime Promotion Contract](source-to-runtime-promotion-contract.md)
+- [Trusted Promotion Verification Contract](trusted-promotion-verification.md)
+- [Rollback, Evidence Revocation, and Downstream Invalidation](rollback-evidence-invalidation.md)
 - [Reconciliation and Migration Recommendations](reconciliation-migration-plan.md)
 - [New Master-Plan Requirements](new-master-plan-requirements.md)
 - [Founder Decision Register and Gate Verdict](founder-packet.md)

@@ -2,179 +2,532 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://zbestmedia.com/schemas/cross-repository-agent-contract.schema.json",
   "title": "Cross-Repository Agent Contract",
+  "description": "Structural envelope only. Promotion authority requires the trusted semantic verifier documented beside this schema.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["agentId","specification","runtime","tenantAuthorization","tools","evidence","governance","promotionStatus"],
+  "required": [
+    "agentId",
+    "subjectSha",
+    "subjectCreatedAt",
+    "specification",
+    "runtime",
+    "tenantAuthorization",
+    "toolPermissions",
+    "evidence",
+    "approval",
+    "governance",
+    "promotionStatus",
+    "stageHistory"
+  ],
   "$defs": {
-    "gateResult": {
+    "principalId": {
+      "type": "string",
+      "pattern": "^principal:[a-z0-9][a-z0-9._-]{2,63}$"
+    },
+    "tenantId": {
+      "type": "string",
+      "pattern": "^tenant_[a-z0-9][a-z0-9_-]{2,63}$"
+    },
+    "workspaceId": {
+      "type": "string",
+      "pattern": "^workspace_[a-z0-9][a-z0-9_-]{2,63}$"
+    },
+    "artifactId": {
+      "type": "string",
+      "pattern": "^artifact_[A-Za-z0-9_-]{8,96}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "commitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "evidenceReference": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status","evidenceRef"],
+      "required": [
+        "evidenceId",
+        "evidenceType",
+        "artifactId",
+        "artifactHash",
+        "subjectSha",
+        "agentId",
+        "tenantId",
+        "workspaceId",
+        "createdAt",
+        "validUntil",
+        "source",
+        "verificationStatus"
+      ],
       "properties": {
-        "status": {"enum":["NOT_RUN","PASS","FAIL"]},
-        "evidenceRef": {"type":["string","null"]}
+        "evidenceId": {
+          "type": "string",
+          "pattern": "^evidence_[A-Za-z0-9_-]{12,96}$"
+        },
+        "evidenceType": {
+          "enum": [
+            "SOURCE_PIN",
+            "LINEAGE",
+            "RECONCILIATION",
+            "SINGLE_TASK_CONTRACT",
+            "MASTERY_SKILLS",
+            "CONTRACT_VALIDATION",
+            "RUNTIME_IMPLEMENTATION",
+            "LOCAL_VERIFICATION",
+            "BENCHMARK",
+            "SECURITY_REVIEW",
+            "RELIABILITY_REVIEW",
+            "EXACT_SHA_CI",
+            "AEGIS_CERTIFICATION",
+            "SUPERVISED_MISSION",
+            "LIVE_MISSION"
+          ]
+        },
+        "artifactId": {"$ref": "#/$defs/artifactId"},
+        "artifactHash": {"$ref": "#/$defs/sha256"},
+        "subjectSha": {"$ref": "#/$defs/commitSha"},
+        "agentId": {"type": "string", "minLength": 1},
+        "tenantId": {"$ref": "#/$defs/tenantId"},
+        "workspaceId": {"$ref": "#/$defs/workspaceId"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "validUntil": {"type": "string", "format": "date-time"},
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["issuerPrincipalId", "systemId"],
+          "properties": {
+            "issuerPrincipalId": {"$ref": "#/$defs/principalId"},
+            "systemId": {
+              "enum": [
+                "zbestmedia-source-registry",
+                "zbestmedia-ui-runtime",
+                "github-actions",
+                "security-review-authority",
+                "reliability-review-authority",
+                "aegis-certification-authority",
+                "human-supervision-ledger"
+              ]
+            }
+          }
+        },
+        "verificationStatus": {
+          "enum": ["VERIFIED", "REVOKED", "EXPIRED", "FAILED"]
+        }
+      }
+    },
+    "toolPermission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "toolId",
+        "allowedActions",
+        "environment",
+        "tenantScope",
+        "approvalRequired",
+        "credentialBoundary",
+        "readWriteMode"
+      ],
+      "properties": {
+        "toolId": {
+          "enum": [
+            "repository-reader",
+            "artifact-reader",
+            "local-test-runner",
+            "ci-evidence-reader"
+          ]
+        },
+        "allowedActions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "read-source",
+              "read-artifact",
+              "execute-local-test",
+              "read-ci-result"
+            ]
+          }
+        },
+        "environment": {
+          "enum": ["LOCAL", "CI", "READ_ONLY_REMOTE"]
+        },
+        "tenantScope": {"$ref": "#/$defs/tenantId"},
+        "approvalRequired": {"const": true},
+        "credentialBoundary": {
+          "enum": [
+            "NO_CREDENTIALS",
+            "READ_ONLY_REPOSITORY_TOKEN",
+            "READ_ONLY_EVIDENCE_TOKEN"
+          ]
+        },
+        "readWriteMode": {"const": "READ_ONLY"}
+      }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approvalStatus",
+        "approvalId",
+        "approvedByPrincipalId",
+        "approvedAt",
+        "expiresAt",
+        "revokedAt",
+        "approvalScope",
+        "subjectSha",
+        "subjectArtifactIds",
+        "tenantId",
+        "workspaceId"
+      ],
+      "properties": {
+        "approvalStatus": {
+          "enum": ["NOT_REQUESTED", "APPROVED", "REJECTED", "REVOKED", "EXPIRED"]
+        },
+        "approvalId": {
+          "type": ["string", "null"],
+          "pattern": "^approval_[A-Za-z0-9_-]{12,96}$"
+        },
+        "approvedByPrincipalId": {
+          "anyOf": [
+            {"$ref": "#/$defs/principalId"},
+            {"type": "null"}
+          ]
+        },
+        "approvedAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "expiresAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "revokedAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "approvalScope": {
+          "type": ["string", "null"],
+          "enum": ["AGENT_LIVE_PROMOTION", null]
+        },
+        "subjectSha": {
+          "anyOf": [
+            {"$ref": "#/$defs/commitSha"},
+            {"type": "null"}
+          ]
+        },
+        "subjectArtifactIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/artifactId"}
+        },
+        "tenantId": {"$ref": "#/$defs/tenantId"},
+        "workspaceId": {"$ref": "#/$defs/workspaceId"}
       },
       "allOf": [
         {
-          "if": {"properties":{"status":{"const":"PASS"}},"required":["status"]},
-          "then": {"properties":{"evidenceRef":{"type":"string","minLength":1}}}
+          "if": {
+            "properties": {"approvalStatus": {"const": "NOT_REQUESTED"}},
+            "required": ["approvalStatus"]
+          },
+          "then": {
+            "properties": {
+              "approvalId": {"type": "null"},
+              "approvedByPrincipalId": {"type": "null"},
+              "approvedAt": {"type": "null"},
+              "expiresAt": {"type": "null"},
+              "revokedAt": {"type": "null"},
+              "approvalScope": {"type": "null"},
+              "subjectSha": {"type": "null"},
+              "subjectArtifactIds": {"type": "array", "maxItems": 0}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {"approvalStatus": {"const": "APPROVED"}},
+            "required": ["approvalStatus"]
+          },
+          "then": {
+            "properties": {
+              "approvalId": {
+                "type": "string",
+                "pattern": "^approval_[A-Za-z0-9_-]{12,96}$"
+              },
+              "approvedByPrincipalId": {"$ref": "#/$defs/principalId"},
+              "approvedAt": {"type": "string", "format": "date-time"},
+              "expiresAt": {"type": "string", "format": "date-time"},
+              "revokedAt": {"type": "null"},
+              "approvalScope": {"const": "AGENT_LIVE_PROMOTION"},
+              "subjectSha": {"$ref": "#/$defs/commitSha"},
+              "subjectArtifactIds": {"type": "array", "minItems": 1}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "approvalStatus": {
+                "enum": ["REJECTED", "REVOKED", "EXPIRED"]
+              }
+            },
+            "required": ["approvalStatus"]
+          },
+          "then": {
+            "properties": {
+              "approvalId": {
+                "type": "string",
+                "pattern": "^approval_[A-Za-z0-9_-]{12,96}$"
+              },
+              "approvedByPrincipalId": {"$ref": "#/$defs/principalId"},
+              "approvedAt": {"type": "string", "format": "date-time"},
+              "approvalScope": {"const": "AGENT_LIVE_PROMOTION"},
+              "subjectSha": {"$ref": "#/$defs/commitSha"}
+            }
+          }
         }
       ]
-    },
-    "successfulGate": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["status","evidenceRef"],
-      "properties": {
-        "status": {"const":"PASS"},
-        "evidenceRef": {"type":"string","minLength":1}
-      }
     }
   },
   "properties": {
-    "agentId": {"type":"string","minLength":1},
+    "agentId": {
+      "type": "string",
+      "pattern": "^(agent|lead)\\.[a-z0-9][a-z0-9.-]*$"
+    },
+    "subjectSha": {"$ref": "#/$defs/commitSha"},
+    "subjectCreatedAt": {"type": "string", "format": "date-time"},
     "specification": {
-      "type":"object",
-      "additionalProperties":false,
-      "required":["repository","commitSha","path","contractVersion","sourceHash"],
-      "properties":{
-        "repository":{"const":"DarksiedCEO/zbestmedia"},
-        "commitSha":{"type":"string","pattern":"^[0-9a-f]{40}$"},
-        "path":{"type":"string","minLength":1},
-        "contractVersion":{"type":"string","minLength":1},
-        "sourceHash":{"type":"string","minLength":1}
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "commitSha", "path", "contractVersion", "sourceHash"],
+      "properties": {
+        "repository": {"const": "DarksiedCEO/zbestmedia"},
+        "commitSha": {"$ref": "#/$defs/commitSha"},
+        "path": {"type": "string", "pattern": "^[A-Za-z0-9._/-]+$"},
+        "contractVersion": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "sourceHash": {"$ref": "#/$defs/sha256"}
       }
     },
     "runtime": {
-      "type":"object",
-      "additionalProperties":false,
-      "required":["repository","commitSha","bindingPath","manifestId"],
-      "properties":{
-        "repository":{"const":"DarksiedCEO/zbestmedia-ui"},
-        "commitSha":{"type":"string","pattern":"^[0-9a-f]{40}$"},
-        "bindingPath":{"type":"string","minLength":1},
-        "manifestId":{"type":"string","minLength":1}
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["repository", "commitSha", "bindingPath", "manifestId", "artifactId"],
+      "properties": {
+        "repository": {"const": "DarksiedCEO/zbestmedia-ui"},
+        "commitSha": {"$ref": "#/$defs/commitSha"},
+        "bindingPath": {"type": "string", "pattern": "^[A-Za-z0-9._/-]+$"},
+        "manifestId": {
+          "type": "string",
+          "pattern": "^manifest_[A-Za-z0-9_-]{8,96}$"
+        },
+        "artifactId": {"$ref": "#/$defs/artifactId"}
       }
     },
     "tenantAuthorization": {
-      "type":"object",
-      "additionalProperties":false,
-      "required":["tenantIsolationMode","authorizationPolicyRef","humanApprovalRequired"],
-      "properties":{
-        "tenantIsolationMode":{"enum":["SINGLE_TENANT","TENANT_SCOPED"]},
-        "authorizationPolicyRef":{"type":"string","minLength":1},
-        "humanApprovalRequired":{"type":"boolean"}
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenantId",
+        "workspaceId",
+        "tenantIsolationMode",
+        "authorizationPolicyId",
+        "humanApprovalRequired"
+      ],
+      "properties": {
+        "tenantId": {"$ref": "#/$defs/tenantId"},
+        "workspaceId": {"$ref": "#/$defs/workspaceId"},
+        "tenantIsolationMode": {"const": "TENANT_SCOPED"},
+        "authorizationPolicyId": {
+          "type": "string",
+          "pattern": "^policy_[A-Za-z0-9_-]{8,96}$"
+        },
+        "humanApprovalRequired": {"type": "boolean"}
       }
     },
-    "tools": {
-      "type":"object",
-      "additionalProperties":false,
-      "required":["allowlist","forbiddenActions"],
-      "properties":{
-        "allowlist":{"type":"array","items":{"type":"string","minLength":1},"uniqueItems":true},
-        "forbiddenActions":{"type":"array","items":{"type":"string","minLength":1},"minItems":1,"uniqueItems":true}
-      }
+    "toolPermissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/toolPermission"}
     },
     "evidence": {
-      "type":"object",
-      "additionalProperties":false,
-      "required":["tests","exactShaCi","securityReview","reliabilityReview","redTeam","sentinel","aegis","supervisedMission","liveMission"],
-      "properties":{
-        "tests":{"type":"array","items":{"type":"string","minLength":1},"uniqueItems":true},
-        "exactShaCi":{"type":"array","items":{"type":"string","minLength":1},"uniqueItems":true},
-        "securityReview":{"$ref":"#/$defs/gateResult"},
-        "reliabilityReview":{"$ref":"#/$defs/gateResult"},
-        "redTeam":{"$ref":"#/$defs/gateResult"},
-        "sentinel":{"$ref":"#/$defs/gateResult"},
-        "aegis":{"$ref":"#/$defs/gateResult"},
-        "supervisedMission":{"$ref":"#/$defs/gateResult"},
-        "liveMission":{"$ref":"#/$defs/gateResult"}
-      }
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/evidenceReference"}
     },
+    "approval": {"$ref": "#/$defs/approval"},
     "governance": {
-      "type":"object",
-      "additionalProperties":false,
-      "required":["rollbackRef","nextOwner","releaseApproval"],
-      "properties":{
-        "rollbackRef":{"type":"string","minLength":1},
-        "nextOwner":{"type":"string","minLength":1},
-        "releaseApproval":{
-          "type":"object",
-          "additionalProperties":false,
-          "required":["status","approvedBy","approvedAt"],
-          "properties":{
-            "status":{"enum":["NOT_REQUESTED","APPROVED","REJECTED"]},
-            "approvedBy":{"type":["string","null"]},
-            "approvedAt":{"type":["string","null"],"format":"date-time"}
-          },
-          "allOf":[
-            {
-              "if":{"properties":{"status":{"const":"APPROVED"}},"required":["status"]},
-              "then":{
-                "properties":{
-                  "approvedBy":{"type":"string","minLength":1},
-                  "approvedAt":{"type":"string","format":"date-time"}
-                }
-              }
-            }
-          ]
-        }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "rollbackTargetSha",
+        "supersedesSchemaVersion",
+        "revocationPolicyId",
+        "downstreamInvalidationPolicyId",
+        "nextOwnerPrincipalId"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "rollbackTargetSha": {"$ref": "#/$defs/commitSha"},
+        "supersedesSchemaVersion": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "revocationPolicyId": {
+          "type": "string",
+          "pattern": "^policy_[A-Za-z0-9_-]{8,96}$"
+        },
+        "downstreamInvalidationPolicyId": {
+          "type": "string",
+          "pattern": "^policy_[A-Za-z0-9_-]{8,96}$"
+        },
+        "nextOwnerPrincipalId": {"$ref": "#/$defs/principalId"}
       }
     },
-    "promotionStatus":{"enum":["SPEC_ONLY","RUNTIME_BOUND","TESTED","AEGIS_REVIEWED","SUPERVISED","LIVE_MISSION_PROVEN"]}
+    "promotionStatus": {
+      "enum": [
+        "SOURCE_PINNED",
+        "LINEAGE_VERIFIED",
+        "RECONCILED",
+        "SINGLE_TASK_DEFINED",
+        "MASTERY_SKILLS_DEFINED",
+        "CONTRACT_VALIDATED",
+        "RUNTIME_IMPLEMENTED",
+        "LOCALLY_VERIFIED",
+        "BENCHMARK_PASSED",
+        "SECURITY_REVIEWED",
+        "RELIABILITY_REVIEWED",
+        "EXACT_SHA_VERIFIED",
+        "AEGIS_CERTIFIED",
+        "SUPERVISED",
+        "LIVE_MISSION_PROVEN"
+      ]
+    },
+    "stageHistory": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 15,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "SOURCE_PINNED",
+          "LINEAGE_VERIFIED",
+          "RECONCILED",
+          "SINGLE_TASK_DEFINED",
+          "MASTERY_SKILLS_DEFINED",
+          "CONTRACT_VALIDATED",
+          "RUNTIME_IMPLEMENTED",
+          "LOCALLY_VERIFIED",
+          "BENCHMARK_PASSED",
+          "SECURITY_REVIEWED",
+          "RELIABILITY_REVIEWED",
+          "EXACT_SHA_VERIFIED",
+          "AEGIS_CERTIFIED",
+          "SUPERVISED",
+          "LIVE_MISSION_PROVEN"
+        ]
+      }
+    }
   },
   "allOf": [
     {
-      "if":{"properties":{"promotionStatus":{"enum":["TESTED","AEGIS_REVIEWED","SUPERVISED","LIVE_MISSION_PROVEN"]}},"required":["promotionStatus"]},
-      "then":{
-        "properties":{
-          "evidence":{
-            "properties":{
-              "tests":{"minItems":1},
-              "exactShaCi":{"minItems":1}
-            }
+      "oneOf": [
+        {"properties":{"promotionStatus":{"const":"SOURCE_PINNED"},"stageHistory":{"const":["SOURCE_PINNED"]}}},
+        {"properties":{"promotionStatus":{"const":"LINEAGE_VERIFIED"},"stageHistory":{"const":["SOURCE_PINNED","LINEAGE_VERIFIED"]}}},
+        {"properties":{"promotionStatus":{"const":"RECONCILED"},"stageHistory":{"const":["SOURCE_PINNED","LINEAGE_VERIFIED","RECONCILED"]}}},
+        {"properties":{"promotionStatus":{"const":"SINGLE_TASK_DEFINED"},"stageHistory":{"const":["SOURCE_PINNED","LINEAGE_VERIFIED","RECONCILED","SINGLE_TASK_DEFINED"]}}},
+        {"properties":{"promotionStatus":{"const":"MASTERY_SKILLS_DEFINED"},"stageHistory":{"const":["SOURCE_PINNED","LINEAGE_VERIFIED","RECONCILED","SINGLE_TASK_DEFINED","MASTERY_SKILLS_DEFINED"]}}},
+        {"properties":{"promotionStatus":{"const":"CONTRACT_VALIDATED"},"stageHistory":{"const":["SOURCE_PINNED","LINEAGE_VERIFIED","RECONCILED","SINGLE_TASK_DEFINED","MASTERY_SKILLS_DEFINED","CONTRACT_VALIDATED"]}}},
+        {"properties":{"promotionStatus":{"const":"RUNTIME_IMPLEMENTED"},"stageHistory":{"const":["SOURCE_PINNED","LINEAGE_VERIFIED","RECONCILED","SINGLE_TASK_DEFINED","MASTERY_SKILLS_DEFINED","CONTRACT_VALIDATED","RUNTIME_IMPLEMENTED"]}}},
+        {"properties":{"promotionStatus":{"const":"LOCALLY_VERIFIED"},"stageHistory":{"const":["SOURCE_PINNED","LINEAGE_VERIFIED","RECONCILED","SINGLE_TASK_DEFINED","MASTERY_SKILLS_DEFINED","CONTRACT_VALIDATED","RUNTIME_IMPLEMENTED","LOCALLY_VERIFIED"]}}},
+        {"properties":{"promotionStatus":{"const":"BENCHMARK_PASSED"},"stageHistory":{"const":["SOURCE_PINNED","LINEAGE_VERIFIED","RECONCILED","SINGLE_TASK_DEFINED","MASTERY_SKILLS_DEFINED","CONTRACT_VALIDATED","RUNTIME_IMPLEMENTED","LOCALLY_VERIFIED","BENCHMARK_PASSED"]}}},
+        {"properties":{"promotionStatus":{"const":"SECURITY_REVIEWED"},"stageHistory":{"const":["SOURCE_PINNED","LINEAGE_VERIFIED","RECONCILED","SINGLE_TASK_DEFINED","MASTERY_SKILLS_DEFINED","CONTRACT_VALIDATED","RUNTIME_IMPLEMENTED","LOCALLY_VERIFIED","BENCHMARK_PASSED","SECURITY_REVIEWED"]}}},
+        {"properties":{"promotionStatus":{"const":"RELIABILITY_REVIEWED"},"stageHistory":{"const":["SOURCE_PINNED","LINEAGE_VERIFIED","RECONCILED","SINGLE_TASK_DEFINED","MASTERY_SKILLS_DEFINED","CONTRACT_VALIDATED","RUNTIME_IMPLEMENTED","LOCALLY_VERIFIED","BENCHMARK_PASSED","SECURITY_REVIEWED","RELIABILITY_REVIEWED"]}}},
+        {"properties":{"promotionStatus":{"const":"EXACT_SHA_VERIFIED"},"stageHistory":{"const":["SOURCE_PINNED","LINEAGE_VERIFIED","RECONCILED","SINGLE_TASK_DEFINED","MASTERY_SKILLS_DEFINED","CONTRACT_VALIDATED","RUNTIME_IMPLEMENTED","LOCALLY_VERIFIED","BENCHMARK_PASSED","SECURITY_REVIEWED","RELIABILITY_REVIEWED","EXACT_SHA_VERIFIED"]}}},
+        {"properties":{"promotionStatus":{"const":"AEGIS_CERTIFIED"},"stageHistory":{"const":["SOURCE_PINNED","LINEAGE_VERIFIED","RECONCILED","SINGLE_TASK_DEFINED","MASTERY_SKILLS_DEFINED","CONTRACT_VALIDATED","RUNTIME_IMPLEMENTED","LOCALLY_VERIFIED","BENCHMARK_PASSED","SECURITY_REVIEWED","RELIABILITY_REVIEWED","EXACT_SHA_VERIFIED","AEGIS_CERTIFIED"]}}},
+        {"properties":{"promotionStatus":{"const":"SUPERVISED"},"stageHistory":{"const":["SOURCE_PINNED","LINEAGE_VERIFIED","RECONCILED","SINGLE_TASK_DEFINED","MASTERY_SKILLS_DEFINED","CONTRACT_VALIDATED","RUNTIME_IMPLEMENTED","LOCALLY_VERIFIED","BENCHMARK_PASSED","SECURITY_REVIEWED","RELIABILITY_REVIEWED","EXACT_SHA_VERIFIED","AEGIS_CERTIFIED","SUPERVISED"]}}},
+        {"properties":{"promotionStatus":{"const":"LIVE_MISSION_PROVEN"},"stageHistory":{"const":["SOURCE_PINNED","LINEAGE_VERIFIED","RECONCILED","SINGLE_TASK_DEFINED","MASTERY_SKILLS_DEFINED","CONTRACT_VALIDATED","RUNTIME_IMPLEMENTED","LOCALLY_VERIFIED","BENCHMARK_PASSED","SECURITY_REVIEWED","RELIABILITY_REVIEWED","EXACT_SHA_VERIFIED","AEGIS_CERTIFIED","SUPERVISED","LIVE_MISSION_PROVEN"]}}}
+      ]
+    },
+    {
+      "if": {
+        "properties": {
+          "promotionStatus": {
+            "enum": [
+              "SOURCE_PINNED",
+              "LINEAGE_VERIFIED",
+              "RECONCILED",
+              "SINGLE_TASK_DEFINED",
+              "MASTERY_SKILLS_DEFINED",
+              "CONTRACT_VALIDATED"
+            ]
+          }
+        },
+        "required": ["promotionStatus"]
+      },
+      "then": {
+        "properties": {
+          "runtime": {"type": "null"},
+          "toolPermissions": {"type": "array", "maxItems": 0},
+          "approval": {
+            "type": "object",
+            "properties": {"approvalStatus": {"const": "NOT_REQUESTED"}}
           }
         }
       }
     },
     {
-      "if":{"properties":{"promotionStatus":{"enum":["AEGIS_REVIEWED","SUPERVISED","LIVE_MISSION_PROVEN"]}},"required":["promotionStatus"]},
-      "then":{
-        "properties":{
-          "evidence":{
-            "properties":{
-              "securityReview":{"$ref":"#/$defs/successfulGate"},
-              "reliabilityReview":{"$ref":"#/$defs/successfulGate"},
-              "redTeam":{"$ref":"#/$defs/successfulGate"},
-              "sentinel":{"$ref":"#/$defs/successfulGate"},
-              "aegis":{"$ref":"#/$defs/successfulGate"}
-            }
+      "if": {
+        "properties": {
+          "promotionStatus": {
+            "enum": [
+              "RUNTIME_IMPLEMENTED",
+              "LOCALLY_VERIFIED",
+              "BENCHMARK_PASSED",
+              "SECURITY_REVIEWED",
+              "RELIABILITY_REVIEWED",
+              "EXACT_SHA_VERIFIED",
+              "AEGIS_CERTIFIED",
+              "SUPERVISED",
+              "LIVE_MISSION_PROVEN"
+            ]
           }
+        },
+        "required": ["promotionStatus"]
+      },
+      "then": {
+        "properties": {
+          "runtime": {"type": "object"}
         }
       }
     },
     {
-      "if":{"properties":{"promotionStatus":{"enum":["SUPERVISED","LIVE_MISSION_PROVEN"]}},"required":["promotionStatus"]},
-      "then":{
-        "properties":{
-          "evidence":{"properties":{"supervisedMission":{"$ref":"#/$defs/successfulGate"}}}
-        }
-      }
-    },
-    {
-      "if":{"properties":{"promotionStatus":{"const":"LIVE_MISSION_PROVEN"}},"required":["promotionStatus"]},
-      "then":{
-        "properties":{
-          "evidence":{"properties":{"liveMission":{"$ref":"#/$defs/successfulGate"}}},
-          "governance":{
-            "properties":{
-              "releaseApproval":{
-                "properties":{
-                  "status":{"const":"APPROVED"},
-                  "approvedBy":{"type":"string","minLength":1},
-                  "approvedAt":{"type":"string","format":"date-time"}
-                }
-              }
+      "if": {
+        "properties": {
+          "promotionStatus": {"const": "LIVE_MISSION_PROVEN"}
+        },
+        "required": ["promotionStatus"]
+      },
+      "then": {
+        "properties": {
+          "tenantAuthorization": {
+            "type": "object",
+            "properties": {
+              "humanApprovalRequired": {"const": true}
+            }
+          },
+          "approval": {
+            "type": "object",
+            "properties": {
+              "approvalStatus": {"const": "APPROVED"}
             }
           }
         }

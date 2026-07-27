@@ -2,7 +2,7 @@
 
 An agent progresses only through evidence-backed states:
 
-`SOURCE_RESEARCHED → SINGLE_TASK_DEFINED → MASTERY_SKILLS_DEFINED → CONTRACT_VALIDATED → TOOL_REQUIREMENTS_DEFINED → RUNTIME_IMPLEMENTED → BENCHMARK_PASSED → RED_TEAM_TESTED → SENTINEL_CONNECTED → AEGIS_CERTIFIED → SUPERVISED → LIVE_MISSION_PROVEN`
+`SOURCE_PINNED → LINEAGE_VERIFIED → RECONCILED → SINGLE_TASK_DEFINED → MASTERY_SKILLS_DEFINED → CONTRACT_VALIDATED → RUNTIME_IMPLEMENTED → LOCALLY_VERIFIED → BENCHMARK_PASSED → SECURITY_REVIEWED → RELIABILITY_REVIEWED → EXACT_SHA_VERIFIED → AEGIS_CERTIFIED → SUPERVISED → LIVE_MISSION_PROVEN`
 
 ## Required handoff
 
@@ -22,6 +22,8 @@ Every promotion handoff must contain:
 
 ## Fail-closed rules
 
+- Promotion history must be the exact monotonic stage prefix; stages cannot be skipped or self-asserted.
+- JSON Schema proves structure only. The trusted verifier authenticates evidence, authority, tenant/workspace binding, expiry, and revocation before promotion.
 - `SPEC_ONLY` is never operational.
 - Expired, missing, mismatched, or unsigned manifests cannot run.
 - A browser return page cannot prove payment.
@@ -29,3 +31,4 @@ Every promotion handoff must contain:
 - No implementer may approve or certify its own work.
 - A runtime binding with a different contract hash is rejected.
 - Missing evidence produces `BLOCKED`, never inferred success.
+- Revoked or superseded schemas, evidence, approvals, or artifacts invalidate downstream promotion without deleting audit history.

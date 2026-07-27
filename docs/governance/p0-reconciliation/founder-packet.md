@@ -1,4 +1,6 @@
-# Founder Packet — P0 Candidate
+# Founder Packet — P0 Remediation Candidate
+
+The earlier candidate at `c1484d84a3b431a3a35ee1d544c357a75d19f7e1` received AEGIS `RED` and is rejected. This branch now contains an authorized, bounded remediation. All independent verdicts for the remediation remain `NOT_RUN` until it is committed and reviewed at one new exact SHA.
 
 ## Exact status
 
@@ -8,12 +10,16 @@
 | Runtime authority candidate | COMPLETE |
 | Canonical 43 documentary registry | COMPLETE |
 | Claimed 32-occurrence quarantine | COMPLETE, IDENTITIES UNREPRODUCIBLE |
-| Cross-repository contract schema | COMPLETE, PENDING INDEPENDENT RE-REVIEW |
+| Cross-repository contract schema | REMEDIATED, INDEPENDENT RE-REVIEW NOT_RUN |
 | Promotion contract | COMPLETE |
 | Alias/duplicate recommendations | COMPLETE |
 | Migration plan | COMPLETE |
 | OOH/DOOH master-plan addition | RECORDED, NOT BUILT |
 | Transaction/contract foundation | RECORDED, NOT BUILT |
+| Independent Security verdict | NOT_RUN |
+| Independent Reliability verdict | NOT_RUN |
+| Independent Test Verification verdict | NOT_RUN |
+| Release Guardian verdict | NOT_RUN |
 | Independent AEGIS verdict | NOT_RUN |
 | Merge authorization | NOT_GRANTED |
 
@@ -30,9 +36,9 @@
 
 ## Gate verdict
 
-Implementation-lane verdict: `YELLOW — COHERENT CANDIDATE, NOT INDEPENDENTLY CERTIFIED`
+Implementation-lane verdict: `REMEDIATION COMPLETE LOCALLY — NOT INDEPENDENTLY CERTIFIED`
 
-Reason: the package is bounded, preserves provenance, separates documentary existence from runtime status, and records new requirements without activating them. Independent AEGIS review is still required and cannot be issued by the lane that produced this candidate.
+Reason: the package is bounded, preserves provenance, separates documentary existence from runtime status, and adds fail-closed promotion validation without activating an agent. Exact-SHA CI and all five independent reviews are still required and cannot be issued by the lane that produced this remediation.
 
 ## Prohibited actions confirmation
 
