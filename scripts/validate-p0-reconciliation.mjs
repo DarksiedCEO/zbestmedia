@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
@@ -11,6 +12,16 @@ const load = (path) => JSON.parse(readFileSync(resolve(p0Root, path), "utf8"));
 const registry = load("canonical-43-agent-registry.json");
 const quarantine = load("quarantined-32-record-ledger.json");
 const schema = load("schemas/cross-repository-agent-contract.schema.json");
+const actualHeadSha = execFileSync("git", ["rev-parse", "HEAD"], {
+  cwd: repoRoot,
+  encoding: "utf8",
+}).trim();
+const requestedCandidateSha = process.env.P0_CANDIDATE_SHA;
+if (requestedCandidateSha && requestedCandidateSha !== actualHeadSha) {
+  throw new Error(
+    `P0_CANDIDATE_SHA ${requestedCandidateSha} does not match git HEAD ${actualHeadSha}`,
+  );
+}
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 addFormats(ajv);
@@ -75,6 +86,7 @@ const SHA = "a".repeat(40);
 const OTHER_SHA = "b".repeat(40);
 const AGENT = "agent.test-agent";
 const ARTIFACT = "artifact_agent_contract_0001";
+const SPEC_ARTIFACT = "artifact_agent_specification_0001";
 const TENANT = "tenant_zbestmedia";
 const WORKSPACE = "workspace_agency";
 const HUMAN = "principal:andre.founder";
@@ -88,7 +100,20 @@ const context = () => ({
   now: NOW,
   authorizedHumans: new Set([HUMAN]),
   trustedIssuers: new Set(ISSUERS),
-  artifacts: new Map([[ARTIFACT, `sha256:${"1".repeat(64)}`]]),
+  artifacts: new Map([
+    [ARTIFACT, `sha256:${"1".repeat(64)}`],
+    [SPEC_ARTIFACT, `sha256:${"3".repeat(64)}`],
+  ]),
+  reviewedCommits: new Map([
+    ["DarksiedCEO/zbestmedia", SHA],
+    ["DarksiedCEO/zbestmedia-ui", SHA],
+  ]),
+  trustedEvidenceRecords: new Map(
+    Array.from({ length: TYPES.length }, (_, index) => {
+      const evidence = makeEvidence(index);
+      return [evidence.evidenceId, JSON.stringify(evidence)];
+    }),
+  ),
   policies: new Set([
     "policy_tenant_auth_0001",
     "policy_evidence_revocation_0001",
@@ -103,8 +128,8 @@ function makeEvidence(index) {
   return {
     evidenceId: `evidence_${String(index).padStart(12, "0")}`,
     evidenceType: TYPES[index],
-    artifactId: ARTIFACT,
-    artifactHash: `sha256:${"1".repeat(64)}`,
+    artifactId: index < 6 ? SPEC_ARTIFACT : ARTIFACT,
+    artifactHash: index < 6 ? `sha256:${"3".repeat(64)}` : `sha256:${"1".repeat(64)}`,
     subjectSha: SHA,
     agentId: AGENT,
     tenantId: TENANT,
@@ -129,7 +154,8 @@ function makeContract(stage) {
       commitSha: SHA,
       path: "agents/test-agent.json",
       contractVersion: "1.0.0",
-      sourceHash: `sha256:${"1".repeat(64)}`,
+      sourceHash: `sha256:${"3".repeat(64)}`,
+      artifactId: SPEC_ARTIFACT,
     },
     runtime: runtime ? {
       repository: "DarksiedCEO/zbestmedia-ui",
@@ -164,7 +190,7 @@ function makeContract(stage) {
       revokedAt: null,
       approvalScope: "AGENT_LIVE_PROMOTION",
       subjectSha: SHA,
-      subjectArtifactIds: [ARTIFACT],
+      subjectArtifactIds: [SPEC_ARTIFACT, ARTIFACT],
       tenantId: TENANT,
       workspaceId: WORKSPACE,
     } : {
@@ -198,6 +224,19 @@ function semanticErrors(value, ctx) {
   const fail = (message) => errors.push(message);
   if (value.subjectSha !== ctx.subjectSha) fail("wrong subject SHA");
   if (value.agentId !== ctx.agentId) fail("wrong agent");
+  if (ctx.reviewedCommits.get(value.specification.repository) !== value.specification.commitSha) {
+    fail("unreviewed specification commit");
+  }
+  if (ctx.artifacts.get(value.specification.artifactId) !== value.specification.sourceHash) {
+    fail("unreviewed specification artifact");
+  }
+  if (
+    value.runtime &&
+    ctx.reviewedCommits.get(value.runtime.repository) !== value.runtime.commitSha
+  ) fail("unreviewed runtime commit");
+  if (value.runtime && !ctx.artifacts.has(value.runtime.artifactId)) {
+    fail("unreviewed runtime artifact");
+  }
   if (value.tenantAuthorization.tenantId !== ctx.tenantId) fail("wrong tenant");
   if (value.tenantAuthorization.workspaceId !== ctx.workspaceId) fail("wrong workspace");
   if (!ctx.policies.has(value.tenantAuthorization.authorizationPolicyId)) fail("untrusted authorization policy");
@@ -213,6 +252,9 @@ function semanticErrors(value, ctx) {
     types.add(evidence.evidenceType);
     if (evidence.verificationStatus !== "VERIFIED") fail("unverified evidence");
     if (ctx.revokedEvidence.has(evidence.evidenceId)) fail("revoked evidence");
+    if (ctx.trustedEvidenceRecords.get(evidence.evidenceId) !== JSON.stringify(evidence)) {
+      fail("evidence record is not authenticated");
+    }
     if (
       evidence.subjectSha !== value.subjectSha ||
       evidence.agentId !== value.agentId ||
@@ -260,9 +302,15 @@ function semanticErrors(value, ctx) {
       approval.tenantId !== ctx.tenantId ||
       approval.workspaceId !== ctx.workspaceId
     ) fail("approval binding mismatch");
+    const requiredArtifacts = new Set([
+      value.specification.artifactId,
+      value.runtime.artifactId,
+      ...value.evidence.map((evidence) => evidence.artifactId),
+    ]);
     if (
-      approval.subjectArtifactIds.length === 0 ||
-      approval.subjectArtifactIds.some((id) => !ctx.artifacts.has(id))
+      approval.subjectArtifactIds.length !== requiredArtifacts.size ||
+      approval.subjectArtifactIds.some((id) => !requiredArtifacts.has(id)) ||
+      [...requiredArtifacts].some((id) => !approval.subjectArtifactIds.includes(id))
     ) fail("approval artifact mismatch");
     if (Date.parse(approval.approvedAt) < Date.parse(value.subjectCreatedAt)) fail("approval predates subject");
     if (Date.parse(approval.approvedAt) > Date.parse(ctx.now)) fail("future approval");
@@ -340,6 +388,11 @@ test("reject fake evidence ID", () => mutate("SOURCE_PINNED", (x) => { x.evidenc
 test("reject malformed artifact hash", () => mutate("SOURCE_PINNED", (x) => { x.evidence[0].artifactHash = "sha256:bad"; }));
 test("reject mismatched artifact hash", () => mutate("SOURCE_PINNED", (x) => { x.evidence[0].artifactHash = `sha256:${"2".repeat(64)}`; }));
 test("reject mismatched evidence SHA", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.evidence[0].subjectSha = OTHER_SHA; }));
+test("reject foreign specification commit", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.specification.commitSha = OTHER_SHA; }));
+test("reject foreign runtime commit", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.runtime.commitSha = OTHER_SHA; }));
+test("reject substituted specification artifact", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.specification.sourceHash = `sha256:${"4".repeat(64)}`; }));
+test("reject unknown runtime artifact", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.runtime.artifactId = "artifact_unknown_runtime_0001"; }));
+test("reject forged trusted-issuer evidence", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.evidence[0].createdAt = "2026-07-26T20:00:01.000Z"; }));
 test("reject wrong-tenant evidence", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.evidence[0].tenantId = "tenant_other"; }));
 test("reject wildcard tool", () => mutate("RUNTIME_IMPLEMENTED", (x) => { x.toolPermissions[0].toolId = "*"; }));
 test("reject production write", () => mutate("RUNTIME_IMPLEMENTED", (x) => { x.toolPermissions[0].allowedActions = ["delete-production"]; x.toolPermissions[0].readWriteMode = "READ_WRITE"; }));
@@ -384,6 +437,14 @@ test("reject revoked schema downstream", () => {
 });
 test("reject wrong approval SHA", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.approval.subjectSha = OTHER_SHA; }));
 test("reject wrong approval artifact", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.approval.subjectArtifactIds = ["artifact_unknown_0001"]; }));
+test("reject incomplete approval artifact coverage", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.approval.subjectArtifactIds = [ARTIFACT]; }));
+test("reject unrelated known approval artifact", () => {
+  const ctx = context();
+  ctx.artifacts.set("artifact_unrelated_known_0001", `sha256:${"5".repeat(64)}`);
+  mutate("LIVE_MISSION_PROVEN", (x) => {
+    x.approval.subjectArtifactIds = ["artifact_unrelated_known_0001"];
+  }, ctx);
+});
 test("reject approval before subject", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.approval.approvedAt = "2026-07-26T18:00:00.000Z"; }));
 test("reject expired approval", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.approval.expiresAt = "2026-07-26T22:00:00.000Z"; }));
 test("reject duplicate evidence ID", () => mutate("LIVE_MISSION_PROVEN", (x) => { x.evidence[1].evidenceId = x.evidence[0].evidenceId; }));
@@ -403,6 +464,9 @@ const REQUIRED = new Set([
   "reject NOT_REQUESTED timestamp", "reject fake evidence ID",
   "reject malformed artifact hash", "reject mismatched artifact hash",
   "reject mismatched evidence SHA",
+  "reject foreign specification commit", "reject foreign runtime commit",
+  "reject substituted specification artifact", "reject unknown runtime artifact",
+  "reject forged trusted-issuer evidence",
   "reject wrong-tenant evidence", "reject wildcard tool",
   "reject production write", "reject stage skipping", "reject self-promotion",
   "reject quarantined promotion", "detect duplicate canonical ID",
@@ -412,6 +476,8 @@ const REQUIRED = new Set([
   "reject revoked approval",
   "reject revoked schema downstream", "reject wrong approval SHA",
   "reject wrong approval artifact", "reject approval before subject",
+  "reject incomplete approval artifact coverage",
+  "reject unrelated known approval artifact",
   "reject expired approval", "reject duplicate evidence ID",
   "reject no-op aggregate",
 ]);
@@ -433,7 +499,7 @@ for (const entry of cases) {
 }
 const summary = {
   suite: "p0-reconciliation",
-  candidateSha: process.env.P0_CANDIDATE_SHA ?? "LOCAL_UNCOMMITTED",
+  candidateSha: actualHeadSha,
   required: REQUIRED.size,
   executed: cases.length,
   passed,

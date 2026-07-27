@@ -301,7 +301,7 @@
     "specification": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repository", "commitSha", "path", "contractVersion", "sourceHash"],
+      "required": ["repository", "commitSha", "path", "contractVersion", "sourceHash", "artifactId"],
       "properties": {
         "repository": {"const": "DarksiedCEO/zbestmedia"},
         "commitSha": {"$ref": "#/$defs/commitSha"},
@@ -310,7 +310,8 @@
           "type": "string",
           "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
         },
-        "sourceHash": {"$ref": "#/$defs/sha256"}
+        "sourceHash": {"$ref": "#/$defs/sha256"},
+        "artifactId": {"$ref": "#/$defs/artifactId"}
       }
     },
     "runtime": {
