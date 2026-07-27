@@ -75,7 +75,11 @@ jobs:
         run: pnpm test:p0-reconciliation
 
       - name: P1-A threat-model contract
-        run: pnpm test:p1a-threat-model
+        env:
+          P1A_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          pnpm test:p1a-threat-model
+          pnpm validate:p1a-threat-model -- --candidate-sha "$P1A_CANDIDATE_SHA"
 
       - name: Quality Gates
         run: |

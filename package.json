@@ -28,7 +28,8 @@
     "test:brandgraph": "pnpm -C services/brandgraph run test",
     "test:agent-lifecycle": "pnpm -C packages/agent-lifecycle run test",
     "test:p0-reconciliation": "node scripts/validate-p0-reconciliation.mjs",
-    "test:p1a-threat-model": "node scripts/validate-p1a-threat-model.mjs",
+    "test:p1a-threat-model": "node scripts/test-p1a-threat-model.mjs",
+    "validate:p1a-threat-model": "node scripts/validate-p1a-threat-model.mjs",
     "schemas:gen": "tsx scripts/generate-json-schemas.ts",
     "schemas:check": "tsx scripts/generate-json-schemas.ts --check && git diff --exit-code -- packages/brand-trinity-schemas/schemas packages/eval-gates-schemas/schemas packages/brand-events-contracts/schemas",
     "schemas:compat": "tsx scripts/check-schema-compat.ts"
