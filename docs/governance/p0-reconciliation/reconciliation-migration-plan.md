@@ -3,9 +3,9 @@
 ## Ordered reconciliation
 
 1. Freeze this candidate to an exact SHA and obtain founder review.
-2. Confirm the 43-record documentary baseline and keep every runtime status separate.
+2. Confirm the 42-record Z Best Media documentary baseline, preserve Aaliyah as one excluded external source observation, and keep every runtime status separate.
 3. Locate the provenance for the claimed 32 occurrences. Until then, retain claim-only `UNREPRODUCIBLE` slots.
-4. Compare `Brandyn`↔`Brandon` and `Jordyn`↔`Jordan` by mission, ownership, contract hash, and runtime binding; never resolve by name similarity alone.
+4. Preserve `Brandon`, `Brandyn`, and `Jordan` only as quarantined historical spellings. Founder-locked canonical display names are `Brandy`, `Kobe`, and `Jordyn`; no spelling alone proves runtime lineage.
 5. Classify each reproduced record as `ALIAS`, `DUPLICATE`, `LEGACY`, `EXPIRED`, `LOCAL_ONLY`, `CONFLICTING`, `REQUIRES_MIGRATION`, or `REQUIRES_FOUNDER_DECISION`.
 6. Pin and census the external agency source only after this authority candidate is approved.
 7. Create migration candidates one agent at a time, preserving original files and hashes.
@@ -18,6 +18,7 @@
 - An alias requires a documented canonical ID and evidence that both records describe the same accountable role.
 - A duplicate requires preservation of both sources and an approved survivor.
 - Expired records remain expired until a separately reviewed successor is issued.
+- Aaliyah remains a separate founder system and is never a Z Best Media migration candidate.
 
 ## Migration rules
 

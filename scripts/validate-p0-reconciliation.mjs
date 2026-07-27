@@ -9,7 +9,7 @@ import addFormats from "ajv-formats";
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const p0Root = resolve(repoRoot, "docs/governance/p0-reconciliation");
 const load = (path) => JSON.parse(readFileSync(resolve(p0Root, path), "utf8"));
-const registry = load("canonical-43-agent-registry.json");
+const registry = load("canonical-agent-registry.json");
 const quarantine = load("quarantined-32-record-ledger.json");
 const schema = load("schemas/cross-repository-agent-contract.schema.json");
 const actualHeadSha = execFileSync("git", ["rev-parse", "HEAD"], {
@@ -60,8 +60,8 @@ const SYSTEMS = [
   "human-supervision-ledger", "human-supervision-ledger",
 ];
 const SPECIALISTS = [
-  "agent.aaliyah-follow-up-connector", "agent.case-study-architect",
-  "agent.client-strategy", "agent.cooper-qualification-director",
+  "agent.case-study-architect", "agent.client-strategy",
+  "agent.cooper-qualification-director",
   "agent.cta-optimizer", "agent.false-claim-detector", "agent.ga4-audit",
   "agent.google-ads-strategist", "agent.headline", "agent.implementation-qa",
   "agent.landing-page-auditor", "agent.lead-intake", "agent.llm-visibility",
@@ -359,6 +359,10 @@ const invalid = (value, ctx) => {
 const quarantineEntryValid = (value) =>
   typeof value === "string" &&
   /^unresolved-occurrence-[0-9]{3}$/.test(value);
+const canonicalRegistryValid = (records) =>
+  records.length === 42 &&
+  new Set(records.map((record) => record.id)).size === 42 &&
+  !records.some((record) => /aaliyah/i.test(record.id) || /aaliyah/i.test(record.name));
 
 const cases = [];
 const test = (name, run) => cases.push({ name, run });
@@ -375,11 +379,19 @@ const mutate = (stage, change, ctx) => {
   invalid(value, ctx);
 };
 
-test("census exact 25+18=43", () => {
+test("census exact 24+18=42 with one external", () => {
   const ids = (kind) => registry.records.filter((x) => x.kind === kind).map((x) => x.id).sort();
   if (JSON.stringify(ids("SPECIALIST_SPEC")) !== JSON.stringify([...SPECIALISTS].sort())) throw new Error("specialist mismatch");
   if (JSON.stringify(ids("DEPARTMENT_LEAD")) !== JSON.stringify([...LEADS].sort())) throw new Error("lead mismatch");
-  if (registry.records.length !== 43 || registry.counts.total !== 43) throw new Error("43 count mismatch");
+  if (
+    registry.records.length !== 42 ||
+    registry.counts.specialistSpecificationsObserved !== 25 ||
+    registry.counts.specialistSpecificationsCanonical !== 24 ||
+    registry.counts.departmentLeads !== 18 ||
+    registry.counts.zbmCanonicalTotal !== 42 ||
+    registry.counts.externalExcluded !== 1 ||
+    registry.counts.sourceRecordsObserved !== 43
+  ) throw new Error("42 canonical + 1 external accounting mismatch");
   if (
     registry.sourceCommitSha !== "94376718e07df2e9d44864ed0394d58219224e61" ||
     registry.sourceEvidence.specialistDirectoryTreeOid !== "2f2dacfbec217dccd142b1e598108b327ab967a7" ||
@@ -388,7 +400,86 @@ test("census exact 25+18=43", () => {
 });
 test("canonical IDs unique and quarantine excluded", () => {
   const ids = registry.records.map((x) => x.id);
-  if (new Set(ids).size !== 43 || ids.some((id) => id.startsWith("unresolved-"))) throw new Error("canonical uniqueness failure");
+  if (
+    !canonicalRegistryValid(registry.records) ||
+    ids.some((id) => id.startsWith("unresolved-"))
+  ) throw new Error("canonical uniqueness failure");
+});
+test("canonical names locked to Brandy Kobe Jordyn", () => {
+  const expected = new Map([
+    ["lead.brand-intelligence", "Brandy"],
+    ["lead.marketing-operations", "Kobe"],
+    ["lead.revenue-performance", "Jordyn"],
+  ]);
+  for (const [id, name] of expected) {
+    if (registry.records.find((record) => record.id === id)?.name !== name) {
+      throw new Error(`wrong canonical name for ${id}`);
+    }
+  }
+  const forbidden = new Set(["Brandon", "Brandyn", "Jordan"]);
+  if (registry.records.some((record) => forbidden.has(record.name))) {
+    throw new Error("legacy spelling used as canonical display name");
+  }
+});
+test("Aaliyah excluded as separate external system", () => {
+  if (registry.records.some((record) => /aaliyah/i.test(record.id) || /aaliyah/i.test(record.name))) {
+    throw new Error("Aaliyah contaminated ZBM canonical registry");
+  }
+  if (registry.externalSystems.length !== 1) throw new Error("external system count mismatch");
+  const external = registry.externalSystems[0];
+  if (
+    external.id !== "external.aaliyah" ||
+    external.relationship !== "SEPARATE_FOUNDER_SYSTEM" ||
+    external.countedInZbmAgentTotal !== false ||
+    external.runtimeAuthority !== "SEPARATE" ||
+    external.repositoryAuthority !== "SEPARATE_OR_UNRESOLVED" ||
+    external.historicalEvidencePreserved !== true
+  ) throw new Error("Aaliyah external-system invariant failure");
+});
+test("runtime references remain documentary and uncertified", () => {
+  for (const id of [
+    "lead.brand-intelligence",
+    "lead.marketing-operations",
+    "lead.revenue-performance",
+  ]) {
+    const record = registry.records.find((entry) => entry.id === id);
+    if (
+      record?.documentaryStatus !== "RUNTIME_REFERENCE_OBSERVED_NOT_CERTIFIED" ||
+      record.runtimeReferenceObserved !== true ||
+      record.runtimeRepository !== "DarksiedCEO/zbestmedia-ui" ||
+      record.productionProven !== false ||
+      record.liveMissionProven !== false ||
+      record.certificationStatus !== "NOT_PROVEN" ||
+      "operationalStatus" in record
+    ) throw new Error(`ambiguous runtime status for ${id}`);
+  }
+  if (JSON.stringify(registry).includes("PRODUCTION_PENDING")) {
+    throw new Error("production-pending language remains in census");
+  }
+});
+test("observed documentary accounting remains 43 plus 32", () => {
+  if (
+    registry.counts.zbmCanonicalTotal + registry.counts.externalExcluded !== 43 ||
+    quarantine.claimedOccurrenceCount !== 32
+  ) throw new Error("observed documentary accounting mismatch");
+});
+test("founder packet has no stale reviewer verdict", () => {
+  const packet = readFileSync(resolve(p0Root, "founder-packet.md"), "utf8");
+  for (const gate of [
+    "Independent Security verdict | NOT_RUN",
+    "Independent Reliability verdict | NOT_RUN",
+    "Independent Test Verification verdict | NOT_RUN",
+    "Release Guardian verdict | NOT_RUN",
+    "Independent AEGIS verdict | NOT_RUN",
+  ]) {
+    if (!packet.includes(gate)) throw new Error(`missing fresh gate state: ${gate}`);
+  }
+  if (
+    packet.includes("Confirm whether Aaliyah") ||
+    packet.includes("Decide whether backend `Brandyn`") ||
+    !packet.includes("Aaliyah: `SEPARATE_FOUNDER_SYSTEM`") ||
+    !packet.includes("Canonical display names: `Brandy`, `Kobe`, `Jordyn`")
+  ) throw new Error("resolved founder decision reopened");
 });
 test("quarantine exact 32 unique claim-only slots", () => {
   if (
@@ -451,7 +542,7 @@ test("detect duplicate canonical ID", () => {
   if (new Set(ids).size === ids.length) throw new Error("duplicate undetected");
 });
 test("detect missing canonical record", () => {
-  if (registry.records.slice(1).length === 43) throw new Error("missing record undetected");
+  if (canonicalRegistryValid(registry.records.slice(1))) throw new Error("missing record undetected");
 });
 test("detect duplicate quarantine ID", () => {
   const ids = [...quarantine.slots, quarantine.slots[0]];
@@ -496,7 +587,12 @@ test("reject no-op aggregate", () => {
 });
 
 const REQUIRED = new Set([
-  "census exact 25+18=43", "canonical IDs unique and quarantine excluded",
+  "census exact 24+18=42 with one external", "canonical IDs unique and quarantine excluded",
+  "canonical names locked to Brandy Kobe Jordyn",
+  "Aaliyah excluded as separate external system",
+  "runtime references remain documentary and uncertified",
+  "observed documentary accounting remains 43 plus 32",
+  "founder packet has no stale reviewer verdict",
   "quarantine exact 32 unique claim-only slots", "quarantine has no operational state",
   "positive documentary record", "positive fully gated promotion",
   "reject fabricated LIVE", "reject humanApprovalRequired=false",

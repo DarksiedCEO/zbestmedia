@@ -11,7 +11,7 @@ Status: `NEW — REQUIRED — NOT BUILT`
 - Human executive: General Manager — OOH/DOOH, Western Region.
 - Automation target: approximately 80%; expert human judgment: approximately 20%.
 - Automated specialists: 23 total: 14 core planning/operations, 8 Proposal/Mockup/Margin Intelligence specialists, and 1 multilingual legal compliance/localization overlay.
-- The 23 are additions to the future accountability ledger, not members of the current canonical 43.
+- The 23 are additions to the future accountability ledger, not members of the current canonical 42-record Z Best Media census.
 - Each must pass the complete source, contract, runtime, benchmark, Red Team, Sentinel, AEGIS, supervision, and live-mission chain.
 - Legal advertising requires responsible-attorney approval; the system does not provide legal advice.
 

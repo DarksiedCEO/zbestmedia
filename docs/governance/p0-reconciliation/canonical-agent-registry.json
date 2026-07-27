@@ -8,16 +8,30 @@
     "specialistDirectoryTreeOid": "2f2dacfbec217dccd142b1e598108b327ab967a7",
     "departmentLeadsPath": "docs/agent-bench/foundation/department-leads.json",
     "departmentLeadsBlobOid": "9af16a1aff96b070588cf38d9308d821ec3c3d65",
-    "countingRule": "Each unique specialist JSON object is counted once; each unique department-lead array record is counted once; departments.json is corroborative and is not added to the entity count."
+    "countingRule": "Each unique source record is observed once. Aaliyah is preserved as one external founder-system observation and excluded from the Z Best Media canonical count. The remaining 24 specialist records and 18 department-lead records form the 42-record Z Best Media census; departments.json is corroborative and is not added to the entity count."
   },
   "counts": {
-    "specialistSpecifications": 25,
+    "sourceRecordsObserved": 43,
+    "specialistSpecificationsObserved": 25,
+    "specialistSpecificationsCanonical": 24,
     "departmentLeads": 18,
-    "total": 43,
+    "zbmCanonicalTotal": 42,
+    "externalExcluded": 1,
     "runtimeActiveProven": 0
   },
+  "externalSystems": [
+    {
+      "id": "external.aaliyah",
+      "sourceRecordId": "agent.aaliyah-follow-up-connector",
+      "sourceName": "Aaliyah Follow-Up Connector",
+      "relationship": "SEPARATE_FOUNDER_SYSTEM",
+      "countedInZbmAgentTotal": false,
+      "runtimeAuthority": "SEPARATE",
+      "repositoryAuthority": "SEPARATE_OR_UNRESOLVED",
+      "historicalEvidencePreserved": true
+    }
+  ],
   "records": [
-    {"id":"agent.aaliyah-follow-up-connector","name":"Aaliyah Follow-Up Connector","department":"operations","kind":"SPECIALIST_SPEC","operationalStatus":"EXCLUDED_PENDING_FOUNDER_REVIEW"},
     {"id":"agent.case-study-architect","name":"Case Study Architect","department":"proof-case-studies","kind":"SPECIALIST_SPEC","operationalStatus":"UNKNOWN"},
     {"id":"agent.client-strategy","name":"Client Strategy Agent","department":"client-strategy","kind":"SPECIALIST_SPEC","operationalStatus":"UNKNOWN"},
     {"id":"agent.cooper-qualification-director","name":"Cooper Qualification Director","department":"qualification","kind":"SPECIALIST_SPEC","operationalStatus":"UNKNOWN"},
@@ -43,9 +57,9 @@
     {"id":"agent.trust-asset-builder","name":"Trust Asset Builder","department":"proof-case-studies","kind":"SPECIALIST_SPEC","operationalStatus":"UNKNOWN"},
     {"id":"agent.website-leak-detector","name":"Website Leak Detector","department":"revenue-recovery-audit","kind":"SPECIALIST_SPEC","operationalStatus":"UNKNOWN"},
     {"id":"lead.executive-command","name":"Executive Command Director","department":"executive-command","kind":"DEPARTMENT_LEAD","operationalStatus":"UNKNOWN"},
-    {"id":"lead.brand-intelligence","name":"Brandon","department":"brand-intelligence","kind":"DEPARTMENT_LEAD","operationalStatus":"RUNTIME_WIRING_OBSERVED_CERTIFICATION_MIXED"},
-    {"id":"lead.marketing-operations","name":"Kobe","department":"marketing-operations","kind":"DEPARTMENT_LEAD","operationalStatus":"RUNTIME_WIRING_OBSERVED_CERTIFICATION_MIXED"},
-    {"id":"lead.revenue-performance","name":"Jordan","department":"revenue-performance","kind":"DEPARTMENT_LEAD","operationalStatus":"RUNTIME_WIRING_OBSERVED_PRODUCTION_PENDING"},
+    {"id":"lead.brand-intelligence","name":"Brandy","department":"brand-intelligence","kind":"DEPARTMENT_LEAD","documentaryStatus":"RUNTIME_REFERENCE_OBSERVED_NOT_CERTIFIED","runtimeReferenceObserved":true,"runtimeRepository":"DarksiedCEO/zbestmedia-ui","productionProven":false,"liveMissionProven":false,"certificationStatus":"NOT_PROVEN","legacySpellingsObserved":["Brandon","Brandyn"],"legacyAliasStatus":"QUARANTINED_PENDING_PROVENANCE"},
+    {"id":"lead.marketing-operations","name":"Kobe","department":"marketing-operations","kind":"DEPARTMENT_LEAD","documentaryStatus":"RUNTIME_REFERENCE_OBSERVED_NOT_CERTIFIED","runtimeReferenceObserved":true,"runtimeRepository":"DarksiedCEO/zbestmedia-ui","productionProven":false,"liveMissionProven":false,"certificationStatus":"NOT_PROVEN","legacySpellingsObserved":["kobe-v1"],"legacyAliasStatus":"QUARANTINED_PENDING_PROVENANCE"},
+    {"id":"lead.revenue-performance","name":"Jordyn","department":"revenue-performance","kind":"DEPARTMENT_LEAD","documentaryStatus":"RUNTIME_REFERENCE_OBSERVED_NOT_CERTIFIED","runtimeReferenceObserved":true,"runtimeRepository":"DarksiedCEO/zbestmedia-ui","productionProven":false,"liveMissionProven":false,"certificationStatus":"NOT_PROVEN","legacySpellingsObserved":["Jordan","jordyn-v1"],"legacyAliasStatus":"QUARANTINED_PENDING_PROVENANCE"},
     {"id":"lead.revenue-recovery-audit","name":"Revenue Recovery Audit Director","department":"revenue-recovery-audit","kind":"DEPARTMENT_LEAD","operationalStatus":"UNKNOWN"},
     {"id":"lead.lead-capture","name":"Lead Capture Director","department":"lead-capture","kind":"DEPARTMENT_LEAD","operationalStatus":"UNKNOWN"},
     {"id":"lead.qualification","name":"Qualification Director","department":"qualification","kind":"DEPARTMENT_LEAD","operationalStatus":"UNKNOWN"},

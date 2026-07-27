@@ -17,9 +17,9 @@
     "unresolved-occurrence-029","unresolved-occurrence-030","unresolved-occurrence-031","unresolved-occurrence-032"
   ],
   "observedCandidatesNotCounted": [
-    {"id":"brandyn-v1","disposition":"EXPIRED","expiresAt":"2026-04-06","reason":"May overlap Brandon; not labeled legacy"},
+    {"id":"brandyn-v1","disposition":"EXPIRED","expiresAt":"2026-04-06","reason":"Historical Brandy-lineage spelling; alias relationship not proven"},
     {"id":"kobe-v1","disposition":"EXPIRED","expiresAt":"2026-04-06","reason":"May overlap Kobe; not labeled legacy"},
-    {"id":"jordyn-v1","disposition":"EXPIRED","expiresAt":"2026-04-06","reason":"May overlap Jordan; not labeled legacy"},
+    {"id":"jordyn-v1","disposition":"EXPIRED","expiresAt":"2026-04-06","reason":"Historical Jordyn-lineage record; alias relationship not proven"},
     {"id":"agp-v1","disposition":"EXPIRED","expiresAt":"2026-04-06","reason":"Identity/function reconciliation required"}
   ]
 }
