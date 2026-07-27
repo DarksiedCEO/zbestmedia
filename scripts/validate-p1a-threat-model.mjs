@@ -125,6 +125,8 @@ export function validateData(model, evidence, manifest, markdown, opts = {}) {
     assert.ok(e,`${t.id}: dangling escalation`);
     for(const key of ["detectionOwnerActorId","triageOwnerActorId","containmentOwnerActorId","remediationOwnerActorId","approvalOwnerActorId","certificationOwnerActorId","closureAuthorityActorId"]) assert.ok(actorIds.has(e[key]),`${e.id}: missing ${key}`);
     assert.ok(e.detectionSignal&&e.recoveryOrRollback&&e.founderEscalationCondition&&e.closureEvidenceRequired.length,`${e.id}: incomplete escalation`);
+    assert.ok(e.requiredDetectionTokens.length>=2&&e.requiredDetectionTokens.every((token)=>e.detectionSignal.includes(token)),`${e.id}: generic or semantically incomplete detection signal`);
+    assert.ok(!e.recoveryOrRollback.includes(`contain ${t.name},`),`${e.id}: templated recovery posture`);
   }
   unique(model.escalationChains.map((x)=>x.detectionSignal),"escalation detection signals");
   unique(model.escalationChains.map((x)=>x.recoveryOrRollback),"escalation recovery postures");
@@ -199,7 +201,7 @@ function runNamedCheck(name,c){
     case "documentation_consistency": validateData(model,evidence,manifest,markdown);return;
     case "negative_controls": {
       const source=readFileSync(path.join(root,"scripts/test-p1a-threat-model.mjs"),"utf8");
-      for(const id of ["wrong_candidate_sha","unauthorized_deletion","dangling_escalation","boundary_doc_conflict","invalid_authority_owner"]) assert.ok(source.includes(id),`missing negative control ${id}`);
+      for(const id of ["wrong_candidate_sha","unauthorized_deletion","dangling_escalation","generic_escalation","boundary_doc_conflict","invalid_authority_owner"]) assert.ok(source.includes(id),`missing negative control ${id}`);
       return;
     }
     default: throw new Error(`unknown required check ${name}`);

@@ -76,7 +76,7 @@ Founder decisions are `DEC-001` authoritative tenant/workspace architecture, `DE
 
 The 10 credential classes preserve unresolved production custody under `DEC-002`. Agents have no raw credential read authority. Managed short-lived delivery, rotation, revocation, emergency expiry, and audit are proposed controls.
 
-Each HIGH/CRITICAL threat has a distinct `ESC-THR-*` record with detection signal, detection/triage/containment/remediation/approval/certification/closure owners, rollback posture, founder escalation condition, and exact closure evidence. External Master Sentinel remains unbuilt and is never treated as a current control.
+Each HIGH/CRITICAL threat has a distinct `ESC-THR-*` record with concrete threat-specific observables, containment/recovery, detection/triage/containment/remediation/approval/certification/closure owners, founder escalation condition, and exact closure evidence. Examples include private-IP and redirect-hop denial for SSRF, membership/RLS mismatch for tenant attacks, signature/hash/nonce mismatch for evidence and approvals, HEAD/provenance mismatch for SHA substitution, secret-access/revocation anomalies for credentials, and heartbeat/audit-continuity loss for Sentinel suppression. External Master Sentinel remains unbuilt and is never treated as a current control.
 
 Five source-to-sink paths make entry, intermediate hops, sink, consequence, flow, threats, and evidence explicit. Seven tenant-propagation records trace context through authenticated and public APIs, workers, database, artifacts, evidence, and providers.
 

@@ -13100,13 +13100,13 @@
       "id": "ESC-THR-001",
       "threatId": "THR-001",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect SSRF through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "destination resolves to private, loopback, link-local, reserved, or metadata IP; redirect hop fails egress policy",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain SSRF, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "abort request, block destination and redirect chain, preserve DNS/IP evidence, rotate exposed credentials if access occurred",
       "founderEscalationCondition": "confirmed or suspected CRITICAL SSRF, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13116,19 +13116,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "private",
+        "redirect"
+      ]
     },
     {
       "id": "ESC-THR-002",
       "threatId": "THR-002",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect DNS rebinding through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "DNS answers change between validation and connection or resolved address leaves the approved public set",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain DNS rebinding, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "pin approved resolution for the connection, terminate rebinding request, quarantine hostname and preserve resolver evidence",
       "founderEscalationCondition": "confirmed or suspected CRITICAL DNS rebinding, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13138,19 +13142,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "DNS",
+        "resolved"
+      ]
     },
     {
       "id": "ESC-THR-003",
       "threatId": "THR-003",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect metadata-service access through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "request targets metadata host or 169.254.169.254 and equivalent IPv6/link-local ranges",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain metadata-service access, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "deny metadata route, terminate egress, revoke possibly exposed workload credentials and preserve request trace",
       "founderEscalationCondition": "confirmed or suspected CRITICAL metadata-service access, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13160,19 +13168,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "metadata",
+        "169.254"
+      ]
     },
     {
       "id": "ESC-THR-004",
       "threatId": "THR-004",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect tenant spoofing through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "requested tenant differs from authenticated principal membership or trusted server context",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain tenant spoofing, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "deny and log tenant decision, invalidate affected session, audit all principal tenant accesses",
       "founderEscalationCondition": "confirmed or suspected CRITICAL tenant spoofing, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13182,19 +13194,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "tenant",
+        "membership"
+      ]
     },
     {
       "id": "ESC-THR-005",
       "threatId": "THR-005",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect workspace spoofing through tenant-safe high telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "workspace hint differs from principal workspace or authorized tenant-workspace relation",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain workspace spoofing, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "deny workspace operation, quarantine affected artifact/evidence decision and rederive workspace server-side",
       "founderEscalationCondition": "confirmed or suspected HIGH workspace spoofing, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13204,19 +13220,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "workspace",
+        "principal"
+      ]
     },
     {
       "id": "ESC-THR-006",
       "threatId": "THR-006",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect cross-tenant access through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "RLS or scoped query denies access, or resource tenant differs from trusted tenant context",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain cross-tenant access, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "stop request and worker, preserve denial trace, revoke unauthorized grants and verify two-tenant negative matrix",
       "founderEscalationCondition": "confirmed or suspected CRITICAL cross-tenant access, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13226,19 +13246,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "RLS",
+        "resource tenant"
+      ]
     },
     {
       "id": "ESC-THR-007",
       "threatId": "THR-007",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect horizontal privilege escalation through tenant-safe high telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "user accesses peer-owned resource outside membership or object entitlement",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain horizontal privilege escalation, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "deny object access, revoke stale membership and audit peer-resource queries",
       "founderEscalationCondition": "confirmed or suspected HIGH horizontal privilege escalation, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13248,19 +13272,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "peer",
+        "entitlement"
+      ]
     },
     {
       "id": "ESC-THR-008",
       "threatId": "THR-008",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect vertical privilege escalation through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "role or permission transition exceeds delegated role ceiling or bypasses approval",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain vertical privilege escalation, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "deny elevation, revoke issued role, invalidate sessions and independently review role history",
       "founderEscalationCondition": "confirmed or suspected CRITICAL vertical privilege escalation, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13270,19 +13298,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "role",
+        "approval"
+      ]
     },
     {
       "id": "ESC-THR-009",
       "threatId": "THR-009",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect confused deputy through tenant-safe high telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "service is asked to use its authority for a caller lacking the same action and tenant entitlement",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain confused deputy, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "deny delegated action, bind caller/action/tenant, revoke confused grant and replay denial tests",
       "founderEscalationCondition": "confirmed or suspected HIGH confused deputy, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13292,19 +13324,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "service",
+        "caller"
+      ]
     },
     {
       "id": "ESC-THR-010",
       "threatId": "THR-010",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect service-account misuse through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "service token used from unexpected workload, tenant, action, network, or time window",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain service-account misuse, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "disable service identity, rotate token, stop dependent jobs and reconstruct authorized use from audit",
       "founderEscalationCondition": "confirmed or suspected CRITICAL service-account misuse, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13314,19 +13350,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "service token",
+        "workload"
+      ]
     },
     {
       "id": "ESC-THR-011",
       "threatId": "THR-011",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect background-job context forgery through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "job tenant/workspace signature or persisted context mismatches referenced resource ownership",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain background-job context forgery, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "quarantine job, revoke forged context, regenerate from trusted server and replay only after tenant verification",
       "founderEscalationCondition": "confirmed or suspected CRITICAL background-job context forgery, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13336,19 +13376,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "job",
+        "signature"
+      ]
     },
     {
       "id": "ESC-THR-012",
       "threatId": "THR-012",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect artifact enumeration through tenant-safe high telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "sequential or high-rate artifact identifier misses across foreign tenant/workspace scope",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain artifact enumeration, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "rate-limit and deny enumeration, rotate exposed identifiers and audit artifact access patterns",
       "founderEscalationCondition": "confirmed or suspected HIGH artifact enumeration, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13358,19 +13402,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "identifier",
+        "rate"
+      ]
     },
     {
       "id": "ESC-THR-013",
       "threatId": "THR-013",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect artifact substitution through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "artifact hash, lineage, subject SHA, tenant, or workspace binding differs at consumption",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain artifact substitution, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "block artifact, revoke substituted lineage, invalidate downstream decisions and rebuild from pinned source",
       "founderEscalationCondition": "confirmed or suspected CRITICAL artifact substitution, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13380,19 +13428,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "artifact hash",
+        "lineage"
+      ]
     },
     {
       "id": "ESC-THR-014",
       "threatId": "THR-014",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect evidence forgery through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "evidence signature, hash chain, issuer, tenant, subject SHA, or sequence verification fails",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain evidence forgery, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "reject evidence, freeze affected decision, append revocation and independently reconstruct proof",
       "founderEscalationCondition": "confirmed or suspected CRITICAL evidence forgery, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13402,19 +13454,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "evidence signature",
+        "sequence"
+      ]
     },
     {
       "id": "ESC-THR-015",
       "threatId": "THR-015",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect stale evidence reuse through tenant-safe high telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "evidence is expired, revoked, superseded, foreign, or bound to a stale subject SHA",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain stale evidence reuse, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "block gate, invalidate downstream state, refresh proof against current exact subject",
       "founderEscalationCondition": "confirmed or suspected HIGH stale evidence reuse, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13424,19 +13480,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "expired",
+        "stale subject SHA"
+      ]
     },
     {
       "id": "ESC-THR-016",
       "threatId": "THR-016",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect approval forgery through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "approval identity, signature, scope, artifact, tenant, or subject SHA fails verification",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain approval forgery, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "reject approval, revoke forged record, freeze protected action and require fresh human decision",
       "founderEscalationCondition": "confirmed or suspected CRITICAL approval forgery, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13446,19 +13506,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "approval identity",
+        "signature"
+      ]
     },
     {
       "id": "ESC-THR-017",
       "threatId": "THR-017",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect approval replay through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "approval nonce/idempotency key repeats or decision targets already-consumed/stale subject",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain approval replay, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "reject replay, mark nonce consumed, invalidate duplicate effect and require new exact approval",
       "founderEscalationCondition": "confirmed or suspected CRITICAL approval replay, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13468,19 +13532,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "nonce",
+        "stale"
+      ]
     },
     {
       "id": "ESC-THR-018",
       "threatId": "THR-018",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect reviewer impersonation through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "review identity lacks required role or signed verdict subject differs from reviewed exact SHA",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain reviewer impersonation, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "reject verdict, suspend reviewer credential and obtain independent fresh review",
       "founderEscalationCondition": "confirmed or suspected CRITICAL reviewer impersonation, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13490,19 +13558,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "review identity",
+        "verdict subject"
+      ]
     },
     {
       "id": "ESC-THR-019",
       "threatId": "THR-019",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect self-certification through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "implementer identity equals reviewer/certifier or authority graph collapses required separation",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain self-certification, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "block gate, discard self-issued verdict and reroute to independent authority",
       "founderEscalationCondition": "confirmed or suspected CRITICAL self-certification, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13512,19 +13584,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "implementer identity",
+        "separation"
+      ]
     },
     {
       "id": "ESC-THR-020",
       "threatId": "THR-020",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect CI bypass through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "required CI check missing, skipped, neutral, stale, nonzero, or not bound to current head",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain CI bypass, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "block merge, preserve failing run and execute trusted exact-head workflow afresh",
       "founderEscalationCondition": "confirmed or suspected CRITICAL CI bypass, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13534,19 +13610,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "CI check",
+        "current head"
+      ]
     },
     {
       "id": "ESC-THR-021",
       "threatId": "THR-021",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect credential leakage through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "secret scanner, provider audit, log redaction, or unexpected secret read reports exposure",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain credential leakage, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "revoke and rotate secret, stop affected workloads, scope disclosure and verify replacement custody",
       "founderEscalationCondition": "confirmed or suspected CRITICAL credential leakage, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13556,19 +13636,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "secret scanner",
+        "unexpected secret read"
+      ]
     },
     {
       "id": "ESC-THR-022",
       "threatId": "THR-022",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect credential misuse through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "credential used for unregistered action, tenant, provider, source workload, or after revocation",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain credential misuse, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "deny call, revoke credential, quarantine caller and audit all uses since last trusted event",
       "founderEscalationCondition": "confirmed or suspected CRITICAL credential misuse, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13578,19 +13662,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "credential used",
+        "revocation"
+      ]
     },
     {
       "id": "ESC-THR-023",
       "threatId": "THR-023",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect SHA substitution through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "checked-out HEAD, event head SHA, artifact provenance, or reviewer subject SHA disagree",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain SHA substitution, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "stop pipeline, reject substituted artifact and restart every gate on one resolved SHA",
       "founderEscalationCondition": "confirmed or suspected CRITICAL SHA substitution, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13600,19 +13688,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "HEAD",
+        "provenance"
+      ]
     },
     {
       "id": "ESC-THR-024",
       "threatId": "THR-024",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect malicious pull request through tenant-safe high telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "PR changes unauthorized path, deletes evidence, weakens test/gate, or broadens workflow permission",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain malicious pull request, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "block PR, preserve diff, remove unauthorized change through separately reviewed remediation",
       "founderEscalationCondition": "confirmed or suspected HIGH malicious pull request, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13622,19 +13714,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "unauthorized path",
+        "workflow permission"
+      ]
     },
     {
       "id": "ESC-THR-025",
       "threatId": "THR-025",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect tool privilege escalation through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "tool requests capability, credential, tenant, or write scope outside registered grant",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain tool privilege escalation, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "deny tool call, revoke grant, quarantine executor and review tool registration",
       "founderEscalationCondition": "confirmed or suspected CRITICAL tool privilege escalation, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13644,19 +13740,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "tool requests",
+        "registered grant"
+      ]
     },
     {
       "id": "ESC-THR-026",
       "threatId": "THR-026",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect prompt injection or poisoned tool result through tenant-safe high telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "untrusted content attempts instruction override or tool result violates schema/provenance",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain prompt injection or poisoned tool result, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "discard poisoned result, isolate content as data, revoke downstream decisions and reprocess under constrained parser",
       "founderEscalationCondition": "confirmed or suspected HIGH prompt injection or poisoned tool result, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13666,19 +13766,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "instruction override",
+        "provenance"
+      ]
     },
     {
       "id": "ESC-THR-027",
       "threatId": "THR-027",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect duplicate execution through tenant-safe high telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "idempotency key repeats, duplicate completion appears, or external effect count exceeds one",
       "triageOwnerActorId": "ACT-009",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain duplicate execution, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "halt duplicate worker, reconcile side effects, compensate only with approval and preserve idempotency evidence",
       "founderEscalationCondition": "confirmed or suspected HIGH duplicate execution, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13688,19 +13792,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "idempotency key",
+        "duplicate"
+      ]
     },
     {
       "id": "ESC-THR-028",
       "threatId": "THR-028",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect race condition through tenant-safe high telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "lease/fence version, compare-and-swap, or state transition conflicts across workers",
       "triageOwnerActorId": "ACT-009",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain race condition, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "reject stale writer, quarantine conflicting jobs and resume from last monotonic committed state",
       "founderEscalationCondition": "confirmed or suspected HIGH race condition, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13710,19 +13818,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "fence",
+        "compare-and-swap"
+      ]
     },
     {
       "id": "ESC-THR-029",
       "threatId": "THR-029",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect rollback failure audit-log tampering or Sentinel suppression through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "rollback verification fails, evidence sequence changes, health signal disappears, or Sentinel heartbeat is suppressed",
       "triageOwnerActorId": "ACT-009",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain rollback failure audit-log tampering or Sentinel suppression, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "freeze release and execution, preserve independent telemetry, restore from reviewed state and reverify audit continuity",
       "founderEscalationCondition": "confirmed or suspected CRITICAL rollback failure audit-log tampering or Sentinel suppression, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13732,19 +13844,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "Sentinel heartbeat",
+        "health signal"
+      ]
     },
     {
       "id": "ESC-THR-030",
       "threatId": "THR-030",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect emergency-access abuse through tenant-safe critical telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "break-glass credential used without ticket, expiry, dual review, or allowed incident scope",
       "triageOwnerActorId": "ACT-008",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain emergency-access abuse, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "revoke emergency access, terminate session, preserve command log and require independent incident review",
       "founderEscalationCondition": "confirmed or suspected CRITICAL emergency-access abuse, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13754,19 +13870,23 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "break-glass",
+        "expiry"
+      ]
     },
     {
       "id": "ESC-THR-031",
       "threatId": "THR-031",
       "detectionOwnerActorId": "ACT-014",
-      "detectionSignal": "detect retry amplification exhaustion or permanent-failure loop through tenant-safe high telemetry, denial evidence, state-transition anomalies, or integrity alerts; implementation NOT_PROVEN",
+      "detectionSignal": "retry budget exhausted, repeated 429/5xx loop, Retry-After exceeds cap, or quarantine grows",
       "triageOwnerActorId": "ACT-009",
       "containmentOwnerActorId": "ACT-002",
       "remediationOwnerActorId": "ACT-006",
       "approvalOwnerActorId": "ACT-001",
       "certificationOwnerActorId": "ACT-012",
-      "recoveryOrRollback": "contain retry amplification exhaustion or permanent-failure loop, stop affected execution, preserve evidence, revoke invalid authority or artifacts, and use a separately reviewed recovery/rollback",
+      "recoveryOrRollback": "open circuit and apply backpressure, dead-letter operation, preserve tenant/idempotency context and release only after reviewed criteria",
       "founderEscalationCondition": "confirmed or suspected HIGH retry amplification exhaustion or permanent-failure loop, missing containment evidence, or any attempted gate bypass",
       "closureAuthorityActorId": "ACT-001",
       "closureEvidenceRequired": [
@@ -13776,7 +13896,11 @@
         "independent owner-specific review",
         "AEGIS verdict when required"
       ],
-      "status": "PROPOSED_CONTROL_NOT_PROVEN"
+      "status": "PROPOSED_CONTROL_NOT_PROVEN",
+      "requiredDetectionTokens": [
+        "retry budget",
+        "Retry-After"
+      ]
     }
   ],
   "retryPolicy": {

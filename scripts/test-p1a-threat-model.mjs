@@ -54,6 +54,7 @@ const mutations=[
   ["missing_tenant_propagation",()=>{const m=clone(baseModel);m.tenantPropagation.pop();return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
   ["missing_credential_field",()=>{const m=clone(baseModel);delete m.credentialClasses[0].lifetime;return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
   ["dangling_escalation",()=>{const m=clone(baseModel);m.escalationChains.shift();return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
+  ["generic_escalation",()=>{const m=clone(baseModel);m.escalationChains[0].detectionSignal="generic alert";return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
   ["invalid_authority_owner",()=>{const m=clone(baseModel);m.authorityPolicy.rules[0].approvalOwnerActorId="ACT-999";return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
   ["missing_retry_threat",()=>{const m=clone(baseModel);m.threats.pop();return validateData(m,baseEvidence,baseManifest,baseMarkdown)}],
   ["boundary_doc_conflict",()=>validateData(baseModel,baseEvidence,baseManifest,baseMarkdown.replace("`BND-004`, ",""))],
