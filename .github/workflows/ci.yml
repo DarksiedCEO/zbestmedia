@@ -20,6 +20,9 @@ jobs:
           # PR workflows otherwise check out GitHub's synthetic merge commit,
           # which cannot be used as exact candidate identity.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # P1-A verifies the authorized base is an actual ancestor and must
+          # fail rather than infer that fact from a shallow checkout.
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
