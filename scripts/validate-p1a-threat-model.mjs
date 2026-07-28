@@ -12,7 +12,53 @@ const exists = (xs, id, label) => assert.ok(xs.some((x) => x.id === id), `${labe
 
 export const REQUIRED_ACTORS = ["founder","authorized human operator","authenticated client user","tenant administrator","workspace member","builder","reviewer","Security Reviewer","Reliability Reviewer","Test Verification Reviewer","Release Guardian","AEGIS","Embedded Red Team","Embedded Sentinel","external Master Sentinel","application service","background worker","database service role","credential custodian","emergency responder","agent","tool executor"];
 export const REQUIRED_THREATS = ["SSRF","DNS rebinding","metadata-service access","tenant spoofing","workspace spoofing","cross-tenant access","horizontal privilege escalation","vertical privilege escalation","confused deputy","service-account misuse","background-job context forgery","artifact enumeration","artifact substitution","evidence forgery","stale evidence reuse","approval forgery","approval replay","reviewer impersonation","self-certification","CI bypass","credential leakage","credential misuse","SHA substitution","malicious pull request","tool privilege escalation","prompt injection or poisoned tool result","duplicate execution","race condition","rollback failure audit-log tampering or Sentinel suppression","emergency-access abuse","retry amplification exhaustion or permanent-failure loop"];
-export const REQUIRED_CHECKS = ["manifest_identity","file_scope","evidence_integrity","required_coverage","id_uniqueness","cross_references","authority_completeness","separation_rules","tenant_operations","credential_custody","escalation_completeness","documentation_consistency","negative_controls"];
+export const REQUIRED_CHECKS = ["manifest_identity","trust_anchor","file_scope","evidence_integrity","evidence_binding","required_coverage","id_uniqueness","cross_references","authority_completeness","separation_rules","tenant_operations","credential_custody","escalation_completeness","documentation_consistency","negative_controls"];
+
+// Runtime evidence must bind to these exact repositories. base-sha evidence resolves in the
+// specification repo; runtime-pin evidence resolves in the runtime repo. Any other pairing is spoofing.
+export const AUTHORIZED_REPOSITORIES = { base: "DarksiedCEO/zbestmedia", runtime: "DarksiedCEO/zbestmedia-ui" };
+
+// A control that cannot be evaluated (missing external trust anchor, unreachable object store,
+// unauthenticated cross-repository read) is NOT_VERIFIED and blocks — it is never silently PASS.
+export class NotVerifiedError extends Error {
+  constructor(message){ super(message); this.name="NotVerifiedError"; this.notVerified=true; }
+}
+
+export function parseLineRange(spec, label){
+  const m=/^(\d+)-(\d+)$/.exec(spec);
+  assert.ok(m,`${label}: malformed line range ${JSON.stringify(spec)}`);
+  const start=Number(m[1]), end=Number(m[2]);
+  assert.ok(Number.isInteger(start)&&Number.isInteger(end),`${label}: non-integer line range`);
+  assert.ok(start>=1,`${label}: line range start must be >= 1 (${start})`);
+  assert.ok(end>=start,`${label}: inverted line range ${start}-${end}`);
+  return {start,end};
+}
+
+export function assertSafeRepoPath(p, label){
+  assert.ok(typeof p==="string"&&p.length>0,`${label}: empty evidence path`);
+  assert.ok(!p.includes("\0"),`${label}: NUL byte in path`);
+  // Printable-ASCII only: rejects unicode slash/backslash lookalikes (U+2044/2215/2216/FF0F/FF3C),
+  // zero-width, and control characters that could smuggle a separator past the segment checks.
+  assert.ok(/^[\x20-\x7e]+$/.test(p),`${label}: non-ASCII or control character in path`);
+  // Explicitly reject percent-encoded sequences (%2e %2f %5c and their double-encoded %25xx forms)
+  // rather than relying on the referenced blob not existing.
+  assert.ok(!/%[0-9a-fA-F]{2}/.test(p),`${label}: percent-encoded sequence in path (${p})`);
+  assert.ok(!p.includes("\\"),`${label}: backslash in path`);
+  assert.ok(!p.startsWith("/"),`${label}: absolute path not allowed (${p})`);
+  assert.ok(!/^[A-Za-z]:/.test(p),`${label}: drive-absolute path not allowed (${p})`);
+  const segs=p.split("/");
+  assert.ok(!segs.includes("..")&&!segs.includes("."),`${label}: path traversal segment (${p})`);
+  assert.ok(!segs.some((s)=>s===""),`${label}: empty path segment (${p})`);
+  const norm=path.posix.normalize(p);
+  assert.ok(norm===p&&!norm.startsWith("..")&&!path.posix.isAbsolute(norm),`${label}: non-normalized or escaping path (${p})`);
+  return norm;
+}
+
+export function repoForSha(sha, manifest){
+  if(sha===manifest.authorizedBaseSha) return AUTHORIZED_REPOSITORIES.base;
+  if(sha===manifest.runtimeEvidenceSha) return AUTHORIZED_REPOSITORIES.runtime;
+  return null;
+}
 
 export function validateData(model, evidence, manifest, markdown, opts = {}) {
   assert.equal(model.sources.specification.revision, manifest.authorizedBaseSha, "wrong base SHA");
@@ -35,6 +81,14 @@ export function validateData(model, evidence, manifest, markdown, opts = {}) {
     assert.ok(["HIGH","MEDIUM","LOW"].includes(ref.confidence));
     assert.ok(ref.path && ref.claim && ref.category);
     assert.ok([manifest.authorizedBaseSha,manifest.runtimeEvidenceSha].includes(ref.sha), `${ref.id}: stale evidence SHA`);
+    // Static evidence hardening (no repository/network access required): reject traversal/absolute
+    // paths, inverted/zero-based ranges, missing blob identity, and repository/SHA mismatches.
+    parseLineRange(ref.lines, ref.id);
+    assertSafeRepoPath(ref.path, ref.id);
+    assert.match(ref.blobSha ?? "", /^[0-9a-f]{40}$/, `${ref.id}: missing or malformed blob identity`);
+    const expectedRepo = repoForSha(ref.sha, manifest);
+    assert.ok(expectedRepo, `${ref.id}: evidence SHA is not an authorized pin`);
+    assert.equal(ref.repository, expectedRepo, `${ref.id}: repository/SHA mismatch (repository ${ref.repository} vs sha resolves to ${expectedRepo})`);
   }
   const evidenceIds = new Set(evidence.references.map((x)=>x.id));
   const actorIds = new Set(model.actors.map((x)=>x.id));
@@ -151,6 +205,60 @@ export function validateData(model, evidence, manifest, markdown, opts = {}) {
   return { authorityRules:model.actors.length*model.actions.length, decision };
 }
 
+// External trust anchor: the authorized base + runtime pins are supplied out-of-band (operator CLI /
+// CI secret), NOT read from candidate-controlled files. The candidate's self-declared pins must match
+// the anchor exactly, which defeats coordinated SHA substitution (e.g. runtime pin -> alternate commit).
+// Absent anchor => NOT_VERIFIED (fail-closed), never PASS.
+export function assertTrustAnchor(model, evidence, manifest, anchor){
+  if(!anchor||!anchor.baseSha||!anchor.runtimePin)
+    throw new NotVerifiedError("trust anchor absent: external authorized base/runtime pins not supplied (fail-closed)");
+  assert.match(anchor.baseSha,/^[0-9a-f]{40}$/,"external anchor baseSha malformed");
+  assert.match(anchor.runtimePin,/^[0-9a-f]{40}$/,"external anchor runtimePin malformed");
+  assert.equal(manifest.authorizedBaseSha,anchor.baseSha,"manifest base SHA does not match external trust anchor (substitution)");
+  assert.equal(manifest.runtimeEvidenceSha,anchor.runtimePin,"manifest runtime pin does not match external trust anchor (substitution)");
+  assert.equal(model.sources.specification.revision,anchor.baseSha,"model base revision does not match external trust anchor");
+  assert.equal(model.sources.runtime.revision,anchor.runtimePin,"model runtime revision does not match external trust anchor");
+  for(const ref of evidence.references){
+    const expected=ref.repository===AUTHORIZED_REPOSITORIES.runtime?anchor.runtimePin:anchor.baseSha;
+    assert.equal(ref.sha,expected,`${ref.id}: evidence SHA does not match external trust anchor (substitution)`);
+  }
+}
+
+// Resolve every evidence reference against real repository objects using a read-only object query
+// (git cat-file / ls-tree) against isolated object stores — never a checkout, so no worktree is dirtied.
+// Enforces: commit + path existence, regular-file mode (rejects symlink/tree), immutable blob-OID
+// identity, and that the cited range fits within the real line count. Unreachable store => NOT_VERIFIED.
+export function validateEvidenceBinding(evidence, manifest, opts={}){
+  const {specGitDir,runtimeGitDir}=opts;
+  if(!specGitDir||!runtimeGitDir)
+    throw new NotVerifiedError("evidence binding not verified: specification/runtime object sources not supplied (fail-closed)");
+  const gitRead=(gitdir,args)=>{
+    try{ return execFileSync("git",["--git-dir",gitdir,...args],{encoding:"utf8",stdio:["ignore","pipe","ignore"]}); }
+    catch(e){ throw new NotVerifiedError(`read-only object query failed in ${gitdir}: ${String(e.message).split("\n")[0]}`); }
+  };
+  for(const [gitdir,sha,tag] of [[specGitDir,manifest.authorizedBaseSha,"base"],[runtimeGitDir,manifest.runtimeEvidenceSha,"runtime"]]){
+    let type;
+    try{ type=execFileSync("git",["--git-dir",gitdir,"cat-file","-t",sha],{encoding:"utf8",stdio:["ignore","pipe","ignore"]}).trim(); }
+    catch{ throw new NotVerifiedError(`${tag} pin ${sha} not present in object store ${gitdir} (fail-closed)`); }
+    assert.equal(type,"commit",`${tag} pin ${sha} is not a commit object`);
+  }
+  for(const ref of evidence.references){
+    const gitdir=ref.repository===AUTHORIZED_REPOSITORIES.runtime?runtimeGitDir:specGitDir;
+    const safePath=assertSafeRepoPath(ref.path,ref.id);
+    const {start,end}=parseLineRange(ref.lines,ref.id);
+    const lst=gitRead(gitdir,["ls-tree",ref.sha,"--",safePath]).trim();
+    assert.ok(lst,`${ref.id}: path ${safePath} absent at ${ref.sha}`);
+    const [mode,type,oid]=lst.split(/\s+/);
+    assert.equal(type,"blob",`${ref.id}: ${safePath} is not a blob (type ${type})`);
+    assert.ok(mode==="100644"||mode==="100755",`${ref.id}: unsafe object mode ${mode} for ${safePath} (symlink/dir/other rejected)`);
+    assert.equal(oid,ref.blobSha,`${ref.id}: blob identity mismatch (resolved ${oid} != bound ${ref.blobSha})`);
+    const blob=gitRead(gitdir,["cat-file","blob",oid]);
+    const nl=(blob.match(/\n/g)||[]).length;
+    const lineCount=blob.length===0?0:(blob.endsWith("\n")?nl:nl+1);
+    assert.ok(end<=lineCount,`${ref.id}: cited range ${start}-${end} exceeds real line count ${lineCount}`);
+  }
+}
+
 export function validateGit(manifest, candidateSha, repoRoot=root) {
   const g=(...args)=>execFileSync("git",args,{cwd:repoRoot,encoding:"utf8"}).trim();
   assert.ok(candidateSha, "candidate SHA absent");
@@ -178,17 +286,19 @@ export function runPackage({candidateSha, runGit=true}={}) {
   return {model,evidence,manifest,head,...result};
 }
 
-function loadContext(candidate){
-  return {candidate,model:load("docs/security/p1-a/model.json"),evidence:load("docs/security/p1-a/evidence-register.json"),manifest:load("docs/security/p1-a/validation-manifest.json"),markdown:readFileSync(path.join(root,"docs/security/p1-a/threat-model.md"),"utf8")};
+function loadContext(candidate,env={}){
+  return {candidate,anchor:env.anchor??null,specGitDir:env.specGitDir??null,runtimeGitDir:env.runtimeGitDir??null,model:load("docs/security/p1-a/model.json"),evidence:load("docs/security/p1-a/evidence-register.json"),manifest:load("docs/security/p1-a/validation-manifest.json"),markdown:readFileSync(path.join(root,"docs/security/p1-a/threat-model.md"),"utf8")};
 }
 function runNamedCheck(name,c){
   const {model,evidence,manifest,markdown,candidate}=c;
   switch(name){
     case "manifest_identity":
       assert.equal(model.sources.specification.revision,manifest.authorizedBaseSha);assert.equal(model.sources.runtime.revision,manifest.runtimeEvidenceSha);assert.deepEqual(manifest.requiredTests,REQUIRED_CHECKS);return;
+    case "trust_anchor": assertTrustAnchor(model,evidence,manifest,c.anchor);return;
     case "file_scope": c.head=validateGit(manifest,candidate);return;
     case "evidence_integrity":
       for(const r of evidence.references){assert.match(r.lines,/^\d+-\d+$/);assert.ok([manifest.authorizedBaseSha,manifest.runtimeEvidenceSha].includes(r.sha));assert.ok(r.path&&r.claim&&r.category);}return;
+    case "evidence_binding": validateEvidenceBinding(evidence,manifest,{specGitDir:c.specGitDir,runtimeGitDir:c.runtimeGitDir});return;
     case "required_coverage": assert.deepEqual(model.actors.map(x=>x.name),REQUIRED_ACTORS);assert.deepEqual(model.threats.map(x=>x.name),REQUIRED_THREATS);return;
     case "id_uniqueness":
       for(const rows of [model.actors,model.actions,model.assets,model.boundaries,model.flows,model.sourceToSinkPaths,model.tenantPropagation,model.controls,model.threats,model.escalationChains,evidence.references]) unique(rows.map(x=>x.id),"named check IDs");return;
@@ -201,25 +311,33 @@ function runNamedCheck(name,c){
     case "documentation_consistency": validateData(model,evidence,manifest,markdown);return;
     case "negative_controls": {
       const source=readFileSync(path.join(root,"scripts/test-p1a-threat-model.mjs"),"utf8");
-      for(const id of ["wrong_candidate_sha","unauthorized_deletion","dangling_escalation","generic_escalation","boundary_doc_conflict","invalid_authority_owner"]) assert.ok(source.includes(id),`missing negative control ${id}`);
+      for(const id of ["wrong_candidate_sha","unauthorized_deletion","dangling_escalation","generic_escalation","boundary_doc_conflict","invalid_authority_owner","runtime_pin_substitution","evidence_path_traversal","evidence_absolute_path","inverted_line_range","out_of_bounds_line_range","symlink_evidence","directory_evidence","blob_identity_mismatch","missing_trust_anchor","runtime_source_unavailable","encoded_traversal","wrong_repository","percent_encoded_traversal","double_encoded_traversal","backslash_encoded_traversal","unicode_slash_traversal"]) assert.ok(source.includes(id),`missing negative control ${id}`);
       return;
     }
     default: throw new Error(`unknown required check ${name}`);
   }
 }
 
+function readArg(flag){const i=process.argv.indexOf(flag);return i>=0?process.argv[i+1]:undefined;}
 function main(){
-  const arg=process.argv.indexOf("--candidate-sha");
-  const candidate=arg>=0?process.argv[arg+1]:process.env.P1A_CANDIDATE_SHA;
+  const candidate=readArg("--candidate-sha")??process.env.P1A_CANDIDATE_SHA;
+  const anchorBase=readArg("--base-sha")??process.env.P1A_TRUST_BASE_SHA;
+  const anchorRuntime=readArg("--runtime-pin")??process.env.P1A_TRUST_RUNTIME_PIN;
+  const anchor=(anchorBase&&anchorRuntime)?{baseSha:anchorBase,runtimePin:anchorRuntime}:null;
+  const specGitDir=readArg("--spec-git-dir")??process.env.P1A_SPEC_GIT_DIR??path.join(root,".git");
+  const runtimeGitDir=readArg("--runtime-git-dir")??process.env.P1A_RUNTIME_GIT_DIR??null;
   const names=[...REQUIRED_CHECKS];
-  const totals={required:names.length,executed:0,passed:0,failed:0,skipped:0,cancelled:0,neutral:0,stale:0};
-  const context=loadContext(candidate);
+  const totals={required:names.length,executed:0,passed:0,failed:0,skipped:0,cancelled:0,neutral:0,stale:0,notVerified:0};
+  const context=loadContext(candidate,{anchor,specGitDir,runtimeGitDir});
   for(const name of names){
     totals.executed++;
     try { runNamedCheck(name,context); totals.passed++; console.log(`PASS ${name}`); }
-    catch(error){totals.failed++;console.error(`FAIL ${name}: ${error.message}`);}
+    catch(error){
+      if(error&&error.notVerified){totals.notVerified++;console.error(`NOT_VERIFIED ${name}: ${error.message}`);}
+      else {totals.failed++;console.error(`FAIL ${name}: ${error.message}`);}
+    }
   }
-  console.log(JSON.stringify({suite:"p1-a-threat-model",candidateSha:context.head??candidate??null,...totals,authorityRules:context.model.authorityPolicy.rules.length,threats:context.model.threats.length,controls:context.model.controls.length}));
-  if(totals.executed!==totals.required||totals.passed!==totals.required||totals.failed||totals.skipped||totals.cancelled||totals.neutral||totals.stale) process.exitCode=1;
+  console.log(JSON.stringify({suite:"p1-a-threat-model",candidateSha:context.head??candidate??null,crossRepositoryCiAuthentication:context.manifest.crossRepositoryCiAuthentication??"NOT_PROVEN",...totals,authorityRules:context.model.authorityPolicy.rules.length,threats:context.model.threats.length,controls:context.model.controls.length}));
+  if(totals.executed!==totals.required||totals.passed!==totals.required||totals.failed||totals.skipped||totals.cancelled||totals.neutral||totals.stale||totals.notVerified) process.exitCode=1;
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)) main();

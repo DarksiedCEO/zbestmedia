@@ -27,8 +27,10 @@
   ],
   "requiredTests": [
     "manifest_identity",
+    "trust_anchor",
     "file_scope",
     "evidence_integrity",
+    "evidence_binding",
     "required_coverage",
     "id_uniqueness",
     "cross_references",
@@ -40,6 +42,19 @@
     "documentation_consistency",
     "negative_controls"
   ],
+  "externalTrustAnchor": {
+    "required": true,
+    "note": "authorizedBaseSha and runtimeEvidenceSha must be supplied out-of-band (operator CLI --base-sha/--runtime-pin or CI secret), NOT trusted from this candidate-controlled file. Absent anchor => NOT_VERIFIED.",
+    "baseSha": "7056ea4ce24379c93549f0ac9b45ddd7a2600dd6",
+    "runtimePin": "94376718e07df2e9d44864ed0394d58219224e61"
+  },
+  "runtimeObjectSource": {
+    "repository": "DarksiedCEO/zbestmedia-ui",
+    "access": "READ_ONLY_ISOLATED_OBJECT_STORE",
+    "note": "runtime evidence is resolved via read-only git object query against an isolated bare mirror; never a checkout into the candidate worktree."
+  },
+  "crossRepositoryCiAuthentication": "NOT_PROVEN",
+  "crossRepositoryCiAuthenticationNote": "CI in DarksiedCEO/zbestmedia cannot read the private DarksiedCEO/zbestmedia-ui object store with the default GITHUB_TOKEN. evidence_binding for runtime-pin evidence is NOT_VERIFIED in CI until a founder-provisioned scoped GitHub App token or read-only deploy key is supplied. Local runs supply --runtime-git-dir against an authenticated mirror.",
   "accountingRule": {
     "executedEqualsRequired": true,
     "passedEqualsRequired": true,
