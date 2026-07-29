@@ -27,6 +27,34 @@ Before the workflow is dispatched:
 Until these controls are observed in GitHub, protected environment custody is
 `NOT_PROVEN` and trusted certification must not run.
 
+## Bootstrap-first verification boundary
+
+Ordinary pull-request CI is deliberately unprivileged. Before bootstrap merge it
+must remotely execute the trusted verifier controls, workflow lint, Node syntax,
+secret-exposure scan, schema validation, P0 regression, and workspace quality
+gates at the exact checked-out SHA.
+
+The frozen-candidate integration and nested trusted verification are
+`NOT_RUN pre-merge` because their private cross-repository Git evidence is
+intentionally unavailable to ordinary CI. Fixture execution is not equivalent
+proof and must not be reported as the real 21/21 or 15/15 suites.
+
+GitHub plan limitations currently prevent enforced branch protection and Code
+Owner review for this private repository. The founder accepts the bounded
+bootstrap risk only with these temporary compensating controls:
+
+- freeze PR #9 at one exact SHA after remote CI;
+- permit no collaborator mutation of the bootstrap branch;
+- require founder exact-SHA review and founder-only merge authorization;
+- make no trusted-certification claim before post-merge execution;
+- retain an AEGIS `YELLOW` posture until post-merge trusted verification passes.
+
+After a separately authorized merge, configure the protected
+`p1a-certification` environment and run the real frozen-candidate integration
+and nested verification. Any failure blocks PR #8 and P1-B, preserves the
+evidence, disables trusted dispatch if necessary, and requires a separately
+reviewed revert commit for bootstrap rollback.
+
 Repository variables remain:
 
 - `P1A_RUNTIME_APP_ID`
