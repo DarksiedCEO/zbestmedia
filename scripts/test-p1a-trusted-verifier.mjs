@@ -161,7 +161,11 @@ const cases = [
   ],
   [
     "candidate_scope_expansion",
-    () => assert.ok(verifier.includes("candidate-controlled allowed file scope changed")),
+    () => {
+      assert.ok(verifier.includes("candidate-controlled allowed file scope changed"));
+      assert.ok(verifier.includes("candidate-controlled required file inventory changed"));
+      assert.ok(verifier.includes("for (const file of REQUIRED_CANDIDATE_FILES)"));
+    },
     false,
   ],
   [

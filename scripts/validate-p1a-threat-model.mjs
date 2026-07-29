@@ -35,6 +35,7 @@ export const AUTHORIZED_CANDIDATE_FILES = [
   "scripts/test-p1a-threat-model.mjs",
   "scripts/validate-p1a-threat-model.mjs",
 ];
+export const REQUIRED_CANDIDATE_FILES = [...AUTHORIZED_CANDIDATE_FILES];
 export const REQUIRED_CHECKS = [
   "manifest_identity",
   "trust_anchor",
@@ -219,6 +220,11 @@ function validateManifest(model, evidence, manifest) {
     [...AUTHORIZED_CANDIDATE_FILES].sort(),
     "candidate-controlled allowed file scope changed",
   );
+  assert.deepEqual(
+    [...manifest.requiredFiles].sort(),
+    [...REQUIRED_CANDIDATE_FILES].sort(),
+    "candidate-controlled required file inventory changed",
+  );
   assert.equal(manifest.crossRepositoryCiAuthentication, "VERIFIED");
   assert.deepEqual(model.gate, {
     runtimeChanged: false,
@@ -262,7 +268,7 @@ function validateGitScope(manifest, candidateSha) {
     .filter(Boolean)
     .sort();
   assert.deepEqual(changed, [...AUTHORIZED_CANDIDATE_FILES].sort());
-  for (const file of manifest.requiredFiles) {
+  for (const file of REQUIRED_CANDIDATE_FILES) {
     const stat = lstatSync(path.join(candidateRoot, file));
     assert.ok(stat.isFile() && !stat.isSymbolicLink(), `${file}: unsafe`);
   }
