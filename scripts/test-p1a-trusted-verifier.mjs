@@ -31,6 +31,8 @@ const governance = readFileSync(
   "utf8",
 );
 const temporary = mkdtempSync(path.join(tmpdir(), "p1a-trusted-verifier-"));
+const integrationMode = process.argv.includes("--integration");
+const frozenCandidate = "365c59757756f3f91480d3bfeb841b543010201f";
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -231,6 +233,53 @@ const cases = [
     false,
   ],
 ];
+
+if (integrationMode) {
+  cases.push([
+    "real_frozen_candidate_integration",
+    () => {
+      for (const name of [
+        "P1A_PACKAGE_ROOT",
+        "P1A_WORKFLOW_SHA",
+        "P1A_VERIFIER_SHA",
+        "P1A_TRUST_BASE_SHA",
+        "P1A_TRUST_RUNTIME_PIN",
+        "P1A_SPEC_GIT_DIR",
+        "P1A_RUNTIME_GIT_DIR",
+      ]) {
+        assert.ok(process.env[name], `${name} is required for integration mode`);
+      }
+      const output = execFileSync(
+        process.execPath,
+        [
+          path.join(root, "scripts/validate-p1a-threat-model.mjs"),
+          "--candidate-sha",
+          frozenCandidate,
+        ],
+        { cwd: root, env: process.env, encoding: "utf8" },
+      );
+      const summary = JSON.parse(output.trim().split("\n").at(-1));
+      assert.equal(summary.candidateSha, frozenCandidate);
+      assert.equal(summary.workflowSha, process.env.P1A_WORKFLOW_SHA);
+      assert.equal(summary.verifierSha, process.env.P1A_VERIFIER_SHA);
+      assert.equal(summary.required, 15);
+      assert.equal(summary.executed, 15);
+      assert.equal(summary.passed, 15);
+      for (const field of [
+        "failed",
+        "skipped",
+        "cancelled",
+        "neutral",
+        "stale",
+        "notVerified",
+      ]) {
+        assert.equal(summary[field], 0, `${field} must be zero`);
+      }
+      assert.equal(summary.crossRepositoryCiAuthentication, "VERIFIED");
+    },
+    false,
+  ]);
+}
 
 let passed = 0;
 let failed = 0;

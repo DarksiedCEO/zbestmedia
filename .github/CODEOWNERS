@@ -1,3 +1,4 @@
+/.github/CODEOWNERS @DarksiedCEO
 /.github/workflows/p1a-certify.yml @DarksiedCEO
 /scripts/validate-p1a-threat-model.mjs @DarksiedCEO
 /scripts/test-p1a-trusted-verifier.mjs @DarksiedCEO
