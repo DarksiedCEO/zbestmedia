@@ -13,16 +13,12 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    # 'true' only when the runtime App key exists; without it the cross-repo binding
-    # fails closed to NOT_VERIFIED. (Hardened trusted-branch certifier deferred to P1-H.)
-    env:
-      HAS_RUNTIME_APP: ${{ secrets.P1A_RUNTIME_APP_PRIVATE_KEY != '' }}
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: true
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # PR workflows otherwise check out GitHub's synthetic merge commit,
           # which cannot be used as exact candidate identity.
@@ -30,9 +26,10 @@ jobs:
           # P1-A verifies the authorized base is an actual ancestor and must
           # fail rather than infer that fact from a shallow checkout.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
 
@@ -47,10 +44,10 @@ jobs:
 
       - name: Get pnpm store path
         id: pnpm-store
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -86,49 +83,6 @@ jobs:
 
       - name: P1-A validator control suite (hermetic)
         run: pnpm test:p1a-threat-model
-
-      - name: Mint short-lived read-only runtime token
-        id: runtime_token
-        if: env.HAS_RUNTIME_APP == 'true'
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          app-id: ${{ vars.P1A_RUNTIME_APP_ID }}
-          private-key: ${{ secrets.P1A_RUNTIME_APP_PRIVATE_KEY }}
-          owner: DarksiedCEO
-          repositories: zbestmedia-ui
-          permission-contents: read
-
-      - name: Fetch runtime evidence pin (read-only, isolated; no token in URL/config)
-        if: env.HAS_RUNTIME_APP == 'true'
-        env:
-          RUNTIME_TOKEN: ${{ steps.runtime_token.outputs.token }}
-          PIN: ${{ vars.P1A_TRUST_RUNTIME_PIN }}
-        run: |
-          set -euo pipefail   # never set -x
-          test -n "$PIN" || { echo "::error::P1A_TRUST_RUNTIME_PIN is empty"; exit 1; }
-          GITDIR="$RUNNER_TEMP/zbestmedia-ui.git"; git init --bare -q "$GITDIR"
-          printf '#!/usr/bin/env bash\ncase "$1" in Username*) echo x-access-token;; Password*) echo "$RUNTIME_TOKEN";; esac\n' > "$RUNNER_TEMP/ap.sh"
-          chmod +x "$RUNNER_TEMP/ap.sh"
-          GIT_ASKPASS="$RUNNER_TEMP/ap.sh" GIT_TERMINAL_PROMPT=0 \
-            git -C "$GITDIR" fetch --depth=1 --no-tags "https://github.com/DarksiedCEO/zbestmedia-ui.git" "$PIN"
-          test "$(git -C "$GITDIR" cat-file -t "$PIN")" = "commit" || { echo "::error::runtime pin is not a commit"; exit 1; }
-          echo "P1A_RUNTIME_GIT_DIR=$GITDIR" >> "$GITHUB_ENV"
-
-      - name: P1-A threat-model contract (exact-SHA, anchored cross-repo binding)
-        env:
-          P1A_CANDIDATE_SHA:     ${{ github.event.pull_request.head.sha || github.sha }}
-          P1A_TRUST_BASE_SHA:    ${{ vars.P1A_TRUST_BASE_SHA }}
-          P1A_TRUST_RUNTIME_PIN: ${{ vars.P1A_TRUST_RUNTIME_PIN }}
-          P1A_SPEC_GIT_DIR:      ${{ github.workspace }}/.git
-          # P1A_RUNTIME_GIT_DIR is exported above only when the App token existed;
-          # absent => evidence_binding NOT_VERIFIED => exit 1 (fail-closed).
-        run: |
-          set -euo pipefail
-          node scripts/validate-p1a-threat-model.mjs --candidate-sha "$P1A_CANDIDATE_SHA"
-
-      - name: Cleanup credential material
-        if: always()
-        run: rm -rf "$RUNNER_TEMP/zbestmedia-ui.git" "$RUNNER_TEMP/ap.sh"
 
       - name: Quality Gates
         run: |

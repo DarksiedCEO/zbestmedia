@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import { validateData, validateGit, runPackage, validateEvidenceBinding, assertTrustAnchor, AUTHORIZED_REPOSITORIES } from "./validate-p1a-threat-model.mjs";
+import { validateData, validateGit, runPackage, validateEvidenceBinding, assertTrustAnchor, assertAuthenticationStatus, AUTHORIZED_REPOSITORIES } from "./validate-p1a-threat-model.mjs";
 
 // External trust-anchor constants (represent the founder/CI-supplied anchor, outside the candidate).
 const ANCHOR_BASE="7056ea4ce24379c93549f0ac9b45ddd7a2600dd6";
@@ -40,6 +40,8 @@ const baseModel=load("docs/security/p1-a/model.json");
 const baseEvidence=load("docs/security/p1-a/evidence-register.json");
 const baseManifest=load("docs/security/p1-a/validation-manifest.json");
 const baseMarkdown=readFileSync(path.join(root,"docs/security/p1-a/threat-model.md"),"utf8");
+const unprivilegedWorkflow=readFileSync(path.join(root,".github/workflows/ci.yml"),"utf8");
+const trustedWorkflow=readFileSync(path.join(root,".github/workflows/p1a-certify.yml"),"utf8");
 const head=execFileSync("git",["rev-parse","HEAD"],{cwd:root,encoding:"utf8"}).trim();
 
 validateData(baseModel,baseEvidence,baseManifest,baseMarkdown);
@@ -51,7 +53,17 @@ const positives=[
   ["complete_escalation_chain",()=>assert.equal(baseModel.escalationChains.find(x=>x.threatId==="THR-001").closureEvidenceRequired.length,5)],
   ["consistent_package",()=>assert.equal(JSON.parse(baseMarkdown.match(/```json p1a-summary\n([^\n]+)\n```/)[1]).threats,baseModel.threats.length)],
   ["trust_anchor_binds_real_pins",()=>assertTrustAnchor(baseModel,baseEvidence,baseManifest,{baseSha:ANCHOR_BASE,runtimePin:ANCHOR_RUNTIME})],
-  ["evidence_binding_valid",()=>runBinding(bindSc,{})]
+  ["evidence_binding_valid",()=>runBinding(bindSc,{})],
+  ["authentication_status_exact_agreement",()=>assert.equal(assertAuthenticationStatus("VERIFIED","VERIFIED"),"VERIFIED")],
+  ["credential_isolation",()=>{
+    assert.ok(!unprivilegedWorkflow.includes("P1A_RUNTIME_APP_PRIVATE_KEY"),"unprivileged CI references App private key");
+    assert.ok(!unprivilegedWorkflow.includes("create-github-app-token"),"unprivileged CI mints a privileged token");
+    assert.ok(!unprivilegedWorkflow.includes("zbestmedia-ui"),"unprivileged CI fetches runtime repository");
+    assert.ok(!trustedWorkflow.includes("pull_request_target"),"trusted workflow uses pull_request_target");
+    assert.ok(trustedWorkflow.includes("environment: p1a-certification"),"trusted workflow lacks protected environment");
+    assert.ok(trustedWorkflow.includes("github.event.repository.default_branch"),"trusted verifier is not sourced from default branch");
+    assert.ok(trustedWorkflow.includes("persist-credentials: false"),"trusted checkout persists credentials");
+  }]
 ];
 const mutations=[
   ["wrong_candidate_sha",()=>runPackage({candidateSha:"0".repeat(40)})],
@@ -117,6 +129,12 @@ const mutations=[
   ["backslash_encoded_traversal",()=>runBinding(bindSc,{path:"%2e%2e%5cwindows"})],
   ["unicode_slash_traversal",()=>runBinding(bindSc,{path:"..∕etc∕passwd"})],
   ["wrong_repository",()=>{const e=clone(baseEvidence);e.references[0].repository="DarksiedCEO/zbestmedia-ui";return validateData(baseModel,e,baseManifest,baseMarkdown);}]
+  ,["declared_not_proven_while_verified",()=>assertAuthenticationStatus("NOT_PROVEN","VERIFIED")]
+  ,["declared_verified_while_not_verified",()=>assertAuthenticationStatus("VERIFIED","NOT_VERIFIED")]
+  ,["stale_status_after_evidence_changes",()=>{
+    assert.equal(assertAuthenticationStatus("VERIFIED","VERIFIED"),"VERIFIED");
+    return assertAuthenticationStatus("VERIFIED","NOT_VERIFIED");
+  }]
 ];
 
 let passed=0;

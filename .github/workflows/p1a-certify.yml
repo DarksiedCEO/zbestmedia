@@ -1,0 +1,129 @@
+name: P1-A Trusted Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact 40-character candidate commit SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p1a-certification-${{ inputs.candidate_sha }}
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    runs-on: ubuntu-24.04
+    environment: p1a-certification
+    steps:
+      - name: Validate immutable candidate input
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::candidate_sha must be exactly 40 lowercase hexadecimal characters"
+            exit 1
+          }
+
+      - name: Checkout trusted verifier from protected default branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout candidate as untrusted data
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify candidate and base identities
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          BASE_SHA: ${{ vars.P1A_TRUST_BASE_SHA }}
+        run: |
+          set -euo pipefail
+          test "$(git -C candidate rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test "$(git -C candidate cat-file -t "$BASE_SHA")" = "commit"
+          git -C candidate merge-base --is-ancestor "$BASE_SHA" "$CANDIDATE_SHA"
+
+      - name: Mint short-lived read-only runtime token
+        id: runtime_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.P1A_RUNTIME_APP_ID }}
+          private-key: ${{ secrets.P1A_RUNTIME_APP_PRIVATE_KEY }}
+          owner: DarksiedCEO
+          repositories: zbestmedia-ui
+          permission-contents: read
+
+      - name: Fetch runtime evidence pin into isolated object store
+        env:
+          RUNTIME_TOKEN: ${{ steps.runtime_token.outputs.token }}
+          RUNTIME_PIN: ${{ vars.P1A_TRUST_RUNTIME_PIN }}
+        run: |
+          set -euo pipefail
+          [[ "$RUNTIME_PIN" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::P1A_TRUST_RUNTIME_PIN must be an exact SHA"
+            exit 1
+          }
+          RUNTIME_GIT_DIR="$RUNNER_TEMP/zbestmedia-ui.git"
+          ASKPASS="$RUNNER_TEMP/p1a-askpass.sh"
+          git init --bare -q "$RUNTIME_GIT_DIR"
+          # shellcheck disable=SC2016
+          printf '#!/usr/bin/env bash\ncase "$1" in Username*) echo x-access-token;; Password*) echo "$RUNTIME_TOKEN";; esac\n' > "$ASKPASS"
+          chmod 700 "$ASKPASS"
+          GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0 \
+            git -C "$RUNTIME_GIT_DIR" fetch --depth=1 --no-tags \
+              "https://github.com/DarksiedCEO/zbestmedia-ui.git" "$RUNTIME_PIN"
+          test "$(git -C "$RUNTIME_GIT_DIR" cat-file -t "$RUNTIME_PIN")" = "commit"
+          echo "P1A_RUNTIME_GIT_DIR=$RUNTIME_GIT_DIR" >> "$GITHUB_ENV"
+
+      - name: Execute trusted verifier against candidate data
+        env:
+          P1A_PACKAGE_ROOT: ${{ github.workspace }}/candidate
+          P1A_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          P1A_TRUST_BASE_SHA: ${{ vars.P1A_TRUST_BASE_SHA }}
+          P1A_TRUST_RUNTIME_PIN: ${{ vars.P1A_TRUST_RUNTIME_PIN }}
+          P1A_SPEC_GIT_DIR: ${{ github.workspace }}/candidate/.git
+        run: |
+          set -euo pipefail
+          node trusted/scripts/validate-p1a-threat-model.mjs \
+            --candidate-sha "$P1A_CANDIDATE_SHA" | tee "$RUNNER_TEMP/p1a-certification.log"
+          tail -n 1 "$RUNNER_TEMP/p1a-certification.log" > "$RUNNER_TEMP/p1a-certification-summary.json"
+
+      - name: Validate sanitized evidence summary
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("fs");
+            const p = process.env.RUNNER_TEMP + "/p1a-certification-summary.json";
+            const x = JSON.parse(fs.readFileSync(p, "utf8"));
+            if (x.crossRepositoryCiAuthentication !== "VERIFIED" ||
+                x.required !== 15 || x.executed !== 15 || x.passed !== 15 ||
+                x.failed || x.skipped || x.cancelled || x.neutral ||
+                x.stale || x.notVerified) process.exit(1);
+          '
+
+      - name: Upload sanitized certification evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: p1a-certification-${{ inputs.candidate_sha }}
+          path: ${{ runner.temp }}/p1a-certification-summary.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Cleanup credential and object material
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/zbestmedia-ui.git"
+          rm -f "$RUNNER_TEMP/p1a-askpass.sh" "$RUNNER_TEMP/p1a-certification.log"

@@ -5,6 +5,7 @@
   "runtimeEvidenceSha": "94376718e07df2e9d44864ed0394d58219224e61",
   "requiredFiles": [
     ".github/workflows/ci.yml",
+    ".github/workflows/p1a-certify.yml",
     "package.json",
     "docs/security/p1-a/model.json",
     "docs/security/p1-a/threat-model.md",
@@ -16,6 +17,7 @@
   ],
   "allowedRemediationFiles": [
     ".github/workflows/ci.yml",
+    ".github/workflows/p1a-certify.yml",
     "package.json",
     "docs/security/p1-a/model.json",
     "docs/security/p1-a/threat-model.md",
@@ -53,8 +55,8 @@
     "access": "READ_ONLY_ISOLATED_OBJECT_STORE",
     "note": "runtime evidence is resolved via read-only git object query against an isolated bare mirror; never a checkout into the candidate worktree."
   },
-  "crossRepositoryCiAuthentication": "NOT_PROVEN",
-  "crossRepositoryCiAuthenticationNote": "CI in DarksiedCEO/zbestmedia cannot read the private DarksiedCEO/zbestmedia-ui object store with the default GITHUB_TOKEN. evidence_binding for runtime-pin evidence is NOT_VERIFIED in CI until a founder-provisioned scoped GitHub App token or read-only deploy key is supplied. Local runs supply --runtime-git-dir against an authenticated mirror.",
+  "crossRepositoryCiAuthentication": "VERIFIED",
+  "crossRepositoryCiAuthenticationNote": "The founder-provisioned zbm-p1a-evidence-reader GitHub App is installed only on DarksiedCEO/zbestmedia-ui with read-only contents and metadata access. Exact-SHA attempt-2 runs 30323406402 and 30323408236 proved authenticated runtime-object acquisition for predecessor candidate e10b602c31b8a3838fdfd76a86b022b7abceb12c. Every new candidate must independently reproduce VERIFIED through the protected p1a-certification workflow; the committed declaration cannot make a run pass.",
   "accountingRule": {
     "executedEqualsRequired": true,
     "passedEqualsRequired": true,

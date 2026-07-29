@@ -4,7 +4,8 @@ import { readFileSync, lstatSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const moduleRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const root = process.env.P1A_PACKAGE_ROOT ? path.resolve(process.env.P1A_PACKAGE_ROOT) : moduleRoot;
 const load = (p) => JSON.parse(readFileSync(path.join(root, p), "utf8"));
 const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 const unique = (xs, label) => assert.equal(new Set(xs).size, xs.length, `${label}: duplicate`);
@@ -22,6 +23,18 @@ export const AUTHORIZED_REPOSITORIES = { base: "DarksiedCEO/zbestmedia", runtime
 // unauthenticated cross-repository read) is NOT_VERIFIED and blocks — it is never silently PASS.
 export class NotVerifiedError extends Error {
   constructor(message){ super(message); this.name="NotVerifiedError"; this.notVerified=true; }
+}
+
+export function assertAuthenticationStatus(declaredStatus, observedStatus){
+  assert.ok(["VERIFIED","NOT_PROVEN"].includes(declaredStatus),`unsupported declared cross-repository authentication status ${JSON.stringify(declaredStatus)}`);
+  assert.ok(["VERIFIED","NOT_VERIFIED"].includes(observedStatus),`unsupported observed cross-repository authentication status ${JSON.stringify(observedStatus)}`);
+  const expectedDeclared=observedStatus==="VERIFIED"?"VERIFIED":"NOT_PROVEN";
+  assert.equal(
+    declaredStatus,
+    expectedDeclared,
+    `stale cross-repository authentication status: declared ${declaredStatus}, observed ${observedStatus}`
+  );
+  return observedStatus;
 }
 
 export function parseLineRange(spec, label){
@@ -298,7 +311,10 @@ function runNamedCheck(name,c){
     case "file_scope": c.head=validateGit(manifest,candidate);return;
     case "evidence_integrity":
       for(const r of evidence.references){assert.match(r.lines,/^\d+-\d+$/);assert.ok([manifest.authorizedBaseSha,manifest.runtimeEvidenceSha].includes(r.sha));assert.ok(r.path&&r.claim&&r.category);}return;
-    case "evidence_binding": validateEvidenceBinding(evidence,manifest,{specGitDir:c.specGitDir,runtimeGitDir:c.runtimeGitDir});return;
+    case "evidence_binding":
+      validateEvidenceBinding(evidence,manifest,{specGitDir:c.specGitDir,runtimeGitDir:c.runtimeGitDir});
+      c.authenticationState=assertAuthenticationStatus(manifest.crossRepositoryCiAuthentication,"VERIFIED");
+      return;
     case "required_coverage": assert.deepEqual(model.actors.map(x=>x.name),REQUIRED_ACTORS);assert.deepEqual(model.threats.map(x=>x.name),REQUIRED_THREATS);return;
     case "id_uniqueness":
       for(const rows of [model.actors,model.actions,model.assets,model.boundaries,model.flows,model.sourceToSinkPaths,model.tenantPropagation,model.controls,model.threats,model.escalationChains,evidence.references]) unique(rows.map(x=>x.id),"named check IDs");return;
@@ -311,7 +327,7 @@ function runNamedCheck(name,c){
     case "documentation_consistency": validateData(model,evidence,manifest,markdown);return;
     case "negative_controls": {
       const source=readFileSync(path.join(root,"scripts/test-p1a-threat-model.mjs"),"utf8");
-      for(const id of ["wrong_candidate_sha","unauthorized_deletion","dangling_escalation","generic_escalation","boundary_doc_conflict","invalid_authority_owner","runtime_pin_substitution","evidence_path_traversal","evidence_absolute_path","inverted_line_range","out_of_bounds_line_range","symlink_evidence","directory_evidence","blob_identity_mismatch","missing_trust_anchor","runtime_source_unavailable","encoded_traversal","wrong_repository","percent_encoded_traversal","double_encoded_traversal","backslash_encoded_traversal","unicode_slash_traversal"]) assert.ok(source.includes(id),`missing negative control ${id}`);
+      for(const id of ["wrong_candidate_sha","unauthorized_deletion","dangling_escalation","generic_escalation","boundary_doc_conflict","invalid_authority_owner","runtime_pin_substitution","evidence_path_traversal","evidence_absolute_path","inverted_line_range","out_of_bounds_line_range","symlink_evidence","directory_evidence","blob_identity_mismatch","missing_trust_anchor","runtime_source_unavailable","encoded_traversal","wrong_repository","percent_encoded_traversal","double_encoded_traversal","backslash_encoded_traversal","unicode_slash_traversal","declared_not_proven_while_verified","declared_verified_while_not_verified","stale_status_after_evidence_changes"]) assert.ok(source.includes(id),`missing negative control ${id}`);
       return;
     }
     default: throw new Error(`unknown required check ${name}`);
@@ -337,7 +353,7 @@ function main(){
       else {totals.failed++;console.error(`FAIL ${name}: ${error.message}`);}
     }
   }
-  console.log(JSON.stringify({suite:"p1-a-threat-model",candidateSha:context.head??candidate??null,crossRepositoryCiAuthentication:context.manifest.crossRepositoryCiAuthentication??"NOT_PROVEN",...totals,authorityRules:context.model.authorityPolicy.rules.length,threats:context.model.threats.length,controls:context.model.controls.length}));
+  console.log(JSON.stringify({suite:"p1-a-threat-model",candidateSha:context.head??candidate??null,crossRepositoryCiAuthentication:context.authenticationState??"NOT_VERIFIED",...totals,authorityRules:context.model.authorityPolicy.rules.length,threats:context.model.threats.length,controls:context.model.controls.length}));
   if(totals.executed!==totals.required||totals.passed!==totals.required||totals.failed||totals.skipped||totals.cancelled||totals.neutral||totals.stale||totals.notVerified) process.exitCode=1;
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)) main();
