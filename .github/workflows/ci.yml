@@ -89,23 +89,18 @@ jobs:
 
       - name: P1-A trusted-bootstrap Node syntax
         run: |
+          node --check scripts/detect-p1a-ordinary-ci-secrets.mjs
+          node --check scripts/test-p1a-ci-secret-detector.mjs
           node --check scripts/test-p1a-trusted-verifier.mjs
           node --check scripts/validate-p1a-threat-model.mjs
 
+      - name: P1-A trusted-bootstrap secret-detector tests
+        run: node scripts/test-p1a-ci-secret-detector.mjs
+
       - name: P1-A trusted-bootstrap secret-exposure scan
         run: |
-          if git grep -q -E -- 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY'; then
-            echo "::error::A private-key payload is present in tracked content"
-            exit 1
-          fi
-          if git grep -q -- 'P1A_RUNTIME_APP_PRIVATE_KEY' -- .github/workflows/ci.yml; then
-            echo "::error::Ordinary CI references the privileged App private key"
-            exit 1
-          fi
-          if git grep -q -- 'pull_request_target' -- .github/workflows/ci.yml; then
-            echo "::error::Ordinary CI uses pull_request_target"
-            exit 1
-          fi
+          node scripts/detect-p1a-ordinary-ci-secrets.mjs \
+            --workflow .github/workflows/ci.yml
 
       - name: P1-A private cross-repository suites are intentionally unavailable
         run: |
