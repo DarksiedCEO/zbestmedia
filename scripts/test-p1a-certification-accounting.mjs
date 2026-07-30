@@ -32,26 +32,40 @@ const cases = [
   ["skipped_integration", { nested, integration: { ...integration, skipped: 1, passed: 20 } }, identity, true],
   ["incomplete_integration", { nested, integration: { ...integration, executed: 20, passed: 20 } }, identity, true],
   ["wrong_candidate", { nested, integration }, { ...identity, candidateSha: "5".repeat(40) }, true],
-  ["wrong_runtime", { nested, integration }, { ...identity, runtimePin: "6".repeat(40) }, true],
-  ["wrong_base", { nested, integration }, { ...identity, baseSha: "7".repeat(40) }, true],
+  ["wrong_workflow", { nested, integration }, { ...identity, workflowSha: "6".repeat(40) }, true],
+  ["wrong_runtime", { nested, integration }, { ...identity, runtimePin: "7".repeat(40) }, true],
+  ["wrong_base", { nested, integration }, { ...identity, baseSha: "8".repeat(40) }, true],
+  [
+    "digest_mismatch",
+    {
+      nested,
+      integration: {
+        ...integration,
+        nestedEvidenceDigest: "c".repeat(64),
+      },
+    },
+    identity,
+    true,
+  ],
 ];
 
 let passed = 0;
 let failed = 0;
 for (const [name, bundle, expected, shouldThrow] of cases) {
+  let rejected = false;
   try {
     validateCertificationBundle(bundle, expected);
-    if (shouldThrow) throw new Error("negative control did not fail");
+  } catch {
+    rejected = true;
+  }
+  if (rejected === shouldThrow) {
     passed += 1;
     console.log(`PASS ${name}`);
-  } catch (error) {
-    if (shouldThrow) {
-      passed += 1;
-      console.log(`PASS ${name}`);
-    } else {
-      failed += 1;
-      console.error(`FAIL ${name}: ${error.message}`);
-    }
+  } else {
+    failed += 1;
+    console.error(
+      `FAIL ${name}: expected ${shouldThrow ? "rejection" : "acceptance"}`,
+    );
   }
 }
 const summary = {
