@@ -120,7 +120,23 @@ jobs:
           tail -n 1 "$RUNNER_TEMP/p1a-certification.log" \
             > "$RUNNER_TEMP/p1a-certification-summary.json"
 
-      - name: Validate and digest sanitized evidence
+      - name: Execute protected real-object integration
+        env:
+          P1A_PACKAGE_ROOT: ${{ github.workspace }}/candidate
+          P1A_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          P1A_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          P1A_VERIFIER_SHA: ${{ github.workflow_sha }}
+          P1A_TRUST_BASE_SHA: ${{ vars.P1A_TRUST_BASE_SHA }}
+          P1A_TRUST_RUNTIME_PIN: ${{ vars.P1A_TRUST_RUNTIME_PIN }}
+          P1A_SPEC_GIT_DIR: ${{ github.workspace }}/candidate/.git
+        run: |
+          set -euo pipefail
+          node trusted/scripts/test-p1a-trusted-verifier.mjs --integration |
+            tee "$RUNNER_TEMP/p1a-integration.log"
+          tail -n 1 "$RUNNER_TEMP/p1a-integration.log" \
+            > "$RUNNER_TEMP/p1a-integration-summary.json"
+
+      - name: Validate fail-closed accounting and digest sanitized evidence
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           WORKFLOW_SHA: ${{ github.workflow_sha }}
@@ -128,33 +144,17 @@ jobs:
           RUNTIME_PIN: ${{ vars.P1A_TRUST_RUNTIME_PIN }}
         run: |
           set -euo pipefail
-          node -e '
-            const fs = require("fs");
-            const p = process.env.RUNNER_TEMP + "/p1a-certification-summary.json";
-            const x = JSON.parse(fs.readFileSync(p, "utf8"));
-            const expected = [
-              "authorityRules", "baseSha", "candidateSha", "cancelled",
-              "controls", "crossRepositoryCiAuthentication", "evidenceDigest",
-              "executed", "failed", "neutral", "notVerified", "passed",
-              "required", "runtimePin", "skipped", "stale", "suite", "threats",
-              "verifierBlobSha", "verifierDigest", "verifierSha", "workflowSha"
-            ].sort();
-            if (JSON.stringify(Object.keys(x).sort()) !== JSON.stringify(expected) ||
-                x.candidateSha !== process.env.CANDIDATE_SHA ||
-                x.workflowSha !== process.env.WORKFLOW_SHA ||
-                x.verifierSha !== process.env.WORKFLOW_SHA ||
-                x.baseSha !== process.env.BASE_SHA ||
-                x.runtimePin !== process.env.RUNTIME_PIN ||
-                x.crossRepositoryCiAuthentication !== "VERIFIED" ||
-                !/^[0-9a-f]{64}$/.test(x.evidenceDigest) ||
-                !/^[0-9a-f]{40}$/.test(x.verifierBlobSha) ||
-                !/^[0-9a-f]{64}$/.test(x.verifierDigest) ||
-                x.required !== 15 || x.executed !== 15 || x.passed !== 15 ||
-                x.failed || x.skipped || x.cancelled || x.neutral ||
-                x.stale || x.notVerified) process.exit(1);
-          '
+          node trusted/scripts/validate-p1a-certification-accounting.mjs \
+            --nested "$RUNNER_TEMP/p1a-certification-summary.json" \
+            --integration "$RUNNER_TEMP/p1a-integration-summary.json" \
+            --candidate "$CANDIDATE_SHA" \
+            --workflow "$WORKFLOW_SHA" \
+            --base "$BASE_SHA" \
+            --runtime "$RUNTIME_PIN" \
+            --output "$RUNNER_TEMP/p1a-protected-summary.json"
           cd "$RUNNER_TEMP"
           sha256sum p1a-certification-summary.json \
+            p1a-integration-summary.json p1a-protected-summary.json \
             > p1a-certification-summary.sha256
 
       - name: Upload sanitized certification evidence
@@ -163,6 +163,8 @@ jobs:
           name: p1a-certification-${{ inputs.candidate_sha }}
           path: |
             ${{ runner.temp }}/p1a-certification-summary.json
+            ${{ runner.temp }}/p1a-integration-summary.json
+            ${{ runner.temp }}/p1a-protected-summary.json
             ${{ runner.temp }}/p1a-certification-summary.sha256
           if-no-files-found: error
           retention-days: 30
@@ -173,3 +175,4 @@ jobs:
           rm -rf "$RUNNER_TEMP/zbestmedia-ui.git"
           rm -f "$RUNNER_TEMP/p1a-askpass.sh"
           rm -f "$RUNNER_TEMP/p1a-certification.log"
+          rm -f "$RUNNER_TEMP/p1a-integration.log"

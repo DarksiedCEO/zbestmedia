@@ -32,7 +32,7 @@ const governance = readFileSync(
 );
 const temporary = mkdtempSync(path.join(tmpdir(), "p1a-trusted-verifier-"));
 const integrationMode = process.argv.includes("--integration");
-const frozenCandidate = "365c59757756f3f91480d3bfeb841b543010201f";
+let integrationEvidence;
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -201,7 +201,10 @@ const cases = [
   [
     "sanitized_evidence_allowlist",
     () => {
-      assert.ok(workflow.includes("Object.keys(x).sort()"));
+      assert.ok(
+        workflow.includes("validate-p1a-certification-accounting.mjs"),
+      );
+      assert.ok(workflow.includes("p1a-protected-summary.json"));
       assert.ok(workflow.includes("p1a-certification-summary.sha256"));
       assert.ok(!workflow.includes("upload-artifact@v"));
     },
@@ -226,6 +229,7 @@ const cases = [
         "neutral",
         "stale",
         "notVerified",
+        "notRun",
       ]) {
         assert.ok(verifier.includes(`totals.${field}`));
       }
@@ -240,6 +244,7 @@ if (integrationMode) {
     () => {
       for (const name of [
         "P1A_PACKAGE_ROOT",
+        "P1A_CANDIDATE_SHA",
         "P1A_WORKFLOW_SHA",
         "P1A_VERIFIER_SHA",
         "P1A_TRUST_BASE_SHA",
@@ -254,12 +259,12 @@ if (integrationMode) {
         [
           path.join(root, "scripts/validate-p1a-threat-model.mjs"),
           "--candidate-sha",
-          frozenCandidate,
+          process.env.P1A_CANDIDATE_SHA,
         ],
         { cwd: root, env: process.env, encoding: "utf8" },
       );
       const summary = JSON.parse(output.trim().split("\n").at(-1));
-      assert.equal(summary.candidateSha, frozenCandidate);
+      assert.equal(summary.candidateSha, process.env.P1A_CANDIDATE_SHA);
       assert.equal(summary.workflowSha, process.env.P1A_WORKFLOW_SHA);
       assert.equal(summary.verifierSha, process.env.P1A_VERIFIER_SHA);
       assert.equal(summary.required, 15);
@@ -276,6 +281,7 @@ if (integrationMode) {
         assert.equal(summary[field], 0, `${field} must be zero`);
       }
       assert.equal(summary.crossRepositoryCiAuthentication, "VERIFIED");
+      integrationEvidence = summary;
     },
     false,
   ]);
@@ -306,6 +312,10 @@ try {
 
 const summary = {
   suite: "p1-a-trusted-verifier-controls",
+  candidateSha: integrationMode ? process.env.P1A_CANDIDATE_SHA : null,
+  workflowSha: integrationMode ? process.env.P1A_WORKFLOW_SHA : null,
+  baseSha: integrationMode ? process.env.P1A_TRUST_BASE_SHA : null,
+  runtimePin: integrationMode ? process.env.P1A_TRUST_RUNTIME_PIN : null,
   required: cases.length,
   executed: cases.length,
   passed,
@@ -315,6 +325,10 @@ const summary = {
   neutral: 0,
   stale: 0,
   notVerified: 0,
+  notRun: 0,
+  crossRepositoryCiAuthentication: integrationMode ? "VERIFIED" : "NOT_RUN",
+  nestedEvidenceDigest: integrationEvidence?.evidenceDigest ?? null,
+  nestedVerifierDigest: integrationEvidence?.verifierDigest ?? null,
 };
 console.log(JSON.stringify(summary));
 if (failed || passed !== cases.length) process.exitCode = 1;
