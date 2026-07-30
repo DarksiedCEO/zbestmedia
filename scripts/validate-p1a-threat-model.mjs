@@ -443,6 +443,7 @@ function main() {
     neutral: 0,
     stale: 0,
     notVerified: 0,
+    notRun: 0,
   };
   for (const name of REQUIRED_CHECKS) {
     totals.executed += 1;
@@ -487,7 +488,8 @@ function main() {
     totals.cancelled ||
     totals.neutral ||
     totals.stale ||
-    totals.notVerified
+    totals.notVerified ||
+    totals.notRun
   ) {
     process.exitCode = 1;
   }

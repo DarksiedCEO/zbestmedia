@@ -34,7 +34,7 @@ must remotely execute the trusted verifier controls, workflow lint, Node syntax,
 secret-exposure scan, schema validation, P0 regression, and workspace quality
 gates at the exact checked-out SHA.
 
-The frozen-candidate integration and nested trusted verification are
+The frozen-candidate integration and nested trusted verification were
 `NOT_RUN pre-merge` because their private cross-repository Git evidence is
 intentionally unavailable to ordinary CI. Fixture execution is not equivalent
 proof and must not be reported as the real 21/21 or 15/15 suites.
@@ -84,6 +84,12 @@ count, and range is checked against immutable Git objects.
 
 Missing anchors, missing objects, contradictory status, expanded file scope,
 unsafe paths, impossible ranges, or any non-pass accounting state fail closed.
+The protected workflow runs both the 15-check nested verifier and the distinct
+21-check real-object integration harness from its trusted workflow checkout.
+Candidate code remains data-only. A trusted accounting validator rejects an
+absent, skipped, incomplete, or identity-mismatched suite and requires
+`failed`, `skipped`, `cancelled`, `neutral`, `stale`, `notVerified`, and
+`notRun` to all equal zero.
 
 ## Evidence handling
 
