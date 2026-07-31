@@ -166,7 +166,9 @@ const cases = [
     () => {
       assert.ok(verifier.includes("candidate-controlled allowed file scope changed"));
       assert.ok(verifier.includes("candidate-controlled required file inventory changed"));
-      assert.ok(verifier.includes("for (const file of REQUIRED_CANDIDATE_FILES)"));
+      assert.ok(verifier.includes("for (const file of CANDIDATE_OWNED_FILES)"));
+      assert.ok(verifier.includes("TRUSTED_INFRASTRUCTURE_FILES"));
+      assert.ok(verifier.includes("trusted blob identity mismatch"));
     },
     false,
   ],
@@ -248,6 +250,9 @@ if (integrationMode) {
         "P1A_WORKFLOW_SHA",
         "P1A_VERIFIER_SHA",
         "P1A_TRUST_BASE_SHA",
+        "P1A_EVIDENCE_BASE_SHA",
+        "P1A_RECONCILIATION_BASE_SHA",
+        "P1A_ORIGINAL_CANDIDATE_SHA",
         "P1A_TRUST_RUNTIME_PIN",
         "P1A_SPEC_GIT_DIR",
         "P1A_RUNTIME_GIT_DIR",
@@ -267,6 +272,9 @@ if (integrationMode) {
       assert.equal(summary.candidateSha, process.env.P1A_CANDIDATE_SHA);
       assert.equal(summary.workflowSha, process.env.P1A_WORKFLOW_SHA);
       assert.equal(summary.verifierSha, process.env.P1A_VERIFIER_SHA);
+      assert.equal(summary.evidenceBaseSha, process.env.P1A_EVIDENCE_BASE_SHA);
+      assert.equal(summary.reconciliationBaseSha, process.env.P1A_RECONCILIATION_BASE_SHA);
+      assert.equal(summary.originalCandidateSha, process.env.P1A_ORIGINAL_CANDIDATE_SHA);
       assert.equal(summary.required, 15);
       assert.equal(summary.executed, 15);
       assert.equal(summary.passed, 15);
@@ -315,6 +323,9 @@ const summary = {
   candidateSha: integrationMode ? process.env.P1A_CANDIDATE_SHA : null,
   workflowSha: integrationMode ? process.env.P1A_WORKFLOW_SHA : null,
   baseSha: integrationMode ? process.env.P1A_TRUST_BASE_SHA : null,
+  evidenceBaseSha: integrationMode ? process.env.P1A_EVIDENCE_BASE_SHA : null,
+  reconciliationBaseSha: integrationMode ? process.env.P1A_RECONCILIATION_BASE_SHA : null,
+  originalCandidateSha: integrationMode ? process.env.P1A_ORIGINAL_CANDIDATE_SHA : null,
   runtimePin: integrationMode ? process.env.P1A_TRUST_RUNTIME_PIN : null,
   required: cases.length,
   executed: cases.length,

@@ -78,6 +78,24 @@ The workflow is manually dispatched from its protected-branch commit. It binds:
 
 The candidate is checked out only as data. Node executes the verifier from the
 trusted workflow commit, never a script path under the candidate checkout. The
+verifier binds three independent immutable identities: evidence/model base
+`7056ea4ce24379c93549f0ac9b45ddd7a2600dd6`, trusted reconciliation base
+`5056fb0df6e1ef739231cd2273a453fb1c644273`, and original P1-A candidate
+`365c59757756f3f91480d3bfeb841b543010201f`. These values are controlled by the
+trusted workflow and are not loaded from candidate data or mutable branch names.
+
+File authority is explicit. The seven evidence/model paths must have the exact
+blobs preserved from the original candidate. Independently merged bootstrap
+paths unchanged by the amendment must match the trusted reconciliation base;
+amendment-controlled paths must match the exact executing workflow commit.
+Ordinary `.github/workflows/ci.yml` is candidate-owned only for one exact
+addition: the hermetic `pnpm test:p1a-threat-model` step. Removing trusted
+bootstrap tests, changing any other CI byte, introducing protected secrets, or
+executing candidate-controlled credentialed code fails closed.
+The candidate must descend from the reconciliation base, and its delta may
+contain only the seven candidate-owned paths. Counts are evidence summaries,
+not policy: path classification and blob identity are the enforcing controls.
+
 runtime repository is fetched into an isolated bare object store using a
 short-lived installation token. Every cited repository path, blob identity, line
 count, and range is checked against immutable Git objects.

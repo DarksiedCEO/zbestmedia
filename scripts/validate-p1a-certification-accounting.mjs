@@ -16,6 +16,9 @@ export function validateSuiteSummary(summary, expected) {
     ["candidateSha", "candidate SHA"],
     ["workflowSha", "workflow SHA"],
     ["baseSha", "base SHA"],
+    ["evidenceBaseSha", "evidence base SHA"],
+    ["reconciliationBaseSha", "reconciliation base SHA"],
+    ["originalCandidateSha", "original candidate SHA"],
     ["runtimePin", "runtime pin"],
   ]) {
     assert.equal(
@@ -35,6 +38,12 @@ export function validateSuiteSummary(summary, expected) {
 
 export function validateCertificationBundle(bundle, expected) {
   assert.ok(bundle && typeof bundle === "object", "bundle absent");
+  const dual = validateSuiteSummary(bundle.dual, {
+    ...expected,
+    label: "dual-base verifier",
+    suite: "p1-a-dual-base-verifier-controls",
+    required: 29,
+  });
   const nested = validateSuiteSummary(bundle.nested, {
     ...expected,
     label: "nested verifier",
@@ -67,7 +76,13 @@ export function validateCertificationBundle(bundle, expected) {
     candidateSha: expected.candidateSha,
     workflowSha: expected.workflowSha,
     baseSha: expected.baseSha,
+    evidenceBaseSha: expected.evidenceBaseSha,
+    reconciliationBaseSha: expected.reconciliationBaseSha,
+    originalCandidateSha: expected.originalCandidateSha,
     runtimePin: expected.runtimePin,
+    dualRequired: dual.required,
+    dualExecuted: dual.executed,
+    dualPassed: dual.passed,
     nestedRequired: nested.required,
     nestedExecuted: nested.executed,
     nestedPassed: nested.passed,
@@ -102,12 +117,16 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
   const args = parseArguments(process.argv.slice(2));
   const nested = JSON.parse(readFileSync(args.nested, "utf8"));
   const integration = JSON.parse(readFileSync(args.integration, "utf8"));
+  const dual = JSON.parse(readFileSync(args.dual, "utf8"));
   const summary = validateCertificationBundle(
-    { nested, integration },
+    { nested, integration, dual },
     {
       candidateSha: args.candidate,
       workflowSha: args.workflow,
       baseSha: args.base,
+      evidenceBaseSha: args["evidence-base"],
+      reconciliationBaseSha: args["reconciliation-base"],
+      originalCandidateSha: args["original-candidate"],
       runtimePin: args.runtime,
     },
   );
