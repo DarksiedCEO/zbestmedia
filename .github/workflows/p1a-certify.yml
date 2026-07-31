@@ -24,6 +24,9 @@ jobs:
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           WORKFLOW_SHA: ${{ github.workflow_sha }}
+          EVIDENCE_BASE_SHA: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          RECONCILIATION_BASE_SHA: 5056fb0df6e1ef739231cd2273a453fb1c644273
+          ORIGINAL_CANDIDATE_SHA: 365c59757756f3f91480d3bfeb841b543010201f
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -35,6 +38,9 @@ jobs:
             echo "::error::github.workflow_sha is not an exact commit"
             exit 1
           }
+          for identity in "$EVIDENCE_BASE_SHA" "$RECONCILIATION_BASE_SHA" "$ORIGINAL_CANDIDATE_SHA" "$WORKFLOW_SHA"; do
+            [[ "$identity" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          done
           test "$REPOSITORY" = "DarksiedCEO/zbestmedia"
 
       - name: Checkout trusted verifier at workflow commit
@@ -42,7 +48,7 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           path: trusted
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Checkout candidate as untrusted data
@@ -57,20 +63,40 @@ jobs:
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           WORKFLOW_SHA: ${{ github.workflow_sha }}
-          BASE_SHA: ${{ vars.P1A_TRUST_BASE_SHA }}
+          EVIDENCE_BASE_SHA: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          RECONCILIATION_BASE_SHA: 5056fb0df6e1ef739231cd2273a453fb1c644273
+          ORIGINAL_CANDIDATE_SHA: 365c59757756f3f91480d3bfeb841b543010201f
         run: |
           set -euo pipefail
-          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
-            echo "::error::P1A_TRUST_BASE_SHA must be an exact commit"
-            exit 1
-          }
           test "$(git -C trusted rev-parse HEAD)" = "$WORKFLOW_SHA"
           test "$(git -C candidate rev-parse HEAD)" = "$CANDIDATE_SHA"
           test "$(git -C candidate remote get-url origin)" = \
             "https://github.com/DarksiedCEO/zbestmedia"
-          test "$(git -C candidate cat-file -t "$BASE_SHA")" = "commit"
-          git -C candidate merge-base --is-ancestor "$BASE_SHA" "$CANDIDATE_SHA"
+          for identity in "$EVIDENCE_BASE_SHA" "$RECONCILIATION_BASE_SHA" "$ORIGINAL_CANDIDATE_SHA"; do
+            test "$(git -C candidate cat-file -t "$identity")" = "commit"
+          done
+          git -C candidate merge-base --is-ancestor "$EVIDENCE_BASE_SHA" "$ORIGINAL_CANDIDATE_SHA"
+          git -C candidate merge-base --is-ancestor "$EVIDENCE_BASE_SHA" "$RECONCILIATION_BASE_SHA"
+          git -C candidate merge-base --is-ancestor "$RECONCILIATION_BASE_SHA" "$CANDIDATE_SHA"
+          git -C candidate merge-base --is-ancestor "$WORKFLOW_SHA" "$CANDIDATE_SHA"
+          git -C candidate merge-base --is-ancestor "$ORIGINAL_CANDIDATE_SHA" "$CANDIDATE_SHA"
           echo "P1A_VERIFIER_SHA=$WORKFLOW_SHA" >> "$GITHUB_ENV"
+
+      - name: Execute protected dual-base controls
+        env:
+          P1A_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          P1A_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          P1A_TRUST_BASE_SHA: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          P1A_EVIDENCE_BASE_SHA: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          P1A_RECONCILIATION_BASE_SHA: 5056fb0df6e1ef739231cd2273a453fb1c644273
+          P1A_ORIGINAL_CANDIDATE_SHA: 365c59757756f3f91480d3bfeb841b543010201f
+          P1A_TRUST_RUNTIME_PIN: ${{ vars.P1A_TRUST_RUNTIME_PIN }}
+        run: |
+          set -euo pipefail
+          node trusted/scripts/test-p1a-dual-base-verifier.mjs |
+            tee "$RUNNER_TEMP/p1a-dual-base.log"
+          tail -n 1 "$RUNNER_TEMP/p1a-dual-base.log" \
+            > "$RUNNER_TEMP/p1a-dual-base-summary.json"
 
       - name: Mint short-lived read-only runtime token
         id: runtime_token
@@ -109,7 +135,10 @@ jobs:
           P1A_PACKAGE_ROOT: ${{ github.workspace }}/candidate
           P1A_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           P1A_WORKFLOW_SHA: ${{ github.workflow_sha }}
-          P1A_TRUST_BASE_SHA: ${{ vars.P1A_TRUST_BASE_SHA }}
+          P1A_TRUST_BASE_SHA: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          P1A_EVIDENCE_BASE_SHA: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          P1A_RECONCILIATION_BASE_SHA: 5056fb0df6e1ef739231cd2273a453fb1c644273
+          P1A_ORIGINAL_CANDIDATE_SHA: 365c59757756f3f91480d3bfeb841b543010201f
           P1A_TRUST_RUNTIME_PIN: ${{ vars.P1A_TRUST_RUNTIME_PIN }}
           P1A_SPEC_GIT_DIR: ${{ github.workspace }}/candidate/.git
         run: |
@@ -126,7 +155,10 @@ jobs:
           P1A_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           P1A_WORKFLOW_SHA: ${{ github.workflow_sha }}
           P1A_VERIFIER_SHA: ${{ github.workflow_sha }}
-          P1A_TRUST_BASE_SHA: ${{ vars.P1A_TRUST_BASE_SHA }}
+          P1A_TRUST_BASE_SHA: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          P1A_EVIDENCE_BASE_SHA: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          P1A_RECONCILIATION_BASE_SHA: 5056fb0df6e1ef739231cd2273a453fb1c644273
+          P1A_ORIGINAL_CANDIDATE_SHA: 365c59757756f3f91480d3bfeb841b543010201f
           P1A_TRUST_RUNTIME_PIN: ${{ vars.P1A_TRUST_RUNTIME_PIN }}
           P1A_SPEC_GIT_DIR: ${{ github.workspace }}/candidate/.git
         run: |
@@ -140,21 +172,29 @@ jobs:
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           WORKFLOW_SHA: ${{ github.workflow_sha }}
-          BASE_SHA: ${{ vars.P1A_TRUST_BASE_SHA }}
+          BASE_SHA: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          EVIDENCE_BASE_SHA: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          RECONCILIATION_BASE_SHA: 5056fb0df6e1ef739231cd2273a453fb1c644273
+          ORIGINAL_CANDIDATE_SHA: 365c59757756f3f91480d3bfeb841b543010201f
           RUNTIME_PIN: ${{ vars.P1A_TRUST_RUNTIME_PIN }}
         run: |
           set -euo pipefail
           node trusted/scripts/validate-p1a-certification-accounting.mjs \
+            --dual "$RUNNER_TEMP/p1a-dual-base-summary.json" \
             --nested "$RUNNER_TEMP/p1a-certification-summary.json" \
             --integration "$RUNNER_TEMP/p1a-integration-summary.json" \
             --candidate "$CANDIDATE_SHA" \
             --workflow "$WORKFLOW_SHA" \
             --base "$BASE_SHA" \
+            --evidence-base "$EVIDENCE_BASE_SHA" \
+            --reconciliation-base "$RECONCILIATION_BASE_SHA" \
+            --original-candidate "$ORIGINAL_CANDIDATE_SHA" \
             --runtime "$RUNTIME_PIN" \
             --output "$RUNNER_TEMP/p1a-protected-summary.json"
           cd "$RUNNER_TEMP"
           sha256sum p1a-certification-summary.json \
-            p1a-integration-summary.json p1a-protected-summary.json \
+            p1a-integration-summary.json p1a-dual-base-summary.json \
+            p1a-protected-summary.json \
             > p1a-certification-summary.sha256
 
       - name: Upload sanitized certification evidence
@@ -164,6 +204,7 @@ jobs:
           path: |
             ${{ runner.temp }}/p1a-certification-summary.json
             ${{ runner.temp }}/p1a-integration-summary.json
+            ${{ runner.temp }}/p1a-dual-base-summary.json
             ${{ runner.temp }}/p1a-protected-summary.json
             ${{ runner.temp }}/p1a-certification-summary.sha256
           if-no-files-found: error
@@ -176,3 +217,4 @@ jobs:
           rm -f "$RUNNER_TEMP/p1a-askpass.sh"
           rm -f "$RUNNER_TEMP/p1a-certification.log"
           rm -f "$RUNNER_TEMP/p1a-integration.log"
+          rm -f "$RUNNER_TEMP/p1a-dual-base.log"

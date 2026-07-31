@@ -17,6 +17,10 @@ const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
 export const AUTHORIZED_BASE =
   "7056ea4ce24379c93549f0ac9b45ddd7a2600dd6";
+export const TRUSTED_RECONCILIATION_BASE =
+  "5056fb0df6e1ef739231cd2273a453fb1c644273";
+export const ORIGINAL_CANDIDATE =
+  "365c59757756f3f91480d3bfeb841b543010201f";
 export const AUTHORIZED_RUNTIME =
   "94376718e07df2e9d44864ed0394d58219224e61";
 export const AUTHORIZED_REPOSITORIES = {
@@ -36,6 +40,40 @@ export const AUTHORIZED_CANDIDATE_FILES = [
   "scripts/validate-p1a-threat-model.mjs",
 ];
 export const REQUIRED_CANDIDATE_FILES = [...AUTHORIZED_CANDIDATE_FILES];
+export const TRUSTED_INFRASTRUCTURE_FILES = [
+  ".github/CODEOWNERS",
+  ".github/workflows/ci.yml",
+  ".github/workflows/p1a-certify.yml",
+  "docs/security/p1-a/trusted-certification-bootstrap.md",
+  "scripts/detect-p1a-ordinary-ci-secrets.mjs",
+  "scripts/test-p1a-certification-accounting.mjs",
+  "scripts/test-p1a-ci-secret-detector.mjs",
+  "scripts/test-p1a-trusted-verifier.mjs",
+  "scripts/validate-p1a-certification-accounting.mjs",
+  "scripts/validate-p1a-threat-model.mjs",
+];
+export const CANDIDATE_OWNED_FILES = [
+  ".github/workflows/ci.yml",
+  "docs/security/p1-a/evidence-register.json",
+  "docs/security/p1-a/known-limitations.md",
+  "docs/security/p1-a/model.json",
+  "docs/security/p1-a/threat-model.md",
+  "docs/security/p1-a/validation-manifest.json",
+  "package.json",
+  "scripts/test-p1a-threat-model.mjs",
+];
+export const EXACT_CANDIDATE_OWNED_FILES = CANDIDATE_OWNED_FILES.filter(
+  (file) => file !== ".github/workflows/ci.yml",
+);
+export const AMENDMENT_CONTROLLED_FILES = [
+  ".github/workflows/p1a-certify.yml",
+  "docs/security/p1-a/trusted-certification-bootstrap.md",
+  "scripts/test-p1a-certification-accounting.mjs",
+  "scripts/test-p1a-dual-base-verifier.mjs",
+  "scripts/test-p1a-trusted-verifier.mjs",
+  "scripts/validate-p1a-certification-accounting.mjs",
+  "scripts/validate-p1a-threat-model.mjs",
+];
 export const REQUIRED_CHECKS = [
   "manifest_identity",
   "trust_anchor",
@@ -249,26 +287,140 @@ function validateManifest(model, evidence, manifest) {
   }
 }
 
+function gitLines(git, ...args) {
+  return git(...args).split("\n").filter(Boolean).sort();
+}
+
+function blobAt(git, commit, file) {
+  try {
+    return git("rev-parse", `${commit}:${file}`);
+  } catch {
+    return null;
+  }
+}
+
+const REQUIRED_CI_ADDITION = [
+  "      - name: P1-A validator control suite (hermetic)",
+  "        run: pnpm test:p1a-threat-model",
+  "",
+  "",
+].join("\n");
+
+function validateCandidateCi(git, candidateSha, reconciliationBaseSha) {
+  const path = ".github/workflows/ci.yml";
+  const entry = git("ls-tree", candidateSha, "--", path);
+  assert.match(entry, /^100644\s+blob\s+[0-9a-f]{40}\t/, `${path}: unsafe entry`);
+  const candidate = git("show", `${candidateSha}:${path}`);
+  const trusted = `${git("show", `${reconciliationBaseSha}:${path}`)}\n`;
+  assert.equal(candidate.split(REQUIRED_CI_ADDITION).length - 1, 1,
+    `${path}: required hermetic step missing or duplicated`);
+  assert.equal(`${candidate.replace(REQUIRED_CI_ADDITION, "")}\n`, trusted,
+    `${path}: changes exceed the exact hermetic step`);
+  for (const forbidden of [
+    "P1A_RUNTIME_APP_PRIVATE_KEY", "-----BEGIN PRIVATE KEY-----",
+    "-----BEGIN RSA PRIVATE KEY-----", "pull_request_target", "node candidate/",
+  ]) assert.ok(!candidate.includes(forbidden), `${path}: forbidden ${forbidden}`);
+  assert.ok(!/\$\{\{\s*secrets\s*\./.test(candidate), `${path}: protected secret reference`);
+  for (const required of [
+    "pnpm test:p1a-threat-model", "node scripts/test-p1a-trusted-verifier.mjs",
+    "node scripts/test-p1a-ci-secret-detector.mjs",
+    "node scripts/detect-p1a-ordinary-ci-secrets.mjs",
+    "P1-A private cross-repository suites are intentionally unavailable",
+  ]) assert.ok(candidate.includes(required), `${path}: missing ${required}`);
+}
+
+export function validateDualBaseScope({
+  git,
+  candidateSha,
+  evidenceBaseSha,
+  reconciliationBaseSha,
+  originalCandidateSha,
+  workflowSha,
+}) {
+  for (const [label, value, expected] of [
+    ["evidence/model base", evidenceBaseSha, AUTHORIZED_BASE],
+    ["trusted reconciliation base", reconciliationBaseSha, TRUSTED_RECONCILIATION_BASE],
+    ["original candidate", originalCandidateSha, ORIGINAL_CANDIDATE],
+  ]) {
+    assert.match(value ?? "", /^[0-9a-f]{40}$/, `${label} SHA absent`);
+    assert.equal(value, expected, `${label} identity mismatch`);
+    assert.equal(git("cat-file", "-t", value), "commit", `${label} is not a commit`);
+  }
+  assert.match(candidateSha ?? "", /^[0-9a-f]{40}$/, "candidate SHA absent");
+  assert.match(workflowSha ?? "", /^[0-9a-f]{40}$/, "workflow SHA absent");
+  assert.equal(git("cat-file", "-t", candidateSha), "commit", "candidate is not a commit");
+  assert.equal(git("cat-file", "-t", workflowSha), "commit", "workflow is not a commit");
+  git("merge-base", "--is-ancestor", evidenceBaseSha, originalCandidateSha);
+  git("merge-base", "--is-ancestor", evidenceBaseSha, reconciliationBaseSha);
+  git("merge-base", "--is-ancestor", reconciliationBaseSha, workflowSha);
+  git("merge-base", "--is-ancestor", workflowSha, candidateSha);
+  git("merge-base", "--is-ancestor", originalCandidateSha, candidateSha);
+
+  const historical = gitLines(
+    git,
+    "diff", "--name-only", "--diff-filter=ACMRTD",
+    `${evidenceBaseSha}..${originalCandidateSha}`,
+  );
+  assert.deepEqual(historical, [...AUTHORIZED_CANDIDATE_FILES].sort(),
+    "historical evidence/model scope mismatch");
+  const trusted = gitLines(
+    git,
+    "diff", "--name-only", "--diff-filter=ACMRTD",
+    `${evidenceBaseSha}..${reconciliationBaseSha}`,
+  );
+  assert.deepEqual(trusted, [...TRUSTED_INFRASTRUCTURE_FILES].sort(),
+    "trusted infrastructure scope mismatch");
+  const amendment = gitLines(
+    git,
+    "diff", "--name-only", "--diff-filter=ACMRTD",
+    `${reconciliationBaseSha}..${workflowSha}`,
+  );
+  assert.deepEqual(amendment, [...AMENDMENT_CONTROLLED_FILES].sort(),
+    "trusted amendment scope mismatch");
+  const reconciled = gitLines(
+    git,
+    "diff", "--name-only", "--diff-filter=ACMRTD",
+    `${reconciliationBaseSha}..${candidateSha}`,
+  );
+  assert.deepEqual(reconciled, [...new Set([...AMENDMENT_CONTROLLED_FILES, ...CANDIDATE_OWNED_FILES])].sort(),
+    "reconciled candidate scope mismatch");
+
+  for (const file of TRUSTED_INFRASTRUCTURE_FILES) {
+    if (file === ".github/workflows/ci.yml") continue;
+    const authority = AMENDMENT_CONTROLLED_FILES.includes(file) ? workflowSha : reconciliationBaseSha;
+    assert.equal(blobAt(git, candidateSha, file), blobAt(git, authority, file),
+      `${file}: trusted blob identity mismatch`);
+  }
+  for (const file of AMENDMENT_CONTROLLED_FILES) {
+    assert.equal(blobAt(git, candidateSha, file), blobAt(git, workflowSha, file),
+      `${file}: amended trusted blob identity mismatch`);
+  }
+  for (const file of EXACT_CANDIDATE_OWNED_FILES) {
+    const expected = blobAt(git, originalCandidateSha, file);
+    assert.ok(expected, `${file}: original candidate blob absent`);
+    assert.equal(blobAt(git, candidateSha, file), expected,
+      `${file}: candidate evidence blob identity mismatch`);
+  }
+  validateCandidateCi(git, candidateSha, reconciliationBaseSha);
+  return { historical, trusted, amendment, reconciled };
+}
+
 function validateGitScope(manifest, candidateSha) {
   const git = (...args) =>
     execFileSync("git", args, {
       cwd: candidateRoot,
       encoding: "utf8",
     }).trim();
-  assert.match(candidateSha ?? "", /^[0-9a-f]{40}$/);
   assert.equal(git("rev-parse", "HEAD"), candidateSha);
-  git("merge-base", "--is-ancestor", AUTHORIZED_BASE, candidateSha);
-  const changed = git(
-    "diff",
-    "--name-only",
-    "--diff-filter=ACMRTD",
-    `${AUTHORIZED_BASE}..${candidateSha}`,
-  )
-    .split("\n")
-    .filter(Boolean)
-    .sort();
-  assert.deepEqual(changed, [...AUTHORIZED_CANDIDATE_FILES].sort());
-  for (const file of REQUIRED_CANDIDATE_FILES) {
+  validateDualBaseScope({
+    git,
+    candidateSha,
+    evidenceBaseSha: process.env.P1A_EVIDENCE_BASE_SHA,
+    reconciliationBaseSha: process.env.P1A_RECONCILIATION_BASE_SHA,
+    originalCandidateSha: process.env.P1A_ORIGINAL_CANDIDATE_SHA,
+    workflowSha: process.env.P1A_WORKFLOW_SHA,
+  });
+  for (const file of CANDIDATE_OWNED_FILES) {
     const stat = lstatSync(path.join(candidateRoot, file));
     assert.ok(stat.isFile() && !stat.isSymbolicLink(), `${file}: unsafe`);
   }
@@ -300,6 +452,9 @@ function runCheck(name, context) {
       return;
     case "trust_anchor":
       assert.equal(process.env.P1A_TRUST_BASE_SHA, AUTHORIZED_BASE);
+      assert.equal(process.env.P1A_EVIDENCE_BASE_SHA, AUTHORIZED_BASE);
+      assert.equal(process.env.P1A_RECONCILIATION_BASE_SHA, TRUSTED_RECONCILIATION_BASE);
+      assert.equal(process.env.P1A_ORIGINAL_CANDIDATE_SHA, ORIGINAL_CANDIDATE);
       assert.equal(process.env.P1A_TRUST_RUNTIME_PIN, AUTHORIZED_RUNTIME);
       return;
     case "file_scope":
@@ -385,8 +540,12 @@ function runCheck(name, context) {
       return;
     }
     case "negative_controls": {
-      const controls = readFileSync(
+      const trustedControls = readFileSync(
         path.join(moduleRoot, "scripts/test-p1a-trusted-verifier.mjs"),
+        "utf8",
+      );
+      const dualBaseControls = readFileSync(
+        path.join(moduleRoot, "scripts/test-p1a-dual-base-verifier.mjs"),
         "utf8",
       );
       for (const id of [
@@ -401,7 +560,14 @@ function runCheck(name, context) {
         "candidate_scope_expansion",
         "secret_in_untrusted_workflow",
       ]) {
-        assert.ok(controls.includes(id), `missing protected control ${id}`);
+        assert.ok(trustedControls.includes(id), `missing protected control ${id}`);
+      }
+      for (const id of [
+        "dual_base_valid_reconciliation",
+        "wrong_evidence_model_base",
+        "candidate_modifies_trusted_verifier",
+      ]) {
+        assert.ok(dualBaseControls.includes(id), `missing dual-base control ${id}`);
       }
       return;
     }
@@ -471,6 +637,9 @@ function main() {
       verifierDigest: sha256(verifierBytes),
       candidateSha,
       baseSha: AUTHORIZED_BASE,
+      evidenceBaseSha: AUTHORIZED_BASE,
+      reconciliationBaseSha: TRUSTED_RECONCILIATION_BASE,
+      originalCandidateSha: ORIGINAL_CANDIDATE,
       runtimePin: AUTHORIZED_RUNTIME,
       evidenceDigest: evidenceDigest(),
       crossRepositoryCiAuthentication: context.authenticationState,
