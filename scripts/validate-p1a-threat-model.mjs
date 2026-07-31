@@ -13,6 +13,8 @@ const load = (file) =>
   JSON.parse(readFileSync(path.join(candidateRoot, file), "utf8"));
 const unique = (items, label) =>
   assert.equal(new Set(items).size, items.length, `${label}: duplicate`);
+const exists = (items, id, label) =>
+  assert.ok(items.some((item) => item.id === id), `${label}: ${id}`);
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
 export const AUTHORIZED_BASE =
@@ -91,6 +93,28 @@ export const REQUIRED_CHECKS = [
   "documentation_consistency",
   "negative_controls",
 ];
+export const REQUIRED_ACTORS = [
+  "founder", "authorized human operator", "authenticated client user",
+  "tenant administrator", "workspace member", "builder", "reviewer",
+  "Security Reviewer", "Reliability Reviewer", "Test Verification Reviewer",
+  "Release Guardian", "AEGIS", "Embedded Red Team", "Embedded Sentinel",
+  "external Master Sentinel", "application service", "background worker",
+  "database service role", "credential custodian", "emergency responder",
+  "agent", "tool executor",
+];
+export const REQUIRED_THREATS = [
+  "SSRF", "DNS rebinding", "metadata-service access", "tenant spoofing",
+  "workspace spoofing", "cross-tenant access", "horizontal privilege escalation",
+  "vertical privilege escalation", "confused deputy", "service-account misuse",
+  "background-job context forgery", "artifact enumeration", "artifact substitution",
+  "evidence forgery", "stale evidence reuse", "approval forgery", "approval replay",
+  "reviewer impersonation", "self-certification", "CI bypass", "credential leakage",
+  "credential misuse", "SHA substitution", "malicious pull request",
+  "tool privilege escalation", "prompt injection or poisoned tool result",
+  "duplicate execution", "race condition",
+  "rollback failure audit-log tampering or Sentinel suppression",
+  "emergency-access abuse", "retry amplification exhaustion or permanent-failure loop",
+];
 
 export class NotVerifiedError extends Error {
   constructor(message) {
@@ -116,6 +140,231 @@ export function assertAuthenticationStatus(declared, observed) {
     `stale authentication status: declared ${declared}, observed ${observed}`,
   );
   return observed;
+}
+
+export function repoForSha(sha, manifest) {
+  if (sha === manifest.authorizedBaseSha) return AUTHORIZED_REPOSITORIES.base;
+  if (sha === manifest.runtimeEvidenceSha) return AUTHORIZED_REPOSITORIES.runtime;
+  return null;
+}
+
+// Legacy data-validation contract, retained as a strict adapter into the
+// canonical identities and separation rules owned by this trusted module.
+export function validateData(model, evidence, manifest, markdown) {
+  assert.ok(model && evidence && manifest && typeof markdown === "string");
+  assert.equal(model.sources?.specification?.revision, manifest.authorizedBaseSha, "wrong base SHA");
+  assert.equal(model.sources?.runtime?.revision, manifest.runtimeEvidenceSha, "wrong runtime evidence pin");
+  assert.deepEqual(manifest.requiredTests, REQUIRED_CHECKS, "required tests changed or skipped");
+  assert.deepEqual(model.gate, {
+    runtimeChanged: false, productionClaimed: false,
+    p1bAuthorized: false, selfCertified: false,
+  });
+  const collections = {
+    actors: model.actors, attackers: model.attackerProfiles, actions: model.actions,
+    assets: model.assets, boundaries: model.boundaries, flows: model.flows,
+    paths: model.sourceToSinkPaths, propagation: model.tenantPropagation,
+    controls: model.controls, threats: model.threats,
+    tenantOperations: model.tenantOperations, credentialClasses: model.credentialClasses,
+    escalations: model.escalationChains, founderDecisions: model.founderDecisions,
+    assumptions: model.assumptions, evidence: evidence.references,
+  };
+  for (const [label, rows] of Object.entries(collections)) {
+    assert.ok(Array.isArray(rows), `${label}: missing collection`);
+    unique(rows.map((row) => row.id), label);
+  }
+  assert.deepEqual(model.actors.map((row) => row.name), REQUIRED_ACTORS, "missing actor coverage");
+  assert.deepEqual(model.threats.map((row) => row.name), REQUIRED_THREATS, "missing required threat or duplicate semantics");
+  assert.equal(model.actions.length, 28);
+  assert.equal(model.actors.length * model.actions.length, 616);
+  assert.equal(model.tenantOperations.length, 18);
+  assert.equal(model.credentialClasses.length, 10);
+
+  for (const reference of evidence.references) {
+    assert.match(reference.sha ?? "", /^[0-9a-f]{40}$/);
+    assert.ok(["DIRECT", "INFERRED", "UNRESOLVED"].includes(reference.basis));
+    assert.ok(["HIGH", "MEDIUM", "LOW"].includes(reference.confidence));
+    assert.ok(reference.path && reference.claim && reference.category);
+    parseLineRange(reference.lines, reference.id);
+    assertSafeRepoPath(reference.path, reference.id);
+    assert.match(reference.blobSha ?? "", /^[0-9a-f]{40}$/);
+    const repository = repoForSha(reference.sha, manifest);
+    assert.ok(repository, `${reference.id}: stale evidence SHA`);
+    assert.equal(reference.repository, repository, `${reference.id}: repository/SHA mismatch`);
+  }
+  const ids = (rows) => new Set(rows.map((row) => row.id));
+  const evidenceIds = ids(evidence.references);
+  const actorIds = ids(model.actors);
+  const boundaryIds = ids(model.boundaries);
+  const flowIds = ids(model.flows);
+  const assetIds = ids(model.assets);
+  const attackerIds = ids(model.attackerProfiles);
+  const controlIds = ids(model.controls);
+  const threatIds = ids(model.threats);
+  for (const pathItem of model.sourceToSinkPaths) {
+    assert.ok(pathItem.source && pathItem.hops.length && pathItem.sink && pathItem.consequence, `${pathItem.id}: incomplete source-to-sink path`);
+    assert.ok(boundaryIds.has(pathItem.entryBoundaryId) && flowIds.has(pathItem.flowId));
+    for (const id of pathItem.threatIds) assert.ok(threatIds.has(id));
+    for (const id of pathItem.evidenceRefs) assert.ok(evidenceIds.has(id));
+  }
+  assert.equal(model.tenantPropagation.length, 7);
+  for (const propagation of model.tenantPropagation) {
+    assert.ok(propagation.stage && propagation.trustedSource && propagation.tenantDerivation && propagation.workspaceDerivation && propagation.status && propagation.next, `${propagation.id}: incomplete tenant propagation`);
+    for (const id of propagation.threatIds) assert.ok(threatIds.has(id));
+    for (const id of propagation.evidenceRefs) assert.ok(evidenceIds.has(id));
+  }
+  for (const row of [...model.boundaries, ...model.flows]) {
+    for (const id of row.evidenceRefs) assert.ok(evidenceIds.has(id), `${row.id}: invalid evidence ref ${id}`);
+  }
+  for (const threat of model.threats) {
+    assert.ok(threat.assets.length && threat.attackers.length && threat.boundaries.length && threat.flows.length && threat.evidenceRefs.length && threat.controlIds.length && threat.escalationId === `ESC-${threat.id}`, `${threat.id}: orphan threat`);
+    for (const id of threat.assets) assert.ok(assetIds.has(id));
+    for (const id of threat.attackers) assert.ok(attackerIds.has(id));
+    for (const id of threat.boundaries) assert.ok(boundaryIds.has(id));
+    for (const id of threat.flows) assert.ok(flowIds.has(id));
+    for (const id of threat.evidenceRefs) assert.ok(evidenceIds.has(id));
+    for (const id of threat.controlIds) assert.ok(controlIds.has(id));
+  }
+  for (const control of model.controls) {
+    assert.ok(control.threatIds.length, `${control.id}: orphan control`);
+    for (const id of control.threatIds) {
+      assert.ok(threatIds.has(id));
+      assert.ok(model.threats.find((threat) => threat.id === id).controlIds.includes(control.id), `${control.id}: reverse mapping missing`);
+    }
+  }
+  assert.equal(model.authorityPolicy.actorOverrides.length, model.actors.length);
+  for (const override of model.authorityPolicy.actorOverrides) {
+    assert.ok(actorIds.has(override.actorId));
+    const actions = [...override.allow, ...override.scoped, ...override.human];
+    unique(actions, `${override.actorId} authority actions`);
+    for (const id of actions) exists(model.actions, id, "action");
+  }
+  assert.equal(model.authorityPolicy.rules.length, 616);
+  unique(model.authorityPolicy.rules.map((rule) => rule.id), "authority rules");
+  unique(model.authorityPolicy.rules.map((rule) => `${rule.actorId}:${rule.actionId}`), "authority pairs");
+  for (const actor of model.actors) for (const action of model.actions) {
+    assert.ok(model.authorityPolicy.rules.some((rule) => rule.actorId === actor.id && rule.actionId === action.id), `missing authority pair ${actor.id}/${action.id}`);
+  }
+  const ownerKeys = ["actorId", "approvalOwnerActorId", "executionOwnerActorId", "reviewOwnerActorId", "certificationOwnerActorId", "credentialAuthorityActorId", "escalationOwnerActorId", "evidenceOwnerActorId"];
+  for (const rule of model.authorityPolicy.rules) {
+    for (const key of ownerKeys) assert.ok(actorIds.has(rule[key]), `${rule.id}: invalid authority owner`);
+    exists(model.actions, rule.actionId, "action");
+    assert.ok(model.authorityPolicy.decisions.includes(rule.decision));
+  }
+  const decision = (actor, action) => model.authorityPolicy.rules.find((rule) => rule.actorId === actor && rule.actionId === action)?.decision;
+  const denied = (actor, action) => assert.equal(decision(actor, action), "DENY", `${actor} must deny ${action}`);
+  for (const action of ["AXN-008", "AXN-010", "AXN-011"]) denied("ACT-006", action);
+  for (const actor of ["ACT-007", "ACT-008", "ACT-009", "ACT-010", "ACT-011", "ACT-012"]) for (const action of ["AXN-002", "AXN-003"]) denied(actor, action);
+  for (const action of ["AXN-002", "AXN-003"]) denied("ACT-013", action);
+  for (const actor of ["ACT-014", "ACT-015"]) denied(actor, "AXN-011");
+  for (const action of ["AXN-007", "AXN-008", "AXN-010", "AXN-011"]) denied("ACT-021", action);
+  for (const actor of model.actors) denied(actor.id, "AXN-006");
+  denied("ACT-018", "AXN-028"); denied("ACT-019", "AXN-025");
+  for (const rule of model.authorityPolicy.rules.filter((item) => ["AXN-002", "AXN-003"].includes(item.actionId) && item.decision !== "DENY")) {
+    assert.notEqual(rule.executionOwnerActorId, rule.approvalOwnerActorId);
+    assert.notEqual(rule.executionOwnerActorId, rule.reviewOwnerActorId);
+    assert.notEqual(rule.executionOwnerActorId, rule.certificationOwnerActorId);
+  }
+  assert.equal(model.tenantOperationPolicy.status, "FOUNDER_DECISION_REQUIRED");
+  assert.equal(model.tenantOperationPolicy.denialBehavior, "DENY_AND_LOG");
+  const credentialKeys = ["custodianActorId", "creatorActorIds", "authorizedReaderActorIds", "authorizedUserActorIds", "rotationAuthorityActorIds", "revocationAuthorityActorIds", "storageBoundary", "deliveryMechanism", "lifetime", "auditEvent", "emergencyProcedure", "evidenceRefs", "founderDecisionId"];
+  for (const credential of model.credentialClasses) {
+    for (const key of credentialKeys) assert.notEqual(credential[key], undefined, `${credential.id}: missing credential field ${key}`);
+    assert.ok(actorIds.has(credential.custodianActorId));
+    for (const id of [...credential.creatorActorIds, ...credential.authorizedReaderActorIds, ...credential.authorizedUserActorIds, ...credential.rotationAuthorityActorIds, ...credential.revocationAuthorityActorIds]) assert.ok(actorIds.has(id));
+    for (const id of credential.evidenceRefs) assert.ok(evidenceIds.has(id));
+  }
+  for (const credential of model.credentialClasses.slice(2)) assert.equal(credential.status, "FOUNDER_DECISION_REQUIRED");
+  assert.equal(model.credentialPolicy.readerActorIds.length, 0);
+  const escalationOwners = ["detectionOwnerActorId", "triageOwnerActorId", "remediationOwnerActorId", "approvalOwnerActorId", "certificationOwnerActorId", "closureAuthorityActorId"];
+  for (const key of escalationOwners) assert.ok(actorIds.has(model.escalationPolicy[key]), `missing escalation owner ${key}`);
+  assert.equal(model.escalationChains.length, model.threats.length);
+  for (const threat of model.threats) {
+    const escalation = model.escalationChains.find((item) => item.id === threat.escalationId && item.threatId === threat.id);
+    assert.ok(escalation, `${threat.id}: dangling escalation`);
+    assert.ok(escalation.detectionSignal && escalation.recoveryOrRollback && escalation.founderEscalationCondition && escalation.closureEvidenceRequired.length, `${escalation.id}: incomplete escalation`);
+    assert.ok(escalation.requiredDetectionTokens.length >= 2 && escalation.requiredDetectionTokens.every((token) => escalation.detectionSignal.includes(token)), `${escalation.id}: generic detection signal`);
+  }
+  unique(model.escalationChains.map((item) => item.detectionSignal), "escalation detection signals");
+  assert.equal(model.retryPolicy.status, "PROPOSED_CONTROL_NOT_IMPLEMENTED");
+  assert.deepEqual(model.retryPolicy.classes.map((item) => item.class), ["PERMANENT", "TRANSIENT", "THROTTLED", "UNKNOWN"]);
+  assert.equal(model.retryPolicy.implementationClaim, false);
+  const summaryMatch = markdown.match(/```json p1a-summary\n([^\n]+)\n```/);
+  assert.ok(summaryMatch, "documentation summary absent");
+  const summary = JSON.parse(summaryMatch[1]);
+  assert.deepEqual(summary, {
+    actors: model.actors.length, actions: model.actions.length,
+    authorityRules: model.authorityPolicy.rules.length, assets: model.assets.length,
+    trustBoundaries: model.boundaries.length, dataFlows: model.flows.length,
+    sourceToSinkPaths: model.sourceToSinkPaths.length,
+    tenantPropagationStages: model.tenantPropagation.length,
+    threats: model.threats.length, controls: model.controls.length,
+    tenantOperations: model.tenantOperations.length,
+    credentialClasses: model.credentialClasses.length,
+    escalationChains: model.escalationChains.length,
+    founderDecisions: model.founderDecisions.length,
+    sourceEvidenceReferences: evidence.references.length,
+  });
+  const markdownThreats = [...markdown.matchAll(/\| (THR-\d{3}) \|/g)].map((match) => match[1]);
+  assert.deepEqual(markdownThreats, model.threats.map((threat) => threat.id));
+  for (const boundary of model.boundaries) assert.ok(markdown.includes(boundary.id));
+  for (const decisionItem of model.founderDecisions) assert.ok(markdown.includes(decisionItem.id));
+  for (const ref of [...markdown.matchAll(/\[(EV-[A-Z0-9-]+)\]/g)].map((match) => match[1])) assert.ok(evidenceIds.has(ref));
+  return { authorityRules: 616, decision };
+}
+
+// Compatibility boundary for the exact PR #8 test contract. The caller may
+// supply only the two historical external anchors; every policy identity is
+// resolved and enforced by this trusted module.
+export function assertTrustAnchor(model, evidence, manifest, anchor) {
+  if (!anchor || typeof anchor !== "object") {
+    throw new NotVerifiedError("trust anchor absent (fail-closed)");
+  }
+  assert.deepEqual(
+    Object.keys(anchor).sort(),
+    ["baseSha", "runtimePin"],
+    "trust anchor contains candidate-controlled policy declarations",
+  );
+  assert.match(anchor.baseSha ?? "", /^[0-9a-f]{40}$/, "anchor base malformed");
+  assert.match(
+    anchor.runtimePin ?? "",
+    /^[0-9a-f]{40}$/,
+    "anchor runtime malformed",
+  );
+  assert.equal(anchor.baseSha, AUTHORIZED_BASE, "unauthorized evidence/model base");
+  assert.equal(anchor.runtimePin, AUTHORIZED_RUNTIME, "unauthorized runtime pin");
+  assert.equal(manifest.authorizedBaseSha, AUTHORIZED_BASE, "manifest base mismatch");
+  assert.equal(
+    manifest.runtimeEvidenceSha,
+    AUTHORIZED_RUNTIME,
+    "manifest runtime mismatch",
+  );
+  assert.equal(
+    model.sources?.specification?.revision,
+    AUTHORIZED_BASE,
+    "model base mismatch",
+  );
+  assert.equal(
+    model.sources?.runtime?.revision,
+    AUTHORIZED_RUNTIME,
+    "model runtime mismatch",
+  );
+  assert.ok(Array.isArray(evidence?.references), "evidence references absent");
+  for (const reference of evidence.references) {
+    const expected =
+      reference.repository === AUTHORIZED_REPOSITORIES.base
+        ? AUTHORIZED_BASE
+        : reference.repository === AUTHORIZED_REPOSITORIES.runtime
+          ? AUTHORIZED_RUNTIME
+          : null;
+    assert.ok(expected, `${reference.id ?? "evidence"}: unauthorized repository`);
+    assert.equal(reference.sha, expected, `${reference.id}: evidence anchor mismatch`);
+  }
+  return Object.freeze({
+    baseSha: AUTHORIZED_BASE,
+    runtimePin: AUTHORIZED_RUNTIME,
+    reconciliationBaseSha: TRUSTED_RECONCILIATION_BASE,
+    originalCandidateSha: ORIGINAL_CANDIDATE,
+  });
 }
 
 export function parseLineRange(spec, label) {
@@ -150,6 +399,149 @@ export function assertSafeRepoPath(value, label) {
   assert.ok(!segments.some((segment) => !segment), `${label}: empty segment`);
   assert.equal(path.posix.normalize(value), value, `${label}: non-normal path`);
   return value;
+}
+
+function exactSha(value, label) {
+  assert.match(value ?? "", /^[0-9a-f]{40}$/, `${label}: exact SHA required`);
+  return value;
+}
+
+function gitAt(repoRoot, ...args) {
+  return execFileSync("git", args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
+function normalizeRepository(value) {
+  return value
+    ?.replace(/^git@github\.com:/, "https://github.com/")
+    .replace(/\.git$/, "");
+}
+
+// Compatibility Git gate. The production path receives its allowlist from the
+// trusted caller; arbitrary manifests are accepted only for explicit temporary
+// fixture repositories used by the negative-control suite.
+export function validateGit(manifest, candidateSha, repoRoot = candidateRoot, options = {}) {
+  assert.ok(manifest && typeof manifest === "object", "manifest absent");
+  exactSha(candidateSha, "candidate");
+  exactSha(manifest.authorizedBaseSha, "authorized base");
+  const headBefore = gitAt(repoRoot, "rev-parse", "HEAD");
+  assert.equal(candidateSha, headBefore, "candidate SHA does not equal checked-out HEAD");
+  assert.equal(gitAt(repoRoot, "cat-file", "-t", candidateSha), "commit");
+  assert.equal(gitAt(repoRoot, "cat-file", "-t", manifest.authorizedBaseSha), "commit");
+  gitAt(repoRoot, "merge-base", "--is-ancestor", manifest.authorizedBaseSha, candidateSha);
+  if (options.repository) {
+    assert.equal(
+      normalizeRepository(gitAt(repoRoot, "remote", "get-url", "origin")),
+      normalizeRepository(`https://github.com/${options.repository}`),
+      "repository identity mismatch",
+    );
+  }
+  const trustedAllowed = options.trustedAllowedFiles ?? manifest.allowedRemediationFiles;
+  const trustedRequired = options.trustedRequiredFiles ?? manifest.requiredFiles;
+  assert.ok(Array.isArray(trustedAllowed) && Array.isArray(trustedRequired));
+  if (options.trustedAllowedFiles) {
+    assert.deepEqual(
+      [...manifest.allowedRemediationFiles].sort(),
+      [...trustedAllowed].sort(),
+      "candidate manifest changed trusted allowlist",
+    );
+    assert.deepEqual(
+      [...manifest.requiredFiles].sort(),
+      [...trustedRequired].sort(),
+      "candidate manifest changed trusted required files",
+    );
+  }
+  for (const file of [...trustedAllowed, ...trustedRequired]) assertSafeRepoPath(file, "scope path");
+  unique([...trustedAllowed].map((file) => path.posix.normalize(file)), "normalized allowed paths");
+  const raw = execFileSync(
+    "git",
+    ["diff", "--name-status", "-z", "--find-renames", `${manifest.authorizedBaseSha}..${candidateSha}`],
+    { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  );
+  const tokens = raw.split("\0").filter(Boolean);
+  const changed = [];
+  for (let index = 0; index < tokens.length;) {
+    const status = tokens[index++];
+    assert.match(status, /^[ACDMT][0-9]*$/, `unsupported or renamed status ${status}`);
+    const file = tokens[index++];
+    assertSafeRepoPath(file, `changed ${status}`);
+    changed.push(file);
+  }
+  unique(changed.map((file) => path.posix.normalize(file)), "normalized changed paths");
+  assert.deepEqual([...changed].sort(), [...trustedAllowed].sort(), "unauthorized, omitted, deleted, renamed, or unclassified path");
+  for (const file of trustedRequired) {
+    const stat = lstatSync(path.join(repoRoot, file));
+    assert.ok(stat.isFile() && !stat.isSymbolicLink(), `${file}: missing or unsafe`);
+  }
+  assert.equal(gitAt(repoRoot, "status", "--porcelain"), "", "dirty worktree");
+  assert.equal(gitAt(repoRoot, "rev-parse", "HEAD"), headBefore, "HEAD moved during validation");
+  return headBefore;
+}
+
+// Deterministic legacy entrypoint. It composes canonical controls and never
+// emits a certification verdict. All trust identities and object stores are
+// explicit; absence is a blocking error.
+export function runPackage(options = {}) {
+  const {
+    candidateSha,
+    repoRoot = candidateRoot,
+    anchor,
+    specGitDir,
+    runtimeGitDir,
+    workflowSha,
+    evidenceBaseSha,
+    reconciliationBaseSha,
+    originalCandidateSha,
+    trustedAllowedFiles,
+    trustedRequiredFiles,
+    repository = AUTHORIZED_REPOSITORIES.base,
+  } = options;
+  exactSha(candidateSha, "candidate");
+  const packageLoad = (file) => JSON.parse(readFileSync(path.join(repoRoot, file), "utf8"));
+  const model = packageLoad("docs/security/p1-a/model.json");
+  const evidence = packageLoad("docs/security/p1-a/evidence-register.json");
+  const manifest = packageLoad("docs/security/p1-a/validation-manifest.json");
+  const markdown = readFileSync(path.join(repoRoot, "docs/security/p1-a/threat-model.md"), "utf8");
+  const dualIdentities = [
+    workflowSha, evidenceBaseSha, reconciliationBaseSha, originalCandidateSha,
+  ];
+  const usesDualBase = dualIdentities.some(Boolean);
+  assert.ok(
+    !usesDualBase || dualIdentities.every(Boolean),
+    "partial dual-base identity set",
+  );
+  const head = usesDualBase
+    ? candidateSha
+    : validateGit(manifest, candidateSha, repoRoot, {
+        trustedAllowedFiles,
+        trustedRequiredFiles,
+        repository,
+      });
+  const trust = assertTrustAnchor(model, evidence, manifest, anchor);
+  const data = validateData(model, evidence, manifest, markdown);
+  validateEvidenceBinding(evidence, manifest, { specGitDir, runtimeGitDir });
+  if (usesDualBase) {
+    for (const [label, value] of [
+      ["workflow", workflowSha], ["evidence base", evidenceBaseSha],
+      ["reconciliation base", reconciliationBaseSha],
+      ["original candidate", originalCandidateSha],
+    ]) exactSha(value, label);
+    validateDualBaseScope({
+      git: (...args) => gitAt(repoRoot, ...args),
+      candidateSha, workflowSha, evidenceBaseSha,
+      reconciliationBaseSha, originalCandidateSha,
+    });
+  }
+  return Object.freeze({
+    status: "VALIDATED_NOT_CERTIFIED",
+    candidateSha: head,
+    trust,
+    authorityRules: data.authorityRules,
+    evidenceReferences: evidence.references.length,
+  });
 }
 
 function gitObject(gitDir, args) {
