@@ -540,8 +540,12 @@ function runCheck(name, context) {
       return;
     }
     case "negative_controls": {
-      const controls = readFileSync(
+      const trustedControls = readFileSync(
         path.join(moduleRoot, "scripts/test-p1a-trusted-verifier.mjs"),
+        "utf8",
+      );
+      const dualBaseControls = readFileSync(
+        path.join(moduleRoot, "scripts/test-p1a-dual-base-verifier.mjs"),
         "utf8",
       );
       for (const id of [
@@ -555,11 +559,15 @@ function runCheck(name, context) {
         "workflow_sha_substitution",
         "candidate_scope_expansion",
         "secret_in_untrusted_workflow",
+      ]) {
+        assert.ok(trustedControls.includes(id), `missing protected control ${id}`);
+      }
+      for (const id of [
         "dual_base_valid_reconciliation",
         "wrong_evidence_model_base",
         "candidate_modifies_trusted_verifier",
       ]) {
-        assert.ok(controls.includes(id), `missing protected control ${id}`);
+        assert.ok(dualBaseControls.includes(id), `missing dual-base control ${id}`);
       }
       return;
     }
