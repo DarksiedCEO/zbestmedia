@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +13,22 @@ import {
 import { validateCertificationBundle } from "./validate-p1a-certification-accounting.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const EXACT_SHA = /^[0-9a-f]{40}$/;
+const OFFICIAL_REPOSITORY = "https://github.com/DarksiedCEO/zbestmedia";
+const EXPECTED_COMPOSED_CI_BLOB = "9a3f1a04f99e83d9dad84cf384d86117a7d282f1";
+const EXPECTED_TREES = Object.freeze({
+  original: "d266dafef452c6a327734eec32013c8718fc9371",
+  baseline: "06bed4d9f31aa6bf0d65c9adfa3dc2fbb6839d26",
+  dualBase: "37345329da7051a818eb2e5b02f1f06f74d667a7",
+});
+const authorityRoots = {
+  original: process.env.P1A_ORIGINAL_REPOSITORY_ROOT,
+  baseline: process.env.P1A_BASELINE_REPOSITORY_ROOT,
+  dualBase: process.env.P1A_DUAL_BASE_AUTHORITY_ROOT,
+};
+const workspaceOptions = (expectedRelative) => process.env.GITHUB_WORKSPACE
+  ? { workspaceRoot: process.env.GITHUB_WORKSPACE, expectedRelative }
+  : {};
 if (process.env.P1A_TRUSTED_EXECUTION_ROOT) {
   assert.equal(
     root,
@@ -31,11 +47,131 @@ const repository = path.join(temporary, "repository");
 const run = (cwd, args, options = {}) => execFileSync(args[0], args.slice(1), {
   cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], ...options,
 }).trim();
-run(temporary, ["git", "clone", "-q", "--no-hardlinks", root, repository]);
+const gitAt = (cwd, ...args) => run(cwd, ["git", ...args]);
+
+function verifyAuthorityRoot(label, suppliedRoot, expectedSha, expectedTree, expectedBlob, options = {}) {
+  assert.ok(suppliedRoot, `${label}: isolated authority root absent`);
+  assert.match(expectedSha, EXACT_SHA, `${label}: exact lowercase SHA required`);
+  assert.ok(!lstatSync(path.resolve(suppliedRoot)).isSymbolicLink(), `${label}: symlink authority forbidden`);
+  const resolved = realpathSync(path.resolve(suppliedRoot));
+  assert.notEqual(resolved, realpathSync(root), `${label}: primary candidate checkout forbidden`);
+  if (options.workspaceRoot && options.expectedRelative) {
+    assert.equal(resolved, realpathSync(path.resolve(options.workspaceRoot, options.expectedRelative)),
+      `${label}: candidate-selected or escaping authority root`);
+  }
+  assert.equal(gitAt(resolved, "rev-parse", "HEAD"), expectedSha, `${label}: wrong HEAD`);
+  assert.equal(gitAt(resolved, "cat-file", "-t", expectedSha), "commit", `${label}: object is not commit`);
+  assert.equal(gitAt(resolved, "cat-file", "-t", `${expectedSha}^{tree}`), "tree", `${label}: required tree absent`);
+  assert.equal(gitAt(resolved, "rev-parse", `${expectedSha}^{tree}`), expectedTree, `${label}: wrong tree`);
+  assert.equal(gitAt(resolved, "remote", "get-url", "origin"), OFFICIAL_REPOSITORY, `${label}: wrong repository`);
+  assert.equal(gitAt(resolved, "status", "--porcelain=v1"), "", `${label}: authority checkout modified`);
+  const config = readFileSync(path.join(resolved, ".git/config"), "utf8");
+  assert.ok(!/x-access-token|authorization:|http\..*extraheader/i.test(config), `${label}: persisted credentials detected`);
+  if (expectedBlob) {
+    assert.equal(
+      gitAt(resolved, "rev-parse", `${expectedSha}:.github/workflows/ci.yml`),
+      expectedBlob,
+      `${label}: required blob mismatch`,
+    );
+  }
+  const gitDirValue = gitAt(resolved, "rev-parse", "--git-dir");
+  return {
+    root: resolved,
+    gitDir: realpathSync(path.isAbsolute(gitDirValue) ? gitDirValue : path.resolve(resolved, gitDirValue)),
+  };
+}
+
+const verifiedAuthorities = {
+  original: verifyAuthorityRoot("original", authorityRoots.original, ORIGINAL_CANDIDATE, EXPECTED_TREES.original,
+    undefined, workspaceOptions(".p1a-original-candidate")),
+  baseline: verifyAuthorityRoot("baseline", authorityRoots.baseline, COMPOSED_CI_BASE, EXPECTED_TREES.baseline,
+    EXPECTED_COMPOSED_CI_BLOB, workspaceOptions(".p1a-trusted-baseline")),
+  dualBase: verifyAuthorityRoot("dual-base", authorityRoots.dualBase, TRUSTED_RECONCILIATION_BASE, EXPECTED_TREES.dualBase,
+    EXPECTED_COMPOSED_CI_BLOB, workspaceOptions(".p1a-dual-base-authority")),
+};
+assert.equal(new Set(Object.values(verifiedAuthorities).map(({ gitDir }) => gitDir)).size, 3, "authority object stores overlap");
+assert.ok(Object.values(verifiedAuthorities).every(({ gitDir }) => !gitDir.startsWith(path.join(root, ".git"))), "primary object store fallback forbidden");
+
+const hostileFixtureRoot = path.join(temporary, "hostile-authority");
+run(temporary, ["git", "clone", "-q", "--no-hardlinks", verifiedAuthorities.dualBase.root, hostileFixtureRoot]);
+gitAt(hostileFixtureRoot, "remote", "set-url", "origin", OFFICIAL_REPOSITORY);
+const wrongRepositoryRoot = path.join(temporary, "wrong-repository");
+run(temporary, ["git", "clone", "-q", "--no-hardlinks", verifiedAuthorities.dualBase.root, wrongRepositoryRoot]);
+gitAt(wrongRepositoryRoot, "remote", "set-url", "origin", "https://github.com/attacker/zbestmedia");
+const credentialRoot = path.join(temporary, "credential-authority");
+run(temporary, ["git", "clone", "-q", "--no-hardlinks", verifiedAuthorities.dualBase.root, credentialRoot]);
+gitAt(credentialRoot, "remote", "set-url", "origin", OFFICIAL_REPOSITORY);
+gitAt(credentialRoot, "config", "http.https://github.com/.extraheader", "AUTHORIZATION: redacted-test-marker");
+const modifiedRoot = path.join(temporary, "modified-authority");
+run(temporary, ["git", "clone", "-q", "--no-hardlinks", verifiedAuthorities.dualBase.root, modifiedRoot]);
+gitAt(modifiedRoot, "remote", "set-url", "origin", OFFICIAL_REPOSITORY);
+writeFileSync(path.join(modifiedRoot, "untracked-hostile.txt"), "hostile fixture\n");
+const symlinkRoot = path.join(temporary, "symlink-authority");
+symlinkSync(verifiedAuthorities.dualBase.root, symlinkRoot);
+const verifyDualBase = (suppliedRoot, sha = TRUSTED_RECONCILIATION_BASE,
+  tree = EXPECTED_TREES.dualBase, blob = EXPECTED_COMPOSED_CI_BLOB, options) =>
+  verifyAuthorityRoot("dual-base-hostile", suppliedRoot, sha, tree, blob, options);
+const verifyDistinctStores = (...items) => assert.equal(new Set(items.map(({ gitDir }) => gitDir)).size, items.length,
+  "authority object stores overlap");
+const verifyCleanup = (paths) => {
+  for (const item of paths) assert.ok(!existsSync(item), `cleanup omitted or deletion failed: ${item}`);
+};
+const hostileAuthorityCases = [
+  ["missing_isolated_trusted_repository", () => verifyDualBase(undefined)],
+  ["wrong_repository", () => verifyDualBase(wrongRepositoryRoot)],
+  ["wrong_trusted_sha", () => verifyDualBase(hostileFixtureRoot, "f".repeat(40))],
+  ["mutable_branch_substituted", () => verifyDualBase(hostileFixtureRoot, "codex/bt-1")],
+  ["mutable_tag_substituted", () => verifyDualBase(hostileFixtureRoot, "v1.0.0")],
+  ["abbreviated_sha", () => verifyDualBase(hostileFixtureRoot, TRUSTED_RECONCILIATION_BASE.slice(0, 12))],
+  ["malformed_sha", () => verifyDualBase(hostileFixtureRoot, "not-a-sha")],
+  ["object_is_not_commit", () => verifyDualBase(hostileFixtureRoot, EXPECTED_COMPOSED_CI_BLOB)],
+  ["required_tree_absent", () => verifyDualBase(hostileFixtureRoot, "0".repeat(40))],
+  ["wrong_tree", () => verifyDualBase(hostileFixtureRoot, TRUSTED_RECONCILIATION_BASE, "f".repeat(40))],
+  ["required_blob_mismatch", () => verifyDualBase(hostileFixtureRoot, TRUSTED_RECONCILIATION_BASE, EXPECTED_TREES.dualBase, "f".repeat(40))],
+  ["candidate_repository_as_authority", () => verifyDualBase(root)],
+  ["primary_shallow_fallback", () => verifyDualBase(root)],
+  ["persisted_credentials", () => verifyDualBase(credentialRoot)],
+  ["shared_object_store", () => verifyDistinctStores(verifiedAuthorities.dualBase, verifiedAuthorities.dualBase)],
+  ["cleanup_omitted", () => verifyCleanup([hostileFixtureRoot])],
+  ["cleanup_deletion_failure", () => verifyCleanup([modifiedRoot])],
+  ["candidate_selected_trusted_root", () => verifyDualBase(hostileFixtureRoot, TRUSTED_RECONCILIATION_BASE,
+    EXPECTED_TREES.dualBase, EXPECTED_COMPOSED_CI_BLOB,
+    { workspaceRoot: temporary, expectedRelative: "expected-authority" })],
+  ["environment_path_escape", () => verifyDualBase(hostileFixtureRoot, TRUSTED_RECONCILIATION_BASE,
+    EXPECTED_TREES.dualBase, EXPECTED_COMPOSED_CI_BLOB,
+    { workspaceRoot: path.join(temporary, "workspace"), expectedRelative: "authority" })],
+  ["trusted_checkout_modified", () => verifyDualBase(modifiedRoot)],
+  ["symlink_authority", () => verifyDualBase(symlinkRoot)],
+];
+let authorityHostilePassed = 0;
+for (const [name, operation] of hostileAuthorityCases) {
+  let rejected = false;
+  try { operation(); } catch { rejected = true; }
+  assert.ok(rejected, `${name}: hostile authority accepted`);
+  authorityHostilePassed += 1;
+  console.log(`PASS isolated_authority_hostile:${name}`);
+}
+
+const shallowPrimary = path.join(temporary, "shallow-primary");
+run(temporary, ["git", "clone", "-q", "--depth", "1", `file://${root}`, shallowPrimary]);
+let shallowFailureReproduced = false;
+try {
+  run(shallowPrimary, ["git", "read-tree", TRUSTED_RECONCILIATION_BASE]);
+} catch (error) {
+  shallowFailureReproduced = /failed to unpack tree object/.test(error.stderr ?? "");
+}
+assert.ok(shallowFailureReproduced, "shallow primary checkout did not reproduce missing trusted tree");
+console.log("PASS shallow_primary_missing_trusted_tree_reproduced");
+
+run(temporary, ["git", "init", "-q", repository]);
 const git = (...args) => run(repository, ["git", ...args]);
 git("config", "user.email", "p1a-dual-base@example.invalid");
 git("config", "user.name", "P1A dual-base fixture");
-git("remote", "set-url", "origin", "https://github.com/DarksiedCEO/zbestmedia.git");
+git("remote", "add", "origin", `${OFFICIAL_REPOSITORY}.git`);
+for (const [name, sha] of [["original", ORIGINAL_CANDIDATE], ["baseline", COMPOSED_CI_BASE], ["dualBase", TRUSTED_RECONCILIATION_BASE]]) {
+  run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", verifiedAuthorities[name].root, sha]);
+  assert.equal(git("cat-file", "-t", sha), "commit", `${name}: fixture import failed`);
+}
 
 function entry(commit, file) {
   const match = /^(\d+)\s+blob\s+([0-9a-f]{40})\t/.exec(git("ls-tree", commit, "--", file));
@@ -269,6 +405,18 @@ try {
     else { failed += 1; console.error(`FAIL composed_negative:${name}: mutation survived`); }
   }
 } finally { rmSync(temporary, { recursive: true, force: true }); }
+console.log(JSON.stringify({
+  suite: "p1-a-isolated-trusted-authority-controls",
+  positiveRequired: 4,
+  positiveExecuted: 4,
+  positivePassed: 4,
+  hostileRequired: hostileAuthorityCases.length,
+  hostileExecuted: hostileAuthorityCases.length,
+  hostilePassed: authorityHostilePassed,
+  shallowFailureReproduced,
+  failed: hostileAuthorityCases.length - authorityHostilePassed,
+  skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
 console.log(JSON.stringify({
   suite: "p1-a-dual-base-verifier-controls",
   candidateSha: process.env.P1A_CANDIDATE_SHA ?? null,
