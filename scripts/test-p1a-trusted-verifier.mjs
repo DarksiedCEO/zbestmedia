@@ -18,6 +18,8 @@ import {
   assertSafeRepoPath,
   AUTHORIZED_BASE,
   AUTHORIZED_RUNTIME,
+  COMPOSED_CI_BASE,
+  composeTrustedCi,
   ORIGINAL_CANDIDATE,
   parseLineRange,
   runPackage,
@@ -31,6 +33,11 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workflow = readFileSync(
   path.join(root, ".github/workflows/p1a-certify.yml"),
   "utf8",
+);
+const ordinaryCi = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
+const baselineCi = execFileSync(
+  "git", ["show", `${COMPOSED_CI_BASE}:.github/workflows/ci.yml`],
+  { cwd: root, encoding: "utf8" },
 );
 const verifier = readFileSync(
   path.join(root, "scripts/validate-p1a-threat-model.mjs"),
@@ -71,6 +78,73 @@ const compatible = (overrides = {}) =>
     overrides.manifest ?? compatibilityManifest,
     Object.hasOwn(overrides, "anchor") ? overrides.anchor : compatibilityAnchor,
   );
+
+function validateHistoricalObjectWorkflow(source) {
+  assert.equal(source, composeTrustedCi(baselineCi), "historical workflow exact composition mismatch");
+  const required = [
+    "repository: DarksiedCEO/zbestmedia",
+    `ref: ${ORIGINAL_CANDIDATE}`,
+    "fetch-depth: 1",
+    "persist-credentials: false",
+    "set -euo pipefail",
+    "[[ \"$P1A_ORIGINAL_CANDIDATE\" =~ ^[0-9a-f]{40}$ ]]",
+    `test \"$P1A_ORIGINAL_CANDIDATE\" = \"${ORIGINAL_CANDIDATE}\"`,
+    "cat-file -t \"$P1A_ORIGINAL_CANDIDATE\"",
+    "remote get-url origin",
+    "git fetch --no-tags --no-write-fetch-head",
+    "P1A_ORIGINAL_MODEL_BLOB",
+    "P1A_ORIGINAL_EVIDENCE_BLOB",
+    "P1A_ORIGINAL_MANIFEST_BLOB",
+    "P1A_ORIGINAL_MARKDOWN_BLOB",
+    "P1A_ORIGINAL_TEST_BLOB",
+    "rm -rf .p1a-original-candidate",
+    "node scripts/test-p1a-trusted-verifier.mjs",
+  ];
+  for (const item of required) assert.ok(source.includes(item), `historical contract missing ${item}`);
+  assert.equal(source.split("      - name: Acquire exact original P1-A candidate object").length - 1, 1);
+  assert.equal(source.split("      - name: Verify and materialize exact original P1-A candidate object").length - 1, 1);
+  assert.ok(!source.includes("pull_request_target"));
+  assert.ok(!source.includes("contents: write"));
+  assert.ok(!source.includes("P1A_RUNTIME_APP_PRIVATE_KEY"));
+  assert.ok(!source.includes("git fetch --no-tags --no-write-fetch-head .p1a-original-candidate \"$P1A_ORIGINAL_CANDIDATE\" || true"));
+}
+
+const mutateHistorical = (needle, replacement) => {
+  assert.equal(ordinaryCi.split(needle).length - 1, 1, `historical fixture count ${needle}`);
+  return ordinaryCi.replace(needle, replacement);
+};
+const historicalObjectCases = [
+  ["historical_exact_candidate_checkout", () => validateHistoricalObjectWorkflow(ordinaryCi), false],
+  ["historical_exact_commit_acquisition", () => assert.ok(ordinaryCi.includes(`ref: ${ORIGINAL_CANDIDATE}`)), false],
+  ["historical_commit_type_verification", () => assert.ok(ordinaryCi.includes("cat-file -t")), false],
+  ["historical_repository_identity", () => assert.ok(ordinaryCi.includes("DarksiedCEO/zbestmedia")), false],
+  ["historical_model_blob_identity", () => assert.ok(ordinaryCi.includes("0bb71b21e3532f9690226b6a504967f3b2504621")), false],
+  ["historical_test_blob_identity", () => assert.ok(ordinaryCi.includes("1ad3be9777b6aaea530a07fbd0b183311d604be5")), false],
+  ["historical_bounded_fetch", () => assert.ok(ordinaryCi.includes("fetch-depth: 1")), false],
+  ["historical_credentials_not_persisted", () => assert.ok(ordinaryCi.includes("persist-credentials: false")), false],
+  ["historical_protected_credentials_absent", () => assert.ok(!ordinaryCi.includes("P1A_RUNTIME_APP_PRIVATE_KEY")), false],
+  ["historical_complete_workflow_contract", () => validateHistoricalObjectWorkflow(ordinaryCi), false],
+  ["historical_wrong_sha", () => validateHistoricalObjectWorkflow(mutateHistorical(ORIGINAL_CANDIDATE, "f".repeat(40))), true],
+  ["historical_malformed_sha", () => validateHistoricalObjectWorkflow(mutateHistorical(`ref: ${ORIGINAL_CANDIDATE}`, "ref: not-a-sha")), true],
+  ["historical_mutable_branch", () => validateHistoricalObjectWorkflow(mutateHistorical(`ref: ${ORIGINAL_CANDIDATE}`, "ref: codex/main")), true],
+  ["historical_mutable_tag", () => validateHistoricalObjectWorkflow(mutateHistorical(`ref: ${ORIGINAL_CANDIDATE}`, "ref: v1.0.0")), true],
+  ["historical_missing_object_check", () => validateHistoricalObjectWorkflow(mutateHistorical("          test \"$(git cat-file -t \"$P1A_ORIGINAL_CANDIDATE\")\" = \"commit\"\n", "")), true],
+  ["historical_blob_for_commit", () => validateHistoricalObjectWorkflow(mutateHistorical(" = \"commit\"", " = \"blob\"")), true],
+  ["historical_tree_for_commit", () => validateHistoricalObjectWorkflow(mutateHistorical(" = \"commit\"", " = \"tree\"")), true],
+  ["historical_wrong_repository", () => validateHistoricalObjectWorkflow(mutateHistorical("repository: DarksiedCEO/zbestmedia", "repository: attacker/zbestmedia")), true],
+  ["historical_fetch_failure_suppressed", () => validateHistoricalObjectWorkflow(mutateHistorical("git fetch --no-tags --no-write-fetch-head .p1a-original-candidate \"$P1A_ORIGINAL_CANDIDATE\"", "git fetch --no-tags --no-write-fetch-head .p1a-original-candidate \"$P1A_ORIGINAL_CANDIDATE\" || true")), true],
+  ["historical_authentication_failure_ignored", () => validateHistoricalObjectWorkflow(mutateHistorical("            exit 1", "            true")), true],
+  ["historical_current_candidate_fallback", () => validateHistoricalObjectWorkflow(mutateHistorical(`ref: ${ORIGINAL_CANDIDATE}`, "ref: ${{ github.sha }}")), true],
+  ["historical_file_absent_unchecked", () => validateHistoricalObjectWorkflow(mutateHistorical("P1A_ORIGINAL_TEST_BLOB", "P1A_UNUSED_TEST_BLOB")), true],
+  ["historical_blob_mismatch", () => validateHistoricalObjectWorkflow(mutateHistorical("0bb71b21e3532f9690226b6a504967f3b2504621", "f".repeat(40))), true],
+  ["historical_candidate_selects_sha", () => validateHistoricalObjectWorkflow(`${ordinaryCi}\nenv:\n  HISTORICAL_SHA: \${{ github.event.inputs.sha }}\n`), true],
+  ["historical_object_verification_skipped", () => validateHistoricalObjectWorkflow(mutateHistorical("cat-file -t \"$P1A_ORIGINAL_CANDIDATE\"", "echo skipped")), true],
+  ["historical_continues_after_fetch_failure", () => validateHistoricalObjectWorkflow(mutateHistorical("set -euo pipefail", "set +e")), true],
+  ["historical_persisted_credentials", () => validateHistoricalObjectWorkflow(mutateHistorical("persist-credentials: false", "persist-credentials: true")), true],
+  ["historical_protected_secret_reference", () => validateHistoricalObjectWorkflow(`${ordinaryCi}\n# \${{ secrets.P1A_RUNTIME_APP_PRIVATE_KEY }}\n`), true],
+  ["historical_pull_request_target", () => validateHistoricalObjectWorkflow(mutateHistorical("  pull_request:\n", "  pull_request_target:\n")), true],
+  ["historical_write_permission", () => validateHistoricalObjectWorkflow(mutateHistorical("contents: read", "contents: write")), true],
+];
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -741,6 +815,7 @@ const runControls = (controls, suite) => {
 let passed = 0;
 let failed = 0;
 try {
+  runControls(historicalObjectCases, "p1-a-historical-object-availability-controls");
   runControls(compatibilityCases, "p1-a-legacy-api-compatibility-controls");
   ({ passed, failed } = runControls(cases, "p1-a-trusted-verifier-controls"));
 } finally {

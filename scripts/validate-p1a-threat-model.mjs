@@ -21,6 +21,10 @@ export const AUTHORIZED_BASE =
   "7056ea4ce24379c93549f0ac9b45ddd7a2600dd6";
 export const TRUSTED_RECONCILIATION_BASE =
   "5056fb0df6e1ef739231cd2273a453fb1c644273";
+export const COMPOSED_CI_BASE =
+  "06e6497ac3420998671f255a42a20d8cb8b9ca50";
+export const COMPOSED_CI_BASE_BLOB =
+  "9a3f1a04f99e83d9dad84cf384d86117a7d282f1";
 export const ORIGINAL_CANDIDATE =
   "365c59757756f3f91480d3bfeb841b543010201f";
 export const AUTHORIZED_RUNTIME =
@@ -68,6 +72,7 @@ export const EXACT_CANDIDATE_OWNED_FILES = CANDIDATE_OWNED_FILES.filter(
   (file) => file !== ".github/workflows/ci.yml",
 );
 export const AMENDMENT_CONTROLLED_FILES = [
+  ".github/workflows/ci.yml",
   ".github/workflows/p1a-certify.yml",
   "docs/security/p1-a/trusted-certification-bootstrap.md",
   "scripts/test-p1a-certification-accounting.mjs",
@@ -698,19 +703,105 @@ const REQUIRED_CI_ADDITION = [
   "",
 ].join("\n");
 
-function validateCandidateCi(git, candidateSha, reconciliationBaseSha) {
+const CI_CHECKOUT_REF =
+  "          ref: ${{ github.event.pull_request.head.sha || github.sha }}\n";
+const TRUSTED_CI_CHECKOUT =
+  `${CI_CHECKOUT_REF}          persist-credentials: false\n`;
+const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candidate object
+        uses: actions/checkout@v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 365c59757756f3f91480d3bfeb841b543010201f
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-original-candidate
+
+      - name: Verify and materialize exact original P1-A candidate object
+        env:
+          P1A_ORIGINAL_CANDIDATE: 365c59757756f3f91480d3bfeb841b543010201f
+          P1A_ORIGINAL_MODEL_BLOB: 0bb71b21e3532f9690226b6a504967f3b2504621
+          P1A_ORIGINAL_EVIDENCE_BLOB: 205dc5451bfc639bdfcbd58d380e11439e6f9764
+          P1A_ORIGINAL_MANIFEST_BLOB: d5e86d2445f750bc85a951c348ae52f76f2ce51a
+          P1A_ORIGINAL_MARKDOWN_BLOB: b675f420e0e50c32e84bba37c13e0aade0cfd5e5
+          P1A_ORIGINAL_TEST_BLOB: 1ad3be9777b6aaea530a07fbd0b183311d604be5
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          [[ "$P1A_ORIGINAL_CANDIDATE" =~ ^[0-9a-f]{40}$ ]]
+          test "$P1A_ORIGINAL_CANDIDATE" = "365c59757756f3f91480d3bfeb841b543010201f"
+          test "$(git -C .p1a-original-candidate rev-parse HEAD)" = "$P1A_ORIGINAL_CANDIDATE"
+          test "$(git -C .p1a-original-candidate cat-file -t "$P1A_ORIGINAL_CANDIDATE")" = "commit"
+          test "$(git -C .p1a-original-candidate remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          if grep -Eiq 'x-access-token|authorization:' .p1a-original-candidate/.git/config; then
+            echo "persisted credential material detected" >&2
+            exit 1
+          fi
+          git fetch --no-tags --no-write-fetch-head .p1a-original-candidate "$P1A_ORIGINAL_CANDIDATE"
+          test "$(git cat-file -t "$P1A_ORIGINAL_CANDIDATE")" = "commit"
+          test "$(git rev-parse "$P1A_ORIGINAL_CANDIDATE^{commit}")" = "$P1A_ORIGINAL_CANDIDATE"
+          test "$(git rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/model.json")" = "$P1A_ORIGINAL_MODEL_BLOB"
+          test "$(git rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/evidence-register.json")" = "$P1A_ORIGINAL_EVIDENCE_BLOB"
+          test "$(git rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/validation-manifest.json")" = "$P1A_ORIGINAL_MANIFEST_BLOB"
+          test "$(git rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/threat-model.md")" = "$P1A_ORIGINAL_MARKDOWN_BLOB"
+          test "$(git rev-parse "$P1A_ORIGINAL_CANDIDATE:scripts/test-p1a-threat-model.mjs")" = "$P1A_ORIGINAL_TEST_BLOB"
+          rm -rf .p1a-original-candidate
+          test ! -e .p1a-original-candidate
+
+`;
+const CI_IDENTITY_MARKER =
+  "      - name: P1-A trusted-bootstrap exact-SHA identity";
+const CI_TRUSTED_VERIFIER_MARKER =
+  "      - name: P1-A trusted verifier controls";
+
+function replaceExactlyOnce(source, fragment, replacement, label) {
+  assert.equal(source.split(fragment).length - 1, 1, `${label}: fragment count mismatch`);
+  return source.replace(fragment, replacement);
+}
+
+export function composeTrustedCi(baseline) {
+  const readOnlyCheckout = replaceExactlyOnce(
+    baseline, CI_CHECKOUT_REF, TRUSTED_CI_CHECKOUT, "trusted checkout",
+  );
+  return replaceExactlyOnce(
+    readOnlyCheckout,
+    CI_TRUSTED_VERIFIER_MARKER,
+    `${TRUSTED_CI_ACQUISITION}${CI_TRUSTED_VERIFIER_MARKER}`,
+    "trusted acquisition placement",
+  );
+}
+
+export function composeCandidateCi(baseline) {
+  return replaceExactlyOnce(
+    baseline,
+    CI_IDENTITY_MARKER,
+    `${REQUIRED_CI_ADDITION}${CI_IDENTITY_MARKER}`,
+    "candidate hermetic placement",
+  );
+}
+
+export function composeFinalCi(baseline) {
+  return composeCandidateCi(composeTrustedCi(baseline));
+}
+
+export function validateComposedCandidateCi(git, candidateSha, workflowSha) {
   const path = ".github/workflows/ci.yml";
   const entry = git("ls-tree", candidateSha, "--", path);
   assert.match(entry, /^100644\s+blob\s+[0-9a-f]{40}\t/, `${path}: unsafe entry`);
-  const candidate = git("show", `${candidateSha}:${path}`);
-  const trusted = `${git("show", `${reconciliationBaseSha}:${path}`)}\n`;
+  assert.equal(blobAt(git, COMPOSED_CI_BASE, path), COMPOSED_CI_BASE_BLOB,
+    `${path}: baseline blob mismatch`);
+  const baseline = `${git("show", `${COMPOSED_CI_BASE}:${path}`)}\n`;
+  const trusted = `${git("show", `${workflowSha}:${path}`)}\n`;
+  const candidate = `${git("show", `${candidateSha}:${path}`)}\n`;
+  assert.equal(trusted, composeTrustedCi(baseline), `${path}: trusted stage mismatch`);
+  assert.equal(candidate, composeFinalCi(baseline), `${path}: composed state or remainder mismatch`);
+  assert.equal(candidate.split(TRUSTED_CI_ACQUISITION).length - 1, 1,
+    `${path}: trusted fragment missing or duplicated`);
   assert.equal(candidate.split(REQUIRED_CI_ADDITION).length - 1, 1,
-    `${path}: required hermetic step missing or duplicated`);
-  assert.equal(`${candidate.replace(REQUIRED_CI_ADDITION, "")}\n`, trusted,
-    `${path}: changes exceed the exact hermetic step`);
+    `${path}: candidate fragment missing or duplicated`);
   for (const forbidden of [
     "P1A_RUNTIME_APP_PRIVATE_KEY", "-----BEGIN PRIVATE KEY-----",
     "-----BEGIN RSA PRIVATE KEY-----", "pull_request_target", "node candidate/",
+    "continue-on-error:", "permissions:\n  contents: write", "fetch-depth: 0",
   ]) assert.ok(!candidate.includes(forbidden), `${path}: forbidden ${forbidden}`);
   assert.ok(!/\$\{\{\s*secrets\s*\./.test(candidate), `${path}: protected secret reference`);
   for (const required of [
@@ -719,6 +810,11 @@ function validateCandidateCi(git, candidateSha, reconciliationBaseSha) {
     "node scripts/detect-p1a-ordinary-ci-secrets.mjs",
     "P1-A private cross-repository suites are intentionally unavailable",
   ]) assert.ok(candidate.includes(required), `${path}: missing ${required}`);
+  return Object.freeze({
+    baselineBlob: COMPOSED_CI_BASE_BLOB,
+    trustedBlob: blobAt(git, workflowSha, path),
+    candidateBlob: blobAt(git, candidateSha, path),
+  });
 }
 
 export function validateDualBaseScope({
@@ -784,6 +880,7 @@ export function validateDualBaseScope({
       `${file}: trusted blob identity mismatch`);
   }
   for (const file of AMENDMENT_CONTROLLED_FILES) {
+    if (file === ".github/workflows/ci.yml") continue;
     assert.equal(blobAt(git, candidateSha, file), blobAt(git, workflowSha, file),
       `${file}: amended trusted blob identity mismatch`);
   }
@@ -793,7 +890,7 @@ export function validateDualBaseScope({
     assert.equal(blobAt(git, candidateSha, file), expected,
       `${file}: candidate evidence blob identity mismatch`);
   }
-  validateCandidateCi(git, candidateSha, reconciliationBaseSha);
+  validateComposedCandidateCi(git, candidateSha, workflowSha);
   return { historical, trusted, amendment, reconciled };
 }
 

