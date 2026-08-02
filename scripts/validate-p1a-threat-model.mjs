@@ -707,8 +707,64 @@ const CI_CHECKOUT_REF =
   "          ref: ${{ github.event.pull_request.head.sha || github.sha }}\n";
 const TRUSTED_CI_CHECKOUT =
   `${CI_CHECKOUT_REF}          persist-credentials: false\n`;
+export const ORDINARY_CI_ACTION_PINS = Object.freeze({
+  "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
+  "actions/setup-node": "49933ea5288caeca8642d1e84afbd3f7d6820020",
+  "actions/cache": "0057852bfaa89a56745cba8c7296529d2fc39830",
+  "raven-actions/actionlint": "3d39aea434753780c3b3d4a1a31c854b4dbf49d7",
+});
+const ORDINARY_CI_ACTION_COUNTS = Object.freeze({
+  "actions/checkout": 3,
+  "actions/setup-node": 1,
+  "actions/cache": 1,
+  "raven-actions/actionlint": 1,
+});
+const PINNED_ACTION_COMMENTS = Object.freeze({
+  "actions/checkout": " # v4",
+  "actions/setup-node": " # v4",
+  "actions/cache": " # v4",
+  "raven-actions/actionlint": " # v2.2.0",
+});
+
+function pinBaselineActions(source) {
+  let pinned = source;
+  for (const [repository, expected] of Object.entries(ORDINARY_CI_ACTION_PINS)) {
+    if (repository === "raven-actions/actionlint") continue;
+    const mutable = `uses: ${repository}@v4`;
+    assert.equal(pinned.split(mutable).length - 1, 1,
+      `${repository}: baseline mutable action count mismatch`);
+    pinned = pinned.replace(
+      mutable,
+      `uses: ${repository}@${expected}${PINNED_ACTION_COMMENTS[repository]}`,
+    );
+  }
+  return pinned;
+}
+
+export function validateOrdinaryCiActionPins(source) {
+  assert.ok(typeof source === "string" && source, "ordinary CI absent");
+  const uses = [...source.matchAll(/^\s*(?:-\s*)?uses:\s*([^\s@]+)@([^\s#]+)(?:\s+#.*)?$/gm)]
+    .map((match) => ({ repository: match[1], revision: match[2] }));
+  assert.equal(uses.length, 6, "ordinary CI action inventory changed");
+  const counts = new Map();
+  for (const { repository, revision } of uses) {
+    assert.ok(Object.hasOwn(ORDINARY_CI_ACTION_PINS, repository),
+      `unclassified action repository: ${repository}`);
+    assert.match(revision, /^[0-9a-f]{40}$/,
+      `${repository}: immutable full action SHA required`);
+    assert.equal(revision, ORDINARY_CI_ACTION_PINS[repository],
+      `${repository}: unauthorized action SHA`);
+    counts.set(repository, (counts.get(repository) ?? 0) + 1);
+  }
+  assert.deepEqual(
+    Object.fromEntries([...counts].sort()),
+    Object.fromEntries(Object.entries(ORDINARY_CI_ACTION_COUNTS).sort()),
+    "ordinary CI action counts changed",
+  );
+  return Object.freeze({ required: uses.length, passed: uses.length });
+}
 const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candidate object
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: DarksiedCEO/zbestmedia
           ref: 365c59757756f3f91480d3bfeb841b543010201f
@@ -744,7 +800,7 @@ const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candid
           test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:scripts/test-p1a-threat-model.mjs")" = "$P1A_ORIGINAL_TEST_BLOB"
 
       - name: Acquire exact trusted CI baseline
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: DarksiedCEO/zbestmedia
           ref: 06e6497ac3420998671f255a42a20d8cb8b9ca50
@@ -799,8 +855,9 @@ function replaceExactlyOnce(source, fragment, replacement, label) {
 }
 
 export function composeTrustedCi(baseline) {
+  const actionPinned = pinBaselineActions(baseline);
   const readOnlyCheckout = replaceExactlyOnce(
-    baseline, CI_CHECKOUT_REF, TRUSTED_CI_CHECKOUT, "trusted checkout",
+    actionPinned, CI_CHECKOUT_REF, TRUSTED_CI_CHECKOUT, "trusted checkout",
   );
   const acquired = replaceExactlyOnce(
     readOnlyCheckout,
@@ -840,6 +897,7 @@ export function validateComposedCandidateCi(git, candidateSha, workflowSha) {
   const candidate = `${git("show", `${candidateSha}:${path}`)}\n`;
   assert.equal(trusted, composeTrustedCi(baseline), `${path}: trusted stage mismatch`);
   assert.equal(candidate, composeFinalCi(baseline), `${path}: composed state or remainder mismatch`);
+  validateOrdinaryCiActionPins(candidate);
   assert.equal(candidate.split(TRUSTED_CI_ACQUISITION).length - 1, 1,
     `${path}: trusted fragment missing or duplicated`);
   assert.equal(candidate.split(REQUIRED_CI_ADDITION).length - 1, 1,

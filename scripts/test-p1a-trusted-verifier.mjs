@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   assertAuthenticationStatus,
   assertTrustAnchor,
@@ -27,6 +27,7 @@ import {
   validateData,
   validateEvidenceBinding,
   validateGit,
+  validateOrdinaryCiActionPins,
 } from "./validate-p1a-threat-model.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -199,7 +200,7 @@ const baselineNegativeCases = [
   ["baseline_malformed_sha", () => validateTrustedBaselineWorkflow(mutateBaseline(`ref: ${COMPOSED_CI_BASE}`, "ref: invalid")), true],
   ["baseline_mutable_branch", () => validateTrustedBaselineWorkflow(mutateBaseline(`ref: ${COMPOSED_CI_BASE}`, "ref: codex/bt-1")), true],
   ["baseline_mutable_tag", () => validateTrustedBaselineWorkflow(mutateBaseline(`ref: ${COMPOSED_CI_BASE}`, "ref: v1.0.0")), true],
-  ["baseline_wrong_repository", () => validateTrustedBaselineWorkflow(mutateBaseline("      - name: Acquire exact trusted CI baseline\n        uses: actions/checkout@v4\n        with:\n          repository: DarksiedCEO/zbestmedia", "      - name: Acquire exact trusted CI baseline\n        uses: actions/checkout@v4\n        with:\n          repository: attacker/zbestmedia")), true],
+  ["baseline_wrong_repository", () => validateTrustedBaselineWorkflow(mutateBaseline("      - name: Acquire exact trusted CI baseline\n        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4\n        with:\n          repository: DarksiedCEO/zbestmedia", "      - name: Acquire exact trusted CI baseline\n        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4\n        with:\n          repository: attacker/zbestmedia")), true],
   ["baseline_wrong_head", () => validateTrustedBaselineWorkflow(mutateBaseline("rev-parse HEAD)\" = \"$P1A_TRUSTED_BASELINE", "rev-parse HEAD)\" != \"$P1A_TRUSTED_BASELINE")), true],
   ["baseline_blob_for_commit", () => validateTrustedBaselineWorkflow(mutateBaseline(".p1a-trusted-baseline cat-file -t \"$P1A_TRUSTED_BASELINE\")\" = \"commit\"", ".p1a-trusted-baseline cat-file -t \"$P1A_TRUSTED_BASELINE\")\" = \"blob\"")), true],
   ["baseline_tree_for_commit", () => validateTrustedBaselineWorkflow(mutateBaseline(".p1a-trusted-baseline cat-file -t \"$P1A_TRUSTED_BASELINE\")\" = \"commit\"", ".p1a-trusted-baseline cat-file -t \"$P1A_TRUSTED_BASELINE\")\" = \"tree\"")), true],
@@ -273,6 +274,107 @@ const scopeManifest = (base, allowed = ["keep.txt"], required = ["keep.txt"]) =>
   allowedRemediationFiles: allowed,
   requiredFiles: required,
 });
+
+const validatorSource = readFileSync(
+  path.join(root, "scripts/validate-p1a-threat-model.mjs"),
+  "utf8",
+);
+const exactShaAssertion =
+  '  assert.match(value ?? "", /^[0-9a-f]{40}$/, `${label}: exact SHA required`);\n';
+assert.equal(
+  validatorSource.split(exactShaAssertion).length - 1,
+  1,
+  "exactSha mutation target count",
+);
+const mutantPath = path.join(temporary, "exact-sha-removal-mutant.mjs");
+writeFileSync(mutantPath, validatorSource.replace(exactShaAssertion, ""));
+const { validateGit: mutantValidateGit } = await import(pathToFileURL(mutantPath));
+
+const exactShaMutationFixture = makeScopeRepository((directory) =>
+  writeFileSync(path.join(directory, "keep.txt"), "changed\n"));
+git(exactShaMutationFixture.directory, "branch", "mutable-base", exactShaMutationFixture.base);
+git(exactShaMutationFixture.directory, "tag", "mutable-base-tag", exactShaMutationFixture.base);
+const symbolicAndMalformedRevisions = [
+  "HEAD", "HEAD^", "HEAD~1", "mutable-base", "mutable-base-tag",
+  exactShaMutationFixture.base.slice(0, 12), exactShaMutationFixture.base.toUpperCase(),
+  "not-a-sha", "", null,
+];
+const exactShaOriginalRejections = symbolicAndMalformedRevisions.map((revision) => {
+  assert.throws(() => validateGit(
+    scopeManifest(revision),
+    exactShaMutationFixture.head,
+    exactShaMutationFixture.directory,
+  ));
+  return revision;
+});
+let mutantAcceptedHeadParent = false;
+try {
+  mutantValidateGit(
+    scopeManifest("HEAD^"),
+    exactShaMutationFixture.head,
+    exactShaMutationFixture.directory,
+  );
+  mutantAcceptedHeadParent = true;
+} catch {}
+assert.equal(mutantAcceptedHeadParent, true, "exactSha-removal accepting path not reproduced");
+console.log(JSON.stringify({
+  suite: "p1-a-exact-sha-behavioral-mutation",
+  attempted: 1,
+  executed: 1,
+  killed: 1,
+  survived: 0,
+  equivalent: 0,
+  unresolved: 0,
+  originalRejected: exactShaOriginalRejections.length,
+  mutantAcceptedHeadParent,
+}));
+
+const checkoutPin = "11d5960a326750d5838078e36cf38b85af677262";
+const setupNodePin = "49933ea5288caeca8642d1e84afbd3f7d6820020";
+const cachePin = "0057852bfaa89a56745cba8c7296529d2fc39830";
+const replaceAction = (source, needle, replacement) => {
+  assert.ok(source.includes(needle), `action-pin fixture missing ${needle}`);
+  return source.replace(needle, replacement);
+};
+const actionPinNegativeCases = [
+  ["checkout_major_tag", (ci) => replaceAction(ci, `actions/checkout@${checkoutPin}`, "actions/checkout@v4")],
+  ["setup_node_major_tag", (ci) => replaceAction(ci, `actions/setup-node@${setupNodePin}`, "actions/setup-node@v4")],
+  ["cache_major_tag", (ci) => replaceAction(ci, `actions/cache@${cachePin}`, "actions/cache@v4")],
+  ["mutable_minor_tag", (ci) => replaceAction(ci, `actions/checkout@${checkoutPin}`, "actions/checkout@v4.2")],
+  ["mutable_patch_tag", (ci) => replaceAction(ci, `actions/checkout@${checkoutPin}`, "actions/checkout@v4.2.2")],
+  ["branch_reference", (ci) => replaceAction(ci, `actions/checkout@${checkoutPin}`, "actions/checkout@main")],
+  ["abbreviated_sha", (ci) => replaceAction(ci, checkoutPin, checkoutPin.slice(0, 12))],
+  ["uppercase_sha", (ci) => replaceAction(ci, checkoutPin, checkoutPin.toUpperCase())],
+  ["repository_substitution", (ci) => replaceAction(ci, "actions/checkout@", "attacker/checkout@")],
+  ["wrong_repository_sha", (ci) => replaceAction(ci, `actions/checkout@${checkoutPin}`, `actions/checkout@${setupNodePin}`)],
+  ["candidate_provided_authority", (ci) => replaceAction(ci, `actions/checkout@${checkoutPin}`, "actions/checkout@${{ github.event.inputs.action_sha }}")],
+  ["duplicated_action_step", (ci) => `${ci}\n      - uses: actions/cache@${cachePin}\n`],
+  ["unclassified_new_action", (ci) => `${ci}\n      - uses: attacker/new-action@${"a".repeat(40)}\n`],
+  ["action_removed", (ci) => replaceAction(ci, `        uses: actions/cache@${cachePin} # v4\n`, "")],
+  ["rollback_to_mutable", (ci) => replaceAction(ci, `actions/setup-node@${setupNodePin}`, "actions/setup-node@release/v4")],
+];
+const actionPinPositive = validateOrdinaryCiActionPins(ordinaryCi);
+let actionPinNegativePassed = 0;
+for (const [name, mutate] of actionPinNegativeCases) {
+  assert.throws(() => validateOrdinaryCiActionPins(mutate(ordinaryCi)), name);
+  actionPinNegativePassed += 1;
+}
+console.log(JSON.stringify({
+  suite: "p1-a-ordinary-ci-action-pin-controls",
+  positiveRequired: 1,
+  positiveExecuted: 1,
+  positivePassed: actionPinPositive.passed === actionPinPositive.required ? 1 : 0,
+  negativeRequired: 15,
+  negativeExecuted: actionPinNegativeCases.length,
+  negativePassed: actionPinNegativePassed,
+  failed: 0,
+  skipped: 0,
+  cancelled: 0,
+  neutral: 0,
+  stale: 0,
+  notVerified: 0,
+  notRun: 0,
+}));
 
 const spec = makeRepository("spec", "docs/spec.txt", "one\ntwo\nthree\n");
 const runtime = makeRepository(
@@ -640,7 +742,8 @@ const compatibilityCases = [
         verifier.indexOf("export function runPackage"),
         verifier.indexOf("function gitObject"),
       );
-      assert.ok(verifier.includes('assert.match(value ?? "", /^[0-9a-f]{40}$/'));
+      assert.equal(mutantAcceptedHeadParent, true);
+      assert.equal(exactShaOriginalRejections.length, 10);
       assert.ok(verifier.includes('gitAt(repoRoot, "merge-base", "--is-ancestor"'));
       assert.ok(verifier.includes('assert.deepEqual([...changed].sort(), [...trustedAllowed].sort()'));
       assert.ok(verifier.includes("Object.keys(anchor).sort()"));
