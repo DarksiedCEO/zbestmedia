@@ -30,15 +30,29 @@ import {
 } from "./validate-p1a-threat-model.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+if (process.env.P1A_ORIGINAL_REPOSITORY_ROOT) {
+  assert.equal(process.env.P1A_ORIGINAL_REPOSITORY_ROOT, ".p1a-original-candidate");
+}
+if (process.env.P1A_BASELINE_REPOSITORY_ROOT) {
+  assert.equal(process.env.P1A_BASELINE_REPOSITORY_ROOT, ".p1a-trusted-baseline");
+}
+const originalRepositoryRoot = process.env.P1A_ORIGINAL_REPOSITORY_ROOT
+  ? path.resolve(root, process.env.P1A_ORIGINAL_REPOSITORY_ROOT)
+  : root;
+const baselineRepositoryRoot = process.env.P1A_BASELINE_REPOSITORY_ROOT
+  ? path.resolve(root, process.env.P1A_BASELINE_REPOSITORY_ROOT)
+  : null;
 const workflow = readFileSync(
   path.join(root, ".github/workflows/p1a-certify.yml"),
   "utf8",
 );
 const ordinaryCi = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
-const baselineCi = execFileSync(
-  "git", ["show", `${COMPOSED_CI_BASE}:.github/workflows/ci.yml`],
-  { cwd: root, encoding: "utf8" },
-);
+const baselineCi = baselineRepositoryRoot
+  ? readFileSync(path.join(baselineRepositoryRoot, ".github/workflows/ci.yml"), "utf8")
+  : execFileSync(
+    "git", ["show", `${COMPOSED_CI_BASE}:.github/workflows/ci.yml`],
+    { cwd: root, encoding: "utf8" },
+  );
 const verifier = readFileSync(
   path.join(root, "scripts/validate-p1a-threat-model.mjs"),
   "utf8",
@@ -53,7 +67,7 @@ let integrationEvidence;
 
 const exactOriginal = (file) =>
   execFileSync("git", ["show", `${ORIGINAL_CANDIDATE}:${file}`], {
-    cwd: root,
+    cwd: originalRepositoryRoot,
     encoding: "utf8",
   });
 const compatibilityModel = JSON.parse(
@@ -91,7 +105,7 @@ function validateHistoricalObjectWorkflow(source) {
     `test \"$P1A_ORIGINAL_CANDIDATE\" = \"${ORIGINAL_CANDIDATE}\"`,
     "cat-file -t \"$P1A_ORIGINAL_CANDIDATE\"",
     "remote get-url origin",
-    "git fetch --no-tags --no-write-fetch-head",
+    "rev-parse \"$P1A_ORIGINAL_CANDIDATE^{commit}\"",
     "P1A_ORIGINAL_MODEL_BLOB",
     "P1A_ORIGINAL_EVIDENCE_BLOB",
     "P1A_ORIGINAL_MANIFEST_BLOB",
@@ -132,8 +146,8 @@ const historicalObjectCases = [
   ["historical_blob_for_commit", () => validateHistoricalObjectWorkflow(mutateHistorical(" = \"commit\"", " = \"blob\"")), true],
   ["historical_tree_for_commit", () => validateHistoricalObjectWorkflow(mutateHistorical(" = \"commit\"", " = \"tree\"")), true],
   ["historical_wrong_repository", () => validateHistoricalObjectWorkflow(mutateHistorical("repository: DarksiedCEO/zbestmedia", "repository: attacker/zbestmedia")), true],
-  ["historical_fetch_failure_suppressed", () => validateHistoricalObjectWorkflow(mutateHistorical("git fetch --no-tags --no-write-fetch-head .p1a-original-candidate \"$P1A_ORIGINAL_CANDIDATE\"", "git fetch --no-tags --no-write-fetch-head .p1a-original-candidate \"$P1A_ORIGINAL_CANDIDATE\" || true")), true],
-  ["historical_authentication_failure_ignored", () => validateHistoricalObjectWorkflow(mutateHistorical("            exit 1", "            true")), true],
+  ["historical_fetch_failure_suppressed", () => validateHistoricalObjectWorkflow(mutateHistorical("          path: .p1a-original-candidate\n", "          path: .p1a-original-candidate\n        continue-on-error: true\n")), true],
+  ["historical_authentication_failure_ignored", () => validateHistoricalObjectWorkflow(mutateHistorical("            echo \"persisted credential material detected\" >&2\n            exit 1\n", "            echo \"persisted credential material detected\" >&2\n            true\n")), true],
   ["historical_current_candidate_fallback", () => validateHistoricalObjectWorkflow(mutateHistorical(`ref: ${ORIGINAL_CANDIDATE}`, "ref: ${{ github.sha }}")), true],
   ["historical_file_absent_unchecked", () => validateHistoricalObjectWorkflow(mutateHistorical("P1A_ORIGINAL_TEST_BLOB", "P1A_UNUSED_TEST_BLOB")), true],
   ["historical_blob_mismatch", () => validateHistoricalObjectWorkflow(mutateHistorical("0bb71b21e3532f9690226b6a504967f3b2504621", "f".repeat(40))), true],
@@ -144,6 +158,73 @@ const historicalObjectCases = [
   ["historical_protected_secret_reference", () => validateHistoricalObjectWorkflow(`${ordinaryCi}\n# \${{ secrets.P1A_RUNTIME_APP_PRIVATE_KEY }}\n`), true],
   ["historical_pull_request_target", () => validateHistoricalObjectWorkflow(mutateHistorical("  pull_request:\n", "  pull_request_target:\n")), true],
   ["historical_write_permission", () => validateHistoricalObjectWorkflow(mutateHistorical("contents: read", "contents: write")), true],
+];
+
+function validateTrustedBaselineWorkflow(source) {
+  assert.equal(source, composeTrustedCi(baselineCi), "trusted baseline workflow composition mismatch");
+  for (const required of [
+    "Acquire exact trusted CI baseline",
+    `ref: ${COMPOSED_CI_BASE}`,
+    "path: .p1a-trusted-baseline",
+    "P1A_TRUSTED_CI_BLOB: 9a3f1a04f99e83d9dad84cf384d86117a7d282f1",
+    "cat-file -t \"$P1A_TRUSTED_BASELINE\"",
+    "remote get-url origin",
+    "test -f .p1a-trusted-baseline/.github/workflows/ci.yml",
+    "P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline",
+    "Remove isolated P1-A authority checkouts",
+    "test ! -e .p1a-original-candidate",
+    "test ! -e .p1a-trusted-baseline",
+  ]) assert.ok(source.includes(required), `baseline contract missing ${required}`);
+}
+const mutateBaseline = (needle, replacement) => {
+  assert.equal(ordinaryCi.split(needle).length - 1, 1, `baseline fixture count ${needle}`);
+  return ordinaryCi.replace(needle, replacement);
+};
+const baselinePositiveCases = [
+  ["baseline_exact_checkout", () => validateTrustedBaselineWorkflow(ordinaryCi), false],
+  ["baseline_head_matches", () => assert.ok(ordinaryCi.includes("rev-parse HEAD)\" = \"$P1A_TRUSTED_BASELINE")), false],
+  ["baseline_object_is_commit", () => assert.ok(ordinaryCi.includes("cat-file -t \"$P1A_TRUSTED_BASELINE\"")), false],
+  ["baseline_origin_matches", () => assert.ok(ordinaryCi.includes(".p1a-trusted-baseline remote get-url origin")), false],
+  ["baseline_ci_path_exists", () => assert.ok(ordinaryCi.includes("test -f .p1a-trusted-baseline/.github/workflows/ci.yml")), false],
+  ["baseline_ci_blob_matches", () => assert.ok(ordinaryCi.includes("9a3f1a04f99e83d9dad84cf384d86117a7d282f1")), false],
+  ["verifier_consumes_isolated_baseline", () => assert.ok(ordinaryCi.includes("P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline")), false],
+  ["original_checkout_still_isolated", () => assert.ok(ordinaryCi.includes("P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate")), false],
+  ["authority_object_stores_are_separate", () => { assert.ok(!ordinaryCi.includes("git fetch --no-tags --no-write-fetch-head")); assert.notEqual(originalRepositoryRoot, baselineRepositoryRoot); }],
+  ["both_directories_cleaned", () => { assert.ok(ordinaryCi.includes("test ! -e .p1a-original-candidate")); assert.ok(ordinaryCi.includes("test ! -e .p1a-trusted-baseline")); }],
+  ["composed_positives_preserved", () => validateTrustedBaselineWorkflow(ordinaryCi), false],
+  ["trusted_verifier_reaches_baseline_input", () => { assert.ok(baselineCi.includes("name: CI")); assert.ok(!baselineCi.includes("Acquire exact trusted CI baseline")); }],
+];
+const baselineNegativeCases = [
+  ["baseline_wrong_sha", () => validateTrustedBaselineWorkflow(mutateBaseline(COMPOSED_CI_BASE, "f".repeat(40))), true],
+  ["baseline_malformed_sha", () => validateTrustedBaselineWorkflow(mutateBaseline(`ref: ${COMPOSED_CI_BASE}`, "ref: invalid")), true],
+  ["baseline_mutable_branch", () => validateTrustedBaselineWorkflow(mutateBaseline(`ref: ${COMPOSED_CI_BASE}`, "ref: codex/bt-1")), true],
+  ["baseline_mutable_tag", () => validateTrustedBaselineWorkflow(mutateBaseline(`ref: ${COMPOSED_CI_BASE}`, "ref: v1.0.0")), true],
+  ["baseline_wrong_repository", () => validateTrustedBaselineWorkflow(mutateBaseline("      - name: Acquire exact trusted CI baseline\n        uses: actions/checkout@v4\n        with:\n          repository: DarksiedCEO/zbestmedia", "      - name: Acquire exact trusted CI baseline\n        uses: actions/checkout@v4\n        with:\n          repository: attacker/zbestmedia")), true],
+  ["baseline_wrong_head", () => validateTrustedBaselineWorkflow(mutateBaseline("rev-parse HEAD)\" = \"$P1A_TRUSTED_BASELINE", "rev-parse HEAD)\" != \"$P1A_TRUSTED_BASELINE")), true],
+  ["baseline_blob_for_commit", () => validateTrustedBaselineWorkflow(mutateBaseline(".p1a-trusted-baseline cat-file -t \"$P1A_TRUSTED_BASELINE\")\" = \"commit\"", ".p1a-trusted-baseline cat-file -t \"$P1A_TRUSTED_BASELINE\")\" = \"blob\"")), true],
+  ["baseline_tree_for_commit", () => validateTrustedBaselineWorkflow(mutateBaseline(".p1a-trusted-baseline cat-file -t \"$P1A_TRUSTED_BASELINE\")\" = \"commit\"", ".p1a-trusted-baseline cat-file -t \"$P1A_TRUSTED_BASELINE\")\" = \"tree\"")), true],
+  ["baseline_ci_path_missing", () => validateTrustedBaselineWorkflow(mutateBaseline("          test -f .p1a-trusted-baseline/.github/workflows/ci.yml\n", "")), true],
+  ["baseline_wrong_ci_blob", () => validateTrustedBaselineWorkflow(mutateBaseline("9a3f1a04f99e83d9dad84cf384d86117a7d282f1", "f".repeat(40))), true],
+  ["baseline_candidate_provided_sha", () => validateTrustedBaselineWorkflow(mutateBaseline(`ref: ${COMPOSED_CI_BASE}`, "ref: ${{ github.event.inputs.baseline_sha }}")), true],
+  ["baseline_candidate_provided_path", () => validateTrustedBaselineWorkflow(mutateBaseline("path: .p1a-trusted-baseline", "path: ${{ github.event.inputs.baseline_path }}")), true],
+  ["baseline_candidate_provided_blob", () => validateTrustedBaselineWorkflow(mutateBaseline("P1A_TRUSTED_CI_BLOB: 9a3f1a04f99e83d9dad84cf384d86117a7d282f1", "P1A_TRUSTED_CI_BLOB: ${{ github.event.inputs.blob }}")), true],
+  ["baseline_persisted_credentials", () => validateTrustedBaselineWorkflow(mutateBaseline("          path: .p1a-trusted-baseline", "          persist-credentials: true\n          path: .p1a-trusted-baseline")), true],
+  ["baseline_protected_secret", () => validateTrustedBaselineWorkflow(`${ordinaryCi}\n# \${{ secrets.P1A_RUNTIME_APP_PRIVATE_KEY }}\n`), true],
+  ["baseline_write_permission", () => validateTrustedBaselineWorkflow(mutateBaseline("contents: read", "contents: write")), true],
+  ["baseline_script_execution", () => validateTrustedBaselineWorkflow(`${ordinaryCi}\n      - run: .p1a-trusted-baseline/scripts/run.sh\n`), true],
+  ["baseline_primary_checkout_substitution", () => validateTrustedBaselineWorkflow(mutateBaseline("P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline", "P1A_BASELINE_REPOSITORY_ROOT: .")), true],
+  ["baseline_original_substituted_for_baseline", () => validateTrustedBaselineWorkflow(mutateBaseline("P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline", "P1A_BASELINE_REPOSITORY_ROOT: .p1a-original-candidate")), true],
+  ["baseline_substituted_for_original", () => validateTrustedBaselineWorkflow(mutateBaseline("P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate", "P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-trusted-baseline")), true],
+  ["baseline_directory_not_cleaned", () => validateTrustedBaselineWorkflow(mutateBaseline("          test ! -e .p1a-trusted-baseline\n", "")), true],
+  ["original_directory_not_cleaned", () => validateTrustedBaselineWorkflow(mutateBaseline("          test ! -e .p1a-original-candidate\n", "")), true],
+  ["baseline_acquisition_failure_continues", () => validateTrustedBaselineWorkflow(mutateBaseline("          set -euo pipefail\n          test \"$GITHUB_REPOSITORY\" = \"DarksiedCEO/zbestmedia\"\n          [[ \"$P1A_TRUSTED_BASELINE\"", "          set +e\n          test \"$GITHUB_REPOSITORY\" = \"DarksiedCEO/zbestmedia\"\n          [[ \"$P1A_TRUSTED_BASELINE\"")), true],
+  ["baseline_blob_mismatch_continues", () => validateTrustedBaselineWorkflow(`${ordinaryCi}\n      continue-on-error: true\n`), true],
+  ["baseline_duplicate_checkout", () => validateTrustedBaselineWorkflow(`${ordinaryCi}\n      - name: Acquire exact trusted CI baseline\n`), true],
+  ["baseline_verification_dead_conditional", () => validateTrustedBaselineWorkflow(mutateBaseline("      - name: Verify exact trusted CI baseline\n", "      - name: Verify exact trusted CI baseline\n        if: ${{ false }}\n")), true],
+  ["baseline_verification_comments_only", () => validateTrustedBaselineWorkflow(mutateBaseline("      - name: Verify exact trusted CI baseline\n", "# Verify exact trusted CI baseline\n")), true],
+  ["baseline_origin_check_removed", () => validateTrustedBaselineWorkflow(mutateBaseline("          test \"$(git -C .p1a-trusted-baseline remote get-url origin)\" = \"https://github.com/DarksiedCEO/zbestmedia\"\n", "")), true],
+  ["baseline_object_type_removed", () => validateTrustedBaselineWorkflow(mutateBaseline("          test \"$(git -C .p1a-trusted-baseline cat-file -t \"$P1A_TRUSTED_BASELINE\")\" = \"commit\"\n", "")), true],
+  ["baseline_cleanup_verification_removed", () => validateTrustedBaselineWorkflow(mutateBaseline("          test ! -e .p1a-trusted-baseline\n", "          echo cleanup assumed\n")), true],
 ];
 
 function git(cwd, ...args) {
@@ -815,6 +896,8 @@ const runControls = (controls, suite) => {
 let passed = 0;
 let failed = 0;
 try {
+  runControls(baselinePositiveCases, "p1-a-trusted-baseline-acquisition-positive-controls");
+  runControls(baselineNegativeCases, "p1-a-trusted-baseline-acquisition-negative-controls");
   runControls(historicalObjectCases, "p1-a-historical-object-availability-controls");
   runControls(compatibilityCases, "p1-a-legacy-api-compatibility-controls");
   ({ passed, failed } = runControls(cases, "p1-a-trusted-verifier-controls"));

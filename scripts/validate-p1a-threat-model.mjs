@@ -736,17 +736,57 @@ const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candid
             echo "persisted credential material detected" >&2
             exit 1
           fi
-          git fetch --no-tags --no-write-fetch-head .p1a-original-candidate "$P1A_ORIGINAL_CANDIDATE"
-          test "$(git cat-file -t "$P1A_ORIGINAL_CANDIDATE")" = "commit"
-          test "$(git rev-parse "$P1A_ORIGINAL_CANDIDATE^{commit}")" = "$P1A_ORIGINAL_CANDIDATE"
-          test "$(git rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/model.json")" = "$P1A_ORIGINAL_MODEL_BLOB"
-          test "$(git rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/evidence-register.json")" = "$P1A_ORIGINAL_EVIDENCE_BLOB"
-          test "$(git rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/validation-manifest.json")" = "$P1A_ORIGINAL_MANIFEST_BLOB"
-          test "$(git rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/threat-model.md")" = "$P1A_ORIGINAL_MARKDOWN_BLOB"
-          test "$(git rev-parse "$P1A_ORIGINAL_CANDIDATE:scripts/test-p1a-threat-model.mjs")" = "$P1A_ORIGINAL_TEST_BLOB"
-          rm -rf .p1a-original-candidate
-          test ! -e .p1a-original-candidate
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE^{commit}")" = "$P1A_ORIGINAL_CANDIDATE"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/model.json")" = "$P1A_ORIGINAL_MODEL_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/evidence-register.json")" = "$P1A_ORIGINAL_EVIDENCE_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/validation-manifest.json")" = "$P1A_ORIGINAL_MANIFEST_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/threat-model.md")" = "$P1A_ORIGINAL_MARKDOWN_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:scripts/test-p1a-threat-model.mjs")" = "$P1A_ORIGINAL_TEST_BLOB"
 
+      - name: Acquire exact trusted CI baseline
+        uses: actions/checkout@v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 06e6497ac3420998671f255a42a20d8cb8b9ca50
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-trusted-baseline
+
+      - name: Verify exact trusted CI baseline
+        env:
+          P1A_TRUSTED_BASELINE: 06e6497ac3420998671f255a42a20d8cb8b9ca50
+          P1A_TRUSTED_CI_BLOB: 9a3f1a04f99e83d9dad84cf384d86117a7d282f1
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          [[ "$P1A_TRUSTED_BASELINE" =~ ^[0-9a-f]{40}$ ]]
+          test "$P1A_TRUSTED_BASELINE" = "06e6497ac3420998671f255a42a20d8cb8b9ca50"
+          test "$(git -C .p1a-trusted-baseline rev-parse HEAD)" = "$P1A_TRUSTED_BASELINE"
+          test "$(git -C .p1a-trusted-baseline cat-file -t "$P1A_TRUSTED_BASELINE")" = "commit"
+          test "$(git -C .p1a-trusted-baseline remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          test -f .p1a-trusted-baseline/.github/workflows/ci.yml
+          test "$(git -C .p1a-trusted-baseline rev-parse "$P1A_TRUSTED_BASELINE:.github/workflows/ci.yml")" = "$P1A_TRUSTED_CI_BLOB"
+          if grep -Eiq 'x-access-token|authorization:' .p1a-trusted-baseline/.git/config; then
+            echo "persisted baseline credential material detected" >&2
+            exit 1
+          fi
+
+`;
+const BASE_TRUSTED_VERIFIER_STEP = `      - name: P1-A trusted verifier controls
+        run: node scripts/test-p1a-trusted-verifier.mjs
+`;
+const ISOLATED_TRUSTED_VERIFIER_STEP = `      - name: P1-A trusted verifier controls
+        env:
+          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
+          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
+        run: node scripts/test-p1a-trusted-verifier.mjs
+
+      - name: Remove isolated P1-A authority checkouts
+        if: always()
+        run: |
+          rm -rf .p1a-original-candidate .p1a-trusted-baseline
+          test ! -e .p1a-original-candidate
+          test ! -e .p1a-trusted-baseline
 `;
 const CI_IDENTITY_MARKER =
   "      - name: P1-A trusted-bootstrap exact-SHA identity";
@@ -762,11 +802,17 @@ export function composeTrustedCi(baseline) {
   const readOnlyCheckout = replaceExactlyOnce(
     baseline, CI_CHECKOUT_REF, TRUSTED_CI_CHECKOUT, "trusted checkout",
   );
-  return replaceExactlyOnce(
+  const acquired = replaceExactlyOnce(
     readOnlyCheckout,
     CI_TRUSTED_VERIFIER_MARKER,
     `${TRUSTED_CI_ACQUISITION}${CI_TRUSTED_VERIFIER_MARKER}`,
     "trusted acquisition placement",
+  );
+  return replaceExactlyOnce(
+    acquired,
+    BASE_TRUSTED_VERIFIER_STEP,
+    ISOLATED_TRUSTED_VERIFIER_STEP,
+    "isolated authority path and cleanup placement",
   );
 }
 
