@@ -763,6 +763,92 @@ export function validateOrdinaryCiActionPins(source) {
   );
   return Object.freeze({ required: uses.length, passed: uses.length });
 }
+
+export function validateCurrentWorkflowShaCustody({
+  git,
+  workflowSha,
+  expectedWorkflowSha,
+  candidateSha,
+  repository,
+  trustedRoot,
+  candidateRoot,
+  verifierPath,
+  workflowPath,
+  expectedWorkflowBlob,
+}) {
+  exactSha(workflowSha, "workflow");
+  exactSha(expectedWorkflowSha, "expected workflow");
+  exactSha(candidateSha, "candidate");
+  exactSha(expectedWorkflowBlob, "workflow blob");
+  assert.equal(workflowSha, expectedWorkflowSha,
+    "workflow SHA differs from trusted execution authority");
+  assert.notEqual(workflowSha, candidateSha,
+    "candidate cannot be trusted workflow authority");
+  assert.notEqual(workflowSha, ORIGINAL_CANDIDATE,
+    "historical candidate cannot be current workflow authority");
+  assert.equal(repository, AUTHORIZED_REPOSITORIES.base,
+    "workflow repository identity mismatch");
+  assert.ok(trustedRoot && candidateRoot, "custody roots absent");
+  assert.notEqual(path.resolve(trustedRoot), path.resolve(candidateRoot),
+    "trusted verifier cannot execute from candidate root");
+  assert.equal(
+    path.resolve(verifierPath),
+    path.resolve(trustedRoot, "scripts/validate-p1a-threat-model.mjs"),
+    "verifier path is not trusted-checkout controlled",
+  );
+  assert.equal(
+    path.resolve(workflowPath),
+    path.resolve(trustedRoot, ".github/workflows/p1a-certify.yml"),
+    "workflow path is not trusted-checkout controlled",
+  );
+  assert.equal(git("cat-file", "-t", workflowSha), "commit",
+    "workflow authority is not a commit");
+  assert.equal(git("cat-file", "-t", candidateSha), "commit",
+    "candidate is not a commit");
+  git("merge-base", "--is-ancestor", workflowSha, candidateSha);
+  assert.equal(
+    blobAt(git, workflowSha, ".github/workflows/p1a-certify.yml"),
+    expectedWorkflowBlob,
+    "trusted workflow blob mismatch",
+  );
+  return Object.freeze({
+    status: "CURRENT_WORKFLOW_SHA_CUSTODY_VALIDATED",
+    workflowSha,
+    candidateSha,
+    workflowBlob: expectedWorkflowBlob,
+  });
+}
+
+export function validateExecutionCustody({
+  role,
+  executionRoot,
+  trustedRoot,
+  candidateRoot,
+  operation,
+  selectsTrustedAuthority = false,
+  claimsCertification = false,
+}) {
+  assert.ok(executionRoot && trustedRoot && candidateRoot, "custody root absent");
+  const execution = path.resolve(executionRoot);
+  const trusted = path.resolve(trustedRoot);
+  const candidate = path.resolve(candidateRoot);
+  assert.notEqual(trusted, candidate, "trusted and candidate roots overlap");
+  if (role === "TRUSTED_CHECKOUT") {
+    assert.equal(execution, trusted, "trusted operation outside trusted checkout");
+    assert.notEqual(execution, candidate, "candidate impersonates trusted checkout");
+    return Object.freeze({ status: "TRUSTED_CHECKOUT_VALIDATED" });
+  }
+  assert.equal(role, "CANDIDATE_DATA", "unknown custody role");
+  assert.equal(execution, candidate, "candidate validation outside candidate root");
+  assert.notEqual(execution, trusted, "candidate validation executes as trusted authority");
+  assert.equal(operation, "VALIDATE_CANDIDATE_DATA",
+    "candidate root requested trusted operation");
+  assert.equal(selectsTrustedAuthority, false,
+    "candidate root cannot select trusted authority");
+  assert.equal(claimsCertification, false,
+    "candidate root cannot self-certify");
+  return Object.freeze({ status: "CANDIDATE_DATA_VALIDATED" });
+}
 const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candidate object
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

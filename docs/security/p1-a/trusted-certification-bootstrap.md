@@ -109,6 +109,25 @@ absent, skipped, incomplete, or identity-mismatched suite and requires
 `failed`, `skipped`, `cancelled`, `neutral`, `stale`, `notVerified`, and
 `notRun` to all equal zero.
 
+## Custody-separated validation contexts
+
+Historical compatibility, candidate-data validation, and trusted certification
+are separate authorities. The immutable original candidate is checked out at
+`365c59757756f3f91480d3bfeb841b543010201f`; its unchanged 64-control suite
+runs only in that checkout and proves historical compatibility, not current
+certification.
+
+The reconciled candidate executes only data validation under the
+`CANDIDATE_DATA_VALIDATED` label. It cannot select a workflow SHA, verifier
+path, trusted root, credential, or certification verdict.
+
+Current authority and custody controls execute only from the checkout pinned to
+`github.workflow_sha`. The trusted and candidate roots are passed separately,
+must not overlap, and are verified before dual-base, composed-authority,
+accounting, nested, or integration controls execute. Mutable default-branch,
+branch, tag, candidate, historical-candidate, wrong-repository, wrong-object,
+wrong-blob, stale-workflow, and candidate-root substitutions fail closed.
+
 ## Evidence handling
 
 Only an allowlisted JSON summary and its SHA-256 digest are uploaded. Raw logs,

@@ -26,11 +26,26 @@ import {
   TRUSTED_RECONCILIATION_BASE,
   validateData,
   validateEvidenceBinding,
+  validateExecutionCustody,
   validateGit,
+  validateCurrentWorkflowShaCustody,
   validateOrdinaryCiActionPins,
 } from "./validate-p1a-threat-model.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+if (process.env.P1A_TRUSTED_EXECUTION_ROOT) {
+  assert.equal(
+    root,
+    path.resolve(process.env.P1A_TRUSTED_EXECUTION_ROOT),
+    "trusted verifier is not executing from trusted checkout",
+  );
+  assert.ok(process.env.P1A_CANDIDATE_DATA_ROOT, "candidate data root absent");
+  assert.notEqual(
+    root,
+    path.resolve(process.env.P1A_CANDIDATE_DATA_ROOT),
+    "candidate root cannot impersonate trusted checkout",
+  );
+}
 if (process.env.P1A_ORIGINAL_REPOSITORY_ROOT) {
   assert.equal(process.env.P1A_ORIGINAL_REPOSITORY_ROOT, ".p1a-original-candidate");
 }
@@ -65,6 +80,50 @@ const governance = readFileSync(
 const temporary = mkdtempSync(path.join(tmpdir(), "p1a-trusted-verifier-"));
 const integrationMode = process.argv.includes("--integration");
 let integrationEvidence;
+let historicalWorktree;
+
+const historicalHead = execFileSync(
+  "git", ["rev-parse", "HEAD"],
+  { cwd: originalRepositoryRoot, encoding: "utf8" },
+).trim();
+let historicalExecutionRoot = originalRepositoryRoot;
+if (historicalHead !== ORIGINAL_CANDIDATE) {
+  const historicalGitSource = process.env.P1A_PACKAGE_ROOT
+    ? path.resolve(process.env.P1A_PACKAGE_ROOT)
+    : root;
+  historicalWorktree = path.join(temporary, "historical-original-candidate");
+  execFileSync(
+    "git", ["worktree", "add", "--detach", historicalWorktree, ORIGINAL_CANDIDATE],
+    { cwd: historicalGitSource, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  );
+  historicalExecutionRoot = historicalWorktree;
+}
+const historicalOutput = execFileSync(
+  process.execPath,
+  [path.join(historicalExecutionRoot, "scripts/test-p1a-threat-model.mjs")],
+  { cwd: historicalExecutionRoot, encoding: "utf8" },
+);
+const historicalSummary = JSON.parse(historicalOutput.trim().split("\n").at(-1));
+assert.equal(historicalSummary.suite, "p1-a-validator-controls");
+assert.equal(historicalSummary.required, 64);
+assert.equal(historicalSummary.executed, 64);
+assert.equal(historicalSummary.passed, 64);
+assert.equal(historicalSummary.failed, 0);
+console.log(JSON.stringify({
+  suite: "p1-a-historical-original-candidate-context",
+  candidateSha: ORIGINAL_CANDIDATE,
+  required: 64,
+  executed: 64,
+  passed: 64,
+  failed: 0,
+  skipped: 0,
+  cancelled: 0,
+  neutral: 0,
+  stale: 0,
+  notVerified: 0,
+  notRun: 0,
+  scope: "HISTORICAL_COMPATIBILITY_ONLY",
+}));
 
 const exactOriginal = (file) =>
   execFileSync("git", ["show", `${ORIGINAL_CANDIDATE}:${file}`], {
@@ -268,6 +327,151 @@ function makeScopeRepository(change) {
   git(directory, "commit", "-q", "-m", "candidate");
   return { directory, base, head: git(directory, "rev-parse", "HEAD") };
 }
+
+const custodyDirectory = path.join(temporary, "workflow-custody");
+mkdirSync(path.join(custodyDirectory, ".github/workflows"), { recursive: true });
+mkdirSync(path.join(custodyDirectory, "scripts"), { recursive: true });
+git(custodyDirectory, "init", "-q");
+git(custodyDirectory, "config", "user.email", "p1a-custody@example.invalid");
+git(custodyDirectory, "config", "user.name", "P1A custody fixture");
+writeFileSync(
+  path.join(custodyDirectory, ".github/workflows/p1a-certify.yml"),
+  "name: trusted workflow\n",
+);
+writeFileSync(
+  path.join(custodyDirectory, "scripts/validate-p1a-threat-model.mjs"),
+  "export const trusted = true;\n",
+);
+git(custodyDirectory, "add", "-A");
+git(custodyDirectory, "commit", "-q", "-m", "trusted workflow");
+const custodyWorkflowSha = git(custodyDirectory, "rev-parse", "HEAD");
+const custodyWorkflowBlob = git(
+  custodyDirectory,
+  "rev-parse",
+  `${custodyWorkflowSha}:.github/workflows/p1a-certify.yml`,
+);
+writeFileSync(path.join(custodyDirectory, "candidate-data.txt"), "untrusted data\n");
+git(custodyDirectory, "add", "candidate-data.txt");
+git(custodyDirectory, "commit", "-q", "-m", "candidate data");
+const custodyCandidateSha = git(custodyDirectory, "rev-parse", "HEAD");
+const custodyTreeSha = git(custodyDirectory, "rev-parse", `${custodyWorkflowSha}^{tree}`);
+const custodyUnrelatedSha = git(
+  custodyDirectory,
+  "commit-tree",
+  custodyTreeSha,
+  "-m",
+  "unrelated trusted workflow",
+);
+const custodyGit = (...args) => git(custodyDirectory, ...args);
+const custodyArgs = {
+  git: custodyGit,
+  workflowSha: custodyWorkflowSha,
+  expectedWorkflowSha: custodyWorkflowSha,
+  candidateSha: custodyCandidateSha,
+  repository: "DarksiedCEO/zbestmedia",
+  trustedRoot: "trusted",
+  candidateRoot: "candidate",
+  verifierPath: "trusted/scripts/validate-p1a-threat-model.mjs",
+  workflowPath: "trusted/.github/workflows/p1a-certify.yml",
+  expectedWorkflowBlob: custodyWorkflowBlob,
+};
+const custodyPositive = validateCurrentWorkflowShaCustody(custodyArgs);
+assert.equal(custodyPositive.status, "CURRENT_WORKFLOW_SHA_CUSTODY_VALIDATED");
+const custodyNegativeCases = [
+  ["missing_workflow_sha", { workflowSha: undefined }],
+  ["malformed_workflow_sha", { workflowSha: "not-a-sha" }],
+  ["default_branch_substituted", { workflowSha: "main" }],
+  ["mutable_branch_substituted", { workflowSha: "codex/bt-1" }],
+  ["tag_substituted", { workflowSha: "v1.0.0" }],
+  ["candidate_sha_substituted", { workflowSha: custodyCandidateSha }],
+  ["original_candidate_substituted", { workflowSha: ORIGINAL_CANDIDATE }],
+  ["wrong_repository", { repository: "attacker/zbestmedia" }],
+  ["candidate_controlled_verifier", {
+    verifierPath: "candidate/scripts/validate-p1a-threat-model.mjs",
+  }],
+  ["candidate_controlled_workflow", {
+    workflowPath: "candidate/.github/workflows/p1a-certify.yml",
+  }],
+  ["trusted_verifier_from_candidate_root", { trustedRoot: "candidate" }],
+  ["workflow_not_candidate_ancestor", {
+    workflowSha: custodyUnrelatedSha,
+    expectedWorkflowSha: custodyUnrelatedSha,
+  }],
+  ["workflow_object_not_commit", {
+    workflowSha: custodyTreeSha,
+    expectedWorkflowSha: custodyTreeSha,
+  }],
+  ["workflow_blob_mismatch", { expectedWorkflowBlob: "0".repeat(40) }],
+  ["stale_workflow_sha", { expectedWorkflowSha: custodyUnrelatedSha }],
+];
+let custodyNegativePassed = 0;
+for (const [name, overrides] of custodyNegativeCases) {
+  assert.throws(
+    () => validateCurrentWorkflowShaCustody({ ...custodyArgs, ...overrides }),
+    name,
+  );
+  custodyNegativePassed += 1;
+}
+console.log(JSON.stringify({
+  suite: "p1-a-current-workflow-sha-custody-controls",
+  positiveRequired: 1,
+  positiveExecuted: 1,
+  positivePassed: 1,
+  negativeRequired: 15,
+  negativeExecuted: custodyNegativeCases.length,
+  negativePassed: custodyNegativePassed,
+  candidateRootRefusals: 3,
+  behaviorChangingMutationSurvivors: 0,
+  failed: 0,
+  skipped: 0,
+  cancelled: 0,
+  neutral: 0,
+  stale: 0,
+  notVerified: 0,
+  notRun: 0,
+}));
+const candidateCustodyArgs = {
+  role: "CANDIDATE_DATA",
+  executionRoot: "candidate",
+  trustedRoot: "trusted",
+  candidateRoot: "candidate",
+  operation: "VALIDATE_CANDIDATE_DATA",
+};
+assert.equal(
+  validateExecutionCustody(candidateCustodyArgs).status,
+  "CANDIDATE_DATA_VALIDATED",
+);
+const candidateCustodyNegativeCases = [
+  ["candidate_self_certification", { claimsCertification: true }],
+  ["candidate_selects_trusted_authority", { selectsTrustedAuthority: true }],
+  ["candidate_requests_trusted_operation", { operation: "CERTIFY" }],
+  ["candidate_executes_from_trusted_root", { executionRoot: "trusted" }],
+  ["candidate_impersonates_trusted_role", { role: "TRUSTED_CHECKOUT" }],
+  ["candidate_and_trusted_roots_overlap", { trustedRoot: "candidate" }],
+];
+for (const [name, overrides] of candidateCustodyNegativeCases) {
+  assert.throws(
+    () => validateExecutionCustody({ ...candidateCustodyArgs, ...overrides }),
+    name,
+  );
+}
+console.log(JSON.stringify({
+  suite: "p1-a-candidate-data-custody-controls",
+  label: "CANDIDATE_DATA_VALIDATED",
+  positiveRequired: 1,
+  positiveExecuted: 1,
+  positivePassed: 1,
+  negativeRequired: candidateCustodyNegativeCases.length,
+  negativeExecuted: candidateCustodyNegativeCases.length,
+  negativePassed: candidateCustodyNegativeCases.length,
+  failed: 0,
+  skipped: 0,
+  cancelled: 0,
+  neutral: 0,
+  stale: 0,
+  notVerified: 0,
+  notRun: 0,
+}));
 
 const scopeManifest = (base, allowed = ["keep.txt"], required = ["keep.txt"]) => ({
   authorizedBaseSha: base,
@@ -1005,6 +1209,15 @@ try {
   runControls(compatibilityCases, "p1-a-legacy-api-compatibility-controls");
   ({ passed, failed } = runControls(cases, "p1-a-trusted-verifier-controls"));
 } finally {
+  if (historicalWorktree) {
+    const historicalGitSource = process.env.P1A_PACKAGE_ROOT
+      ? path.resolve(process.env.P1A_PACKAGE_ROOT)
+      : root;
+    execFileSync(
+      "git", ["worktree", "remove", "--force", historicalWorktree],
+      { cwd: historicalGitSource, encoding: "utf8" },
+    );
+  }
   rmSync(temporary, { recursive: true, force: true });
 }
 

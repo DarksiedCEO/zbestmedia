@@ -84,6 +84,8 @@ jobs:
 
       - name: Execute protected dual-base controls
         env:
+          P1A_TRUSTED_EXECUTION_ROOT: ${{ github.workspace }}/trusted
+          P1A_CANDIDATE_DATA_ROOT: ${{ github.workspace }}/candidate
           P1A_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           P1A_WORKFLOW_SHA: ${{ github.workflow_sha }}
           P1A_TRUST_BASE_SHA: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
@@ -132,6 +134,8 @@ jobs:
 
       - name: Execute protected verifier against candidate data
         env:
+          P1A_TRUSTED_EXECUTION_ROOT: ${{ github.workspace }}/trusted
+          P1A_CANDIDATE_DATA_ROOT: ${{ github.workspace }}/candidate
           P1A_PACKAGE_ROOT: ${{ github.workspace }}/candidate
           P1A_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           P1A_WORKFLOW_SHA: ${{ github.workflow_sha }}
@@ -151,6 +155,8 @@ jobs:
 
       - name: Execute protected real-object integration
         env:
+          P1A_TRUSTED_EXECUTION_ROOT: ${{ github.workspace }}/trusted
+          P1A_CANDIDATE_DATA_ROOT: ${{ github.workspace }}/candidate
           P1A_PACKAGE_ROOT: ${{ github.workspace }}/candidate
           P1A_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           P1A_WORKFLOW_SHA: ${{ github.workflow_sha }}

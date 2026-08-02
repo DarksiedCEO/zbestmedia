@@ -12,6 +12,19 @@ import {
 import { validateCertificationBundle } from "./validate-p1a-certification-accounting.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+if (process.env.P1A_TRUSTED_EXECUTION_ROOT) {
+  assert.equal(
+    root,
+    path.resolve(process.env.P1A_TRUSTED_EXECUTION_ROOT),
+    "dual-base verifier is not executing from trusted checkout",
+  );
+  assert.ok(process.env.P1A_CANDIDATE_DATA_ROOT, "candidate data root absent");
+  assert.notEqual(
+    root,
+    path.resolve(process.env.P1A_CANDIDATE_DATA_ROOT),
+    "candidate root cannot impersonate trusted dual-base checkout",
+  );
+}
 const temporary = mkdtempSync(path.join(tmpdir(), "p1a-dual-base-"));
 const repository = path.join(temporary, "repository");
 const run = (cwd, args, options = {}) => execFileSync(args[0], args.slice(1), {
