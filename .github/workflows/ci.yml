@@ -18,14 +18,15 @@ jobs:
       fail-fast: true
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # PR workflows otherwise check out GitHub's synthetic merge commit,
           # which cannot be used as exact candidate identity.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
 
@@ -43,7 +44,7 @@ jobs:
         run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -84,8 +85,82 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           printf '%s\n' "Bootstrap CI exact SHA: $EXPECTED_SHA" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Acquire exact original P1-A candidate object
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 365c59757756f3f91480d3bfeb841b543010201f
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-original-candidate
+
+      - name: Verify and materialize exact original P1-A candidate object
+        env:
+          P1A_ORIGINAL_CANDIDATE: 365c59757756f3f91480d3bfeb841b543010201f
+          P1A_ORIGINAL_MODEL_BLOB: 0bb71b21e3532f9690226b6a504967f3b2504621
+          P1A_ORIGINAL_EVIDENCE_BLOB: 205dc5451bfc639bdfcbd58d380e11439e6f9764
+          P1A_ORIGINAL_MANIFEST_BLOB: d5e86d2445f750bc85a951c348ae52f76f2ce51a
+          P1A_ORIGINAL_MARKDOWN_BLOB: b675f420e0e50c32e84bba37c13e0aade0cfd5e5
+          P1A_ORIGINAL_TEST_BLOB: 1ad3be9777b6aaea530a07fbd0b183311d604be5
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          [[ "$P1A_ORIGINAL_CANDIDATE" =~ ^[0-9a-f]{40}$ ]]
+          test "$P1A_ORIGINAL_CANDIDATE" = "365c59757756f3f91480d3bfeb841b543010201f"
+          test "$(git -C .p1a-original-candidate rev-parse HEAD)" = "$P1A_ORIGINAL_CANDIDATE"
+          test "$(git -C .p1a-original-candidate cat-file -t "$P1A_ORIGINAL_CANDIDATE")" = "commit"
+          test "$(git -C .p1a-original-candidate remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          if grep -Eiq 'x-access-token|authorization:' .p1a-original-candidate/.git/config; then
+            echo "persisted credential material detected" >&2
+            exit 1
+          fi
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE^{commit}")" = "$P1A_ORIGINAL_CANDIDATE"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/model.json")" = "$P1A_ORIGINAL_MODEL_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/evidence-register.json")" = "$P1A_ORIGINAL_EVIDENCE_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/validation-manifest.json")" = "$P1A_ORIGINAL_MANIFEST_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/threat-model.md")" = "$P1A_ORIGINAL_MARKDOWN_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:scripts/test-p1a-threat-model.mjs")" = "$P1A_ORIGINAL_TEST_BLOB"
+
+      - name: Acquire exact trusted CI baseline
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 06e6497ac3420998671f255a42a20d8cb8b9ca50
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-trusted-baseline
+
+      - name: Verify exact trusted CI baseline
+        env:
+          P1A_TRUSTED_BASELINE: 06e6497ac3420998671f255a42a20d8cb8b9ca50
+          P1A_TRUSTED_CI_BLOB: 9a3f1a04f99e83d9dad84cf384d86117a7d282f1
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          [[ "$P1A_TRUSTED_BASELINE" =~ ^[0-9a-f]{40}$ ]]
+          test "$P1A_TRUSTED_BASELINE" = "06e6497ac3420998671f255a42a20d8cb8b9ca50"
+          test "$(git -C .p1a-trusted-baseline rev-parse HEAD)" = "$P1A_TRUSTED_BASELINE"
+          test "$(git -C .p1a-trusted-baseline cat-file -t "$P1A_TRUSTED_BASELINE")" = "commit"
+          test "$(git -C .p1a-trusted-baseline remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          test -f .p1a-trusted-baseline/.github/workflows/ci.yml
+          test "$(git -C .p1a-trusted-baseline rev-parse "$P1A_TRUSTED_BASELINE:.github/workflows/ci.yml")" = "$P1A_TRUSTED_CI_BLOB"
+          if grep -Eiq 'x-access-token|authorization:' .p1a-trusted-baseline/.git/config; then
+            echo "persisted baseline credential material detected" >&2
+            exit 1
+          fi
+
       - name: P1-A trusted verifier controls
+        env:
+          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
+          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
         run: node scripts/test-p1a-trusted-verifier.mjs
+
+      - name: Remove isolated P1-A authority checkouts
+        if: always()
+        run: |
+          rm -rf .p1a-original-candidate .p1a-trusted-baseline
+          test ! -e .p1a-original-candidate
+          test ! -e .p1a-trusted-baseline
 
       - name: P1-A trusted-bootstrap Node syntax
         run: |

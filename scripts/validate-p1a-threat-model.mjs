@@ -13,12 +13,18 @@ const load = (file) =>
   JSON.parse(readFileSync(path.join(candidateRoot, file), "utf8"));
 const unique = (items, label) =>
   assert.equal(new Set(items).size, items.length, `${label}: duplicate`);
+const exists = (items, id, label) =>
+  assert.ok(items.some((item) => item.id === id), `${label}: ${id}`);
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
 export const AUTHORIZED_BASE =
   "7056ea4ce24379c93549f0ac9b45ddd7a2600dd6";
 export const TRUSTED_RECONCILIATION_BASE =
   "5056fb0df6e1ef739231cd2273a453fb1c644273";
+export const COMPOSED_CI_BASE =
+  "06e6497ac3420998671f255a42a20d8cb8b9ca50";
+export const COMPOSED_CI_BASE_BLOB =
+  "9a3f1a04f99e83d9dad84cf384d86117a7d282f1";
 export const ORIGINAL_CANDIDATE =
   "365c59757756f3f91480d3bfeb841b543010201f";
 export const AUTHORIZED_RUNTIME =
@@ -66,6 +72,7 @@ export const EXACT_CANDIDATE_OWNED_FILES = CANDIDATE_OWNED_FILES.filter(
   (file) => file !== ".github/workflows/ci.yml",
 );
 export const AMENDMENT_CONTROLLED_FILES = [
+  ".github/workflows/ci.yml",
   ".github/workflows/p1a-certify.yml",
   "docs/security/p1-a/trusted-certification-bootstrap.md",
   "scripts/test-p1a-certification-accounting.mjs",
@@ -90,6 +97,28 @@ export const REQUIRED_CHECKS = [
   "escalation_completeness",
   "documentation_consistency",
   "negative_controls",
+];
+export const REQUIRED_ACTORS = [
+  "founder", "authorized human operator", "authenticated client user",
+  "tenant administrator", "workspace member", "builder", "reviewer",
+  "Security Reviewer", "Reliability Reviewer", "Test Verification Reviewer",
+  "Release Guardian", "AEGIS", "Embedded Red Team", "Embedded Sentinel",
+  "external Master Sentinel", "application service", "background worker",
+  "database service role", "credential custodian", "emergency responder",
+  "agent", "tool executor",
+];
+export const REQUIRED_THREATS = [
+  "SSRF", "DNS rebinding", "metadata-service access", "tenant spoofing",
+  "workspace spoofing", "cross-tenant access", "horizontal privilege escalation",
+  "vertical privilege escalation", "confused deputy", "service-account misuse",
+  "background-job context forgery", "artifact enumeration", "artifact substitution",
+  "evidence forgery", "stale evidence reuse", "approval forgery", "approval replay",
+  "reviewer impersonation", "self-certification", "CI bypass", "credential leakage",
+  "credential misuse", "SHA substitution", "malicious pull request",
+  "tool privilege escalation", "prompt injection or poisoned tool result",
+  "duplicate execution", "race condition",
+  "rollback failure audit-log tampering or Sentinel suppression",
+  "emergency-access abuse", "retry amplification exhaustion or permanent-failure loop",
 ];
 
 export class NotVerifiedError extends Error {
@@ -116,6 +145,231 @@ export function assertAuthenticationStatus(declared, observed) {
     `stale authentication status: declared ${declared}, observed ${observed}`,
   );
   return observed;
+}
+
+export function repoForSha(sha, manifest) {
+  if (sha === manifest.authorizedBaseSha) return AUTHORIZED_REPOSITORIES.base;
+  if (sha === manifest.runtimeEvidenceSha) return AUTHORIZED_REPOSITORIES.runtime;
+  return null;
+}
+
+// Legacy data-validation contract, retained as a strict adapter into the
+// canonical identities and separation rules owned by this trusted module.
+export function validateData(model, evidence, manifest, markdown) {
+  assert.ok(model && evidence && manifest && typeof markdown === "string");
+  assert.equal(model.sources?.specification?.revision, manifest.authorizedBaseSha, "wrong base SHA");
+  assert.equal(model.sources?.runtime?.revision, manifest.runtimeEvidenceSha, "wrong runtime evidence pin");
+  assert.deepEqual(manifest.requiredTests, REQUIRED_CHECKS, "required tests changed or skipped");
+  assert.deepEqual(model.gate, {
+    runtimeChanged: false, productionClaimed: false,
+    p1bAuthorized: false, selfCertified: false,
+  });
+  const collections = {
+    actors: model.actors, attackers: model.attackerProfiles, actions: model.actions,
+    assets: model.assets, boundaries: model.boundaries, flows: model.flows,
+    paths: model.sourceToSinkPaths, propagation: model.tenantPropagation,
+    controls: model.controls, threats: model.threats,
+    tenantOperations: model.tenantOperations, credentialClasses: model.credentialClasses,
+    escalations: model.escalationChains, founderDecisions: model.founderDecisions,
+    assumptions: model.assumptions, evidence: evidence.references,
+  };
+  for (const [label, rows] of Object.entries(collections)) {
+    assert.ok(Array.isArray(rows), `${label}: missing collection`);
+    unique(rows.map((row) => row.id), label);
+  }
+  assert.deepEqual(model.actors.map((row) => row.name), REQUIRED_ACTORS, "missing actor coverage");
+  assert.deepEqual(model.threats.map((row) => row.name), REQUIRED_THREATS, "missing required threat or duplicate semantics");
+  assert.equal(model.actions.length, 28);
+  assert.equal(model.actors.length * model.actions.length, 616);
+  assert.equal(model.tenantOperations.length, 18);
+  assert.equal(model.credentialClasses.length, 10);
+
+  for (const reference of evidence.references) {
+    assert.match(reference.sha ?? "", /^[0-9a-f]{40}$/);
+    assert.ok(["DIRECT", "INFERRED", "UNRESOLVED"].includes(reference.basis));
+    assert.ok(["HIGH", "MEDIUM", "LOW"].includes(reference.confidence));
+    assert.ok(reference.path && reference.claim && reference.category);
+    parseLineRange(reference.lines, reference.id);
+    assertSafeRepoPath(reference.path, reference.id);
+    assert.match(reference.blobSha ?? "", /^[0-9a-f]{40}$/);
+    const repository = repoForSha(reference.sha, manifest);
+    assert.ok(repository, `${reference.id}: stale evidence SHA`);
+    assert.equal(reference.repository, repository, `${reference.id}: repository/SHA mismatch`);
+  }
+  const ids = (rows) => new Set(rows.map((row) => row.id));
+  const evidenceIds = ids(evidence.references);
+  const actorIds = ids(model.actors);
+  const boundaryIds = ids(model.boundaries);
+  const flowIds = ids(model.flows);
+  const assetIds = ids(model.assets);
+  const attackerIds = ids(model.attackerProfiles);
+  const controlIds = ids(model.controls);
+  const threatIds = ids(model.threats);
+  for (const pathItem of model.sourceToSinkPaths) {
+    assert.ok(pathItem.source && pathItem.hops.length && pathItem.sink && pathItem.consequence, `${pathItem.id}: incomplete source-to-sink path`);
+    assert.ok(boundaryIds.has(pathItem.entryBoundaryId) && flowIds.has(pathItem.flowId));
+    for (const id of pathItem.threatIds) assert.ok(threatIds.has(id));
+    for (const id of pathItem.evidenceRefs) assert.ok(evidenceIds.has(id));
+  }
+  assert.equal(model.tenantPropagation.length, 7);
+  for (const propagation of model.tenantPropagation) {
+    assert.ok(propagation.stage && propagation.trustedSource && propagation.tenantDerivation && propagation.workspaceDerivation && propagation.status && propagation.next, `${propagation.id}: incomplete tenant propagation`);
+    for (const id of propagation.threatIds) assert.ok(threatIds.has(id));
+    for (const id of propagation.evidenceRefs) assert.ok(evidenceIds.has(id));
+  }
+  for (const row of [...model.boundaries, ...model.flows]) {
+    for (const id of row.evidenceRefs) assert.ok(evidenceIds.has(id), `${row.id}: invalid evidence ref ${id}`);
+  }
+  for (const threat of model.threats) {
+    assert.ok(threat.assets.length && threat.attackers.length && threat.boundaries.length && threat.flows.length && threat.evidenceRefs.length && threat.controlIds.length && threat.escalationId === `ESC-${threat.id}`, `${threat.id}: orphan threat`);
+    for (const id of threat.assets) assert.ok(assetIds.has(id));
+    for (const id of threat.attackers) assert.ok(attackerIds.has(id));
+    for (const id of threat.boundaries) assert.ok(boundaryIds.has(id));
+    for (const id of threat.flows) assert.ok(flowIds.has(id));
+    for (const id of threat.evidenceRefs) assert.ok(evidenceIds.has(id));
+    for (const id of threat.controlIds) assert.ok(controlIds.has(id));
+  }
+  for (const control of model.controls) {
+    assert.ok(control.threatIds.length, `${control.id}: orphan control`);
+    for (const id of control.threatIds) {
+      assert.ok(threatIds.has(id));
+      assert.ok(model.threats.find((threat) => threat.id === id).controlIds.includes(control.id), `${control.id}: reverse mapping missing`);
+    }
+  }
+  assert.equal(model.authorityPolicy.actorOverrides.length, model.actors.length);
+  for (const override of model.authorityPolicy.actorOverrides) {
+    assert.ok(actorIds.has(override.actorId));
+    const actions = [...override.allow, ...override.scoped, ...override.human];
+    unique(actions, `${override.actorId} authority actions`);
+    for (const id of actions) exists(model.actions, id, "action");
+  }
+  assert.equal(model.authorityPolicy.rules.length, 616);
+  unique(model.authorityPolicy.rules.map((rule) => rule.id), "authority rules");
+  unique(model.authorityPolicy.rules.map((rule) => `${rule.actorId}:${rule.actionId}`), "authority pairs");
+  for (const actor of model.actors) for (const action of model.actions) {
+    assert.ok(model.authorityPolicy.rules.some((rule) => rule.actorId === actor.id && rule.actionId === action.id), `missing authority pair ${actor.id}/${action.id}`);
+  }
+  const ownerKeys = ["actorId", "approvalOwnerActorId", "executionOwnerActorId", "reviewOwnerActorId", "certificationOwnerActorId", "credentialAuthorityActorId", "escalationOwnerActorId", "evidenceOwnerActorId"];
+  for (const rule of model.authorityPolicy.rules) {
+    for (const key of ownerKeys) assert.ok(actorIds.has(rule[key]), `${rule.id}: invalid authority owner`);
+    exists(model.actions, rule.actionId, "action");
+    assert.ok(model.authorityPolicy.decisions.includes(rule.decision));
+  }
+  const decision = (actor, action) => model.authorityPolicy.rules.find((rule) => rule.actorId === actor && rule.actionId === action)?.decision;
+  const denied = (actor, action) => assert.equal(decision(actor, action), "DENY", `${actor} must deny ${action}`);
+  for (const action of ["AXN-008", "AXN-010", "AXN-011"]) denied("ACT-006", action);
+  for (const actor of ["ACT-007", "ACT-008", "ACT-009", "ACT-010", "ACT-011", "ACT-012"]) for (const action of ["AXN-002", "AXN-003"]) denied(actor, action);
+  for (const action of ["AXN-002", "AXN-003"]) denied("ACT-013", action);
+  for (const actor of ["ACT-014", "ACT-015"]) denied(actor, "AXN-011");
+  for (const action of ["AXN-007", "AXN-008", "AXN-010", "AXN-011"]) denied("ACT-021", action);
+  for (const actor of model.actors) denied(actor.id, "AXN-006");
+  denied("ACT-018", "AXN-028"); denied("ACT-019", "AXN-025");
+  for (const rule of model.authorityPolicy.rules.filter((item) => ["AXN-002", "AXN-003"].includes(item.actionId) && item.decision !== "DENY")) {
+    assert.notEqual(rule.executionOwnerActorId, rule.approvalOwnerActorId);
+    assert.notEqual(rule.executionOwnerActorId, rule.reviewOwnerActorId);
+    assert.notEqual(rule.executionOwnerActorId, rule.certificationOwnerActorId);
+  }
+  assert.equal(model.tenantOperationPolicy.status, "FOUNDER_DECISION_REQUIRED");
+  assert.equal(model.tenantOperationPolicy.denialBehavior, "DENY_AND_LOG");
+  const credentialKeys = ["custodianActorId", "creatorActorIds", "authorizedReaderActorIds", "authorizedUserActorIds", "rotationAuthorityActorIds", "revocationAuthorityActorIds", "storageBoundary", "deliveryMechanism", "lifetime", "auditEvent", "emergencyProcedure", "evidenceRefs", "founderDecisionId"];
+  for (const credential of model.credentialClasses) {
+    for (const key of credentialKeys) assert.notEqual(credential[key], undefined, `${credential.id}: missing credential field ${key}`);
+    assert.ok(actorIds.has(credential.custodianActorId));
+    for (const id of [...credential.creatorActorIds, ...credential.authorizedReaderActorIds, ...credential.authorizedUserActorIds, ...credential.rotationAuthorityActorIds, ...credential.revocationAuthorityActorIds]) assert.ok(actorIds.has(id));
+    for (const id of credential.evidenceRefs) assert.ok(evidenceIds.has(id));
+  }
+  for (const credential of model.credentialClasses.slice(2)) assert.equal(credential.status, "FOUNDER_DECISION_REQUIRED");
+  assert.equal(model.credentialPolicy.readerActorIds.length, 0);
+  const escalationOwners = ["detectionOwnerActorId", "triageOwnerActorId", "remediationOwnerActorId", "approvalOwnerActorId", "certificationOwnerActorId", "closureAuthorityActorId"];
+  for (const key of escalationOwners) assert.ok(actorIds.has(model.escalationPolicy[key]), `missing escalation owner ${key}`);
+  assert.equal(model.escalationChains.length, model.threats.length);
+  for (const threat of model.threats) {
+    const escalation = model.escalationChains.find((item) => item.id === threat.escalationId && item.threatId === threat.id);
+    assert.ok(escalation, `${threat.id}: dangling escalation`);
+    assert.ok(escalation.detectionSignal && escalation.recoveryOrRollback && escalation.founderEscalationCondition && escalation.closureEvidenceRequired.length, `${escalation.id}: incomplete escalation`);
+    assert.ok(escalation.requiredDetectionTokens.length >= 2 && escalation.requiredDetectionTokens.every((token) => escalation.detectionSignal.includes(token)), `${escalation.id}: generic detection signal`);
+  }
+  unique(model.escalationChains.map((item) => item.detectionSignal), "escalation detection signals");
+  assert.equal(model.retryPolicy.status, "PROPOSED_CONTROL_NOT_IMPLEMENTED");
+  assert.deepEqual(model.retryPolicy.classes.map((item) => item.class), ["PERMANENT", "TRANSIENT", "THROTTLED", "UNKNOWN"]);
+  assert.equal(model.retryPolicy.implementationClaim, false);
+  const summaryMatch = markdown.match(/```json p1a-summary\n([^\n]+)\n```/);
+  assert.ok(summaryMatch, "documentation summary absent");
+  const summary = JSON.parse(summaryMatch[1]);
+  assert.deepEqual(summary, {
+    actors: model.actors.length, actions: model.actions.length,
+    authorityRules: model.authorityPolicy.rules.length, assets: model.assets.length,
+    trustBoundaries: model.boundaries.length, dataFlows: model.flows.length,
+    sourceToSinkPaths: model.sourceToSinkPaths.length,
+    tenantPropagationStages: model.tenantPropagation.length,
+    threats: model.threats.length, controls: model.controls.length,
+    tenantOperations: model.tenantOperations.length,
+    credentialClasses: model.credentialClasses.length,
+    escalationChains: model.escalationChains.length,
+    founderDecisions: model.founderDecisions.length,
+    sourceEvidenceReferences: evidence.references.length,
+  });
+  const markdownThreats = [...markdown.matchAll(/\| (THR-\d{3}) \|/g)].map((match) => match[1]);
+  assert.deepEqual(markdownThreats, model.threats.map((threat) => threat.id));
+  for (const boundary of model.boundaries) assert.ok(markdown.includes(boundary.id));
+  for (const decisionItem of model.founderDecisions) assert.ok(markdown.includes(decisionItem.id));
+  for (const ref of [...markdown.matchAll(/\[(EV-[A-Z0-9-]+)\]/g)].map((match) => match[1])) assert.ok(evidenceIds.has(ref));
+  return { authorityRules: 616, decision };
+}
+
+// Compatibility boundary for the exact PR #8 test contract. The caller may
+// supply only the two historical external anchors; every policy identity is
+// resolved and enforced by this trusted module.
+export function assertTrustAnchor(model, evidence, manifest, anchor) {
+  if (!anchor || typeof anchor !== "object") {
+    throw new NotVerifiedError("trust anchor absent (fail-closed)");
+  }
+  assert.deepEqual(
+    Object.keys(anchor).sort(),
+    ["baseSha", "runtimePin"],
+    "trust anchor contains candidate-controlled policy declarations",
+  );
+  assert.match(anchor.baseSha ?? "", /^[0-9a-f]{40}$/, "anchor base malformed");
+  assert.match(
+    anchor.runtimePin ?? "",
+    /^[0-9a-f]{40}$/,
+    "anchor runtime malformed",
+  );
+  assert.equal(anchor.baseSha, AUTHORIZED_BASE, "unauthorized evidence/model base");
+  assert.equal(anchor.runtimePin, AUTHORIZED_RUNTIME, "unauthorized runtime pin");
+  assert.equal(manifest.authorizedBaseSha, AUTHORIZED_BASE, "manifest base mismatch");
+  assert.equal(
+    manifest.runtimeEvidenceSha,
+    AUTHORIZED_RUNTIME,
+    "manifest runtime mismatch",
+  );
+  assert.equal(
+    model.sources?.specification?.revision,
+    AUTHORIZED_BASE,
+    "model base mismatch",
+  );
+  assert.equal(
+    model.sources?.runtime?.revision,
+    AUTHORIZED_RUNTIME,
+    "model runtime mismatch",
+  );
+  assert.ok(Array.isArray(evidence?.references), "evidence references absent");
+  for (const reference of evidence.references) {
+    const expected =
+      reference.repository === AUTHORIZED_REPOSITORIES.base
+        ? AUTHORIZED_BASE
+        : reference.repository === AUTHORIZED_REPOSITORIES.runtime
+          ? AUTHORIZED_RUNTIME
+          : null;
+    assert.ok(expected, `${reference.id ?? "evidence"}: unauthorized repository`);
+    assert.equal(reference.sha, expected, `${reference.id}: evidence anchor mismatch`);
+  }
+  return Object.freeze({
+    baseSha: AUTHORIZED_BASE,
+    runtimePin: AUTHORIZED_RUNTIME,
+    reconciliationBaseSha: TRUSTED_RECONCILIATION_BASE,
+    originalCandidateSha: ORIGINAL_CANDIDATE,
+  });
 }
 
 export function parseLineRange(spec, label) {
@@ -150,6 +404,149 @@ export function assertSafeRepoPath(value, label) {
   assert.ok(!segments.some((segment) => !segment), `${label}: empty segment`);
   assert.equal(path.posix.normalize(value), value, `${label}: non-normal path`);
   return value;
+}
+
+function exactSha(value, label) {
+  assert.match(value ?? "", /^[0-9a-f]{40}$/, `${label}: exact SHA required`);
+  return value;
+}
+
+function gitAt(repoRoot, ...args) {
+  return execFileSync("git", args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
+function normalizeRepository(value) {
+  return value
+    ?.replace(/^git@github\.com:/, "https://github.com/")
+    .replace(/\.git$/, "");
+}
+
+// Compatibility Git gate. The production path receives its allowlist from the
+// trusted caller; arbitrary manifests are accepted only for explicit temporary
+// fixture repositories used by the negative-control suite.
+export function validateGit(manifest, candidateSha, repoRoot = candidateRoot, options = {}) {
+  assert.ok(manifest && typeof manifest === "object", "manifest absent");
+  exactSha(candidateSha, "candidate");
+  exactSha(manifest.authorizedBaseSha, "authorized base");
+  const headBefore = gitAt(repoRoot, "rev-parse", "HEAD");
+  assert.equal(candidateSha, headBefore, "candidate SHA does not equal checked-out HEAD");
+  assert.equal(gitAt(repoRoot, "cat-file", "-t", candidateSha), "commit");
+  assert.equal(gitAt(repoRoot, "cat-file", "-t", manifest.authorizedBaseSha), "commit");
+  gitAt(repoRoot, "merge-base", "--is-ancestor", manifest.authorizedBaseSha, candidateSha);
+  if (options.repository) {
+    assert.equal(
+      normalizeRepository(gitAt(repoRoot, "remote", "get-url", "origin")),
+      normalizeRepository(`https://github.com/${options.repository}`),
+      "repository identity mismatch",
+    );
+  }
+  const trustedAllowed = options.trustedAllowedFiles ?? manifest.allowedRemediationFiles;
+  const trustedRequired = options.trustedRequiredFiles ?? manifest.requiredFiles;
+  assert.ok(Array.isArray(trustedAllowed) && Array.isArray(trustedRequired));
+  if (options.trustedAllowedFiles) {
+    assert.deepEqual(
+      [...manifest.allowedRemediationFiles].sort(),
+      [...trustedAllowed].sort(),
+      "candidate manifest changed trusted allowlist",
+    );
+    assert.deepEqual(
+      [...manifest.requiredFiles].sort(),
+      [...trustedRequired].sort(),
+      "candidate manifest changed trusted required files",
+    );
+  }
+  for (const file of [...trustedAllowed, ...trustedRequired]) assertSafeRepoPath(file, "scope path");
+  unique([...trustedAllowed].map((file) => path.posix.normalize(file)), "normalized allowed paths");
+  const raw = execFileSync(
+    "git",
+    ["diff", "--name-status", "-z", "--find-renames", `${manifest.authorizedBaseSha}..${candidateSha}`],
+    { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  );
+  const tokens = raw.split("\0").filter(Boolean);
+  const changed = [];
+  for (let index = 0; index < tokens.length;) {
+    const status = tokens[index++];
+    assert.match(status, /^[ACDMT][0-9]*$/, `unsupported or renamed status ${status}`);
+    const file = tokens[index++];
+    assertSafeRepoPath(file, `changed ${status}`);
+    changed.push(file);
+  }
+  unique(changed.map((file) => path.posix.normalize(file)), "normalized changed paths");
+  assert.deepEqual([...changed].sort(), [...trustedAllowed].sort(), "unauthorized, omitted, deleted, renamed, or unclassified path");
+  for (const file of trustedRequired) {
+    const stat = lstatSync(path.join(repoRoot, file));
+    assert.ok(stat.isFile() && !stat.isSymbolicLink(), `${file}: missing or unsafe`);
+  }
+  assert.equal(gitAt(repoRoot, "status", "--porcelain"), "", "dirty worktree");
+  assert.equal(gitAt(repoRoot, "rev-parse", "HEAD"), headBefore, "HEAD moved during validation");
+  return headBefore;
+}
+
+// Deterministic legacy entrypoint. It composes canonical controls and never
+// emits a certification verdict. All trust identities and object stores are
+// explicit; absence is a blocking error.
+export function runPackage(options = {}) {
+  const {
+    candidateSha,
+    repoRoot = candidateRoot,
+    anchor,
+    specGitDir,
+    runtimeGitDir,
+    workflowSha,
+    evidenceBaseSha,
+    reconciliationBaseSha,
+    originalCandidateSha,
+    trustedAllowedFiles,
+    trustedRequiredFiles,
+    repository = AUTHORIZED_REPOSITORIES.base,
+  } = options;
+  exactSha(candidateSha, "candidate");
+  const packageLoad = (file) => JSON.parse(readFileSync(path.join(repoRoot, file), "utf8"));
+  const model = packageLoad("docs/security/p1-a/model.json");
+  const evidence = packageLoad("docs/security/p1-a/evidence-register.json");
+  const manifest = packageLoad("docs/security/p1-a/validation-manifest.json");
+  const markdown = readFileSync(path.join(repoRoot, "docs/security/p1-a/threat-model.md"), "utf8");
+  const dualIdentities = [
+    workflowSha, evidenceBaseSha, reconciliationBaseSha, originalCandidateSha,
+  ];
+  const usesDualBase = dualIdentities.some(Boolean);
+  assert.ok(
+    !usesDualBase || dualIdentities.every(Boolean),
+    "partial dual-base identity set",
+  );
+  const head = usesDualBase
+    ? candidateSha
+    : validateGit(manifest, candidateSha, repoRoot, {
+        trustedAllowedFiles,
+        trustedRequiredFiles,
+        repository,
+      });
+  const trust = assertTrustAnchor(model, evidence, manifest, anchor);
+  const data = validateData(model, evidence, manifest, markdown);
+  validateEvidenceBinding(evidence, manifest, { specGitDir, runtimeGitDir });
+  if (usesDualBase) {
+    for (const [label, value] of [
+      ["workflow", workflowSha], ["evidence base", evidenceBaseSha],
+      ["reconciliation base", reconciliationBaseSha],
+      ["original candidate", originalCandidateSha],
+    ]) exactSha(value, label);
+    validateDualBaseScope({
+      git: (...args) => gitAt(repoRoot, ...args),
+      candidateSha, workflowSha, evidenceBaseSha,
+      reconciliationBaseSha, originalCandidateSha,
+    });
+  }
+  return Object.freeze({
+    status: "VALIDATED_NOT_CERTIFIED",
+    candidateSha: head,
+    trust,
+    authorityRules: data.authorityRules,
+    evidenceReferences: evidence.references.length,
+  });
 }
 
 function gitObject(gitDir, args) {
@@ -306,19 +703,209 @@ const REQUIRED_CI_ADDITION = [
   "",
 ].join("\n");
 
-function validateCandidateCi(git, candidateSha, reconciliationBaseSha) {
+const CI_CHECKOUT_REF =
+  "          ref: ${{ github.event.pull_request.head.sha || github.sha }}\n";
+const TRUSTED_CI_CHECKOUT =
+  `${CI_CHECKOUT_REF}          persist-credentials: false\n`;
+export const ORDINARY_CI_ACTION_PINS = Object.freeze({
+  "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
+  "actions/setup-node": "49933ea5288caeca8642d1e84afbd3f7d6820020",
+  "actions/cache": "0057852bfaa89a56745cba8c7296529d2fc39830",
+  "raven-actions/actionlint": "3d39aea434753780c3b3d4a1a31c854b4dbf49d7",
+});
+const ORDINARY_CI_ACTION_COUNTS = Object.freeze({
+  "actions/checkout": 3,
+  "actions/setup-node": 1,
+  "actions/cache": 1,
+  "raven-actions/actionlint": 1,
+});
+const PINNED_ACTION_COMMENTS = Object.freeze({
+  "actions/checkout": " # v4",
+  "actions/setup-node": " # v4",
+  "actions/cache": " # v4",
+  "raven-actions/actionlint": " # v2.2.0",
+});
+
+function pinBaselineActions(source) {
+  let pinned = source;
+  for (const [repository, expected] of Object.entries(ORDINARY_CI_ACTION_PINS)) {
+    if (repository === "raven-actions/actionlint") continue;
+    const mutable = `uses: ${repository}@v4`;
+    assert.equal(pinned.split(mutable).length - 1, 1,
+      `${repository}: baseline mutable action count mismatch`);
+    pinned = pinned.replace(
+      mutable,
+      `uses: ${repository}@${expected}${PINNED_ACTION_COMMENTS[repository]}`,
+    );
+  }
+  return pinned;
+}
+
+export function validateOrdinaryCiActionPins(source) {
+  assert.ok(typeof source === "string" && source, "ordinary CI absent");
+  const uses = [...source.matchAll(/^\s*(?:-\s*)?uses:\s*([^\s@]+)@([^\s#]+)(?:\s+#.*)?$/gm)]
+    .map((match) => ({ repository: match[1], revision: match[2] }));
+  assert.equal(uses.length, 6, "ordinary CI action inventory changed");
+  const counts = new Map();
+  for (const { repository, revision } of uses) {
+    assert.ok(Object.hasOwn(ORDINARY_CI_ACTION_PINS, repository),
+      `unclassified action repository: ${repository}`);
+    assert.match(revision, /^[0-9a-f]{40}$/,
+      `${repository}: immutable full action SHA required`);
+    assert.equal(revision, ORDINARY_CI_ACTION_PINS[repository],
+      `${repository}: unauthorized action SHA`);
+    counts.set(repository, (counts.get(repository) ?? 0) + 1);
+  }
+  assert.deepEqual(
+    Object.fromEntries([...counts].sort()),
+    Object.fromEntries(Object.entries(ORDINARY_CI_ACTION_COUNTS).sort()),
+    "ordinary CI action counts changed",
+  );
+  return Object.freeze({ required: uses.length, passed: uses.length });
+}
+const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candidate object
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 365c59757756f3f91480d3bfeb841b543010201f
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-original-candidate
+
+      - name: Verify and materialize exact original P1-A candidate object
+        env:
+          P1A_ORIGINAL_CANDIDATE: 365c59757756f3f91480d3bfeb841b543010201f
+          P1A_ORIGINAL_MODEL_BLOB: 0bb71b21e3532f9690226b6a504967f3b2504621
+          P1A_ORIGINAL_EVIDENCE_BLOB: 205dc5451bfc639bdfcbd58d380e11439e6f9764
+          P1A_ORIGINAL_MANIFEST_BLOB: d5e86d2445f750bc85a951c348ae52f76f2ce51a
+          P1A_ORIGINAL_MARKDOWN_BLOB: b675f420e0e50c32e84bba37c13e0aade0cfd5e5
+          P1A_ORIGINAL_TEST_BLOB: 1ad3be9777b6aaea530a07fbd0b183311d604be5
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          [[ "$P1A_ORIGINAL_CANDIDATE" =~ ^[0-9a-f]{40}$ ]]
+          test "$P1A_ORIGINAL_CANDIDATE" = "365c59757756f3f91480d3bfeb841b543010201f"
+          test "$(git -C .p1a-original-candidate rev-parse HEAD)" = "$P1A_ORIGINAL_CANDIDATE"
+          test "$(git -C .p1a-original-candidate cat-file -t "$P1A_ORIGINAL_CANDIDATE")" = "commit"
+          test "$(git -C .p1a-original-candidate remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          if grep -Eiq 'x-access-token|authorization:' .p1a-original-candidate/.git/config; then
+            echo "persisted credential material detected" >&2
+            exit 1
+          fi
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE^{commit}")" = "$P1A_ORIGINAL_CANDIDATE"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/model.json")" = "$P1A_ORIGINAL_MODEL_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/evidence-register.json")" = "$P1A_ORIGINAL_EVIDENCE_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/validation-manifest.json")" = "$P1A_ORIGINAL_MANIFEST_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/threat-model.md")" = "$P1A_ORIGINAL_MARKDOWN_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:scripts/test-p1a-threat-model.mjs")" = "$P1A_ORIGINAL_TEST_BLOB"
+
+      - name: Acquire exact trusted CI baseline
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 06e6497ac3420998671f255a42a20d8cb8b9ca50
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-trusted-baseline
+
+      - name: Verify exact trusted CI baseline
+        env:
+          P1A_TRUSTED_BASELINE: 06e6497ac3420998671f255a42a20d8cb8b9ca50
+          P1A_TRUSTED_CI_BLOB: 9a3f1a04f99e83d9dad84cf384d86117a7d282f1
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          [[ "$P1A_TRUSTED_BASELINE" =~ ^[0-9a-f]{40}$ ]]
+          test "$P1A_TRUSTED_BASELINE" = "06e6497ac3420998671f255a42a20d8cb8b9ca50"
+          test "$(git -C .p1a-trusted-baseline rev-parse HEAD)" = "$P1A_TRUSTED_BASELINE"
+          test "$(git -C .p1a-trusted-baseline cat-file -t "$P1A_TRUSTED_BASELINE")" = "commit"
+          test "$(git -C .p1a-trusted-baseline remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          test -f .p1a-trusted-baseline/.github/workflows/ci.yml
+          test "$(git -C .p1a-trusted-baseline rev-parse "$P1A_TRUSTED_BASELINE:.github/workflows/ci.yml")" = "$P1A_TRUSTED_CI_BLOB"
+          if grep -Eiq 'x-access-token|authorization:' .p1a-trusted-baseline/.git/config; then
+            echo "persisted baseline credential material detected" >&2
+            exit 1
+          fi
+
+`;
+const BASE_TRUSTED_VERIFIER_STEP = `      - name: P1-A trusted verifier controls
+        run: node scripts/test-p1a-trusted-verifier.mjs
+`;
+const ISOLATED_TRUSTED_VERIFIER_STEP = `      - name: P1-A trusted verifier controls
+        env:
+          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
+          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
+        run: node scripts/test-p1a-trusted-verifier.mjs
+
+      - name: Remove isolated P1-A authority checkouts
+        if: always()
+        run: |
+          rm -rf .p1a-original-candidate .p1a-trusted-baseline
+          test ! -e .p1a-original-candidate
+          test ! -e .p1a-trusted-baseline
+`;
+const CI_IDENTITY_MARKER =
+  "      - name: P1-A trusted-bootstrap exact-SHA identity";
+const CI_TRUSTED_VERIFIER_MARKER =
+  "      - name: P1-A trusted verifier controls";
+
+function replaceExactlyOnce(source, fragment, replacement, label) {
+  assert.equal(source.split(fragment).length - 1, 1, `${label}: fragment count mismatch`);
+  return source.replace(fragment, replacement);
+}
+
+export function composeTrustedCi(baseline) {
+  const actionPinned = pinBaselineActions(baseline);
+  const readOnlyCheckout = replaceExactlyOnce(
+    actionPinned, CI_CHECKOUT_REF, TRUSTED_CI_CHECKOUT, "trusted checkout",
+  );
+  const acquired = replaceExactlyOnce(
+    readOnlyCheckout,
+    CI_TRUSTED_VERIFIER_MARKER,
+    `${TRUSTED_CI_ACQUISITION}${CI_TRUSTED_VERIFIER_MARKER}`,
+    "trusted acquisition placement",
+  );
+  return replaceExactlyOnce(
+    acquired,
+    BASE_TRUSTED_VERIFIER_STEP,
+    ISOLATED_TRUSTED_VERIFIER_STEP,
+    "isolated authority path and cleanup placement",
+  );
+}
+
+export function composeCandidateCi(baseline) {
+  return replaceExactlyOnce(
+    baseline,
+    CI_IDENTITY_MARKER,
+    `${REQUIRED_CI_ADDITION}${CI_IDENTITY_MARKER}`,
+    "candidate hermetic placement",
+  );
+}
+
+export function composeFinalCi(baseline) {
+  return composeCandidateCi(composeTrustedCi(baseline));
+}
+
+export function validateComposedCandidateCi(git, candidateSha, workflowSha) {
   const path = ".github/workflows/ci.yml";
   const entry = git("ls-tree", candidateSha, "--", path);
   assert.match(entry, /^100644\s+blob\s+[0-9a-f]{40}\t/, `${path}: unsafe entry`);
-  const candidate = git("show", `${candidateSha}:${path}`);
-  const trusted = `${git("show", `${reconciliationBaseSha}:${path}`)}\n`;
+  assert.equal(blobAt(git, COMPOSED_CI_BASE, path), COMPOSED_CI_BASE_BLOB,
+    `${path}: baseline blob mismatch`);
+  const baseline = `${git("show", `${COMPOSED_CI_BASE}:${path}`)}\n`;
+  const trusted = `${git("show", `${workflowSha}:${path}`)}\n`;
+  const candidate = `${git("show", `${candidateSha}:${path}`)}\n`;
+  assert.equal(trusted, composeTrustedCi(baseline), `${path}: trusted stage mismatch`);
+  assert.equal(candidate, composeFinalCi(baseline), `${path}: composed state or remainder mismatch`);
+  validateOrdinaryCiActionPins(candidate);
+  assert.equal(candidate.split(TRUSTED_CI_ACQUISITION).length - 1, 1,
+    `${path}: trusted fragment missing or duplicated`);
   assert.equal(candidate.split(REQUIRED_CI_ADDITION).length - 1, 1,
-    `${path}: required hermetic step missing or duplicated`);
-  assert.equal(`${candidate.replace(REQUIRED_CI_ADDITION, "")}\n`, trusted,
-    `${path}: changes exceed the exact hermetic step`);
+    `${path}: candidate fragment missing or duplicated`);
   for (const forbidden of [
     "P1A_RUNTIME_APP_PRIVATE_KEY", "-----BEGIN PRIVATE KEY-----",
     "-----BEGIN RSA PRIVATE KEY-----", "pull_request_target", "node candidate/",
+    "continue-on-error:", "permissions:\n  contents: write", "fetch-depth: 0",
   ]) assert.ok(!candidate.includes(forbidden), `${path}: forbidden ${forbidden}`);
   assert.ok(!/\$\{\{\s*secrets\s*\./.test(candidate), `${path}: protected secret reference`);
   for (const required of [
@@ -327,6 +914,11 @@ function validateCandidateCi(git, candidateSha, reconciliationBaseSha) {
     "node scripts/detect-p1a-ordinary-ci-secrets.mjs",
     "P1-A private cross-repository suites are intentionally unavailable",
   ]) assert.ok(candidate.includes(required), `${path}: missing ${required}`);
+  return Object.freeze({
+    baselineBlob: COMPOSED_CI_BASE_BLOB,
+    trustedBlob: blobAt(git, workflowSha, path),
+    candidateBlob: blobAt(git, candidateSha, path),
+  });
 }
 
 export function validateDualBaseScope({
@@ -392,6 +984,7 @@ export function validateDualBaseScope({
       `${file}: trusted blob identity mismatch`);
   }
   for (const file of AMENDMENT_CONTROLLED_FILES) {
+    if (file === ".github/workflows/ci.yml") continue;
     assert.equal(blobAt(git, candidateSha, file), blobAt(git, workflowSha, file),
       `${file}: amended trusted blob identity mismatch`);
   }
@@ -401,7 +994,7 @@ export function validateDualBaseScope({
     assert.equal(blobAt(git, candidateSha, file), expected,
       `${file}: candidate evidence blob identity mismatch`);
   }
-  validateCandidateCi(git, candidateSha, reconciliationBaseSha);
+  validateComposedCandidateCi(git, candidateSha, workflowSha);
   return { historical, trusted, amendment, reconciled };
 }
 
