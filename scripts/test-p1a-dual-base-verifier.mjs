@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url";
 import {
   AUTHORIZED_BASE, ORIGINAL_CANDIDATE, TRUSTED_RECONCILIATION_BASE,
   AMENDMENT_CONTROLLED_FILES, CANDIDATE_OWNED_FILES, COMPOSED_CI_BASE,
-  composeCandidateCi, composeFinalCi, composeTrustedCi, validateDualBaseScope,
+  REQUIRED_CI_ADDITION, composeCandidateCi, composeFinalCi, composeTrustedCi,
+  validateDualBaseScope,
 } from "./validate-p1a-threat-model.mjs";
 import { validateCertificationBundle } from "./validate-p1a-certification-accounting.mjs";
 
@@ -34,6 +35,7 @@ run(temporary, ["git", "clone", "-q", "--no-hardlinks", root, repository]);
 const git = (...args) => run(repository, ["git", ...args]);
 git("config", "user.email", "p1a-dual-base@example.invalid");
 git("config", "user.name", "P1A dual-base fixture");
+git("remote", "set-url", "origin", "https://github.com/DarksiedCEO/zbestmedia.git");
 
 function entry(commit, file) {
   const match = /^(\d+)\s+blob\s+([0-9a-f]{40})\t/.exec(git("ls-tree", commit, "--", file));
@@ -54,7 +56,8 @@ function trustedWorkflow() {
 }
 const workflowSha = trustedWorkflow();
 
-function candidate({ omit, add, mutate, ciAppend = "", ciTransform, omitOriginalParent = false } = {}) {
+function candidate({ omit, add, mutate, ciAppend = "", ciTransform,
+  omitOriginalParent = false, reverseParents = false } = {}) {
   sequence += 1;
   const env = { ...process.env, GIT_INDEX_FILE: path.join(temporary, `index-${sequence}`) };
   run(repository, ["git", "read-tree", workflowSha], { env });
@@ -67,8 +70,7 @@ function candidate({ omit, add, mutate, ciAppend = "", ciTransform, omitOriginal
   if (omit !== ".github/workflows/ci.yml") {
     const trustedCi = git("show", `${workflowSha}:.github/workflows/ci.yml`);
     const marker = "      - name: P1-A trusted-bootstrap exact-SHA identity";
-    const addition = "      - name: P1-A validator control suite (hermetic)\n        run: pnpm test:p1a-threat-model\n\n";
-    const composedCi = `${trustedCi.replace(marker, `${addition}${marker}`)}${ciAppend}`;
+    const composedCi = `${trustedCi.replace(marker, `${REQUIRED_CI_ADDITION}${marker}`)}${ciAppend}`;
     const resolvedCi = ciTransform ? ciTransform(composedCi) : composedCi;
     const blob = run(repository, ["git", "hash-object", "-w", "--stdin"], { env, input: `${resolvedCi}\n` });
     run(repository, ["git", "update-index", "--add", "--cacheinfo", "100644", blob, ".github/workflows/ci.yml"], { env });
@@ -79,16 +81,37 @@ function candidate({ omit, add, mutate, ciAppend = "", ciTransform, omitOriginal
     run(repository, ["git", "update-index", "--add", "--cacheinfo", "100644", blob, file], { env });
   }
   const tree = run(repository, ["git", "write-tree"], { env });
-  const parents = ["-p", workflowSha];
-  if (!omitOriginalParent) parents.push("-p", ORIGINAL_CANDIDATE);
+  const parents = [];
+  if (reverseParents) {
+    parents.push("-p", workflowSha);
+    if (!omitOriginalParent) parents.push("-p", ORIGINAL_CANDIDATE);
+  } else {
+    if (!omitOriginalParent) parents.push("-p", ORIGINAL_CANDIDATE);
+    parents.push("-p", workflowSha);
+  }
   const commit = run(repository, ["git", "commit-tree", tree, ...parents, "-m", `fixture ${sequence}`], { env });
   if (omit !== ".github/workflows/ci.yml" && mutate !== ".github/workflows/ci.yml") {
-    assert.ok(git("show", `${commit}:.github/workflows/ci.yml`).includes("pnpm test:p1a-threat-model"));
+    const finalCi = git("show", `${commit}:.github/workflows/ci.yml`);
+    assert.ok(finalCi.includes("--candidate-data-only"));
+    assert.ok(!finalCi.includes("pnpm test:p1a-threat-model"));
   }
   return commit;
 }
 
 const validCandidate = candidate();
+const candidateDataRun = (sha = validCandidate, extraEnv = {}) => {
+  git("checkout", "--detach", sha);
+  const output = run(root, [
+    process.execPath, path.join(root, "scripts/validate-p1a-threat-model.mjs"),
+    "--candidate-data-only",
+  ], { env: {
+    ...process.env,
+    P1A_PACKAGE_ROOT: repository,
+    P1A_CANDIDATE_SHA: sha,
+    ...extraEnv,
+  } });
+  return JSON.parse(output.split("\n").at(-1));
+};
 const invoke = (overrides = {}) => validateDualBaseScope({
   git, candidateSha: validCandidate, evidenceBaseSha: AUTHORIZED_BASE,
   reconciliationBaseSha: TRUSTED_RECONCILIATION_BASE,
@@ -109,6 +132,34 @@ const dualAccounting = { suite: "p1-a-dual-base-verifier-controls", ...identity,
 
 const cases = [
   ["dual_base_valid_reconciliation", () => invoke(), false],
+  ["candidate_data_valid_reconciliation", () => {
+    const summary = candidateDataRun();
+    assert.equal(summary.scope, "CANDIDATE_DATA_VALIDATED");
+    assert.equal(summary.certified, false);
+    assert.equal(summary.failed, 0);
+    assert.equal(summary.protectedOperations, 0);
+  }, false],
+  ["candidate_data_wrong_sha", () => candidateDataRun(validCandidate, {
+    P1A_CANDIDATE_SHA: "f".repeat(40),
+  }), true],
+  ["candidate_data_reversed_parents", () => candidateDataRun(candidate({
+    reverseParents: true,
+  })), true],
+  ["candidate_data_unauthorized_path", () => candidateDataRun(candidate({
+    add: "unauthorized.txt",
+  })), true],
+  ["candidate_data_blob_substitution", () => candidateDataRun(candidate({
+    mutate: "docs/security/p1-a/model.json",
+  })), true],
+  ["candidate_data_historical_root_command", () => candidateDataRun(candidate({
+    ciAppend: "\n      - name: obsolete historical root\n        run: pnpm test:p1a-threat-model\n",
+  })), true],
+  ["candidate_data_workflow_authority_injection", () => candidateDataRun(validCandidate, {
+    P1A_WORKFLOW_SHA: workflowSha,
+  }), true],
+  ["candidate_data_overlapping_trusted_root", () => candidateDataRun(validCandidate, {
+    P1A_TRUSTED_EXECUTION_ROOT: repository,
+  }), true],
   ["wrong_evidence_model_base", () => invoke({ evidenceBaseSha: "0".repeat(40) }), true],
   ["wrong_trusted_reconciliation_base", () => invoke({ reconciliationBaseSha: AUTHORIZED_BASE }), true],
   ["wrong_original_candidate", () => invoke({ originalCandidateSha: TRUSTED_RECONCILIATION_BASE }), true],
@@ -145,8 +196,8 @@ const validCi = `${git("show", `${validCandidate}:.github/workflows/ci.yml`)}\n`
 const positiveCases = [
   ["exact_baseline_recognized", () => assert.equal(git("rev-parse", `${COMPOSED_CI_BASE}:.github/workflows/ci.yml`), "9a3f1a04f99e83d9dad84cf384d86117a7d282f1")],
   ["baseline_plus_trusted_fragment", () => assert.equal(trustedCi, composeTrustedCi(baselineCi))],
-  ["baseline_plus_candidate_fragment", () => assert.ok(composeCandidateCi(baselineCi).includes("pnpm test:p1a-threat-model"))],
-  ["baseline_plus_both_fragments", () => assert.equal(validCi, composeFinalCi(baselineCi))],
+  ["baseline_plus_candidate_fragment", () => assert.ok(composeCandidateCi(baselineCi).includes("--candidate-data-only"))],
+  ["baseline_plus_both_fragments", () => assert.equal(validCi, composeCandidateCi(trustedCi))],
   ["immutable_candidate_checkout", () => assert.ok(validCi.includes("ref: ${{ github.event.pull_request.head.sha || github.sha }}"))],
   ["read_only_permissions", () => { assert.ok(validCi.includes("permissions:\n  contents: read")); assert.ok(!validCi.includes("contents: write")); }],
   ["exact_historical_commit_acquired", () => assert.ok(validCi.includes(`ref: ${ORIGINAL_CANDIDATE}`))],
@@ -161,11 +212,13 @@ const replaceOnce = (source, needle, replacement) => {
 };
 const negativeCases = [
   ["missing_trusted_fragment", (ci) => replaceOnce(ci, "      - name: Acquire exact original P1-A candidate object\n", "")],
-  ["missing_candidate_fragment", (ci) => replaceOnce(ci, "      - name: P1-A validator control suite (hermetic)\n", "")],
+  ["missing_candidate_fragment", (ci) => replaceOnce(ci, "      - name: P1-A candidate-data validation\n", "")],
   ["duplicate_trusted_fragment", (ci) => `${ci}\n      - name: Acquire exact original P1-A candidate object\n`],
-  ["duplicate_candidate_fragment", (ci) => `${ci}\n      - name: P1-A validator control suite (hermetic)\n`],
+  ["duplicate_candidate_fragment", (ci) => `${ci}\n      - name: P1-A candidate-data validation\n`],
   ["modified_trusted_command", (ci) => replaceOnce(ci, "git fetch --no-tags --no-write-fetch-head", "git fetch --no-tags")],
-  ["modified_candidate_command", (ci) => replaceOnce(ci, "pnpm test:p1a-threat-model", "pnpm test:p1a-threat-model || true")],
+  ["modified_candidate_command", (ci) => replaceOnce(ci, "node scripts/validate-p1a-threat-model.mjs --candidate-data-only", "node scripts/validate-p1a-threat-model.mjs --candidate-data-only || true")],
+  ["historical_root_command_restored", (ci) => `${ci}\n      - name: obsolete historical root\n        run: pnpm test:p1a-threat-model\n`],
+  ["candidate_data_relabelled_certified", (ci) => `${ci}\n# CERTIFIED\n`],
   ["reordered_security_critical_fragment", (ci) => replaceOnce(ci, "      - name: Acquire exact original P1-A candidate object", "      - name: Reordered acquisition")],
   ["continue_on_error_introduced", (ci) => `${ci}\n      continue-on-error: true\n`],
   ["conditional_bypass_introduced", (ci) => `${ci}\n      if: false\n`],
@@ -186,8 +239,8 @@ const negativeCases = [
   ["candidate_provided_authority_hash", (ci) => `${ci}\nenv:\n  P1A_AUTHORITY_HASH: \${{ github.event.inputs.authority_hash }}\n`],
   ["candidate_provided_historical_sha", (ci) => replaceOnce(ci, `ref: ${ORIGINAL_CANDIDATE}`, "ref: ${{ github.event.inputs.historical_sha }}")],
   ["baseline_remainder_changed", (ci) => `${ci}\n# unauthorized baseline remainder\n`],
-  ["fragment_only_in_comments", (ci) => replaceOnce(ci, "      - name: P1-A validator control suite (hermetic)\n        run: pnpm test:p1a-threat-model\n", "# P1-A validator control suite (hermetic)\n# pnpm test:p1a-threat-model\n")],
-  ["fragment_only_in_dead_conditional", (ci) => replaceOnce(ci, "      - name: P1-A validator control suite (hermetic)\n", "      - name: P1-A validator control suite (hermetic)\n        if: ${{ false }}\n")],
+  ["fragment_only_in_comments", (ci) => replaceOnce(ci, REQUIRED_CI_ADDITION, "# P1-A candidate-data validation\n# --candidate-data-only\n")],
+  ["fragment_only_in_dead_conditional", (ci) => replaceOnce(ci, "      - name: P1-A candidate-data validation\n", "      - name: P1-A candidate-data validation\n        if: ${{ false }}\n")],
   ["trusted_fragment_candidate_script", (ci) => replaceOnce(ci, "git fetch --no-tags --no-write-fetch-head .p1a-original-candidate", "node candidate/untrusted.mjs")],
   ["accounting_without_both_authorities", (ci) => replaceOnce(ci, "      - name: Acquire exact original P1-A candidate object\n", "      - name: authority accounting claims complete\n")],
 ];
@@ -230,10 +283,10 @@ console.log(JSON.stringify({
 }));
 console.log(JSON.stringify({
   suite: "p1-a-composed-ci-authority-controls",
-  positiveRequired: 10, positiveExecuted: positiveCases.length, positivePassed,
-  negativeRequired: 30, negativeExecuted: negativeCases.length, negativePassed,
+  positiveRequired: positiveCases.length, positiveExecuted: positiveCases.length, positivePassed,
+  negativeRequired: negativeCases.length, negativeExecuted: negativeCases.length, negativePassed,
   behaviorChangingMutationSurvivors: negativeCases.length - negativePassed,
-  failed: (10 - positivePassed) + (30 - negativePassed),
+  failed: (positiveCases.length - positivePassed) + (negativeCases.length - negativePassed),
   skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
 }));
 if (failed || passed !== cases.length) process.exitCode = 1;

@@ -167,7 +167,11 @@ jobs:
           node --check scripts/detect-p1a-ordinary-ci-secrets.mjs
           node --check scripts/test-p1a-ci-secret-detector.mjs
           node --check scripts/test-p1a-trusted-verifier.mjs
+          node --check scripts/test-p1a-dual-base-verifier.mjs
           node --check scripts/validate-p1a-threat-model.mjs
+
+      - name: P1-A current candidate-data contract controls
+        run: node scripts/test-p1a-dual-base-verifier.mjs
 
       - name: P1-A trusted-bootstrap secret-detector tests
         run: node scripts/test-p1a-ci-secret-detector.mjs

@@ -696,9 +696,11 @@ function blobAt(git, commit, file) {
   }
 }
 
-const REQUIRED_CI_ADDITION = [
-  "      - name: P1-A validator control suite (hermetic)",
-  "        run: pnpm test:p1a-threat-model",
+export const REQUIRED_CI_ADDITION = [
+  "      - name: P1-A candidate-data validation",
+  "        env:",
+  "          P1A_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}",
+  "        run: node scripts/validate-p1a-threat-model.mjs --candidate-data-only",
   "",
   "",
 ].join("\n");
@@ -934,6 +936,16 @@ const CI_IDENTITY_MARKER =
   "      - name: P1-A trusted-bootstrap exact-SHA identity";
 const CI_TRUSTED_VERIFIER_MARKER =
   "      - name: P1-A trusted verifier controls";
+const TRUSTED_CURRENT_CONTRACT_ADDITION = [
+  "          node --check scripts/test-p1a-trusted-verifier.mjs",
+  "          node --check scripts/test-p1a-dual-base-verifier.mjs",
+  "          node --check scripts/validate-p1a-threat-model.mjs",
+  "",
+  "      - name: P1-A current candidate-data contract controls",
+  "        run: node scripts/test-p1a-dual-base-verifier.mjs",
+  "",
+  "      - name: P1-A trusted-bootstrap secret-detector tests",
+].join("\n");
 
 function replaceExactlyOnce(source, fragment, replacement, label) {
   assert.equal(source.split(fragment).length - 1, 1, `${label}: fragment count mismatch`);
@@ -951,11 +963,22 @@ export function composeTrustedCi(baseline) {
     `${TRUSTED_CI_ACQUISITION}${CI_TRUSTED_VERIFIER_MARKER}`,
     "trusted acquisition placement",
   );
-  return replaceExactlyOnce(
+  const isolated = replaceExactlyOnce(
     acquired,
     BASE_TRUSTED_VERIFIER_STEP,
     ISOLATED_TRUSTED_VERIFIER_STEP,
     "isolated authority path and cleanup placement",
+  );
+  return replaceExactlyOnce(
+    isolated,
+    [
+      "          node --check scripts/test-p1a-trusted-verifier.mjs",
+      "          node --check scripts/validate-p1a-threat-model.mjs",
+      "",
+      "      - name: P1-A trusted-bootstrap secret-detector tests",
+    ].join("\n"),
+    TRUSTED_CURRENT_CONTRACT_ADDITION,
+    "current candidate-data contract placement",
   );
 }
 
@@ -978,11 +1001,11 @@ export function validateComposedCandidateCi(git, candidateSha, workflowSha) {
   assert.match(entry, /^100644\s+blob\s+[0-9a-f]{40}\t/, `${path}: unsafe entry`);
   assert.equal(blobAt(git, COMPOSED_CI_BASE, path), COMPOSED_CI_BASE_BLOB,
     `${path}: baseline blob mismatch`);
-  const baseline = `${git("show", `${COMPOSED_CI_BASE}:${path}`)}\n`;
   const trusted = `${git("show", `${workflowSha}:${path}`)}\n`;
   const candidate = `${git("show", `${candidateSha}:${path}`)}\n`;
-  assert.equal(trusted, composeTrustedCi(baseline), `${path}: trusted stage mismatch`);
-  assert.equal(candidate, composeFinalCi(baseline), `${path}: composed state or remainder mismatch`);
+  assert.ok(!trusted.includes(REQUIRED_CI_ADDITION), `${path}: trusted stage contains candidate step`);
+  assert.ok(!trusted.includes("pnpm test:p1a-threat-model"), `${path}: trusted stage contains historical root command`);
+  assert.equal(candidate, composeCandidateCi(trusted), `${path}: composed state or remainder mismatch`);
   validateOrdinaryCiActionPins(candidate);
   assert.equal(candidate.split(TRUSTED_CI_ACQUISITION).length - 1, 1,
     `${path}: trusted fragment missing or duplicated`);
@@ -995,15 +1018,97 @@ export function validateComposedCandidateCi(git, candidateSha, workflowSha) {
   ]) assert.ok(!candidate.includes(forbidden), `${path}: forbidden ${forbidden}`);
   assert.ok(!/\$\{\{\s*secrets\s*\./.test(candidate), `${path}: protected secret reference`);
   for (const required of [
-    "pnpm test:p1a-threat-model", "node scripts/test-p1a-trusted-verifier.mjs",
+    "node scripts/validate-p1a-threat-model.mjs --candidate-data-only",
+    "node scripts/test-p1a-trusted-verifier.mjs",
     "node scripts/test-p1a-ci-secret-detector.mjs",
     "node scripts/detect-p1a-ordinary-ci-secrets.mjs",
     "P1-A private cross-repository suites are intentionally unavailable",
   ]) assert.ok(candidate.includes(required), `${path}: missing ${required}`);
+  assert.ok(!candidate.includes("pnpm test:p1a-threat-model"),
+    `${path}: historical suite cannot execute from reconciled root`);
   return Object.freeze({
     baselineBlob: COMPOSED_CI_BASE_BLOB,
     trustedBlob: blobAt(git, workflowSha, path),
     candidateBlob: blobAt(git, candidateSha, path),
+  });
+}
+
+export function validateCandidateDataOnly({ repoRoot = candidateRoot, candidateSha } = {}) {
+  const checks = [];
+  const check = (name, operation) => {
+    operation();
+    checks.push(name);
+  };
+  exactSha(candidateSha, "candidate");
+  check("candidate_identity", () => {
+    assert.equal(gitAt(repoRoot, "rev-parse", "HEAD"), candidateSha);
+    assert.equal(gitAt(repoRoot, "cat-file", "-t", candidateSha), "commit");
+    assert.equal(
+      normalizeRepository(gitAt(repoRoot, "remote", "get-url", "origin")),
+      "https://github.com/DarksiedCEO/zbestmedia",
+    );
+  });
+  const parents = gitAt(repoRoot, "show", "-s", "--format=%P", candidateSha).split(" ");
+  check("ordered_parentage", () => {
+    assert.equal(parents.length, 2, "candidate must have exactly two parents");
+    assert.equal(parents[0], ORIGINAL_CANDIDATE, "first parent is not original candidate");
+    assert.match(parents[1], /^[0-9a-f]{40}$/, "trusted parent is not immutable");
+  });
+  const trustedParent = parents[1];
+  check("required_ancestry", () => {
+    gitAt(repoRoot, "merge-base", "--is-ancestor", AUTHORIZED_BASE, ORIGINAL_CANDIDATE);
+    gitAt(repoRoot, "merge-base", "--is-ancestor", TRUSTED_RECONCILIATION_BASE, trustedParent);
+    gitAt(repoRoot, "merge-base", "--is-ancestor", ORIGINAL_CANDIDATE, candidateSha);
+    gitAt(repoRoot, "merge-base", "--is-ancestor", trustedParent, candidateSha);
+  });
+  check("exact_scope", () => {
+    const changed = gitAt(repoRoot, "diff", "--name-only", `${trustedParent}..${candidateSha}`)
+      .split("\n").filter(Boolean).sort();
+    assert.deepEqual(changed, [...CANDIDATE_OWNED_FILES].sort());
+  });
+  check("candidate_blob_identity", () => {
+    for (const file of EXACT_CANDIDATE_OWNED_FILES) {
+      assert.equal(gitAt(repoRoot, "rev-parse", `${candidateSha}:${file}`),
+        gitAt(repoRoot, "rev-parse", `${ORIGINAL_CANDIDATE}:${file}`), file);
+    }
+  });
+  check("trusted_blob_identity", () => {
+    for (const file of TRUSTED_INFRASTRUCTURE_FILES) {
+      if (file === ".github/workflows/ci.yml") continue;
+      assert.equal(gitAt(repoRoot, "rev-parse", `${candidateSha}:${file}`),
+        gitAt(repoRoot, "rev-parse", `${trustedParent}:${file}`), file);
+    }
+  });
+  check("ordinary_ci_composition", () => {
+    const git = (...args) => gitAt(repoRoot, ...args);
+    validateComposedCandidateCi(git, candidateSha, trustedParent);
+  });
+  check("candidate_documents", () => {
+    const packageLoad = (file) => JSON.parse(readFileSync(path.join(repoRoot, file), "utf8"));
+    const model = packageLoad("docs/security/p1-a/model.json");
+    const evidence = packageLoad("docs/security/p1-a/evidence-register.json");
+    const manifest = packageLoad("docs/security/p1-a/validation-manifest.json");
+    const markdown = readFileSync(path.join(repoRoot, "docs/security/p1-a/threat-model.md"), "utf8");
+    validateData(model, evidence, manifest, markdown);
+    assert.deepEqual(manifest.requiredTests, REQUIRED_CHECKS);
+    assert.deepEqual(model.gate, {
+      runtimeChanged: false, productionClaimed: false, p1bAuthorized: false, selfCertified: false,
+    });
+  });
+  check("custody_separation", () => {
+    assert.ok(!process.env.P1A_WORKFLOW_SHA, "candidate cannot select workflow SHA");
+    assert.ok(!process.env.P1A_VERIFIER_SHA, "candidate cannot select verifier SHA");
+    assert.ok(!process.env.P1A_RUNTIME_APP_PRIVATE_KEY, "protected credential present");
+    if (process.env.P1A_TRUSTED_EXECUTION_ROOT) {
+      assert.notEqual(path.resolve(repoRoot), path.resolve(process.env.P1A_TRUSTED_EXECUTION_ROOT));
+    }
+  });
+  assert.equal(gitAt(repoRoot, "status", "--porcelain"), "", "dirty candidate worktree");
+  return Object.freeze({
+    scope: "CANDIDATE_DATA_VALIDATED", candidateSha, required: checks.length,
+    executed: checks.length, passed: checks.length, failed: 0, skipped: 0,
+    cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+    certified: false, protectedOperations: 0,
   });
 }
 
@@ -1256,6 +1361,11 @@ function runCheck(name, context) {
 }
 
 function main() {
+  if (process.argv.includes("--candidate-data-only")) {
+    const summary = validateCandidateDataOnly({ candidateSha: process.env.P1A_CANDIDATE_SHA });
+    console.log(JSON.stringify(summary));
+    return;
+  }
   const candidateIndex = process.argv.indexOf("--candidate-sha");
   const candidateSha =
     candidateIndex >= 0
