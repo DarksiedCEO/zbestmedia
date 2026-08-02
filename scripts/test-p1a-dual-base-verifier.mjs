@@ -20,11 +20,13 @@ const EXPECTED_TREES = Object.freeze({
   original: "d266dafef452c6a327734eec32013c8718fc9371",
   baseline: "06bed4d9f31aa6bf0d65c9adfa3dc2fbb6839d26",
   dualBase: "37345329da7051a818eb2e5b02f1f06f74d667a7",
+  evidenceBase: "a929da05a15a0c37644a224697dddec9762b00a0",
 });
 const authorityRoots = {
   original: process.env.P1A_ORIGINAL_REPOSITORY_ROOT,
   baseline: process.env.P1A_BASELINE_REPOSITORY_ROOT,
   dualBase: process.env.P1A_DUAL_BASE_AUTHORITY_ROOT,
+  evidenceBase: process.env.P1A_EVIDENCE_BASE_AUTHORITY_ROOT,
 };
 const workspaceOptions = (expectedRelative) => process.env.GITHUB_WORKSPACE
   ? { workspaceRoot: process.env.GITHUB_WORKSPACE, expectedRelative }
@@ -88,8 +90,10 @@ const verifiedAuthorities = {
     EXPECTED_COMPOSED_CI_BLOB, workspaceOptions(".p1a-trusted-baseline")),
   dualBase: verifyAuthorityRoot("dual-base", authorityRoots.dualBase, TRUSTED_RECONCILIATION_BASE, EXPECTED_TREES.dualBase,
     EXPECTED_COMPOSED_CI_BLOB, workspaceOptions(".p1a-dual-base-authority")),
+  evidenceBase: verifyAuthorityRoot("evidence-base", authorityRoots.evidenceBase, AUTHORIZED_BASE, EXPECTED_TREES.evidenceBase,
+    "92d0002609c084a280a582b5e1ab39476032ca71", workspaceOptions(".p1a-evidence-base-authority")),
 };
-assert.equal(new Set(Object.values(verifiedAuthorities).map(({ gitDir }) => gitDir)).size, 3, "authority object stores overlap");
+assert.equal(new Set(Object.values(verifiedAuthorities).map(({ gitDir }) => gitDir)).size, 4, "authority object stores overlap");
 assert.ok(Object.values(verifiedAuthorities).every(({ gitDir }) => !gitDir.startsWith(path.join(root, ".git"))), "primary object store fallback forbidden");
 
 const hostileFixtureRoot = path.join(temporary, "hostile-authority");
@@ -108,9 +112,28 @@ gitAt(modifiedRoot, "remote", "set-url", "origin", OFFICIAL_REPOSITORY);
 writeFileSync(path.join(modifiedRoot, "untracked-hostile.txt"), "hostile fixture\n");
 const symlinkRoot = path.join(temporary, "symlink-authority");
 symlinkSync(verifiedAuthorities.dualBase.root, symlinkRoot);
+const evidenceFixtureRoot = path.join(temporary, "evidence-base-authority");
+run(temporary, ["git", "clone", "-q", "--no-hardlinks", verifiedAuthorities.evidenceBase.root, evidenceFixtureRoot]);
+gitAt(evidenceFixtureRoot, "remote", "set-url", "origin", OFFICIAL_REPOSITORY);
+const evidenceWrongRepositoryRoot = path.join(temporary, "evidence-base-wrong-repository");
+run(temporary, ["git", "clone", "-q", "--no-hardlinks", verifiedAuthorities.evidenceBase.root, evidenceWrongRepositoryRoot]);
+gitAt(evidenceWrongRepositoryRoot, "remote", "set-url", "origin", "https://github.com/attacker/zbestmedia");
+const evidenceCredentialRoot = path.join(temporary, "evidence-base-credential");
+run(temporary, ["git", "clone", "-q", "--no-hardlinks", verifiedAuthorities.evidenceBase.root, evidenceCredentialRoot]);
+gitAt(evidenceCredentialRoot, "remote", "set-url", "origin", OFFICIAL_REPOSITORY);
+gitAt(evidenceCredentialRoot, "config", "http.https://github.com/.extraheader", "AUTHORIZATION: redacted-test-marker");
+const evidenceModifiedRoot = path.join(temporary, "evidence-base-modified");
+run(temporary, ["git", "clone", "-q", "--no-hardlinks", verifiedAuthorities.evidenceBase.root, evidenceModifiedRoot]);
+gitAt(evidenceModifiedRoot, "remote", "set-url", "origin", OFFICIAL_REPOSITORY);
+writeFileSync(path.join(evidenceModifiedRoot, "untracked-hostile.txt"), "hostile fixture\n");
+const evidenceSymlinkRoot = path.join(temporary, "evidence-base-symlink");
+symlinkSync(verifiedAuthorities.evidenceBase.root, evidenceSymlinkRoot);
 const verifyDualBase = (suppliedRoot, sha = TRUSTED_RECONCILIATION_BASE,
   tree = EXPECTED_TREES.dualBase, blob = EXPECTED_COMPOSED_CI_BLOB, options) =>
   verifyAuthorityRoot("dual-base-hostile", suppliedRoot, sha, tree, blob, options);
+const verifyEvidenceBase = (suppliedRoot, sha = AUTHORIZED_BASE,
+  tree = EXPECTED_TREES.evidenceBase, blob = "92d0002609c084a280a582b5e1ab39476032ca71", options) =>
+  verifyAuthorityRoot("evidence-base-hostile", suppliedRoot, sha, tree, blob, options);
 const verifyDistinctStores = (...items) => assert.equal(new Set(items.map(({ gitDir }) => gitDir)).size, items.length,
   "authority object stores overlap");
 const verifyCleanup = (paths) => {
@@ -143,6 +166,38 @@ const hostileAuthorityCases = [
   ["trusted_checkout_modified", () => verifyDualBase(modifiedRoot)],
   ["symlink_authority", () => verifyDualBase(symlinkRoot)],
 ];
+const evidenceBaseHostileCases = [
+  ["missing_root", () => verifyEvidenceBase(undefined)],
+  ["wrong_repository", () => verifyEvidenceBase(evidenceWrongRepositoryRoot)],
+  ["wrong_sha", () => verifyEvidenceBase(evidenceFixtureRoot, "f".repeat(40))],
+  ["mutable_branch", () => verifyEvidenceBase(evidenceFixtureRoot, "codex/bt-1")],
+  ["mutable_tag", () => verifyEvidenceBase(evidenceFixtureRoot, "v1.0.0")],
+  ["abbreviated_sha", () => verifyEvidenceBase(evidenceFixtureRoot, AUTHORIZED_BASE.slice(0, 12))],
+  ["malformed_sha", () => verifyEvidenceBase(evidenceFixtureRoot, "not-a-sha")],
+  ["object_not_commit", () => verifyEvidenceBase(evidenceFixtureRoot, "92d0002609c084a280a582b5e1ab39476032ca71")],
+  ["missing_object", () => verifyEvidenceBase(evidenceFixtureRoot, "0".repeat(40))],
+  ["wrong_tree", () => verifyEvidenceBase(verifiedAuthorities.evidenceBase.root, AUTHORIZED_BASE, "f".repeat(40))],
+  ["wrong_blob", () => verifyEvidenceBase(verifiedAuthorities.evidenceBase.root, AUTHORIZED_BASE,
+    EXPECTED_TREES.evidenceBase, "f".repeat(40))],
+  ["candidate_root", () => verifyEvidenceBase(root)],
+  ["primary_store", () => verifyEvidenceBase(root)],
+  ["persisted_credentials", () => verifyEvidenceBase(evidenceCredentialRoot)],
+  ["shared_store", () => verifyDistinctStores(verifiedAuthorities.evidenceBase, verifiedAuthorities.evidenceBase)],
+  ["cleanup_omitted", () => verifyCleanup([verifiedAuthorities.evidenceBase.root])],
+  ["candidate_selected_root", () => verifyEvidenceBase(verifiedAuthorities.evidenceBase.root, AUTHORIZED_BASE,
+    EXPECTED_TREES.evidenceBase, "92d0002609c084a280a582b5e1ab39476032ca71",
+    { workspaceRoot: temporary, expectedRelative: "wrong-root" })],
+  ["environment_escape", () => verifyEvidenceBase(verifiedAuthorities.evidenceBase.root, AUTHORIZED_BASE,
+    EXPECTED_TREES.evidenceBase, "92d0002609c084a280a582b5e1ab39476032ca71",
+    { workspaceRoot: path.join(temporary, "workspace"), expectedRelative: "authority" })],
+  ["symlink_root", () => verifyEvidenceBase(evidenceSymlinkRoot)],
+  ["wrong_authority_kind", () => verifyEvidenceBase(verifiedAuthorities.dualBase.root)],
+  ["wrong_original_kind", () => verifyEvidenceBase(verifiedAuthorities.original.root)],
+  ["modified_checkout", () => verifyEvidenceBase(evidenceModifiedRoot)],
+  ["uppercase_sha", () => verifyEvidenceBase(verifiedAuthorities.evidenceBase.root, AUTHORIZED_BASE.toUpperCase())],
+  ["empty_sha", () => verifyEvidenceBase(verifiedAuthorities.evidenceBase.root, "")],
+  ["null_sha", () => verifyEvidenceBase(verifiedAuthorities.evidenceBase.root, null)],
+];
 let authorityHostilePassed = 0;
 for (const [name, operation] of hostileAuthorityCases) {
   let rejected = false;
@@ -150,6 +205,14 @@ for (const [name, operation] of hostileAuthorityCases) {
   assert.ok(rejected, `${name}: hostile authority accepted`);
   authorityHostilePassed += 1;
   console.log(`PASS isolated_authority_hostile:${name}`);
+}
+let evidenceBaseHostilePassed = 0;
+for (const [name, operation] of evidenceBaseHostileCases) {
+  let rejected = false;
+  try { operation(); } catch { rejected = true; }
+  assert.ok(rejected, `${name}: hostile evidence-base authority accepted`);
+  evidenceBaseHostilePassed += 1;
+  console.log(`PASS evidence_base_authority_hostile:${name}`);
 }
 
 const shallowPrimary = path.join(temporary, "shallow-primary");
@@ -168,7 +231,7 @@ const git = (...args) => run(repository, ["git", ...args]);
 git("config", "user.email", "p1a-dual-base@example.invalid");
 git("config", "user.name", "P1A dual-base fixture");
 git("remote", "add", "origin", `${OFFICIAL_REPOSITORY}.git`);
-for (const [name, sha] of [["original", ORIGINAL_CANDIDATE], ["baseline", COMPOSED_CI_BASE], ["dualBase", TRUSTED_RECONCILIATION_BASE]]) {
+for (const [name, sha] of [["original", ORIGINAL_CANDIDATE], ["baseline", COMPOSED_CI_BASE], ["dualBase", TRUSTED_RECONCILIATION_BASE], ["evidenceBase", AUTHORIZED_BASE]]) {
   run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", verifiedAuthorities[name].root, sha]);
   assert.equal(git("cat-file", "-t", sha), "commit", `${name}: fixture import failed`);
 }
@@ -381,30 +444,59 @@ const negativeCases = [
   ["accounting_without_both_authorities", (ci) => replaceOnce(ci, "      - name: Acquire exact original P1-A candidate object\n", "      - name: authority accounting claims complete\n")],
 ];
 
-let passed = 0;
-let failed = 0;
-let positivePassed = 0;
-let negativePassed = 0;
+const summarize = (outcomes, required = outcomes.length) => {
+  assert.equal(outcomes.length, required, "suite required/executed mismatch");
+  const passed = outcomes.filter(Boolean).length;
+  const summary = Object.freeze({ required, executed: outcomes.length, passed, failed: outcomes.length - passed });
+  assert.equal(summary.passed + summary.failed, summary.executed, "suite accounting invariant violated");
+  return summary;
+};
+const accountingIsolationCases = [
+  () => assert.deepEqual(summarize([false, true]), { required: 2, executed: 2, passed: 1, failed: 1 }),
+  () => assert.equal(summarize([true]).failed, 0),
+  () => assert.equal(summarize([false]).failed, 1),
+  () => assert.equal(summarize([true, true]).passed, 2),
+  () => assert.throws(() => summarize([true], 2)),
+  () => { const dual = summarize([false]); const composed = summarize([true]); assert.equal(dual.failed, 1); assert.equal(composed.failed, 0); },
+  () => { const positive = summarize([true]); const negative = summarize([false]); assert.equal(positive.failed, 0); assert.equal(negative.failed, 1); },
+  () => { const first = summarize([false]); const second = summarize([true]); assert.notEqual(first.failed, second.failed); },
+  () => { const source = [true]; const first = summarize(source); source[0] = false; assert.equal(first.failed, 0); },
+  () => { const fresh = summarize([true]); assert.equal(fresh.failed, 0, "stale failure leaked into fresh suite"); },
+];
+const accountingOutcomes = accountingIsolationCases.map((operation, index) => {
+  try { operation(); console.log(`PASS accounting_isolation:${index + 1}`); return true; }
+  catch (error) { console.error(`FAIL accounting_isolation:${index + 1}: ${error.message}`); return false; }
+});
+const dualOutcomes = [];
+const positiveOutcomes = [];
+const negativeOutcomes = [];
 try {
   for (const [name, operation, shouldReject] of cases) {
     let rejected = false;
     let detail = "";
     try { operation(); } catch (error) { rejected = true; detail = error.message; }
-    if (rejected === shouldReject) { passed += 1; console.log(`PASS ${name}`); }
-    else { failed += 1; console.error(`FAIL ${name}${detail ? `: ${detail}` : ""}`); }
+    const passed = rejected === shouldReject;
+    dualOutcomes.push(passed);
+    if (passed) console.log(`PASS ${name}`);
+    else console.error(`FAIL ${name}${detail ? `: ${detail}` : ""}`);
   }
   for (const [name, operation] of positiveCases) {
-    try { operation(); positivePassed += 1; console.log(`PASS composed_positive:${name}`); }
-    catch (error) { failed += 1; console.error(`FAIL composed_positive:${name}: ${error.message}`); }
+    try { operation(); positiveOutcomes.push(true); console.log(`PASS composed_positive:${name}`); }
+    catch (error) { positiveOutcomes.push(false); console.error(`FAIL composed_positive:${name}: ${error.message}`); }
   }
   for (const [name, transform] of negativeCases) {
     let rejected = false;
     try { invoke({ candidateSha: candidate({ ciTransform: transform }) }); }
     catch { rejected = true; }
-    if (rejected) { negativePassed += 1; console.log(`PASS composed_negative:${name}`); }
-    else { failed += 1; console.error(`FAIL composed_negative:${name}: mutation survived`); }
+    negativeOutcomes.push(rejected);
+    if (rejected) console.log(`PASS composed_negative:${name}`);
+    else console.error(`FAIL composed_negative:${name}: mutation survived`);
   }
 } finally { rmSync(temporary, { recursive: true, force: true }); }
+const dualSummary = summarize(dualOutcomes, cases.length);
+const positiveSummary = summarize(positiveOutcomes, positiveCases.length);
+const negativeSummary = summarize(negativeOutcomes, negativeCases.length);
+const accountingSummary = summarize(accountingOutcomes, accountingIsolationCases.length);
 console.log(JSON.stringify({
   suite: "p1-a-isolated-trusted-authority-controls",
   positiveRequired: 4,
@@ -418,6 +510,15 @@ console.log(JSON.stringify({
   skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
 }));
 console.log(JSON.stringify({
+  suite: "p1-a-evidence-base-authority-controls",
+  positiveRequired: 1, positiveExecuted: 1, positivePassed: 1,
+  hostileRequired: evidenceBaseHostileCases.length,
+  hostileExecuted: evidenceBaseHostileCases.length,
+  hostilePassed: evidenceBaseHostilePassed,
+  failed: evidenceBaseHostileCases.length - evidenceBaseHostilePassed,
+  skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
+console.log(JSON.stringify({
   suite: "p1-a-dual-base-verifier-controls",
   candidateSha: process.env.P1A_CANDIDATE_SHA ?? null,
   workflowSha: process.env.P1A_WORKFLOW_SHA ?? null,
@@ -426,15 +527,22 @@ console.log(JSON.stringify({
   reconciliationBaseSha: process.env.P1A_RECONCILIATION_BASE_SHA ?? null,
   originalCandidateSha: process.env.P1A_ORIGINAL_CANDIDATE_SHA ?? null,
   runtimePin: process.env.P1A_TRUST_RUNTIME_PIN ?? null,
-  required: cases.length, executed: cases.length, passed, failed,
+  ...dualSummary,
   skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
 }));
 console.log(JSON.stringify({
   suite: "p1-a-composed-ci-authority-controls",
-  positiveRequired: positiveCases.length, positiveExecuted: positiveCases.length, positivePassed,
-  negativeRequired: negativeCases.length, negativeExecuted: negativeCases.length, negativePassed,
-  behaviorChangingMutationSurvivors: negativeCases.length - negativePassed,
-  failed: (positiveCases.length - positivePassed) + (negativeCases.length - negativePassed),
+  positiveRequired: positiveSummary.required, positiveExecuted: positiveSummary.executed, positivePassed: positiveSummary.passed,
+  negativeRequired: negativeSummary.required, negativeExecuted: negativeSummary.executed, negativePassed: negativeSummary.passed,
+  behaviorChangingMutationSurvivors: negativeSummary.failed,
+  failed: positiveSummary.failed + negativeSummary.failed,
   skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
 }));
-if (failed || passed !== cases.length) process.exitCode = 1;
+console.log(JSON.stringify({
+  suite: "p1-a-suite-accounting-isolation-controls",
+  ...accountingSummary,
+  skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
+if (dualSummary.failed || positiveSummary.failed || negativeSummary.failed || accountingSummary.failed
+  || authorityHostilePassed !== hostileAuthorityCases.length
+  || evidenceBaseHostilePassed !== evidenceBaseHostileCases.length) process.exitCode = 1;

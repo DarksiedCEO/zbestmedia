@@ -716,7 +716,7 @@ export const ORDINARY_CI_ACTION_PINS = Object.freeze({
   "raven-actions/actionlint": "3d39aea434753780c3b3d4a1a31c854b4dbf49d7",
 });
 const ORDINARY_CI_ACTION_COUNTS = Object.freeze({
-  "actions/checkout": 4,
+  "actions/checkout": 5,
   "actions/setup-node": 1,
   "actions/cache": 1,
   "raven-actions/actionlint": 1,
@@ -747,7 +747,7 @@ export function validateOrdinaryCiActionPins(source) {
   assert.ok(typeof source === "string" && source, "ordinary CI absent");
   const uses = [...source.matchAll(/^\s*(?:-\s*)?uses:\s*([^\s@]+)@([^\s#]+)(?:\s+#.*)?$/gm)]
     .map((match) => ({ repository: match[1], revision: match[2] }));
-  assert.equal(uses.length, 7, "ordinary CI action inventory changed");
+  assert.equal(uses.length, 8, "ordinary CI action inventory changed");
   const counts = new Map();
   for (const { repository, revision } of uses) {
     assert.ok(Object.hasOwn(ORDINARY_CI_ACTION_PINS, repository),
@@ -945,6 +945,36 @@ const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candid
             exit 1
           fi
 
+      - name: Acquire exact historical evidence-base authority
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-evidence-base-authority
+
+      - name: Verify exact historical evidence-base authority
+        env:
+          P1A_EVIDENCE_BASE_AUTHORITY: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          P1A_EVIDENCE_BASE_TREE: a929da05a15a0c37644a224697dddec9762b00a0
+          P1A_EVIDENCE_BASE_CI_BLOB: 92d0002609c084a280a582b5e1ab39476032ca71
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          [[ "$P1A_EVIDENCE_BASE_AUTHORITY" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git -C .p1a-evidence-base-authority rev-parse HEAD)" = "$P1A_EVIDENCE_BASE_AUTHORITY"
+          test "$(git -C .p1a-evidence-base-authority cat-file -t "$P1A_EVIDENCE_BASE_AUTHORITY")" = "commit"
+          test "$(git -C .p1a-evidence-base-authority cat-file -t "$P1A_EVIDENCE_BASE_AUTHORITY^{tree}")" = "tree"
+          test "$(git -C .p1a-evidence-base-authority rev-parse "$P1A_EVIDENCE_BASE_AUTHORITY^{tree}")" = "$P1A_EVIDENCE_BASE_TREE"
+          test "$(git -C .p1a-evidence-base-authority remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          test "$(git -C .p1a-evidence-base-authority rev-parse "$P1A_EVIDENCE_BASE_AUTHORITY:.github/workflows/ci.yml")" = "$P1A_EVIDENCE_BASE_CI_BLOB"
+          test -z "$(git -C .p1a-evidence-base-authority status --porcelain=v1)"
+          if grep -Eiq 'x-access-token|authorization:|http\\..*extraheader' .p1a-evidence-base-authority/.git/config; then
+            echo "persisted evidence-base authority credential material detected" >&2
+            exit 1
+          fi
+
 `;
 const BASE_TRUSTED_VERIFIER_STEP = `      - name: P1-A trusted verifier controls
         run: node scripts/test-p1a-trusted-verifier.mjs
@@ -969,15 +999,17 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate",
   "          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline",
   "          P1A_DUAL_BASE_AUTHORITY_ROOT: .p1a-dual-base-authority",
+  "          P1A_EVIDENCE_BASE_AUTHORITY_ROOT: .p1a-evidence-base-authority",
   "        run: node scripts/test-p1a-dual-base-verifier.mjs",
   "",
   "      - name: Remove isolated P1-A authority checkouts",
   "        if: always()",
   "        run: |",
-  "          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority",
+  "          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority",
   "          test ! -e .p1a-original-candidate",
   "          test ! -e .p1a-trusted-baseline",
   "          test ! -e .p1a-dual-base-authority",
+  "          test ! -e .p1a-evidence-base-authority",
   "",
   "      - name: P1-A trusted-bootstrap secret-detector tests",
 ].join("\n");
