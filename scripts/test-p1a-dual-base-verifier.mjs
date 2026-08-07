@@ -8,6 +8,7 @@ import {
   AUTHORIZED_BASE, ORIGINAL_CANDIDATE, TRUSTED_RECONCILIATION_BASE,
   AUTHORIZED_ANCESTRY_CHAIN, TRUSTED_RECONCILIATION_DAG, PRE_BASE_PARENT,
   verifyCanonicalBoundedAncestry, verifyCanonicalTrustedReconciliationAncestry,
+  propagateTrustedReconciliationDag,
   AMENDMENT_CONTROLLED_FILES, CANDIDATE_OWNED_FILES, COMPOSED_CI_BASE,
   REQUIRED_CI_ADDITION, composeCandidateCi, composeFinalCi, composeTrustedCi,
   removeTwoStageCustodyFragment, validateDualBaseScope,
@@ -396,6 +397,54 @@ for (const sha of ANCESTRY_CHAIN) {
   run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", verifiedAuthorities.ancestry.root, sha]);
   assert.equal(git("cat-file", "-t", sha), "commit", `ancestry import failed: ${sha}`);
 }
+
+const freshReconciliationFixture = (name, prepare) => {
+  const fixture = path.join(temporary, `reconciliation-${name}`);
+  run(temporary, ["git", "init", "-q", fixture]);
+  prepare?.(fixture);
+  return fixture;
+};
+const mutateDagForFixture = (index, replacement) => TRUSTED_RECONCILIATION_DAG.map(
+  (entry, position) => position === index ? replacement(entry) : entry,
+);
+const reconciliationFixtureHostileControls = [
+  ["missing_authority_root", () => propagateTrustedReconciliationDag({ reconciliationFixtureRoot: freshReconciliationFixture("missing-source") })],
+  ["missing_destination_root", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root })],
+  ["independent_verification_absent", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: freshReconciliationFixture("unverified"), independentlyVerified: false })],
+  ["missing_intermediate", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: freshReconciliationFixture("missing-intermediate"), dag: TRUSTED_RECONCILIATION_DAG.filter((_, index) => index !== 6) })],
+  ["wrong_intermediate", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: freshReconciliationFixture("wrong-intermediate"), dag: mutateDagForFixture(6, (entry) => ({ ...entry, sha: "f".repeat(40) })) })],
+  ["wrong_first_merge_topology", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: freshReconciliationFixture("wrong-first-merge"), dag: mutateDagForFixture(6, (entry) => ({ ...entry, parents: [AUTHORIZED_BASE] })) })],
+  ["wrong_second_merge_topology", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: freshReconciliationFixture("wrong-second-merge"), dag: mutateDagForFixture(9, (entry) => ({ ...entry, parents: [...entry.parents].reverse() })) })],
+  ["primary_checkout_source", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: root, reconciliationFixtureRoot: freshReconciliationFixture("primary-source") })],
+  ["historical_authority_source", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.ancestry.root, reconciliationFixtureRoot: freshReconciliationFixture("historical-source") })],
+  ["shared_source_destination", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: verifiedAuthorities.trustedReconciliation.root })],
+  ["primary_checkout_destination", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: root })],
+  ["symlink_destination", () => {
+    const actual = freshReconciliationFixture("symlink-actual");
+    const link = path.join(temporary, "reconciliation-symlink");
+    symlinkSync(actual, link);
+    propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: link });
+  }],
+  ["object_store_alternate", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: freshReconciliationFixture("alternate", (fixture) => writeFileSync(path.join(fixture, ".git/objects/info/alternates"), `${verifiedAuthorities.trustedReconciliation.gitDir}/objects\n`)) })],
+  ["replace_ref", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: freshReconciliationFixture("replace", (fixture) => gitAt(fixture, "update-ref", `refs/replace/${AUTHORIZED_BASE}`, TRUSTED_RECONCILIATION_BASE)) })],
+  ["graft_file", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: freshReconciliationFixture("graft", (fixture) => writeFileSync(path.join(fixture, ".git/info/grafts"), `${AUTHORIZED_BASE} ${PRE_BASE_PARENT}\n`)) })],
+  ["second_boundary_at_trusted_head", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: freshReconciliationFixture("second-boundary", (fixture) => writeFileSync(path.join(fixture, ".git/shallow"), `${TRUSTED_RECONCILIATION_BASE}\n`)) })],
+  ["multiple_boundaries", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: freshReconciliationFixture("multiple-boundaries", (fixture) => writeFileSync(path.join(fixture, ".git/shallow"), `${AUTHORIZED_BASE}\n${TRUSTED_RECONCILIATION_BASE}\n`)) })],
+  ["forbidden_preboundary_object", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: freshReconciliationFixture("preboundary", (fixture) => run(fixture, ["git", "fetch", "-q", "--no-tags", "--no-write-fetch-head", verifiedAuthorities.evidenceBase.root, PRE_BASE_PARENT])) })],
+  ["candidate_selected_dag", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: freshReconciliationFixture("candidate-dag"), dag: [TRUSTED_RECONCILIATION_DAG.at(-1)] })],
+  ["environment_selected_sha_list", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: freshReconciliationFixture("environment-list"), dag: process.env.P1A_TRUSTED_SHA_LIST?.split(",") ?? [] })],
+  ["staging_source_not_authority", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.dualBase.root, reconciliationFixtureRoot: freshReconciliationFixture("staging-source") })],
+  ["raw_primary_history_fallback", () => assert.ok(readFileSync(path.join(root, "scripts/validate-p1a-threat-model.mjs"), "utf8").includes("fetch --unshallow"))],
+  ["wholesale_object_copy", () => assert.ok(readFileSync(path.join(root, "scripts/validate-p1a-threat-model.mjs"), "utf8").includes("cp -R .git/objects"))],
+  ["candidate_controls_authority_root", () => assert.ok(readFileSync(path.join(root, "scripts/validate-p1a-threat-model.mjs"), "utf8").includes("github.event.inputs.trusted_root"))],
+  ["synthetic_ancestry_success", () => propagateTrustedReconciliationDag({ trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root, reconciliationFixtureRoot: freshReconciliationFixture("synthetic"), independentlyVerified: false })],
+];
+const reconciliationFixtureHostileOutcomes = reconciliationFixtureHostileControls.map(([name, operation]) => {
+  const rejected = rejects(operation);
+  if (rejected) console.log(`PASS reconciliation_fixture_hostile:${name}`);
+  else console.error(`FAIL reconciliation_fixture_hostile:${name}: hostile condition accepted`);
+  return rejected;
+});
 
 // Import only the independently verified in-scope commit objects into a disposable
 // object store. The lower boundary is explicit; older business history is neither
@@ -805,6 +854,43 @@ function candidate({ omit, add, mutate, ciAppend = "", ciTransform,
 }
 
 const validCandidate = candidate();
+// Reproduce the exact remote failure against the generated reconciliation
+// candidate, then propagate the verified DAG into that same fixture.
+let reconciliationFailureBeforePropagation = false;
+try {
+  git("merge-base", "--is-ancestor", TRUSTED_RECONCILIATION_BASE, validCandidate);
+} catch (error) {
+  reconciliationFailureBeforePropagation = /1ab3a7796cc587e4634c8cc36d2e5defa6c871e0/.test(error.stderr ?? "");
+}
+assert.ok(reconciliationFailureBeforePropagation,
+  "reconciliation fixture: missing trusted-DAG failure was not reproduced");
+console.log("PASS reconciliation_fixture_before_propagation_failure_reproduced");
+const reconciliationFixture = propagateTrustedReconciliationDag({
+  trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root,
+  reconciliationFixtureRoot: repository,
+  authorizedGeneratedCommits: [workflowSha, validCandidate],
+});
+assert.equal(reconciliationFixture.importedCommits, 10);
+assert.equal(reconciliationFixture.boundarySha, AUTHORIZED_BASE);
+git("merge-base", "--is-ancestor", AUTHORIZED_BASE, TRUSTED_RECONCILIATION_BASE);
+git("merge-base", "--is-ancestor", TRUSTED_RECONCILIATION_BASE, validCandidate);
+console.log("PASS reconciliation_fixture_after_propagation_native_ancestry");
+const reconciliationFixturePositiveControls = [
+  ["exact_source_authority", () => assert.equal(reconciliationFixture.sourceRoot, verifiedAuthorities.trustedReconciliation.root)],
+  ["ten_exact_commits", () => assert.equal(reconciliationFixture.importedCommits, 10)],
+  ["exact_tree_identities", () => assert.ok(reconciliationFixture.importedTrees >= 1)],
+  ["sole_common_boundary", () => assert.equal(readFileSync(path.join(repository, ".git/shallow"), "utf8"), `${AUTHORIZED_BASE}\n`)],
+  ["forbidden_parent_absent", () => assert.ok(rejects(() => git("cat-file", "-e", `${PRE_BASE_PARENT}^{commit}`)))],
+  ["no_alternates", () => assert.ok(!existsSync(path.join(repository, ".git/objects/info/alternates")))],
+  ["no_shared_store", () => assert.notEqual(realpathSync(path.join(repository, ".git")), verifiedAuthorities.trustedReconciliation.gitDir)],
+  ["boundary_to_trusted_head", () => git("merge-base", "--is-ancestor", AUTHORIZED_BASE, TRUSTED_RECONCILIATION_BASE)],
+  ["trusted_head_to_workflow", () => git("merge-base", "--is-ancestor", TRUSTED_RECONCILIATION_BASE, workflowSha)],
+  ["trusted_head_to_candidate", () => git("merge-base", "--is-ancestor", TRUSTED_RECONCILIATION_BASE, validCandidate)],
+];
+const reconciliationFixturePositiveOutcomes = reconciliationFixturePositiveControls.map(([name, operation]) => {
+  try { operation(); console.log(`PASS reconciliation_fixture_positive:${name}`); return true; }
+  catch (error) { console.error(`FAIL reconciliation_fixture_positive:${name}: ${error.message}`); return false; }
+});
 const candidateDataRun = (sha = validCandidate, extraEnv = {}) => {
   git("checkout", "--detach", sha);
   const output = run(root, [
@@ -1014,6 +1100,8 @@ const canonicalPositiveSummary = summarize(canonicalPositiveOutcomes, canonicalP
 const canonicalHostileSummary = summarize(canonicalHostileOutcomes, canonicalHostileControls.length);
 const trustedDagPositiveSummary = summarize(trustedDagPositiveOutcomes, trustedDagPositiveControls.length);
 const trustedDagHostileSummary = summarize(trustedDagHostileOutcomes, trustedDagHostileControls.length);
+const reconciliationFixturePositiveSummary = summarize(reconciliationFixturePositiveOutcomes, 10);
+const reconciliationFixtureHostileSummary = summarize(reconciliationFixtureHostileOutcomes, 25);
 console.log(JSON.stringify({
   suite: "p1-a-canonical-bounded-ancestry-propagation-controls",
   positiveRequired: canonicalPositiveSummary.required,
@@ -1041,6 +1129,20 @@ console.log(JSON.stringify({
   boundarySha: AUTHORIZED_BASE,
   trustedHeadSha: TRUSTED_RECONCILIATION_BASE,
   failed: trustedDagPositiveSummary.failed + trustedDagHostileSummary.failed,
+  skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
+console.log(JSON.stringify({
+  suite: "p1-a-reconciliation-fixture-propagation-controls",
+  positiveRequired: reconciliationFixturePositiveSummary.required,
+  positiveExecuted: reconciliationFixturePositiveSummary.executed,
+  positivePassed: reconciliationFixturePositiveSummary.passed,
+  hostileRequired: reconciliationFixtureHostileSummary.required,
+  hostileExecuted: reconciliationFixtureHostileSummary.executed,
+  hostilePassed: reconciliationFixtureHostileSummary.passed,
+  beforeFailureReproduced: reconciliationFailureBeforePropagation,
+  boundarySha: AUTHORIZED_BASE,
+  trustedHeadSha: TRUSTED_RECONCILIATION_BASE,
+  failed: reconciliationFixturePositiveSummary.failed + reconciliationFixtureHostileSummary.failed,
   skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
 }));
 console.log(JSON.stringify({

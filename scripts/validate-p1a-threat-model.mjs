@@ -594,6 +594,134 @@ export function verifyCanonicalTrustedReconciliationAncestry({
   });
 }
 
+// Copy the already-verified trusted reconciliation DAG into a disposable
+// reconciliation repository without sharing object stores or importing the
+// transport checkout's unrelated history. This is the only supported bridge
+// between trusted-DAG custody and native ancestry checks in generated fixtures.
+export function propagateTrustedReconciliationDag({
+  trustedReconciliationAuthorityRoot,
+  reconciliationFixtureRoot,
+  dag = TRUSTED_RECONCILIATION_DAG,
+  independentlyVerified = true,
+  authorizedGeneratedCommits = [],
+} = {}) {
+  assert.equal(independentlyVerified, true,
+    "reconciliation fixture: independent trusted-DAG verification required");
+  assert.deepEqual(dag, TRUSTED_RECONCILIATION_DAG,
+    "reconciliation fixture: exact trusted DAG required");
+  assert.ok(trustedReconciliationAuthorityRoot,
+    "reconciliation fixture: trusted authority root absent");
+  assert.ok(reconciliationFixtureRoot,
+    "reconciliation fixture: destination root absent");
+  assert.ok(!lstatSync(path.resolve(reconciliationFixtureRoot)).isSymbolicLink(),
+    "reconciliation fixture: symlink destination forbidden");
+  const sourceRoot = realpathSync(path.resolve(trustedReconciliationAuthorityRoot));
+  const destinationRoot = realpathSync(path.resolve(reconciliationFixtureRoot));
+  assert.ok(process.env.P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT,
+    "reconciliation fixture: trusted authority environment binding absent");
+  assert.equal(sourceRoot, realpathSync(path.resolve(
+    process.env.P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT,
+  )), "reconciliation fixture: candidate-selected trusted authority root");
+  assert.notEqual(sourceRoot, destinationRoot,
+    "reconciliation fixture: shared authority object store forbidden");
+  assert.notEqual(destinationRoot, realpathSync(candidateRoot),
+    "reconciliation fixture: primary checkout forbidden");
+  verifyCanonicalTrustedReconciliationAncestry({
+    trustedReconciliationAuthorityRoot: sourceRoot,
+  });
+  const destinationGitDir = realpathSync(path.resolve(
+    destinationRoot,
+    gitAt(destinationRoot, "rev-parse", "--git-dir"),
+  ));
+  const sourceGitDir = realpathSync(path.resolve(
+    sourceRoot,
+    gitAt(sourceRoot, "rev-parse", "--git-dir"),
+  ));
+  assert.notEqual(destinationGitDir, sourceGitDir,
+    "reconciliation fixture: shared Git directory forbidden");
+  assert.ok(!existsSync(path.join(destinationGitDir, "objects/info/alternates")),
+    "reconciliation fixture: alternates forbidden");
+  assert.equal(gitAt(destinationRoot, "for-each-ref", "--format=%(refname)", "refs/replace"), "",
+    "reconciliation fixture: replace refs forbidden");
+  assert.ok(!existsSync(path.join(destinationGitDir, "info/grafts")),
+    "reconciliation fixture: grafts forbidden");
+  const allowedExistingCommits = new Set([
+    ...AUTHORIZED_ANCESTRY_CHAIN,
+    COMPOSED_CI_BASE,
+    AUTHORIZED_BASE,
+    TRUSTED_RECONCILIATION_BASE,
+  ]);
+  assert.ok(Array.isArray(authorizedGeneratedCommits),
+    "reconciliation fixture: generated commit allowlist malformed");
+  for (const sha of authorizedGeneratedCommits) {
+    exactSha(sha, "reconciliation fixture generated commit");
+    assert.equal(gitAt(destinationRoot, "cat-file", "-t", sha), "commit",
+      "reconciliation fixture: generated object is not a commit");
+    allowedExistingCommits.add(sha);
+  }
+  const existingCommits = gitAt(
+    destinationRoot,
+    "cat-file", "--batch-all-objects", "--batch-check=%(objectname) %(objecttype)",
+  ).split("\n").filter((line) => line.endsWith(" commit")).map((line) => line.slice(0, 40));
+  for (const sha of existingCommits) {
+    assert.ok(allowedExistingCommits.has(sha),
+      `reconciliation fixture: unauthorized preexisting commit ${sha}`);
+  }
+
+  for (const entry of dag) {
+    const rawTree = execFileSync("git", ["cat-file", "tree", entry.tree], {
+      cwd: sourceRoot, stdio: ["ignore", "pipe", "pipe"],
+    });
+    const importedTree = execFileSync(
+      "git", ["hash-object", "-w", "-t", "tree", "--stdin"],
+      { cwd: destinationRoot, input: rawTree, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+    ).trim();
+    assert.equal(importedTree, entry.tree,
+      `reconciliation fixture: tree identity changed for ${entry.sha}`);
+    const rawCommit = execFileSync("git", ["cat-file", "commit", entry.sha], {
+      cwd: sourceRoot, stdio: ["ignore", "pipe", "pipe"],
+    });
+    const importedCommit = execFileSync(
+      "git", ["hash-object", "-w", "-t", "commit", "--stdin"],
+      { cwd: destinationRoot, input: rawCommit, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+    ).trim();
+    assert.equal(importedCommit, entry.sha,
+      `reconciliation fixture: commit identity changed for ${entry.sha}`);
+    assert.equal(gitAt(destinationRoot, "rev-parse", `${entry.sha}^{tree}`), entry.tree,
+      `reconciliation fixture: imported tree mismatch for ${entry.sha}`);
+    const parents = gitAt(destinationRoot, "cat-file", "-p", entry.sha).split("\n")
+      .filter((line) => line.startsWith("parent ")).map((line) => line.slice(7));
+    if (entry.sha === AUTHORIZED_BASE) {
+      assert.ok(parents.includes(PRE_BASE_PARENT),
+        "reconciliation fixture: boundary parent identity changed");
+    } else {
+      assert.deepEqual(parents, entry.parents,
+        `reconciliation fixture: parent topology changed for ${entry.sha}`);
+    }
+  }
+  assert.throws(() => gitAt(destinationRoot, "cat-file", "-e", `${PRE_BASE_PARENT}^{commit}`),
+    "reconciliation fixture: forbidden pre-boundary commit imported");
+  const shallowPath = path.join(destinationGitDir, "shallow");
+  if (existsSync(shallowPath)) {
+    assert.equal(readFileSync(shallowPath, "utf8"), `${AUTHORIZED_BASE}\n`,
+      "reconciliation fixture: conflicting shallow boundary");
+  } else {
+    writeFileSync(shallowPath, `${AUTHORIZED_BASE}\n`, { flag: "wx" });
+  }
+  assert.equal(readFileSync(shallowPath, "utf8"), `${AUTHORIZED_BASE}\n`,
+    "reconciliation fixture: exact sole boundary required");
+  gitAt(destinationRoot, "merge-base", "--is-ancestor", AUTHORIZED_BASE,
+    TRUSTED_RECONCILIATION_BASE);
+  return Object.freeze({
+    sourceRoot,
+    destinationRoot,
+    boundarySha: AUTHORIZED_BASE,
+    trustedHeadSha: TRUSTED_RECONCILIATION_BASE,
+    importedCommits: dag.length,
+    importedTrees: new Set(dag.map(({ tree }) => tree)).size,
+  });
+}
+
 // Compatibility Git gate. The production path receives its allowlist from the
 // trusted caller; arbitrary manifests are accepted only for explicit temporary
 // fixture repositories used by the negative-control suite.
