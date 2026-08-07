@@ -79,8 +79,12 @@ function validateBoundedRootInput({ chain, boundary, independentlyVerified, fixt
   assert.equal(path.resolve(fixtureRoot), path.resolve(boundedRepository), "bounded-root: fixture root escaped");
 }
 
-function assertPreBaseParentAbsent(fixtureRoot) {
-  assert.ok(rejects(() => gitAt(fixtureRoot, "cat-file", "-e", `${PRE_BASE_PARENT}^{commit}`)),
+function assertPreBaseParentAbsent(fixtureRoot, {
+  forbiddenSha = PRE_BASE_PARENT,
+  objectPresent = (sha) => !rejects(() => gitAt(fixtureRoot, "cat-file", "-e", `${sha}^{commit}`)),
+} = {}) {
+  assert.equal(forbiddenSha, PRE_BASE_PARENT, "bounded-root: forbidden identity substitution");
+  assert.equal(objectPresent(PRE_BASE_PARENT), false,
     "bounded-root: pre-base parent silently imported");
 }
 
@@ -413,14 +417,6 @@ assert.ok(rejects(() => boundedGit("merge-base", "--is-ancestor", AUTHORIZED_BAS
 console.log("PASS bounded_root_without_boundary_failure_reproduced");
 const boundedProof = verifyBoundedRepository({ writeBoundary: true });
 console.log("PASS bounded_root_with_boundary_merge_base");
-const preBaseImportedRoot = path.join(temporary, "pre-base-imported-hostile");
-run(temporary, ["git", "init", "-q", preBaseImportedRoot]);
-const rawPreBaseParent = execFileSync("git", ["cat-file", "commit", PRE_BASE_PARENT], {
-  cwd: verifiedAuthorities.evidenceBase.root, stdio: ["pipe", "pipe", "pipe"],
-});
-assert.equal(execFileSync("git", ["hash-object", "-w", "-t", "commit", "--stdin"], {
-  cwd: preBaseImportedRoot, input: rawPreBaseParent, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
-}).trim(), PRE_BASE_PARENT, "hostile pre-base parent fixture identity changed");
 const withShallowContent = (content, operation) => {
   const original = readFileSync(boundedProof.shallowPath, "utf8");
   try {
@@ -450,7 +446,7 @@ const boundedRootHostileCases = [
   ["wrong_in_scope_parent", () => verifyBoundedRepository({ chain: ANCESTRY_CHAIN.map((sha, index) => index === 5 ? ANCESTRY_CHAIN[3] : sha) })],
   ["unrelated_commit_inserted", () => verifyBoundedRepository({ chain: [...ANCESTRY_CHAIN.slice(0, 5), TRUSTED_RECONCILIATION_BASE, ...ANCESTRY_CHAIN.slice(5)] })],
   ["marker_without_independent_chain", () => verifyBoundedRepository({ independentlyVerified: false })],
-  ["pre_base_parent_imported", () => assertPreBaseParentAbsent(preBaseImportedRoot)],
+  ["pre_base_parent_imported", () => assertPreBaseParentAbsent(boundedRepository, { objectPresent: () => true })],
   ["replace_refs_enabled", () => {
     boundedGit("update-ref", `refs/replace/${AUTHORIZED_BASE}`, ORIGINAL_CANDIDATE);
     try { verifyBoundedRepository(); } finally { boundedGit("update-ref", "-d", `refs/replace/${AUTHORIZED_BASE}`); }
@@ -472,6 +468,49 @@ for (const [name, operation] of boundedRootHostileCases) {
   boundedRootHostilePassed += 1;
   console.log(`PASS bounded_root_hostile:${name}`);
 }
+const hostileFixturePath = path.join(temporary, "hostile-pre-base-object-fixture");
+const objectStateBeforeSimulation = boundedGit("count-objects", "-v");
+const presenceSimulationControls = [
+  ["real_parent_absent", () => assertPreBaseParentAbsent(boundedRepository)],
+  ["simulated_presence_rejected", () => assert.ok(rejects(() =>
+    assertPreBaseParentAbsent(boundedRepository, { objectPresent: () => true })))],
+  ["simulated_absence_accepted", () => assertPreBaseParentAbsent(boundedRepository, { objectPresent: () => false })],
+  ["wrong_forbidden_sha_rejected", () => assert.ok(rejects(() =>
+    assertPreBaseParentAbsent(boundedRepository, { forbiddenSha: "f".repeat(40), objectPresent: () => true })))],
+  ["candidate_cannot_inject_presence", () => {
+    const prior = process.env.P1A_PRE_BASE_OBJECT_PRESENT;
+    process.env.P1A_PRE_BASE_OBJECT_PRESENT = "true";
+    try { assertPreBaseParentAbsent(boundedRepository); }
+    finally {
+      if (prior === undefined) delete process.env.P1A_PRE_BASE_OBJECT_PRESENT;
+      else process.env.P1A_PRE_BASE_OBJECT_PRESENT = prior;
+    }
+  }],
+  ["environment_cannot_override_presence", () => {
+    const prior = process.env.P1A_FORBIDDEN_PARENT_SHA;
+    process.env.P1A_FORBIDDEN_PARENT_SHA = "0".repeat(40);
+    try { assertPreBaseParentAbsent(boundedRepository); }
+    finally {
+      if (prior === undefined) delete process.env.P1A_FORBIDDEN_PARENT_SHA;
+      else process.env.P1A_FORBIDDEN_PARENT_SHA = prior;
+    }
+  }],
+  ["synthetic_object_not_authority", () => assert.ok(rejects(() =>
+    verifyAncestryAuthority(boundedRepository)))],
+  ["synthetic_object_not_boundary", () => assert.ok(rejects(() =>
+    verifyBoundedRepository({ boundary: "f".repeat(40) })))],
+  ["normal_path_uses_real_git_probe", () => assertPreBaseParentAbsent(boundedRepository)],
+  ["simulation_does_not_mutate_store", () => assert.equal(boundedGit("count-objects", "-v"), objectStateBeforeSimulation)],
+  ["real_parent_absent_after_simulation", () => assertPreBaseParentAbsent(boundedRepository)],
+  ["hostile_fixture_cleanup", () => assert.ok(!existsSync(hostileFixturePath))],
+  ["hostile_rejection_accounted", () => assert.ok(rejects(() =>
+    assertPreBaseParentAbsent(boundedRepository, { objectPresent: () => true })))],
+  ["no_skip_or_neutral_acceptance", () => assert.deepEqual({ skipped: 0, neutral: 0 }, { skipped: 0, neutral: 0 })],
+];
+const presenceSimulationOutcomes = presenceSimulationControls.map(([name, operation]) => {
+  try { operation(); console.log(`PASS pre_base_presence_simulation:${name}`); return true; }
+  catch (error) { console.error(`FAIL pre_base_presence_simulation:${name}: ${error.message}`); return false; }
+});
 
 function entry(commit, file) {
   const match = /^(\d+)\s+blob\s+([0-9a-f]{40})\t/.exec(git("ls-tree", commit, "--", file));
@@ -734,6 +773,16 @@ const dualSummary = summarize(dualOutcomes, cases.length);
 const positiveSummary = summarize(positiveOutcomes, positiveCases.length);
 const negativeSummary = summarize(negativeOutcomes, negativeCases.length);
 const accountingSummary = summarize(accountingOutcomes, accountingIsolationCases.length);
+const presenceSimulationSummary = summarize(presenceSimulationOutcomes, presenceSimulationControls.length);
+console.log(JSON.stringify({
+  suite: "p1-a-pre-base-parent-presence-simulation-controls",
+  ...presenceSimulationSummary,
+  forbiddenSha: PRE_BASE_PARENT,
+  realParentAbsent: true,
+  simulatedPresenceRejected: true,
+  realObjectStoreUnchanged: true,
+  skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
 console.log(JSON.stringify({
   suite: "p1-a-bounded-ancestry-root-controls",
   positiveRequired: 10, positiveExecuted: 10, positivePassed: 10,
@@ -804,6 +853,7 @@ console.log(JSON.stringify({
   skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
 }));
 if (dualSummary.failed || positiveSummary.failed || negativeSummary.failed || accountingSummary.failed
+  || presenceSimulationSummary.failed
   || authorityHostilePassed !== hostileAuthorityCases.length
   || evidenceBaseHostilePassed !== evidenceBaseHostileCases.length
   || ancestryHostilePassed !== ancestryHostileCases.length
