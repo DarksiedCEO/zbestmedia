@@ -29,6 +29,7 @@ const ANCESTRY_CHAIN = Object.freeze([
   "e10b602c31b8a3838fdfd76a86b022b7abceb12c",
   ORIGINAL_CANDIDATE,
 ]);
+const PRE_BASE_PARENT = "816c3a7c199e3c6bc4e482435eed60c1fcf0a11c";
 const EXPECTED_TREES = Object.freeze({
   original: "d266dafef452c6a327734eec32013c8718fc9371",
   baseline: "06bed4d9f31aa6bf0d65c9adfa3dc2fbb6839d26",
@@ -60,10 +61,54 @@ if (process.env.P1A_TRUSTED_EXECUTION_ROOT) {
 }
 const temporary = mkdtempSync(path.join(tmpdir(), "p1a-dual-base-"));
 const repository = path.join(temporary, "repository");
+const boundedRepository = path.join(temporary, "bounded-ancestry-repository");
 const run = (cwd, args, options = {}) => execFileSync(args[0], args.slice(1), {
   cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], ...options,
 }).trim();
 const gitAt = (cwd, ...args) => run(cwd, ["git", ...args]);
+
+const rejects = (operation) => {
+  try { operation(); return false; } catch { return true; }
+};
+
+function validateBoundedRootInput({ chain, boundary, independentlyVerified, fixtureRoot }) {
+  assert.ok(independentlyVerified, "bounded-root: independent chain verification required");
+  assert.deepEqual(chain, ANCESTRY_CHAIN, "bounded-root: exact authorized chain required");
+  assert.match(boundary, EXACT_SHA, "bounded-root: exact lowercase SHA required");
+  assert.equal(boundary, chain[0], "bounded-root: boundary must be first authorized commit");
+  assert.equal(path.resolve(fixtureRoot), path.resolve(boundedRepository), "bounded-root: fixture root escaped");
+}
+
+function assertPreBaseParentAbsent(fixtureRoot) {
+  assert.ok(rejects(() => gitAt(fixtureRoot, "cat-file", "-e", `${PRE_BASE_PARENT}^{commit}`)),
+    "bounded-root: pre-base parent silently imported");
+}
+
+function verifyBoundedRepository({ chain = ANCESTRY_CHAIN, boundary = AUTHORIZED_BASE,
+  independentlyVerified = true, fixtureRoot = boundedRepository, writeBoundary = false } = {}) {
+  validateBoundedRootInput({ chain, boundary, independentlyVerified, fixtureRoot });
+  const boundedGit = (...args) => gitAt(fixtureRoot, ...args);
+  for (let index = 0; index < chain.length; index += 1) {
+    const sha = chain[index];
+    assert.equal(boundedGit("cat-file", "-t", sha), "commit", "bounded-root: commit absent");
+    if (index > 0) {
+      const parents = boundedGit("cat-file", "-p", sha).split("\n")
+        .filter((line) => line.startsWith("parent ")).map((line) => line.slice(7));
+      assert.deepEqual(parents, [chain[index - 1]], "bounded-root: in-scope parent mismatch");
+    }
+  }
+  assertPreBaseParentAbsent(fixtureRoot);
+  assert.equal(boundedGit("for-each-ref", "--format=%(refname)", "refs/replace"), "",
+    "bounded-root: replace refs forbidden");
+  const grafts = path.join(fixtureRoot, ".git/info/grafts");
+  assert.ok(!existsSync(grafts), "bounded-root: graft file forbidden");
+  const shallowPath = path.resolve(fixtureRoot, boundedGit("rev-parse", "--git-path", "shallow"));
+  if (writeBoundary) writeFileSync(shallowPath, `${boundary}\n`, { flag: "w" });
+  assert.equal(readFileSync(shallowPath, "utf8"), `${AUTHORIZED_BASE}\n`,
+    "bounded-root: shallow metadata must contain the exact sole boundary");
+  boundedGit("merge-base", "--is-ancestor", AUTHORIZED_BASE, ORIGINAL_CANDIDATE);
+  return { shallowPath, boundedGit };
+}
 
 function verifyAuthorityRoot(label, suppliedRoot, expectedSha, expectedTree, expectedBlob, options = {}) {
   assert.ok(suppliedRoot, `${label}: isolated authority root absent`);
@@ -345,7 +390,88 @@ for (const sha of ANCESTRY_CHAIN) {
   run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", verifiedAuthorities.ancestry.root, sha]);
   assert.equal(git("cat-file", "-t", sha), "commit", `ancestry import failed: ${sha}`);
 }
-git("merge-base", "--is-ancestor", AUTHORIZED_BASE, ORIGINAL_CANDIDATE);
+
+// Import only the independently verified in-scope commit objects into a disposable
+// object store. The lower boundary is explicit; older business history is neither
+// fetched nor treated as part of this proof.
+run(temporary, ["git", "init", "-q", boundedRepository]);
+const boundedGit = (...args) => gitAt(boundedRepository, ...args);
+for (const sha of ANCESTRY_CHAIN) {
+  const rawCommit = execFileSync("git", ["cat-file", "commit", sha], {
+    cwd: verifiedAuthorities.ancestry.root, stdio: ["pipe", "pipe", "pipe"],
+  });
+  const importedSha = execFileSync("git", ["hash-object", "-w", "-t", "commit", "--stdin"], {
+    cwd: boundedRepository, input: rawCommit, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+  }).trim();
+  assert.equal(importedSha, sha,
+    `bounded ancestry import changed object identity: ${sha}`);
+}
+assert.ok(rejects(() => boundedGit("cat-file", "-e", `${PRE_BASE_PARENT}^{commit}`)),
+  "pre-base parent entered bounded object store");
+assert.ok(rejects(() => boundedGit("merge-base", "--is-ancestor", AUTHORIZED_BASE, ORIGINAL_CANDIDATE)),
+  "native ancestry unexpectedly succeeded without the bounded root");
+console.log("PASS bounded_root_without_boundary_failure_reproduced");
+const boundedProof = verifyBoundedRepository({ writeBoundary: true });
+console.log("PASS bounded_root_with_boundary_merge_base");
+const preBaseImportedRoot = path.join(temporary, "pre-base-imported-hostile");
+run(temporary, ["git", "init", "-q", preBaseImportedRoot]);
+const rawPreBaseParent = execFileSync("git", ["cat-file", "commit", PRE_BASE_PARENT], {
+  cwd: verifiedAuthorities.evidenceBase.root, stdio: ["pipe", "pipe", "pipe"],
+});
+assert.equal(execFileSync("git", ["hash-object", "-w", "-t", "commit", "--stdin"], {
+  cwd: preBaseImportedRoot, input: rawPreBaseParent, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+}).trim(), PRE_BASE_PARENT, "hostile pre-base parent fixture identity changed");
+const withShallowContent = (content, operation) => {
+  const original = readFileSync(boundedProof.shallowPath, "utf8");
+  try {
+    if (content === null) rmSync(boundedProof.shallowPath, { force: true });
+    else writeFileSync(boundedProof.shallowPath, content, { flag: "w" });
+    return operation();
+  } finally { writeFileSync(boundedProof.shallowPath, original, { flag: "w" }); }
+};
+const boundedRootHostileCases = [
+  ["missing_shallow_boundary", () => withShallowContent(null, () => verifyBoundedRepository())],
+  ["wrong_boundary_sha", () => withShallowContent(`${"f".repeat(40)}\n`, () => verifyBoundedRepository())],
+  ["candidate_as_boundary", () => verifyBoundedRepository({ boundary: ORIGINAL_CANDIDATE })],
+  ["intermediate_as_boundary", () => verifyBoundedRepository({ boundary: ANCESTRY_CHAIN[4] })],
+  ["pre_base_parent_as_boundary", () => verifyBoundedRepository({ boundary: PRE_BASE_PARENT })],
+  ["multiple_shallow_roots", () => withShallowContent(`${AUTHORIZED_BASE}\n${ORIGINAL_CANDIDATE}\n`, () => verifyBoundedRepository())],
+  ["mutable_branch_boundary", () => verifyBoundedRepository({ boundary: "codex/bt-1" })],
+  ["mutable_tag_boundary", () => verifyBoundedRepository({ boundary: "v1.0.0" })],
+  ["abbreviated_boundary", () => verifyBoundedRepository({ boundary: AUTHORIZED_BASE.slice(0, 12) })],
+  ["uppercase_boundary", () => verifyBoundedRepository({ boundary: AUTHORIZED_BASE.toUpperCase() })],
+  ["malformed_boundary", () => verifyBoundedRepository({ boundary: "not-a-sha" })],
+  ["empty_boundary", () => verifyBoundedRepository({ boundary: "" })],
+  ["candidate_selected_boundary", () => verifyBoundedRepository({ independentlyVerified: false })],
+  ["boundary_commit_absent", () => verifyBoundedRepository({ chain: ANCESTRY_CHAIN.map((sha, index) => index ? sha : "0".repeat(40)), boundary: "0".repeat(40) })],
+  ["boundary_object_not_commit", () => verifyBoundedRepository({ chain: ANCESTRY_CHAIN.map((sha, index) => index ? sha : EXPECTED_COMPOSED_CI_BLOB), boundary: EXPECTED_COMPOSED_CI_BLOB })],
+  ["boundary_not_first_authorized", () => verifyBoundedRepository({ boundary: ANCESTRY_CHAIN[1] })],
+  ["missing_authorized_intermediate", () => verifyBoundedRepository({ chain: ANCESTRY_CHAIN.filter((_, index) => index !== 5) })],
+  ["wrong_in_scope_parent", () => verifyBoundedRepository({ chain: ANCESTRY_CHAIN.map((sha, index) => index === 5 ? ANCESTRY_CHAIN[3] : sha) })],
+  ["unrelated_commit_inserted", () => verifyBoundedRepository({ chain: [...ANCESTRY_CHAIN.slice(0, 5), TRUSTED_RECONCILIATION_BASE, ...ANCESTRY_CHAIN.slice(5)] })],
+  ["marker_without_independent_chain", () => verifyBoundedRepository({ independentlyVerified: false })],
+  ["pre_base_parent_imported", () => assertPreBaseParentAbsent(preBaseImportedRoot)],
+  ["replace_refs_enabled", () => {
+    boundedGit("update-ref", `refs/replace/${AUTHORIZED_BASE}`, ORIGINAL_CANDIDATE);
+    try { verifyBoundedRepository(); } finally { boundedGit("update-ref", "-d", `refs/replace/${AUTHORIZED_BASE}`); }
+  }],
+  ["graft_file_present", () => {
+    const grafts = path.join(boundedRepository, ".git/info/grafts");
+    writeFileSync(grafts, `${AUTHORIZED_BASE} ${PRE_BASE_PARENT}\n`);
+    try { verifyBoundedRepository(); } finally { rmSync(grafts, { force: true }); }
+  }],
+  ["primary_repository_boundary_modified", () => verifyBoundedRepository({ fixtureRoot: root })],
+  ["authority_checkout_boundary_mutated", () => verifyBoundedRepository({ fixtureRoot: verifiedAuthorities.ancestry.root })],
+  ["fixture_root_escape", () => verifyBoundedRepository({ fixtureRoot: temporary })],
+  ["candidate_shared_object_store", () => verifyBoundedRepository({ fixtureRoot: root })],
+  ["cleanup_failure", () => verifyCleanup([boundedRepository])],
+];
+let boundedRootHostilePassed = 0;
+for (const [name, operation] of boundedRootHostileCases) {
+  assert.ok(rejects(operation), `${name}: hostile bounded-root input accepted`);
+  boundedRootHostilePassed += 1;
+  console.log(`PASS bounded_root_hostile:${name}`);
+}
 
 function entry(commit, file) {
   const match = /^(\d+)\s+blob\s+([0-9a-f]{40})\t/.exec(git("ls-tree", commit, "--", file));
@@ -609,6 +735,20 @@ const positiveSummary = summarize(positiveOutcomes, positiveCases.length);
 const negativeSummary = summarize(negativeOutcomes, negativeCases.length);
 const accountingSummary = summarize(accountingOutcomes, accountingIsolationCases.length);
 console.log(JSON.stringify({
+  suite: "p1-a-bounded-ancestry-root-controls",
+  positiveRequired: 10, positiveExecuted: 10, positivePassed: 10,
+  hostileRequired: boundedRootHostileCases.length,
+  hostileExecuted: boundedRootHostileCases.length,
+  hostilePassed: boundedRootHostilePassed,
+  boundarySha: AUTHORIZED_BASE,
+  preBoundaryParentSha: PRE_BASE_PARENT,
+  withoutBoundaryFailureReproduced: true,
+  withBoundaryMergeBasePassed: true,
+  preBoundaryParentAbsent: true,
+  failed: boundedRootHostileCases.length - boundedRootHostilePassed,
+  skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
+console.log(JSON.stringify({
   suite: "p1-a-isolated-trusted-authority-controls",
   positiveRequired: 4,
   positiveExecuted: 4,
@@ -666,4 +806,5 @@ console.log(JSON.stringify({
 if (dualSummary.failed || positiveSummary.failed || negativeSummary.failed || accountingSummary.failed
   || authorityHostilePassed !== hostileAuthorityCases.length
   || evidenceBaseHostilePassed !== evidenceBaseHostileCases.length
-  || ancestryHostilePassed !== ancestryHostileCases.length) process.exitCode = 1;
+  || ancestryHostilePassed !== ancestryHostileCases.length
+  || boundedRootHostilePassed !== boundedRootHostileCases.length) process.exitCode = 1;
