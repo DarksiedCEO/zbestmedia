@@ -209,6 +209,56 @@ jobs:
             exit 1
           fi
 
+      - name: Acquire exact immutable P1-A ancestry authority
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 365c59757756f3f91480d3bfeb841b543010201f
+          fetch-depth: 11
+          persist-credentials: false
+          path: .p1a-ancestry-authority
+
+      - name: Verify exact immutable P1-A ancestry authority
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          expected=(
+            7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+            c9c6198e9dc3018bfdbcf98dd3e63335dd2c0e6e
+            bf3b0478afcab9cb5b58e8af904b98ea53ae3f3e
+            fec9d68fc142a122c3568a7e8b73e5503081cc28
+            73227f2bde0f3b70e8a126eaaa16cb1ee0946b71
+            06545d264030199f87df1558b414aa7f051871cd
+            f3f2966ec511b64b2d46f38c0363be269bb4246a
+            36d5b1f2fadddbb60a80f7cac601455c51286240
+            aa7014e691a6222a0b93e61d6aa2ffa12aa4ced1
+            e10b602c31b8a3838fdfd76a86b022b7abceb12c
+            365c59757756f3f91480d3bfeb841b543010201f
+          )
+          test "$(git -C .p1a-ancestry-authority rev-parse HEAD)" = "${expected[10]}"
+          test "$(git -C .p1a-ancestry-authority remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          test -z "$(git -C .p1a-ancestry-authority status --porcelain=v1)"
+          if grep -Eiq 'x-access-token|authorization:|http\..*extraheader' .p1a-ancestry-authority/.git/config; then
+            echo "persisted ancestry authority credential material detected" >&2
+            exit 1
+          fi
+          mapfile -t actual < <(git -C .p1a-ancestry-authority rev-list --reverse "${expected[10]}")
+          test "${#actual[@]}" -eq "${#expected[@]}"
+          for index in "${!expected[@]}"; do
+            sha="${expected[$index]}"
+            [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+            test "${actual[$index]}" = "$sha"
+            test "$(git -C .p1a-ancestry-authority cat-file -t "$sha")" = commit
+            tree="$(git -C .p1a-ancestry-authority show -s --format=%T "$sha")"
+            [[ "$tree" =~ ^[0-9a-f]{40}$ ]]
+            test "$(git -C .p1a-ancestry-authority cat-file -t "$tree")" = tree
+            if (( index > 0 )); then
+              parent="$(git -C .p1a-ancestry-authority cat-file -p "$sha" | sed -n 's/^parent //p')"
+              test "$parent" = "${expected[$((index - 1))]}"
+            fi
+          done
+          git -C .p1a-ancestry-authority merge-base --is-ancestor "${expected[0]}" "${expected[10]}"
+
       - name: P1-A trusted verifier controls
         env:
           P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
@@ -229,16 +279,18 @@ jobs:
           P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
           P1A_DUAL_BASE_AUTHORITY_ROOT: .p1a-dual-base-authority
           P1A_EVIDENCE_BASE_AUTHORITY_ROOT: .p1a-evidence-base-authority
+          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority
         run: node scripts/test-p1a-dual-base-verifier.mjs
 
       - name: Remove isolated P1-A authority checkouts
         if: always()
         run: |
-          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority
+          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority
           test ! -e .p1a-original-candidate
           test ! -e .p1a-trusted-baseline
           test ! -e .p1a-dual-base-authority
           test ! -e .p1a-evidence-base-authority
+          test ! -e .p1a-ancestry-authority
 
       - name: P1-A trusted-bootstrap secret-detector tests
         run: node scripts/test-p1a-ci-secret-detector.mjs

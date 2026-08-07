@@ -16,6 +16,19 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EXACT_SHA = /^[0-9a-f]{40}$/;
 const OFFICIAL_REPOSITORY = "https://github.com/DarksiedCEO/zbestmedia";
 const EXPECTED_COMPOSED_CI_BLOB = "9a3f1a04f99e83d9dad84cf384d86117a7d282f1";
+const ANCESTRY_CHAIN = Object.freeze([
+  AUTHORIZED_BASE,
+  "c9c6198e9dc3018bfdbcf98dd3e63335dd2c0e6e",
+  "bf3b0478afcab9cb5b58e8af904b98ea53ae3f3e",
+  "fec9d68fc142a122c3568a7e8b73e5503081cc28",
+  "73227f2bde0f3b70e8a126eaaa16cb1ee0946b71",
+  "06545d264030199f87df1558b414aa7f051871cd",
+  "f3f2966ec511b64b2d46f38c0363be269bb4246a",
+  "36d5b1f2fadddbb60a80f7cac601455c51286240",
+  "aa7014e691a6222a0b93e61d6aa2ffa12aa4ced1",
+  "e10b602c31b8a3838fdfd76a86b022b7abceb12c",
+  ORIGINAL_CANDIDATE,
+]);
 const EXPECTED_TREES = Object.freeze({
   original: "d266dafef452c6a327734eec32013c8718fc9371",
   baseline: "06bed4d9f31aa6bf0d65c9adfa3dc2fbb6839d26",
@@ -27,6 +40,7 @@ const authorityRoots = {
   baseline: process.env.P1A_BASELINE_REPOSITORY_ROOT,
   dualBase: process.env.P1A_DUAL_BASE_AUTHORITY_ROOT,
   evidenceBase: process.env.P1A_EVIDENCE_BASE_AUTHORITY_ROOT,
+  ancestry: process.env.P1A_ANCESTRY_AUTHORITY_ROOT,
 };
 const workspaceOptions = (expectedRelative) => process.env.GITHUB_WORKSPACE
   ? { workspaceRoot: process.env.GITHUB_WORKSPACE, expectedRelative }
@@ -83,6 +97,40 @@ function verifyAuthorityRoot(label, suppliedRoot, expectedSha, expectedTree, exp
   };
 }
 
+function verifyAncestryAuthority(suppliedRoot, chain = ANCESTRY_CHAIN, options = {}) {
+  assert.ok(suppliedRoot, "ancestry: isolated authority root absent");
+  assert.deepEqual(chain, ANCESTRY_CHAIN, "ancestry: exact chain mismatch");
+  assert.ok(!lstatSync(path.resolve(suppliedRoot)).isSymbolicLink(), "ancestry: symlink authority forbidden");
+  const resolved = realpathSync(path.resolve(suppliedRoot));
+  assert.notEqual(resolved, realpathSync(root), "ancestry: primary candidate checkout forbidden");
+  if (options.workspaceRoot && options.expectedRelative) {
+    assert.equal(resolved, realpathSync(path.resolve(options.workspaceRoot, options.expectedRelative)),
+      "ancestry: candidate-selected or escaping authority root");
+  }
+  assert.equal(gitAt(resolved, "remote", "get-url", "origin"), OFFICIAL_REPOSITORY, "ancestry: wrong repository");
+  assert.equal(gitAt(resolved, "status", "--porcelain=v1"), "", "ancestry: authority checkout modified");
+  const config = readFileSync(path.join(resolved, ".git/config"), "utf8");
+  assert.ok(!/x-access-token|authorization:|http\..*extraheader/i.test(config), "ancestry: persisted credentials detected");
+  const actual = gitAt(resolved, "rev-list", "--reverse", ORIGINAL_CANDIDATE).split("\n").filter(Boolean);
+  assert.deepEqual(actual, ANCESTRY_CHAIN, "ancestry: incomplete or unrelated history");
+  for (let index = 0; index < chain.length; index += 1) {
+    const sha = chain[index];
+    assert.match(sha, EXACT_SHA, "ancestry: exact lowercase SHA required");
+    assert.equal(gitAt(resolved, "cat-file", "-t", sha), "commit", "ancestry: object is not commit");
+    const tree = gitAt(resolved, "show", "-s", "--format=%T", sha);
+    assert.match(tree, EXACT_SHA, "ancestry: tree identity malformed");
+    assert.equal(gitAt(resolved, "cat-file", "-t", tree), "tree", "ancestry: tree absent");
+    if (index > 0) {
+      const parents = gitAt(resolved, "cat-file", "-p", sha).split("\n")
+        .filter((line) => line.startsWith("parent ")).map((line) => line.slice(7));
+      assert.deepEqual(parents, [chain[index - 1]], "ancestry: parent linkage mismatch");
+    }
+  }
+  gitAt(resolved, "merge-base", "--is-ancestor", AUTHORIZED_BASE, ORIGINAL_CANDIDATE);
+  const gitDirValue = gitAt(resolved, "rev-parse", "--git-dir");
+  return { root: resolved, gitDir: realpathSync(path.isAbsolute(gitDirValue) ? gitDirValue : path.resolve(resolved, gitDirValue)) };
+}
+
 const verifiedAuthorities = {
   original: verifyAuthorityRoot("original", authorityRoots.original, ORIGINAL_CANDIDATE, EXPECTED_TREES.original,
     undefined, workspaceOptions(".p1a-original-candidate")),
@@ -92,8 +140,10 @@ const verifiedAuthorities = {
     EXPECTED_COMPOSED_CI_BLOB, workspaceOptions(".p1a-dual-base-authority")),
   evidenceBase: verifyAuthorityRoot("evidence-base", authorityRoots.evidenceBase, AUTHORIZED_BASE, EXPECTED_TREES.evidenceBase,
     "92d0002609c084a280a582b5e1ab39476032ca71", workspaceOptions(".p1a-evidence-base-authority")),
+  ancestry: verifyAncestryAuthority(authorityRoots.ancestry, ANCESTRY_CHAIN,
+    workspaceOptions(".p1a-ancestry-authority")),
 };
-assert.equal(new Set(Object.values(verifiedAuthorities).map(({ gitDir }) => gitDir)).size, 4, "authority object stores overlap");
+assert.equal(new Set(Object.values(verifiedAuthorities).map(({ gitDir }) => gitDir)).size, 5, "authority object stores overlap");
 assert.ok(Object.values(verifiedAuthorities).every(({ gitDir }) => !gitDir.startsWith(path.join(root, ".git"))), "primary object store fallback forbidden");
 
 const hostileFixtureRoot = path.join(temporary, "hostile-authority");
@@ -128,6 +178,22 @@ gitAt(evidenceModifiedRoot, "remote", "set-url", "origin", OFFICIAL_REPOSITORY);
 writeFileSync(path.join(evidenceModifiedRoot, "untracked-hostile.txt"), "hostile fixture\n");
 const evidenceSymlinkRoot = path.join(temporary, "evidence-base-symlink");
 symlinkSync(verifiedAuthorities.evidenceBase.root, evidenceSymlinkRoot);
+const ancestryWrongRepositoryRoot = path.join(temporary, "ancestry-wrong-repository");
+run(temporary, ["git", "clone", "-q", "--no-hardlinks", verifiedAuthorities.ancestry.root, ancestryWrongRepositoryRoot]);
+gitAt(ancestryWrongRepositoryRoot, "remote", "set-url", "origin", "https://github.com/attacker/zbestmedia");
+const ancestryCredentialRoot = path.join(temporary, "ancestry-credential");
+run(temporary, ["git", "clone", "-q", "--no-hardlinks", verifiedAuthorities.ancestry.root, ancestryCredentialRoot]);
+gitAt(ancestryCredentialRoot, "remote", "set-url", "origin", OFFICIAL_REPOSITORY);
+gitAt(ancestryCredentialRoot, "config", "http.https://github.com/.extraheader", "AUTHORIZATION: redacted-test-marker");
+const ancestryModifiedRoot = path.join(temporary, "ancestry-modified");
+run(temporary, ["git", "clone", "-q", "--no-hardlinks", verifiedAuthorities.ancestry.root, ancestryModifiedRoot]);
+gitAt(ancestryModifiedRoot, "remote", "set-url", "origin", OFFICIAL_REPOSITORY);
+writeFileSync(path.join(ancestryModifiedRoot, "untracked-hostile.txt"), "hostile fixture\n");
+const ancestrySymlinkRoot = path.join(temporary, "ancestry-symlink");
+symlinkSync(verifiedAuthorities.ancestry.root, ancestrySymlinkRoot);
+const ancestryIncompleteRoot = path.join(temporary, "ancestry-incomplete");
+run(temporary, ["git", "clone", "-q", "--depth", "1", `file://${verifiedAuthorities.ancestry.root}`, ancestryIncompleteRoot]);
+gitAt(ancestryIncompleteRoot, "remote", "set-url", "origin", OFFICIAL_REPOSITORY);
 const verifyDualBase = (suppliedRoot, sha = TRUSTED_RECONCILIATION_BASE,
   tree = EXPECTED_TREES.dualBase, blob = EXPECTED_COMPOSED_CI_BLOB, options) =>
   verifyAuthorityRoot("dual-base-hostile", suppliedRoot, sha, tree, blob, options);
@@ -198,6 +264,38 @@ const evidenceBaseHostileCases = [
   ["empty_sha", () => verifyEvidenceBase(verifiedAuthorities.evidenceBase.root, "")],
   ["null_sha", () => verifyEvidenceBase(verifiedAuthorities.evidenceBase.root, null)],
 ];
+const mutateChain = (index, value) => ANCESTRY_CHAIN.map((sha, offset) => offset === index ? value : sha);
+const ancestryHostileCases = [
+  ["missing_authority", () => verifyAncestryAuthority(undefined)],
+  ["missing_intermediate", () => verifyAncestryAuthority(verifiedAuthorities.ancestry.root, ANCESTRY_CHAIN.filter((_, index) => index !== 4))],
+  ["wrong_intermediate", () => verifyAncestryAuthority(verifiedAuthorities.ancestry.root, mutateChain(4, "f".repeat(40)))],
+  ["wrong_parent_linkage", () => verifyAncestryAuthority(verifiedAuthorities.ancestry.root, mutateChain(5, ANCESTRY_CHAIN[3]))],
+  ["reversed_parent_linkage", () => verifyAncestryAuthority(verifiedAuthorities.ancestry.root, [...ANCESTRY_CHAIN].reverse())],
+  ["mutable_branch", () => verifyAncestryAuthority(verifiedAuthorities.ancestry.root, mutateChain(4, "codex/bt-1"))],
+  ["mutable_tag", () => verifyAncestryAuthority(verifiedAuthorities.ancestry.root, mutateChain(4, "v1.0.0"))],
+  ["abbreviated_sha", () => verifyAncestryAuthority(verifiedAuthorities.ancestry.root, mutateChain(4, ANCESTRY_CHAIN[4].slice(0, 12)))],
+  ["malformed_sha", () => verifyAncestryAuthority(verifiedAuthorities.ancestry.root, mutateChain(4, "not-a-sha"))],
+  ["wrong_repository", () => verifyAncestryAuthority(ancestryWrongRepositoryRoot)],
+  ["tree_substituted", () => verifyAncestryAuthority(verifiedAuthorities.ancestry.root, mutateChain(4, EXPECTED_TREES.evidenceBase))],
+  ["blob_substituted", () => verifyAncestryAuthority(verifiedAuthorities.ancestry.root, mutateChain(4, EXPECTED_COMPOSED_CI_BLOB))],
+  ["candidate_checkout", () => verifyAncestryAuthority(root)],
+  ["evidence_base_fallback", () => verifyAncestryAuthority(verifiedAuthorities.evidenceBase.root)],
+  ["dual_base_fallback", () => verifyAncestryAuthority(verifiedAuthorities.dualBase.root)],
+  ["trusted_baseline_fallback", () => verifyAncestryAuthority(verifiedAuthorities.baseline.root)],
+  ["shared_object_store", () => verifyDistinctStores(verifiedAuthorities.ancestry, verifiedAuthorities.ancestry)],
+  ["persisted_credentials", () => verifyAncestryAuthority(ancestryCredentialRoot)],
+  ["candidate_selected_root", () => verifyAncestryAuthority(verifiedAuthorities.ancestry.root, ANCESTRY_CHAIN,
+    { workspaceRoot: temporary, expectedRelative: "wrong-root" })],
+  ["path_escape", () => verifyAncestryAuthority(verifiedAuthorities.ancestry.root, ANCESTRY_CHAIN,
+    { workspaceRoot: path.join(temporary, "workspace"), expectedRelative: "authority" })],
+  ["symlink_authority", () => verifyAncestryAuthority(ancestrySymlinkRoot)],
+  ["incomplete_chain_with_endpoints", () => verifyAncestryAuthority(ancestryIncompleteRoot)],
+  ["unrelated_commit_inserted", () => verifyAncestryAuthority(verifiedAuthorities.ancestry.root,
+    [...ANCESTRY_CHAIN.slice(0, 4), TRUSTED_RECONCILIATION_BASE, ...ANCESTRY_CHAIN.slice(4)])],
+  ["parent_relation_unverified", () => verifyAncestryAuthority(verifiedAuthorities.ancestry.root,
+    ANCESTRY_CHAIN.map((sha, index) => index === 1 ? ANCESTRY_CHAIN[2] : sha))],
+  ["primary_extra_history_dependency", () => verifyAncestryAuthority(root)],
+];
 let authorityHostilePassed = 0;
 for (const [name, operation] of hostileAuthorityCases) {
   let rejected = false;
@@ -213,6 +311,14 @@ for (const [name, operation] of evidenceBaseHostileCases) {
   assert.ok(rejected, `${name}: hostile evidence-base authority accepted`);
   evidenceBaseHostilePassed += 1;
   console.log(`PASS evidence_base_authority_hostile:${name}`);
+}
+let ancestryHostilePassed = 0;
+for (const [name, operation] of ancestryHostileCases) {
+  let rejected = false;
+  try { operation(); } catch { rejected = true; }
+  assert.ok(rejected, `${name}: hostile ancestry authority accepted`);
+  ancestryHostilePassed += 1;
+  console.log(`PASS ancestry_authority_hostile:${name}`);
 }
 
 const shallowPrimary = path.join(temporary, "shallow-primary");
@@ -235,6 +341,11 @@ for (const [name, sha] of [["original", ORIGINAL_CANDIDATE], ["baseline", COMPOS
   run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", verifiedAuthorities[name].root, sha]);
   assert.equal(git("cat-file", "-t", sha), "commit", `${name}: fixture import failed`);
 }
+for (const sha of ANCESTRY_CHAIN) {
+  run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", verifiedAuthorities.ancestry.root, sha]);
+  assert.equal(git("cat-file", "-t", sha), "commit", `ancestry import failed: ${sha}`);
+}
+git("merge-base", "--is-ancestor", AUTHORIZED_BASE, ORIGINAL_CANDIDATE);
 
 function entry(commit, file) {
   const match = /^(\d+)\s+blob\s+([0-9a-f]{40})\t/.exec(git("ls-tree", commit, "--", file));
@@ -519,6 +630,15 @@ console.log(JSON.stringify({
   skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
 }));
 console.log(JSON.stringify({
+  suite: "p1-a-immutable-ancestry-authority-controls",
+  positiveRequired: 1, positiveExecuted: 1, positivePassed: 1,
+  hostileRequired: ancestryHostileCases.length,
+  hostileExecuted: ancestryHostileCases.length,
+  hostilePassed: ancestryHostilePassed,
+  failed: ancestryHostileCases.length - ancestryHostilePassed,
+  skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
+console.log(JSON.stringify({
   suite: "p1-a-dual-base-verifier-controls",
   candidateSha: process.env.P1A_CANDIDATE_SHA ?? null,
   workflowSha: process.env.P1A_WORKFLOW_SHA ?? null,
@@ -545,4 +665,5 @@ console.log(JSON.stringify({
 }));
 if (dualSummary.failed || positiveSummary.failed || negativeSummary.failed || accountingSummary.failed
   || authorityHostilePassed !== hostileAuthorityCases.length
-  || evidenceBaseHostilePassed !== evidenceBaseHostileCases.length) process.exitCode = 1;
+  || evidenceBaseHostilePassed !== evidenceBaseHostileCases.length
+  || ancestryHostilePassed !== ancestryHostileCases.length) process.exitCode = 1;
