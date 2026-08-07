@@ -259,6 +259,68 @@ jobs:
           done
           git -C .p1a-ancestry-authority merge-base --is-ancestor "${expected[0]}" "${expected[10]}"
 
+      - name: Acquire bounded trusted-reconciliation staging objects
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 5056fb0df6e1ef739231cd2273a453fb1c644273
+          fetch-depth: 10
+          persist-credentials: false
+          path: .p1a-trusted-reconciliation-staging
+
+      - name: Construct exact trusted-reconciliation authority store
+        run: |
+          set -euo pipefail
+          staging=.p1a-trusted-reconciliation-staging
+          authority=.p1a-trusted-reconciliation-authority
+          authorized=(
+            7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+            8bd4e384609d526d45bb503bf8bfa78b584a4bd9
+            a87ad2e383d59fa0c0f0bf60d1ae794ea695693d
+            82fd3dee5ad2ac35f5d75336f1280a07b0e3b034
+            16d990e82f944dd111743f3f09168402da69ff04
+            30c157e589f97b5009853ce8612f8af09db203cc
+            1ab3a7796cc587e4634c8cc36d2e5defa6c871e0
+            6001e13f9359bc6c454d42154d9816409457388c
+            a227202ddf63fdae6dc4c2ff6e51cec24e2bc429
+            5056fb0df6e1ef739231cd2273a453fb1c644273
+          )
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          test "$(git -C "$staging" remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          test -z "$(git -C "$staging" status --porcelain=v1)"
+          if grep -Eiq 'x-access-token|authorization:|http\..*extraheader' "$staging/.git/config"; then
+            echo "persisted staging credential material detected" >&2
+            exit 1
+          fi
+          mapfile -t staging_commits < <(git -C "$staging" rev-list --all)
+          test "${#staging_commits[@]}" -ge "${#authorized[@]}"
+          git init -q "$authority"
+          git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
+          for sha in "${authorized[@]}"; do
+            test "$(git -C "$staging" cat-file -t "$sha")" = commit
+            imported="$(git -C "$staging" cat-file commit "$sha" | git -C "$authority" hash-object -w -t commit --stdin)"
+            test "$imported" = "$sha"
+            tree="$(git -C "$staging" show -s --format=%T "$sha")"
+            test "$(git -C "$staging" cat-file -t "$tree")" = tree
+            imported_tree="$(git -C "$staging" cat-file tree "$tree" | git -C "$authority" hash-object -w -t tree --stdin)"
+            test "$imported_tree" = "$tree"
+          done
+          printf '%s\n' "${authorized[0]}" > "$authority/.git/shallow"
+          rm -rf "$staging"
+          test ! -e "$staging"
+          test ! -e "$authority/.git/objects/info/alternates"
+          test -z "$(git -C "$authority" for-each-ref --format='%(refname)' refs/replace)"
+          test ! -s "$authority/.git/info/grafts"
+          test "$(cat "$authority/.git/shallow")" = "${authorized[0]}"
+          mapfile -t exact_commits < <(git -C "$authority" cat-file --batch-all-objects --batch-check='%(objectname) %(objecttype)' | awk '$2 == "commit" {print $1}' | sort)
+          mapfile -t expected_commits < <(printf '%s\n' "${authorized[@]}" | sort)
+          test "${exact_commits[*]}" = "${expected_commits[*]}"
+          if git -C "$authority" cat-file -e '816c3a7c199e3c6bc4e482435eed60c1fcf0a11c^{commit}'; then
+            echo "forbidden pre-boundary commit imported" >&2
+            exit 1
+          fi
+          git -C "$authority" merge-base --is-ancestor "${authorized[0]}" "${authorized[9]}"
+
       - name: P1-A trusted verifier controls
         env:
           P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
@@ -280,17 +342,20 @@ jobs:
           P1A_DUAL_BASE_AUTHORITY_ROOT: .p1a-dual-base-authority
           P1A_EVIDENCE_BASE_AUTHORITY_ROOT: .p1a-evidence-base-authority
           P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority
+          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority
         run: node scripts/test-p1a-dual-base-verifier.mjs
 
       - name: Remove isolated P1-A authority checkouts
         if: always()
         run: |
-          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority
+          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority
           test ! -e .p1a-original-candidate
           test ! -e .p1a-trusted-baseline
           test ! -e .p1a-dual-base-authority
           test ! -e .p1a-evidence-base-authority
           test ! -e .p1a-ancestry-authority
+          test ! -e .p1a-trusted-reconciliation-authority
+          test ! -e .p1a-trusted-reconciliation-staging
 
       - name: P1-A trusted-bootstrap secret-detector tests
         run: node scripts/test-p1a-ci-secret-detector.mjs

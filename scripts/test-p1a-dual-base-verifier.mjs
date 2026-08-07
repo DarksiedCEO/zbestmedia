@@ -6,9 +6,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   AUTHORIZED_BASE, ORIGINAL_CANDIDATE, TRUSTED_RECONCILIATION_BASE,
+  AUTHORIZED_ANCESTRY_CHAIN, TRUSTED_RECONCILIATION_DAG, PRE_BASE_PARENT,
+  verifyCanonicalBoundedAncestry, verifyCanonicalTrustedReconciliationAncestry,
   AMENDMENT_CONTROLLED_FILES, CANDIDATE_OWNED_FILES, COMPOSED_CI_BASE,
   REQUIRED_CI_ADDITION, composeCandidateCi, composeFinalCi, composeTrustedCi,
-  validateDualBaseScope,
+  removeTwoStageCustodyFragment, validateDualBaseScope,
 } from "./validate-p1a-threat-model.mjs";
 import { validateCertificationBundle } from "./validate-p1a-certification-accounting.mjs";
 
@@ -16,20 +18,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EXACT_SHA = /^[0-9a-f]{40}$/;
 const OFFICIAL_REPOSITORY = "https://github.com/DarksiedCEO/zbestmedia";
 const EXPECTED_COMPOSED_CI_BLOB = "9a3f1a04f99e83d9dad84cf384d86117a7d282f1";
-const ANCESTRY_CHAIN = Object.freeze([
-  AUTHORIZED_BASE,
-  "c9c6198e9dc3018bfdbcf98dd3e63335dd2c0e6e",
-  "bf3b0478afcab9cb5b58e8af904b98ea53ae3f3e",
-  "fec9d68fc142a122c3568a7e8b73e5503081cc28",
-  "73227f2bde0f3b70e8a126eaaa16cb1ee0946b71",
-  "06545d264030199f87df1558b414aa7f051871cd",
-  "f3f2966ec511b64b2d46f38c0363be269bb4246a",
-  "36d5b1f2fadddbb60a80f7cac601455c51286240",
-  "aa7014e691a6222a0b93e61d6aa2ffa12aa4ced1",
-  "e10b602c31b8a3838fdfd76a86b022b7abceb12c",
-  ORIGINAL_CANDIDATE,
-]);
-const PRE_BASE_PARENT = "816c3a7c199e3c6bc4e482435eed60c1fcf0a11c";
+const ANCESTRY_CHAIN = AUTHORIZED_ANCESTRY_CHAIN;
 const EXPECTED_TREES = Object.freeze({
   original: "d266dafef452c6a327734eec32013c8718fc9371",
   baseline: "06bed4d9f31aa6bf0d65c9adfa3dc2fbb6839d26",
@@ -42,6 +31,7 @@ const authorityRoots = {
   dualBase: process.env.P1A_DUAL_BASE_AUTHORITY_ROOT,
   evidenceBase: process.env.P1A_EVIDENCE_BASE_AUTHORITY_ROOT,
   ancestry: process.env.P1A_ANCESTRY_AUTHORITY_ROOT,
+  trustedReconciliation: process.env.P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT,
 };
 const workspaceOptions = (expectedRelative) => process.env.GITHUB_WORKSPACE
   ? { workspaceRoot: process.env.GITHUB_WORKSPACE, expectedRelative }
@@ -191,8 +181,20 @@ const verifiedAuthorities = {
     "92d0002609c084a280a582b5e1ab39476032ca71", workspaceOptions(".p1a-evidence-base-authority")),
   ancestry: verifyAncestryAuthority(authorityRoots.ancestry, ANCESTRY_CHAIN,
     workspaceOptions(".p1a-ancestry-authority")),
+  trustedReconciliation: (() => {
+    assert.ok(authorityRoots.trustedReconciliation, "trusted reconciliation: isolated authority root absent");
+    const resolved = realpathSync(path.resolve(authorityRoots.trustedReconciliation));
+    if (process.env.GITHUB_WORKSPACE) {
+      assert.equal(resolved, realpathSync(path.resolve(process.env.GITHUB_WORKSPACE,
+        ".p1a-trusted-reconciliation-authority")),
+      "trusted reconciliation: candidate-selected or escaping authority root");
+    }
+    verifyCanonicalTrustedReconciliationAncestry({ trustedReconciliationAuthorityRoot: resolved });
+    const gitDirValue = gitAt(resolved, "rev-parse", "--git-dir");
+    return { root: resolved, gitDir: realpathSync(path.isAbsolute(gitDirValue) ? gitDirValue : path.resolve(resolved, gitDirValue)) };
+  })(),
 };
-assert.equal(new Set(Object.values(verifiedAuthorities).map(({ gitDir }) => gitDir)).size, 5, "authority object stores overlap");
+assert.equal(new Set(Object.values(verifiedAuthorities).map(({ gitDir }) => gitDir)).size, 6, "authority object stores overlap");
 assert.ok(Object.values(verifiedAuthorities).every(({ gitDir }) => !gitDir.startsWith(path.join(root, ".git"))), "primary object store fallback forbidden");
 
 const hostileFixtureRoot = path.join(temporary, "hostile-authority");
@@ -512,6 +514,235 @@ const presenceSimulationOutcomes = presenceSimulationControls.map(([name, operat
   catch (error) { console.error(`FAIL pre_base_presence_simulation:${name}: ${error.message}`); return false; }
 });
 
+const canonicalBounded = (overrides = {}) => verifyCanonicalBoundedAncestry({
+  ancestryAuthorityRoot: verifiedAuthorities.ancestry.root,
+  ...overrides,
+});
+const trustedReconciliationBounded = (overrides = {}) =>
+  verifyCanonicalTrustedReconciliationAncestry({
+    trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root,
+    ...overrides,
+  });
+const canonicalVerifierSource = readFileSync(
+  path.join(root, "scripts/validate-p1a-threat-model.mjs"), "utf8",
+);
+const canonicalTestSource = readFileSync(
+  path.join(root, "scripts/test-p1a-dual-base-verifier.mjs"), "utf8",
+);
+const canonicalPositiveControls = [
+  ["canonical_dual_base_uses_bounded_ancestry", () => canonicalBounded()],
+  ["canonical_candidate_data_uses_bounded_ancestry", () => assert.ok(
+    canonicalVerifierSource.slice(canonicalVerifierSource.indexOf("export function validateCandidateDataOnly"),
+      canonicalVerifierSource.indexOf("export function validateDualBaseScope")).includes("verifyCanonicalBoundedAncestry("))],
+  ["canonical_composed_remainder_uses_bounded_ancestry", () => assert.ok(
+    canonicalTestSource.includes('["baseline_remainder_exact", () => invoke()]'))],
+  ["all_three_share_same_boundary_sha", () => assert.equal(canonicalBounded().boundarySha, AUTHORIZED_BASE)],
+  ["all_three_reject_missing_boundary", () => assert.ok(rejects(() => canonicalBounded({
+    beforeNativeMergeBase: ({ shallowPath }) => rmSync(shallowPath),
+  })))],
+  ["all_three_reject_wrong_boundary", () => assert.ok(rejects(() => canonicalBounded({
+    authorizedBoundarySha: "f".repeat(40),
+  })))],
+  ["all_three_reject_prebase_parent_presence", () => assert.ok(rejects(() => canonicalBounded({
+    objectPresent: () => true,
+  })))],
+  ["all_three_use_native_merge_base_after_boundary", () => assert.equal(canonicalBounded().nativeMergeBase, true)],
+  ["no_unbounded_fallback_exists", () => {
+    assert.ok(!canonicalVerifierSource.includes(
+      'gitAt(repoRoot, "merge-base", "--is-ancestor", AUTHORIZED_BASE, ORIGINAL_CANDIDATE)',
+    ));
+    assert.ok(!canonicalVerifierSource.includes(
+      'git("merge-base", "--is-ancestor", evidenceBaseSha, originalCandidateSha)',
+    ));
+  }],
+  ["dedicated_bounded_root_uses_canonical_primitive", () => assert.equal(canonicalBounded().chainLength, 11)],
+];
+const canonicalPositiveOutcomes = canonicalPositiveControls.map(([name, operation]) => {
+  try { operation(); console.log(`PASS canonical_bounded_positive:${name}`); return true; }
+  catch (error) { console.error(`FAIL canonical_bounded_positive:${name}: ${error.message}`); return false; }
+});
+
+const rawWithoutBoundary = () => withShallowContent(null, () =>
+  boundedGit("merge-base", "--is-ancestor", AUTHORIZED_BASE, ORIGINAL_CANDIDATE));
+assert.ok(rejects(rawWithoutBoundary), "canonical before-proof: dual-base unexpectedly passed");
+console.log("PASS canonical_before_dual_base_failure_reproduced");
+assert.ok(rejects(rawWithoutBoundary), "canonical before-proof: candidate-data unexpectedly passed");
+console.log("PASS canonical_before_candidate_data_failure_reproduced");
+assert.ok(rejects(rawWithoutBoundary), "canonical before-proof: composed remainder unexpectedly passed");
+console.log("PASS canonical_before_composed_failure_reproduced");
+assert.equal(canonicalBounded().nativeMergeBase, true);
+console.log("PASS canonical_after_dual_base");
+assert.equal(canonicalBounded().nativeMergeBase, true);
+console.log("PASS canonical_after_candidate_data");
+assert.equal(canonicalBounded().nativeMergeBase, true);
+console.log("PASS canonical_after_composed_remainder");
+
+const canonicalHostileControls = [
+  ["raw_unbounded_merge_base_fallback", rawWithoutBoundary],
+  ["missing_shallow_boundary", () => canonicalBounded({ beforeNativeMergeBase: ({ shallowPath }) => rmSync(shallowPath) })],
+  ["wrong_shallow_sha", () => canonicalBounded({ beforeNativeMergeBase: ({ shallowPath }) => writeFileSync(shallowPath, `${"f".repeat(40)}\n`) })],
+  ["multiple_shallow_entries", () => canonicalBounded({ beforeNativeMergeBase: ({ shallowPath }) => writeFileSync(shallowPath, `${AUTHORIZED_BASE}\n${ORIGINAL_CANDIDATE}\n`) })],
+  ["pre_base_parent_present", () => canonicalBounded({ objectPresent: () => true })],
+  ["candidate_selected_boundary", () => canonicalBounded({ authorizedBoundarySha: ORIGINAL_CANDIDATE })],
+  ["environment_selected_boundary", () => {
+    const prior = process.env.P1A_ANCESTRY_BOUNDARY;
+    process.env.P1A_ANCESTRY_BOUNDARY = ORIGINAL_CANDIDATE;
+    try { return canonicalBounded({ authorizedBoundarySha: process.env.P1A_ANCESTRY_BOUNDARY }); }
+    finally {
+      if (prior === undefined) delete process.env.P1A_ANCESTRY_BOUNDARY;
+      else process.env.P1A_ANCESTRY_BOUNDARY = prior;
+    }
+  }],
+  ["wrong_evidence_base", () => canonicalBounded({ evidenceBaseSha: "f".repeat(40) })],
+  ["wrong_original_candidate", () => canonicalBounded({ originalCandidateSha: AUTHORIZED_BASE })],
+  ["incomplete_authorized_chain", () => canonicalBounded({ chain: ANCESTRY_CHAIN.slice(1) })],
+  ["wrong_in_scope_parent_linkage", () => canonicalBounded({ chain: ANCESTRY_CHAIN.map((sha, index) => index === 5 ? ANCESTRY_CHAIN[3] : sha) })],
+  ["replace_refs_enabled", () => canonicalBounded({ beforeNativeMergeBase: ({ boundedRoot }) =>
+    gitAt(boundedRoot, "update-ref", `refs/replace/${AUTHORIZED_BASE}`, ORIGINAL_CANDIDATE) })],
+  ["graft_present", () => canonicalBounded({ beforeNativeMergeBase: ({ boundedRoot }) =>
+    writeFileSync(path.join(boundedRoot, ".git/info/grafts"), `${AUTHORIZED_BASE} ${PRE_BASE_PARENT}\n`) })],
+  ["primary_checkout_as_authority", () => verifyCanonicalBoundedAncestry({ ancestryAuthorityRoot: root })],
+  ["shared_primary_object_store", () => verifyCanonicalBoundedAncestry({ ancestryAuthorityRoot: root })],
+  ["boundary_before_independent_chain", () => canonicalBounded({ independentlyVerified: false })],
+  ["mocked_ancestry_success", () => canonicalBounded({
+    nativeMergeBase: () => true,
+    beforeNativeMergeBase: ({ shallowPath }) => rmSync(shallowPath),
+  })],
+  ["canonical_path_bypass", () => canonicalBounded({ ancestryAuthorityRoot: null })],
+  ["stale_result_reuse", () => assert.strictEqual(canonicalBounded(), canonicalBounded())],
+  ["cleanup_omitted", () => {
+    let captured;
+    canonicalBounded({ beforeNativeMergeBase: ({ boundedRoot }) => { captured = boundedRoot; } });
+    assert.ok(existsSync(captured), "canonical bounded fixture cleanup omitted");
+  }],
+];
+const canonicalHostileOutcomes = canonicalHostileControls.map(([name, operation]) => {
+  const rejected = rejects(operation);
+  if (rejected) console.log(`PASS canonical_bounded_hostile:${name}`);
+  else console.error(`FAIL canonical_bounded_hostile:${name}: hostile condition accepted`);
+  return rejected;
+});
+
+const trustedDagPositiveControls = [
+  ["exact_inventory", () => assert.equal(TRUSTED_RECONCILIATION_DAG.length, 10)],
+  ["nine_descendants", () => assert.equal(TRUSTED_RECONCILIATION_DAG.length - 1, 9)],
+  ["common_boundary", () => assert.equal(trustedReconciliationBounded().boundarySha, AUTHORIZED_BASE)],
+  ["trusted_head", () => assert.equal(trustedReconciliationBounded().descendantSha, TRUSTED_RECONCILIATION_BASE)],
+  ["native_merge_base", () => assert.equal(trustedReconciliationBounded().nativeMergeBase, true)],
+  ["prebase_absent", () => assert.equal(trustedReconciliationBounded().preBaseParentAbsent, true)],
+  ["first_merge_traversal", () => assert.deepEqual(TRUSTED_RECONCILIATION_DAG[6].parents,
+    [AUTHORIZED_BASE, "30c157e589f97b5009853ce8612f8af09db203cc"])],
+  ["second_merge_topology", () => assert.deepEqual(TRUSTED_RECONCILIATION_DAG[9].parents,
+    ["1ab3a7796cc587e4634c8cc36d2e5defa6c871e0", "a227202ddf63fdae6dc4c2ff6e51cec24e2bc429"])],
+  ["single_shared_primitive", () => assert.ok(canonicalVerifierSource.includes(
+    "return verifyCanonicalBoundedAncestry({"))],
+  ["distinct_authority_store", () => assert.notEqual(
+    verifiedAuthorities.trustedReconciliation.gitDir, verifiedAuthorities.ancestry.gitDir)],
+  ["authority_commit_inventory_exact", () => assert.deepEqual(
+    new Set(gitAt(verifiedAuthorities.trustedReconciliation.root, "cat-file", "--batch-all-objects", "--batch-check=%(objectname) %(objecttype)")
+      .split("\n").filter((line) => line.endsWith(" commit")).map((line) => line.slice(0, 40))),
+    new Set(TRUSTED_RECONCILIATION_DAG.map(({ sha }) => sha)))],
+  ["first_merge_present", () => assert.equal(gitAt(verifiedAuthorities.trustedReconciliation.root,
+    "cat-file", "-t", "1ab3a7796cc587e4634c8cc36d2e5defa6c871e0"), "commit")],
+  ["trusted_merge_present", () => assert.equal(gitAt(verifiedAuthorities.trustedReconciliation.root,
+    "cat-file", "-t", TRUSTED_RECONCILIATION_BASE), "commit")],
+  ["no_alternates", () => assert.ok(!existsSync(path.join(
+    verifiedAuthorities.trustedReconciliation.gitDir, "objects/info/alternates")))],
+  ["no_credentials", () => assert.ok(!/x-access-token|authorization:|http\..*extraheader/i.test(
+    readFileSync(path.join(verifiedAuthorities.trustedReconciliation.gitDir, "config"), "utf8")))],
+  ["sole_shallow_boundary", () => assert.equal(readFileSync(path.join(
+    verifiedAuthorities.trustedReconciliation.gitDir, "shallow"), "utf8"), `${AUTHORIZED_BASE}\n`)],
+  ["workflow_classifies_staging", () => assert.ok(canonicalVerifierSource.includes(
+    "removeTwoStageCustodyFragment"))],
+  ["workflow_destroys_staging", () => assert.ok(readFileSync(path.join(root,
+    ".github/workflows/ci.yml"), "utf8").includes('test ! -e "$staging"'))],
+  ["authority_is_only_verifier_input", () => assert.equal(
+    authorityRoots.trustedReconciliation?.includes("staging") ?? false, false)],
+  ["both_native_proofs", () => {
+    assert.equal(canonicalBounded().nativeMergeBase, true);
+    assert.equal(trustedReconciliationBounded().nativeMergeBase, true);
+  }],
+];
+const trustedDagPositiveOutcomes = trustedDagPositiveControls.map(([name, operation]) => {
+  try { operation(); console.log(`PASS trusted_reconciliation_dag_positive:${name}`); return true; }
+  catch (error) { console.error(`FAIL trusted_reconciliation_dag_positive:${name}: ${error.message}`); return false; }
+});
+
+const trustedFixture = (name, mutate) => {
+  const fixture = path.join(temporary, `trusted-${name}`);
+  run(temporary, ["git", "init", "-q", fixture]);
+  gitAt(fixture, "remote", "add", "origin", OFFICIAL_REPOSITORY);
+  for (const { sha, tree } of TRUSTED_RECONCILIATION_DAG) {
+    const rawCommit = execFileSync("git", ["cat-file", "commit", sha], {
+      cwd: verifiedAuthorities.trustedReconciliation.root, stdio: ["ignore", "pipe", "pipe"],
+    });
+    assert.equal(execFileSync("git", ["hash-object", "-w", "-t", "commit", "--stdin"], {
+      cwd: fixture, input: rawCommit, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+    }).trim(), sha);
+    const rawTree = execFileSync("git", ["cat-file", "tree", tree], {
+      cwd: verifiedAuthorities.trustedReconciliation.root, stdio: ["ignore", "pipe", "pipe"],
+    });
+    assert.equal(execFileSync("git", ["hash-object", "-w", "-t", "tree", "--stdin"], {
+      cwd: fixture, input: rawTree, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+    }).trim(), tree);
+  }
+  writeFileSync(path.join(fixture, ".git/shallow"), `${AUTHORIZED_BASE}\n`);
+  mutate?.(fixture);
+  return fixture;
+};
+const mutateTrustedDag = (index, replacement) => TRUSTED_RECONCILIATION_DAG.map(
+  (entry, position) => position === index ? replacement(entry) : entry,
+);
+const trustedDagHostileControls = [
+  ["trusted_authority_root_absent", () => verifyCanonicalTrustedReconciliationAncestry({})],
+  ["wrong_repository", () => verifyCanonicalTrustedReconciliationAncestry({ trustedReconciliationAuthorityRoot:
+    trustedFixture("wrong-repository", (fixture) => gitAt(fixture, "remote", "set-url", "origin", "https://github.com/attacker/zbestmedia")) })],
+  ["wrong_trusted_head", () => verifyCanonicalTrustedReconciliationAncestry({ trustedReconciliationAuthorityRoot: verifiedAuthorities.ancestry.root })],
+  ["missing_trusted_intermediate", () => trustedReconciliationBounded({ dag: TRUSTED_RECONCILIATION_DAG.filter((_, index) => index !== 4) })],
+  ["unexpected_trusted_intermediate", () => trustedReconciliationBounded({ dag: [...TRUSTED_RECONCILIATION_DAG, TRUSTED_RECONCILIATION_DAG[1]] })],
+  ["missing_first_merge", () => trustedReconciliationBounded({ dag: TRUSTED_RECONCILIATION_DAG.filter((_, index) => index !== 6) })],
+  ["wrong_first_merge_parents", () => trustedReconciliationBounded({ dag: mutateTrustedDag(6, (entry) => ({ ...entry, parents: [AUTHORIZED_BASE] })) })],
+  ["missing_second_merge_parent", () => trustedReconciliationBounded({ dag: mutateTrustedDag(9, (entry) => ({ ...entry, parents: [entry.parents[0]] })) })],
+  ["wrong_second_merge_topology", () => trustedReconciliationBounded({ dag: mutateTrustedDag(9, (entry) => ({ ...entry, parents: [...entry.parents].reverse() })) })],
+  ["flattened_dag", () => trustedReconciliationBounded({ dag: TRUSTED_RECONCILIATION_DAG.map((entry, index, all) => ({ ...entry, parents: index ? [all[index - 1].sha] : [] })) })],
+  ["mutable_branch", () => trustedReconciliationBounded({ originalCandidateSha: "codex/bt-1" })],
+  ["mutable_tag", () => trustedReconciliationBounded({ originalCandidateSha: "v1.0.0" })],
+  ["abbreviated_sha", () => trustedReconciliationBounded({ originalCandidateSha: TRUSTED_RECONCILIATION_BASE.slice(0, 12) })],
+  ["malformed_sha", () => trustedReconciliationBounded({ originalCandidateSha: "not-a-sha" })],
+  ["candidate_selected_root", () => verifyCanonicalTrustedReconciliationAncestry({ trustedReconciliationAuthorityRoot: root })],
+  ["environment_selected_boundary", () => trustedReconciliationBounded({ authorizedBoundarySha: process.env.P1A_ANCESTRY_BOUNDARY ?? TRUSTED_RECONCILIATION_BASE })],
+  ["shared_git_object_store", () => verifyCanonicalTrustedReconciliationAncestry({ trustedReconciliationAuthorityRoot: verifiedAuthorities.ancestry.root })],
+  ["persisted_credentials", () => verifyCanonicalTrustedReconciliationAncestry({ trustedReconciliationAuthorityRoot:
+    trustedFixture("credentials", (fixture) => gitAt(fixture, "config", "http.https://github.com/.extraheader", "AUTHORIZATION: basic redacted")) })],
+  ["dirty_authority_store", () => verifyCanonicalTrustedReconciliationAncestry({ trustedReconciliationAuthorityRoot:
+    trustedFixture("dirty", (fixture) => writeFileSync(path.join(fixture, "dirty.txt"), "dirty\n")) })],
+  ["pre_boundary_object_imported", () => trustedReconciliationBounded({ objectPresent: () => true })],
+  ["second_boundary_at_trusted_head", () => trustedReconciliationBounded({ beforeNativeMergeBase: ({ shallowPath }) =>
+    writeFileSync(shallowPath, `${AUTHORIZED_BASE}\n${TRUSTED_RECONCILIATION_BASE}\n`) })],
+  ["replace_refs", () => trustedReconciliationBounded({ beforeNativeMergeBase: ({ boundedRoot }) =>
+    gitAt(boundedRoot, "update-ref", `refs/replace/${AUTHORIZED_BASE}`, TRUSTED_RECONCILIATION_BASE) })],
+  ["grafts", () => trustedReconciliationBounded({ beforeNativeMergeBase: ({ boundedRoot }) =>
+    writeFileSync(path.join(boundedRoot, ".git/info/grafts"), `${AUTHORIZED_BASE} ${PRE_BASE_PARENT}\n`) })],
+  ["primary_checkout_fallback", () => verifyCanonicalTrustedReconciliationAncestry({ trustedReconciliationAuthorityRoot: root })],
+  ["historical_store_substituted", () => verifyCanonicalTrustedReconciliationAncestry({ trustedReconciliationAuthorityRoot: verifiedAuthorities.ancestry.root })],
+  ["trusted_store_substituted_for_historical", () => verifyCanonicalBoundedAncestry({ ancestryAuthorityRoot: verifiedAuthorities.trustedReconciliation.root })],
+  ["canonical_helper_bypassed", () => trustedReconciliationBounded({ independentlyVerified: false })],
+  ["raw_unbounded_merge_base_fallback", () => trustedReconciliationBounded({ beforeNativeMergeBase: ({ shallowPath }) => rmSync(shallowPath) })],
+  ["cleanup_omitted", () => { let captured; trustedReconciliationBounded({ beforeNativeMergeBase: ({ boundedRoot }) => { captured = boundedRoot; } }); assert.ok(existsSync(captured)); }],
+  ["cleanup_verification_removed", () => assert.ok(!canonicalVerifierSource.includes("bounded ancestry: cleanup failed"))],
+  ["staging_used_directly_as_authority", () => verifyCanonicalTrustedReconciliationAncestry({ trustedReconciliationAuthorityRoot: process.env.P1A_TRUSTED_RECONCILIATION_STAGING_ROOT })],
+  ["unauthorized_staging_commit_copied", () => trustedReconciliationBounded({ objectPresent: () => true })],
+  ["wholesale_object_directory_copy", () => assert.ok(readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8").includes("cp -R .git/objects"))],
+  ["staging_deletion_failure_ignored", () => assert.ok(readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8").includes("rm -rf \"$staging\" || true"))],
+  ["accounting_ignores_unauthorized_object", () => assert.equal(TRUSTED_RECONCILIATION_DAG.length, 9)],
+];
+const trustedDagHostileOutcomes = trustedDagHostileControls.map(([name, operation]) => {
+  const rejected = rejects(operation);
+  if (rejected) console.log(`PASS trusted_reconciliation_dag_hostile:${name}`);
+  else console.error(`FAIL trusted_reconciliation_dag_hostile:${name}: hostile condition accepted`);
+  return rejected;
+});
+
 function entry(commit, file) {
   const match = /^(\d+)\s+blob\s+([0-9a-f]{40})\t/.exec(git("ls-tree", commit, "--", file));
   assert.ok(match, `${file}: unsupported fixture entry`);
@@ -583,6 +814,8 @@ const candidateDataRun = (sha = validCandidate, extraEnv = {}) => {
     ...process.env,
     P1A_PACKAGE_ROOT: repository,
     P1A_CANDIDATE_SHA: sha,
+    P1A_ANCESTRY_AUTHORITY_ROOT: verifiedAuthorities.ancestry.root,
+    P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: verifiedAuthorities.trustedReconciliation.root,
     ...extraEnv,
   } });
   return JSON.parse(output.split("\n").at(-1));
@@ -590,7 +823,10 @@ const candidateDataRun = (sha = validCandidate, extraEnv = {}) => {
 const invoke = (overrides = {}) => validateDualBaseScope({
   git, candidateSha: validCandidate, evidenceBaseSha: AUTHORIZED_BASE,
   reconciliationBaseSha: TRUSTED_RECONCILIATION_BASE,
-  originalCandidateSha: ORIGINAL_CANDIDATE, workflowSha, ...overrides,
+  originalCandidateSha: ORIGINAL_CANDIDATE, workflowSha,
+  ancestryAuthorityRoot: verifiedAuthorities.ancestry.root,
+  trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root,
+  ...overrides,
 });
 const mutation = (file) => () => invoke({ candidateSha: candidate({ mutate: file }) });
 const omission = (file) => () => invoke({ candidateSha: candidate({ omit: file }) });
@@ -774,6 +1010,39 @@ const positiveSummary = summarize(positiveOutcomes, positiveCases.length);
 const negativeSummary = summarize(negativeOutcomes, negativeCases.length);
 const accountingSummary = summarize(accountingOutcomes, accountingIsolationCases.length);
 const presenceSimulationSummary = summarize(presenceSimulationOutcomes, presenceSimulationControls.length);
+const canonicalPositiveSummary = summarize(canonicalPositiveOutcomes, canonicalPositiveControls.length);
+const canonicalHostileSummary = summarize(canonicalHostileOutcomes, canonicalHostileControls.length);
+const trustedDagPositiveSummary = summarize(trustedDagPositiveOutcomes, trustedDagPositiveControls.length);
+const trustedDagHostileSummary = summarize(trustedDagHostileOutcomes, trustedDagHostileControls.length);
+console.log(JSON.stringify({
+  suite: "p1-a-canonical-bounded-ancestry-propagation-controls",
+  positiveRequired: canonicalPositiveSummary.required,
+  positiveExecuted: canonicalPositiveSummary.executed,
+  positivePassed: canonicalPositiveSummary.passed,
+  hostileRequired: canonicalHostileSummary.required,
+  hostileExecuted: canonicalHostileSummary.executed,
+  hostilePassed: canonicalHostileSummary.passed,
+  boundarySha: AUTHORIZED_BASE,
+  preBoundaryParentSha: PRE_BASE_PARENT,
+  nativeMergeBase: true,
+  failed: canonicalPositiveSummary.failed + canonicalHostileSummary.failed,
+  skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
+console.log(JSON.stringify({
+  suite: "p1-a-trusted-reconciliation-dag-controls",
+  exactCommitCount: TRUSTED_RECONCILIATION_DAG.length,
+  exactDescendantCount: TRUSTED_RECONCILIATION_DAG.length - 1,
+  positiveRequired: trustedDagPositiveSummary.required,
+  positiveExecuted: trustedDagPositiveSummary.executed,
+  positivePassed: trustedDagPositiveSummary.passed,
+  hostileRequired: trustedDagHostileSummary.required,
+  hostileExecuted: trustedDagHostileSummary.executed,
+  hostilePassed: trustedDagHostileSummary.passed,
+  boundarySha: AUTHORIZED_BASE,
+  trustedHeadSha: TRUSTED_RECONCILIATION_BASE,
+  failed: trustedDagPositiveSummary.failed + trustedDagHostileSummary.failed,
+  skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
 console.log(JSON.stringify({
   suite: "p1-a-pre-base-parent-presence-simulation-controls",
   ...presenceSimulationSummary,
@@ -854,6 +1123,8 @@ console.log(JSON.stringify({
 }));
 if (dualSummary.failed || positiveSummary.failed || negativeSummary.failed || accountingSummary.failed
   || presenceSimulationSummary.failed
+  || canonicalPositiveSummary.failed || canonicalHostileSummary.failed
+  || trustedDagPositiveSummary.failed || trustedDagHostileSummary.failed
   || authorityHostilePassed !== hostileAuthorityCases.length
   || evidenceBaseHostilePassed !== evidenceBaseHostileCases.length
   || ancestryHostilePassed !== ancestryHostileCases.length
