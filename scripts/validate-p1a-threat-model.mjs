@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstatSync, readFileSync } from "node:fs";
+import {
+  existsSync, lstatSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync,
+} from "node:fs";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 const moduleRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -27,6 +30,33 @@ export const COMPOSED_CI_BASE_BLOB =
   "9a3f1a04f99e83d9dad84cf384d86117a7d282f1";
 export const ORIGINAL_CANDIDATE =
   "365c59757756f3f91480d3bfeb841b543010201f";
+export const PRE_BASE_PARENT =
+  "816c3a7c199e3c6bc4e482435eed60c1fcf0a11c";
+export const AUTHORIZED_ANCESTRY_CHAIN = Object.freeze([
+  AUTHORIZED_BASE,
+  "c9c6198e9dc3018bfdbcf98dd3e63335dd2c0e6e",
+  "bf3b0478afcab9cb5b58e8af904b98ea53ae3f3e",
+  "fec9d68fc142a122c3568a7e8b73e5503081cc28",
+  "73227f2bde0f3b70e8a126eaaa16cb1ee0946b71",
+  "06545d264030199f87df1558b414aa7f051871cd",
+  "f3f2966ec511b64b2d46f38c0363be269bb4246a",
+  "36d5b1f2fadddbb60a80f7cac601455c51286240",
+  "aa7014e691a6222a0b93e61d6aa2ffa12aa4ced1",
+  "e10b602c31b8a3838fdfd76a86b022b7abceb12c",
+  ORIGINAL_CANDIDATE,
+]);
+export const TRUSTED_RECONCILIATION_DAG = Object.freeze([
+  { sha: AUTHORIZED_BASE, tree: "a929da05a15a0c37644a224697dddec9762b00a0", parents: [] },
+  { sha: "8bd4e384609d526d45bb503bf8bfa78b584a4bd9", tree: "99e4c51b072ee4629a37514b6c99e6b24cd958a1", parents: [AUTHORIZED_BASE] },
+  { sha: "a87ad2e383d59fa0c0f0bf60d1ae794ea695693d", tree: "67370b02c35a007942dbc133e939f674c79c4925", parents: ["8bd4e384609d526d45bb503bf8bfa78b584a4bd9"] },
+  { sha: "82fd3dee5ad2ac35f5d75336f1280a07b0e3b034", tree: "e427086b13f984abb0e7f8dcdff7995bbe966a9b", parents: ["a87ad2e383d59fa0c0f0bf60d1ae794ea695693d"] },
+  { sha: "16d990e82f944dd111743f3f09168402da69ff04", tree: "eeb8e94168dfb9372c4d8e33d7f217f9d3b1e8e5", parents: ["82fd3dee5ad2ac35f5d75336f1280a07b0e3b034"] },
+  { sha: "30c157e589f97b5009853ce8612f8af09db203cc", tree: "23de0a9929e69e6d298f34bfbcbdd218eed9dc22", parents: ["16d990e82f944dd111743f3f09168402da69ff04"] },
+  { sha: "1ab3a7796cc587e4634c8cc36d2e5defa6c871e0", tree: "23de0a9929e69e6d298f34bfbcbdd218eed9dc22", parents: [AUTHORIZED_BASE, "30c157e589f97b5009853ce8612f8af09db203cc"] },
+  { sha: "6001e13f9359bc6c454d42154d9816409457388c", tree: "140dc6c715fd7d6182531560a06b645637db7c3e", parents: ["1ab3a7796cc587e4634c8cc36d2e5defa6c871e0"] },
+  { sha: "a227202ddf63fdae6dc4c2ff6e51cec24e2bc429", tree: "37345329da7051a818eb2e5b02f1f06f74d667a7", parents: ["6001e13f9359bc6c454d42154d9816409457388c"] },
+  { sha: TRUSTED_RECONCILIATION_BASE, tree: "37345329da7051a818eb2e5b02f1f06f74d667a7", parents: ["1ab3a7796cc587e4634c8cc36d2e5defa6c871e0", "a227202ddf63fdae6dc4c2ff6e51cec24e2bc429"] },
+]);
 export const AUTHORIZED_RUNTIME =
   "94376718e07df2e9d44864ed0394d58219224e61";
 export const AUTHORIZED_REPOSITORIES = {
@@ -425,6 +455,273 @@ function normalizeRepository(value) {
     .replace(/\.git$/, "");
 }
 
+// Canonical evidence-base -> original-candidate ancestry primitive. Authority
+// comes from exact identities and the independently verified in-scope chain;
+// shallow metadata only bounds native Git traversal after those checks pass.
+export function verifyCanonicalBoundedAncestry({
+  ancestryAuthorityRoot,
+  evidenceBaseSha = AUTHORIZED_BASE,
+  originalCandidateSha = ORIGINAL_CANDIDATE,
+  authorizedBoundarySha = AUTHORIZED_BASE,
+  chain = AUTHORIZED_ANCESTRY_CHAIN,
+  dag,
+  independentlyVerified = true,
+  objectPresent,
+  beforeNativeMergeBase,
+} = {}) {
+  assert.ok(independentlyVerified, "bounded ancestry: independent chain verification required");
+  assert.equal(evidenceBaseSha, AUTHORIZED_BASE, "bounded ancestry: wrong evidence base");
+  const expectedHead = dag ? TRUSTED_RECONCILIATION_BASE : ORIGINAL_CANDIDATE;
+  const expectedEntries = dag ?? chain.map((sha, index) => ({
+    sha,
+    tree: null,
+    parents: index === 0 ? [] : [chain[index - 1]],
+  }));
+  assert.equal(originalCandidateSha, expectedHead, "bounded ancestry: wrong descendant head");
+  assert.equal(authorizedBoundarySha, AUTHORIZED_BASE, "bounded ancestry: wrong boundary");
+  if (dag) assert.deepEqual(dag, TRUSTED_RECONCILIATION_DAG, "bounded ancestry: exact trusted DAG required");
+  else assert.deepEqual(chain, AUTHORIZED_ANCESTRY_CHAIN, "bounded ancestry: exact chain required");
+  assert.ok(ancestryAuthorityRoot, "bounded ancestry: authority root absent");
+  assert.ok(!lstatSync(path.resolve(ancestryAuthorityRoot)).isSymbolicLink(),
+    "bounded ancestry: symlink authority forbidden");
+  const authorityRoot = realpathSync(path.resolve(ancestryAuthorityRoot));
+  assert.notEqual(authorityRoot, realpathSync(candidateRoot),
+    "bounded ancestry: primary candidate checkout forbidden");
+  assert.equal(
+    normalizeRepository(gitAt(authorityRoot, "remote", "get-url", "origin")),
+    "https://github.com/DarksiedCEO/zbestmedia",
+    "bounded ancestry: repository identity mismatch",
+  );
+  assert.equal(gitAt(authorityRoot, "status", "--porcelain=v1"), "",
+    "bounded ancestry: authority checkout modified");
+  const authorityConfig = readFileSync(path.join(authorityRoot, ".git/config"), "utf8");
+  assert.ok(!/x-access-token|authorization:|http\..*extraheader/i.test(authorityConfig),
+    "bounded ancestry: persisted credentials detected");
+  const actualChain = gitAt(authorityRoot, "rev-list", "--reverse", expectedHead)
+    .split("\n").filter(Boolean);
+  if (dag) assert.deepEqual(new Set(actualChain), new Set(expectedEntries.map(({ sha }) => sha)),
+    "bounded ancestry: independently verified DAG inventory mismatch");
+  else assert.deepEqual(actualChain, AUTHORIZED_ANCESTRY_CHAIN,
+    "bounded ancestry: independently verified chain mismatch");
+  for (const entry of expectedEntries) {
+    const { sha } = entry;
+    exactSha(sha, "bounded ancestry commit");
+    assert.equal(gitAt(authorityRoot, "cat-file", "-t", sha), "commit",
+      "bounded ancestry: commit absent");
+    const tree = gitAt(authorityRoot, "cat-file", "-p", sha).split("\n")
+      .find((line) => line.startsWith("tree "))?.slice(5);
+    exactSha(tree, "bounded ancestry tree");
+    assert.equal(gitAt(authorityRoot, "cat-file", "-t", tree), "tree",
+      "bounded ancestry: tree absent");
+    if (entry.tree) assert.equal(tree, entry.tree, "bounded ancestry: tree identity mismatch");
+    const parents = gitAt(authorityRoot, "cat-file", "-p", sha).split("\n")
+      .filter((line) => line.startsWith("parent ")).map((line) => line.slice(7));
+    if (sha === AUTHORIZED_BASE) {
+      assert.ok(parents.includes(PRE_BASE_PARENT), "bounded ancestry: boundary parent identity changed");
+    } else {
+      assert.deepEqual(parents, entry.parents, "bounded ancestry: in-scope parent mismatch");
+    }
+  }
+
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), "p1a-canonical-bounded-"));
+  const boundedRoot = path.join(temporaryRoot, "repository");
+  try {
+    execFileSync("git", ["init", "-q", boundedRoot], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    for (const { sha } of expectedEntries) {
+      const rawCommit = execFileSync("git", ["cat-file", "commit", sha], {
+        cwd: authorityRoot, stdio: ["ignore", "pipe", "pipe"],
+      });
+      const importedSha = execFileSync("git", ["hash-object", "-w", "-t", "commit", "--stdin"], {
+        cwd: boundedRoot, input: rawCommit, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+      assert.equal(importedSha, sha, "bounded ancestry: commit identity changed during import");
+    }
+    const present = objectPresent
+      ? objectPresent(PRE_BASE_PARENT, boundedRoot)
+      : (() => {
+          try { gitAt(boundedRoot, "cat-file", "-e", `${PRE_BASE_PARENT}^{commit}`); return true; }
+          catch { return false; }
+        })();
+    assert.equal(present, false, "bounded ancestry: pre-base parent present");
+    assert.equal(gitAt(boundedRoot, "for-each-ref", "--format=%(refname)", "refs/replace"), "",
+      "bounded ancestry: replace refs forbidden");
+    assert.ok(!existsSync(path.join(boundedRoot, ".git/info/grafts")),
+      "bounded ancestry: grafts forbidden");
+    const shallowPath = path.join(boundedRoot, ".git/shallow");
+    writeFileSync(shallowPath, `${AUTHORIZED_BASE}\n`, { flag: "wx" });
+    assert.equal(readFileSync(shallowPath, "utf8"), `${AUTHORIZED_BASE}\n`,
+      "bounded ancestry: exact sole boundary required");
+    if (beforeNativeMergeBase) beforeNativeMergeBase({ boundedRoot, shallowPath });
+    assert.equal(readFileSync(shallowPath, "utf8"), `${AUTHORIZED_BASE}\n`,
+      "bounded ancestry: boundary changed before native validation");
+    assert.equal(gitAt(boundedRoot, "for-each-ref", "--format=%(refname)", "refs/replace"), "",
+      "bounded ancestry: replace refs enabled before native validation");
+    assert.ok(!existsSync(path.join(boundedRoot, ".git/info/grafts")),
+      "bounded ancestry: graft installed before native validation");
+    const preBasePresentBeforeNative = objectPresent
+      ? objectPresent(PRE_BASE_PARENT, boundedRoot)
+      : (() => {
+          try { gitAt(boundedRoot, "cat-file", "-e", `${PRE_BASE_PARENT}^{commit}`); return true; }
+          catch { return false; }
+        })();
+    assert.equal(preBasePresentBeforeNative, false,
+      "bounded ancestry: pre-base parent appeared before native validation");
+    gitAt(boundedRoot, "merge-base", "--is-ancestor", AUTHORIZED_BASE, expectedHead);
+    return Object.freeze({
+      evidenceBaseSha: AUTHORIZED_BASE,
+      descendantSha: expectedHead,
+      boundarySha: AUTHORIZED_BASE,
+      chainLength: expectedEntries.length,
+      nativeMergeBase: true,
+      preBaseParentAbsent: true,
+    });
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+    assert.ok(!existsSync(temporaryRoot), "bounded ancestry: cleanup failed");
+  }
+}
+
+export function verifyCanonicalTrustedReconciliationAncestry({
+  trustedReconciliationAuthorityRoot,
+  ...overrides
+} = {}) {
+  return verifyCanonicalBoundedAncestry({
+    ancestryAuthorityRoot: trustedReconciliationAuthorityRoot,
+    originalCandidateSha: TRUSTED_RECONCILIATION_BASE,
+    chain: undefined,
+    dag: TRUSTED_RECONCILIATION_DAG,
+    ...overrides,
+  });
+}
+
+// Copy the already-verified trusted reconciliation DAG into a disposable
+// reconciliation repository without sharing object stores or importing the
+// transport checkout's unrelated history. This is the only supported bridge
+// between trusted-DAG custody and native ancestry checks in generated fixtures.
+export function propagateTrustedReconciliationDag({
+  trustedReconciliationAuthorityRoot,
+  reconciliationFixtureRoot,
+  dag = TRUSTED_RECONCILIATION_DAG,
+  independentlyVerified = true,
+  authorizedGeneratedCommits = [],
+} = {}) {
+  assert.equal(independentlyVerified, true,
+    "reconciliation fixture: independent trusted-DAG verification required");
+  assert.deepEqual(dag, TRUSTED_RECONCILIATION_DAG,
+    "reconciliation fixture: exact trusted DAG required");
+  assert.ok(trustedReconciliationAuthorityRoot,
+    "reconciliation fixture: trusted authority root absent");
+  assert.ok(reconciliationFixtureRoot,
+    "reconciliation fixture: destination root absent");
+  assert.ok(!lstatSync(path.resolve(reconciliationFixtureRoot)).isSymbolicLink(),
+    "reconciliation fixture: symlink destination forbidden");
+  const sourceRoot = realpathSync(path.resolve(trustedReconciliationAuthorityRoot));
+  const destinationRoot = realpathSync(path.resolve(reconciliationFixtureRoot));
+  assert.ok(process.env.P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT,
+    "reconciliation fixture: trusted authority environment binding absent");
+  assert.equal(sourceRoot, realpathSync(path.resolve(
+    process.env.P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT,
+  )), "reconciliation fixture: candidate-selected trusted authority root");
+  assert.notEqual(sourceRoot, destinationRoot,
+    "reconciliation fixture: shared authority object store forbidden");
+  assert.notEqual(destinationRoot, realpathSync(candidateRoot),
+    "reconciliation fixture: primary checkout forbidden");
+  verifyCanonicalTrustedReconciliationAncestry({
+    trustedReconciliationAuthorityRoot: sourceRoot,
+  });
+  const destinationGitDir = realpathSync(path.resolve(
+    destinationRoot,
+    gitAt(destinationRoot, "rev-parse", "--git-dir"),
+  ));
+  const sourceGitDir = realpathSync(path.resolve(
+    sourceRoot,
+    gitAt(sourceRoot, "rev-parse", "--git-dir"),
+  ));
+  assert.notEqual(destinationGitDir, sourceGitDir,
+    "reconciliation fixture: shared Git directory forbidden");
+  assert.ok(!existsSync(path.join(destinationGitDir, "objects/info/alternates")),
+    "reconciliation fixture: alternates forbidden");
+  assert.equal(gitAt(destinationRoot, "for-each-ref", "--format=%(refname)", "refs/replace"), "",
+    "reconciliation fixture: replace refs forbidden");
+  assert.ok(!existsSync(path.join(destinationGitDir, "info/grafts")),
+    "reconciliation fixture: grafts forbidden");
+  const allowedExistingCommits = new Set([
+    ...AUTHORIZED_ANCESTRY_CHAIN,
+    COMPOSED_CI_BASE,
+    AUTHORIZED_BASE,
+    TRUSTED_RECONCILIATION_BASE,
+  ]);
+  assert.ok(Array.isArray(authorizedGeneratedCommits),
+    "reconciliation fixture: generated commit allowlist malformed");
+  for (const sha of authorizedGeneratedCommits) {
+    exactSha(sha, "reconciliation fixture generated commit");
+    assert.equal(gitAt(destinationRoot, "cat-file", "-t", sha), "commit",
+      "reconciliation fixture: generated object is not a commit");
+    allowedExistingCommits.add(sha);
+  }
+  const existingCommits = gitAt(
+    destinationRoot,
+    "cat-file", "--batch-all-objects", "--batch-check=%(objectname) %(objecttype)",
+  ).split("\n").filter((line) => line.endsWith(" commit")).map((line) => line.slice(0, 40));
+  for (const sha of existingCommits) {
+    assert.ok(allowedExistingCommits.has(sha),
+      `reconciliation fixture: unauthorized preexisting commit ${sha}`);
+  }
+
+  for (const entry of dag) {
+    const rawTree = execFileSync("git", ["cat-file", "tree", entry.tree], {
+      cwd: sourceRoot, stdio: ["ignore", "pipe", "pipe"],
+    });
+    const importedTree = execFileSync(
+      "git", ["hash-object", "-w", "-t", "tree", "--stdin"],
+      { cwd: destinationRoot, input: rawTree, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+    ).trim();
+    assert.equal(importedTree, entry.tree,
+      `reconciliation fixture: tree identity changed for ${entry.sha}`);
+    const rawCommit = execFileSync("git", ["cat-file", "commit", entry.sha], {
+      cwd: sourceRoot, stdio: ["ignore", "pipe", "pipe"],
+    });
+    const importedCommit = execFileSync(
+      "git", ["hash-object", "-w", "-t", "commit", "--stdin"],
+      { cwd: destinationRoot, input: rawCommit, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+    ).trim();
+    assert.equal(importedCommit, entry.sha,
+      `reconciliation fixture: commit identity changed for ${entry.sha}`);
+    assert.equal(gitAt(destinationRoot, "rev-parse", `${entry.sha}^{tree}`), entry.tree,
+      `reconciliation fixture: imported tree mismatch for ${entry.sha}`);
+    const parents = gitAt(destinationRoot, "cat-file", "-p", entry.sha).split("\n")
+      .filter((line) => line.startsWith("parent ")).map((line) => line.slice(7));
+    if (entry.sha === AUTHORIZED_BASE) {
+      assert.ok(parents.includes(PRE_BASE_PARENT),
+        "reconciliation fixture: boundary parent identity changed");
+    } else {
+      assert.deepEqual(parents, entry.parents,
+        `reconciliation fixture: parent topology changed for ${entry.sha}`);
+    }
+  }
+  assert.throws(() => gitAt(destinationRoot, "cat-file", "-e", `${PRE_BASE_PARENT}^{commit}`),
+    "reconciliation fixture: forbidden pre-boundary commit imported");
+  const shallowPath = path.join(destinationGitDir, "shallow");
+  if (existsSync(shallowPath)) {
+    assert.equal(readFileSync(shallowPath, "utf8"), `${AUTHORIZED_BASE}\n`,
+      "reconciliation fixture: conflicting shallow boundary");
+  } else {
+    writeFileSync(shallowPath, `${AUTHORIZED_BASE}\n`, { flag: "wx" });
+  }
+  assert.equal(readFileSync(shallowPath, "utf8"), `${AUTHORIZED_BASE}\n`,
+    "reconciliation fixture: exact sole boundary required");
+  gitAt(destinationRoot, "merge-base", "--is-ancestor", AUTHORIZED_BASE,
+    TRUSTED_RECONCILIATION_BASE);
+  return Object.freeze({
+    sourceRoot,
+    destinationRoot,
+    boundarySha: AUTHORIZED_BASE,
+    trustedHeadSha: TRUSTED_RECONCILIATION_BASE,
+    importedCommits: dag.length,
+    importedTrees: new Set(dag.map(({ tree }) => tree)).size,
+  });
+}
+
 // Compatibility Git gate. The production path receives its allowlist from the
 // trusted caller; arbitrary manifests are accepted only for explicit temporary
 // fixture repositories used by the negative-control suite.
@@ -502,6 +799,8 @@ export function runPackage(options = {}) {
     originalCandidateSha,
     trustedAllowedFiles,
     trustedRequiredFiles,
+    ancestryAuthorityRoot = process.env.P1A_ANCESTRY_AUTHORITY_ROOT,
+    trustedReconciliationAuthorityRoot = process.env.P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT,
     repository = AUTHORIZED_REPOSITORIES.base,
   } = options;
   exactSha(candidateSha, "candidate");
@@ -537,7 +836,8 @@ export function runPackage(options = {}) {
     validateDualBaseScope({
       git: (...args) => gitAt(repoRoot, ...args),
       candidateSha, workflowSha, evidenceBaseSha,
-      reconciliationBaseSha, originalCandidateSha,
+      reconciliationBaseSha, originalCandidateSha, ancestryAuthorityRoot,
+      trustedReconciliationAuthorityRoot,
     });
   }
   return Object.freeze({
@@ -696,9 +996,11 @@ function blobAt(git, commit, file) {
   }
 }
 
-const REQUIRED_CI_ADDITION = [
-  "      - name: P1-A validator control suite (hermetic)",
-  "        run: pnpm test:p1a-threat-model",
+export const REQUIRED_CI_ADDITION = [
+  "      - name: P1-A candidate-data validation",
+  "        env:",
+  "          P1A_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}",
+  "        run: node scripts/validate-p1a-threat-model.mjs --candidate-data-only",
   "",
   "",
 ].join("\n");
@@ -714,7 +1016,7 @@ export const ORDINARY_CI_ACTION_PINS = Object.freeze({
   "raven-actions/actionlint": "3d39aea434753780c3b3d4a1a31c854b4dbf49d7",
 });
 const ORDINARY_CI_ACTION_COUNTS = Object.freeze({
-  "actions/checkout": 3,
+  "actions/checkout": 7,
   "actions/setup-node": 1,
   "actions/cache": 1,
   "raven-actions/actionlint": 1,
@@ -745,7 +1047,7 @@ export function validateOrdinaryCiActionPins(source) {
   assert.ok(typeof source === "string" && source, "ordinary CI absent");
   const uses = [...source.matchAll(/^\s*(?:-\s*)?uses:\s*([^\s@]+)@([^\s#]+)(?:\s+#.*)?$/gm)]
     .map((match) => ({ repository: match[1], revision: match[2] }));
-  assert.equal(uses.length, 6, "ordinary CI action inventory changed");
+  assert.equal(uses.length, 10, "ordinary CI action inventory changed");
   const counts = new Map();
   for (const { repository, revision } of uses) {
     assert.ok(Object.hasOwn(ORDINARY_CI_ACTION_PINS, repository),
@@ -913,7 +1215,150 @@ const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candid
             exit 1
           fi
 
+      - name: Acquire exact dual-base trusted authority
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 5056fb0df6e1ef739231cd2273a453fb1c644273
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-dual-base-authority
+
+      - name: Verify exact dual-base trusted authority
+        env:
+          P1A_DUAL_BASE_AUTHORITY: 5056fb0df6e1ef739231cd2273a453fb1c644273
+          P1A_DUAL_BASE_TREE: 37345329da7051a818eb2e5b02f1f06f74d667a7
+          P1A_DUAL_BASE_CI_BLOB: 9a3f1a04f99e83d9dad84cf384d86117a7d282f1
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          [[ "$P1A_DUAL_BASE_AUTHORITY" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git -C .p1a-dual-base-authority rev-parse HEAD)" = "$P1A_DUAL_BASE_AUTHORITY"
+          test "$(git -C .p1a-dual-base-authority cat-file -t "$P1A_DUAL_BASE_AUTHORITY")" = "commit"
+          test "$(git -C .p1a-dual-base-authority cat-file -t "$P1A_DUAL_BASE_AUTHORITY^{tree}")" = "tree"
+          test "$(git -C .p1a-dual-base-authority rev-parse "$P1A_DUAL_BASE_AUTHORITY^{tree}")" = "$P1A_DUAL_BASE_TREE"
+          test "$(git -C .p1a-dual-base-authority remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          test "$(git -C .p1a-dual-base-authority rev-parse "$P1A_DUAL_BASE_AUTHORITY:.github/workflows/ci.yml")" = "$P1A_DUAL_BASE_CI_BLOB"
+          test -z "$(git -C .p1a-dual-base-authority status --porcelain=v1)"
+          if grep -Eiq 'x-access-token|authorization:|http\\..*extraheader' .p1a-dual-base-authority/.git/config; then
+            echo "persisted dual-base authority credential material detected" >&2
+            exit 1
+          fi
+
+      - name: Acquire exact historical evidence-base authority
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-evidence-base-authority
+
+      - name: Verify exact historical evidence-base authority
+        env:
+          P1A_EVIDENCE_BASE_AUTHORITY: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          P1A_EVIDENCE_BASE_TREE: a929da05a15a0c37644a224697dddec9762b00a0
+          P1A_EVIDENCE_BASE_CI_BLOB: 92d0002609c084a280a582b5e1ab39476032ca71
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          [[ "$P1A_EVIDENCE_BASE_AUTHORITY" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git -C .p1a-evidence-base-authority rev-parse HEAD)" = "$P1A_EVIDENCE_BASE_AUTHORITY"
+          test "$(git -C .p1a-evidence-base-authority cat-file -t "$P1A_EVIDENCE_BASE_AUTHORITY")" = "commit"
+          test "$(git -C .p1a-evidence-base-authority cat-file -t "$P1A_EVIDENCE_BASE_AUTHORITY^{tree}")" = "tree"
+          test "$(git -C .p1a-evidence-base-authority rev-parse "$P1A_EVIDENCE_BASE_AUTHORITY^{tree}")" = "$P1A_EVIDENCE_BASE_TREE"
+          test "$(git -C .p1a-evidence-base-authority remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          test "$(git -C .p1a-evidence-base-authority rev-parse "$P1A_EVIDENCE_BASE_AUTHORITY:.github/workflows/ci.yml")" = "$P1A_EVIDENCE_BASE_CI_BLOB"
+          test -z "$(git -C .p1a-evidence-base-authority status --porcelain=v1)"
+          if grep -Eiq 'x-access-token|authorization:|http\\..*extraheader' .p1a-evidence-base-authority/.git/config; then
+            echo "persisted evidence-base authority credential material detected" >&2
+            exit 1
+          fi
+
+      - name: Acquire exact immutable P1-A ancestry authority
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 365c59757756f3f91480d3bfeb841b543010201f
+          fetch-depth: 11
+          persist-credentials: false
+          path: .p1a-ancestry-authority
+
+      - name: Verify exact immutable P1-A ancestry authority
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          expected=(
+            7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+            c9c6198e9dc3018bfdbcf98dd3e63335dd2c0e6e
+            bf3b0478afcab9cb5b58e8af904b98ea53ae3f3e
+            fec9d68fc142a122c3568a7e8b73e5503081cc28
+            73227f2bde0f3b70e8a126eaaa16cb1ee0946b71
+            06545d264030199f87df1558b414aa7f051871cd
+            f3f2966ec511b64b2d46f38c0363be269bb4246a
+            36d5b1f2fadddbb60a80f7cac601455c51286240
+            aa7014e691a6222a0b93e61d6aa2ffa12aa4ced1
+            e10b602c31b8a3838fdfd76a86b022b7abceb12c
+            365c59757756f3f91480d3bfeb841b543010201f
+          )
+          test "$(git -C .p1a-ancestry-authority rev-parse HEAD)" = "\${expected[10]}"
+          test "$(git -C .p1a-ancestry-authority remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          test -z "$(git -C .p1a-ancestry-authority status --porcelain=v1)"
+          if grep -Eiq 'x-access-token|authorization:|http\\..*extraheader' .p1a-ancestry-authority/.git/config; then
+            echo "persisted ancestry authority credential material detected" >&2
+            exit 1
+          fi
+          mapfile -t actual < <(git -C .p1a-ancestry-authority rev-list --reverse "\${expected[10]}")
+          test "\${#actual[@]}" -eq "\${#expected[@]}"
+          for index in "\${!expected[@]}"; do
+            sha="\${expected[$index]}"
+            [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+            test "\${actual[$index]}" = "$sha"
+            test "$(git -C .p1a-ancestry-authority cat-file -t "$sha")" = commit
+            tree="$(git -C .p1a-ancestry-authority show -s --format=%T "$sha")"
+            [[ "$tree" =~ ^[0-9a-f]{40}$ ]]
+            test "$(git -C .p1a-ancestry-authority cat-file -t "$tree")" = tree
+            if (( index > 0 )); then
+              parent="$(git -C .p1a-ancestry-authority cat-file -p "$sha" | sed -n 's/^parent //p')"
+              test "$parent" = "\${expected[$((index - 1))]}"
+            fi
+          done
+          git -C .p1a-ancestry-authority merge-base --is-ancestor "\${expected[0]}" "\${expected[10]}"
+
 `;
+const TWO_STAGE_CI_START = "      - name: Acquire bounded trusted-reconciliation staging objects\n";
+const TWO_STAGE_CI_END = "      - name: P1-A trusted verifier controls\n";
+const TWO_STAGE_CI_SHA256 = "3aa63fcaf34a0c90dcd78e59e0a8395c18a766faaed2b815b53135134d2bb3f5";
+function exactTwoStageCustodyFragment(source) {
+  assert.equal(source.split(TWO_STAGE_CI_START).length - 1, 1,
+    "two-stage custody: staging acquisition missing or duplicated");
+  const start = source.indexOf(TWO_STAGE_CI_START);
+  const end = source.indexOf(TWO_STAGE_CI_END, start);
+  assert.ok(end > start, "two-stage custody: verifier placement missing");
+  const fragment = source.slice(start, end);
+  assert.equal(sha256(fragment), TWO_STAGE_CI_SHA256,
+    "two-stage custody: exact fragment digest mismatch");
+  for (const required of [
+    "persist-credentials: false",
+    "path: .p1a-trusted-reconciliation-staging",
+    "Construct exact trusted-reconciliation authority store",
+    "cat-file commit",
+    "hash-object -w -t commit --stdin",
+    "hash-object -w -t tree --stdin",
+    "rm -rf \"$staging\"",
+    "test ! -e \"$staging\"",
+    "objects/info/alternates",
+    "816c3a7c199e3c6bc4e482435eed60c1fcf0a11c",
+    "merge-base --is-ancestor",
+  ]) assert.ok(fragment.includes(required), `two-stage custody: missing ${required}`);
+  assert.ok(!fragment.includes("persist-credentials: true"),
+    "two-stage custody: credentials persisted");
+  return { fragment, start, end };
+}
+export function removeTwoStageCustodyFragment(source) {
+  const { start, end } = exactTwoStageCustodyFragment(source);
+  return `${source.slice(0, start)}${source.slice(end)}`;
+}
 const BASE_TRUSTED_VERIFIER_STEP = `      - name: P1-A trusted verifier controls
         run: node scripts/test-p1a-trusted-verifier.mjs
 `;
@@ -922,18 +1367,40 @@ const ISOLATED_TRUSTED_VERIFIER_STEP = `      - name: P1-A trusted verifier cont
           P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
           P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
         run: node scripts/test-p1a-trusted-verifier.mjs
-
-      - name: Remove isolated P1-A authority checkouts
-        if: always()
-        run: |
-          rm -rf .p1a-original-candidate .p1a-trusted-baseline
-          test ! -e .p1a-original-candidate
-          test ! -e .p1a-trusted-baseline
 `;
 const CI_IDENTITY_MARKER =
   "      - name: P1-A trusted-bootstrap exact-SHA identity";
 const CI_TRUSTED_VERIFIER_MARKER =
   "      - name: P1-A trusted verifier controls";
+const TRUSTED_CURRENT_CONTRACT_ADDITION = [
+  "          node --check scripts/test-p1a-trusted-verifier.mjs",
+  "          node --check scripts/test-p1a-dual-base-verifier.mjs",
+  "          node --check scripts/validate-p1a-threat-model.mjs",
+  "",
+  "      - name: P1-A current candidate-data contract controls",
+  "        env:",
+  "          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate",
+  "          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline",
+  "          P1A_DUAL_BASE_AUTHORITY_ROOT: .p1a-dual-base-authority",
+  "          P1A_EVIDENCE_BASE_AUTHORITY_ROOT: .p1a-evidence-base-authority",
+  "          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority",
+  "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority",
+  "        run: node scripts/test-p1a-dual-base-verifier.mjs",
+  "",
+  "      - name: Remove isolated P1-A authority checkouts",
+  "        if: always()",
+  "        run: |",
+  "          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority",
+  "          test ! -e .p1a-original-candidate",
+  "          test ! -e .p1a-trusted-baseline",
+  "          test ! -e .p1a-dual-base-authority",
+  "          test ! -e .p1a-evidence-base-authority",
+  "          test ! -e .p1a-ancestry-authority",
+  "          test ! -e .p1a-trusted-reconciliation-authority",
+  "          test ! -e .p1a-trusted-reconciliation-staging",
+  "",
+  "      - name: P1-A trusted-bootstrap secret-detector tests",
+].join("\n");
 
 function replaceExactlyOnce(source, fragment, replacement, label) {
   assert.equal(source.split(fragment).length - 1, 1, `${label}: fragment count mismatch`);
@@ -951,11 +1418,31 @@ export function composeTrustedCi(baseline) {
     `${TRUSTED_CI_ACQUISITION}${CI_TRUSTED_VERIFIER_MARKER}`,
     "trusted acquisition placement",
   );
-  return replaceExactlyOnce(
+  const twoStageFragment = exactTwoStageCustodyFragment(
+    readFileSync(path.join(moduleRoot, ".github/workflows/ci.yml"), "utf8"),
+  ).fragment;
+  const trustedReconciliationAcquired = replaceExactlyOnce(
     acquired,
+    CI_TRUSTED_VERIFIER_MARKER,
+    `${twoStageFragment}${CI_TRUSTED_VERIFIER_MARKER}`,
+    "two-stage custody placement",
+  );
+  const isolated = replaceExactlyOnce(
+    trustedReconciliationAcquired,
     BASE_TRUSTED_VERIFIER_STEP,
     ISOLATED_TRUSTED_VERIFIER_STEP,
     "isolated authority path and cleanup placement",
+  );
+  return replaceExactlyOnce(
+    isolated,
+    [
+      "          node --check scripts/test-p1a-trusted-verifier.mjs",
+      "          node --check scripts/validate-p1a-threat-model.mjs",
+      "",
+      "      - name: P1-A trusted-bootstrap secret-detector tests",
+    ].join("\n"),
+    TRUSTED_CURRENT_CONTRACT_ADDITION,
+    "current candidate-data contract placement",
   );
 }
 
@@ -978,14 +1465,15 @@ export function validateComposedCandidateCi(git, candidateSha, workflowSha) {
   assert.match(entry, /^100644\s+blob\s+[0-9a-f]{40}\t/, `${path}: unsafe entry`);
   assert.equal(blobAt(git, COMPOSED_CI_BASE, path), COMPOSED_CI_BASE_BLOB,
     `${path}: baseline blob mismatch`);
-  const baseline = `${git("show", `${COMPOSED_CI_BASE}:${path}`)}\n`;
   const trusted = `${git("show", `${workflowSha}:${path}`)}\n`;
   const candidate = `${git("show", `${candidateSha}:${path}`)}\n`;
-  assert.equal(trusted, composeTrustedCi(baseline), `${path}: trusted stage mismatch`);
-  assert.equal(candidate, composeFinalCi(baseline), `${path}: composed state or remainder mismatch`);
+  assert.ok(!trusted.includes(REQUIRED_CI_ADDITION), `${path}: trusted stage contains candidate step`);
+  assert.ok(!trusted.includes("pnpm test:p1a-threat-model"), `${path}: trusted stage contains historical root command`);
+  assert.equal(candidate, composeCandidateCi(trusted), `${path}: composed state or remainder mismatch`);
   validateOrdinaryCiActionPins(candidate);
   assert.equal(candidate.split(TRUSTED_CI_ACQUISITION).length - 1, 1,
     `${path}: trusted fragment missing or duplicated`);
+  removeTwoStageCustodyFragment(candidate);
   assert.equal(candidate.split(REQUIRED_CI_ADDITION).length - 1, 1,
     `${path}: candidate fragment missing or duplicated`);
   for (const forbidden of [
@@ -995,15 +1483,103 @@ export function validateComposedCandidateCi(git, candidateSha, workflowSha) {
   ]) assert.ok(!candidate.includes(forbidden), `${path}: forbidden ${forbidden}`);
   assert.ok(!/\$\{\{\s*secrets\s*\./.test(candidate), `${path}: protected secret reference`);
   for (const required of [
-    "pnpm test:p1a-threat-model", "node scripts/test-p1a-trusted-verifier.mjs",
+    "node scripts/validate-p1a-threat-model.mjs --candidate-data-only",
+    "node scripts/test-p1a-trusted-verifier.mjs",
     "node scripts/test-p1a-ci-secret-detector.mjs",
     "node scripts/detect-p1a-ordinary-ci-secrets.mjs",
     "P1-A private cross-repository suites are intentionally unavailable",
   ]) assert.ok(candidate.includes(required), `${path}: missing ${required}`);
+  assert.ok(!candidate.includes("pnpm test:p1a-threat-model"),
+    `${path}: historical suite cannot execute from reconciled root`);
   return Object.freeze({
     baselineBlob: COMPOSED_CI_BASE_BLOB,
     trustedBlob: blobAt(git, workflowSha, path),
     candidateBlob: blobAt(git, candidateSha, path),
+  });
+}
+
+export function validateCandidateDataOnly({
+  repoRoot = candidateRoot,
+  candidateSha,
+  ancestryAuthorityRoot = process.env.P1A_ANCESTRY_AUTHORITY_ROOT,
+  trustedReconciliationAuthorityRoot = process.env.P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT,
+} = {}) {
+  const checks = [];
+  const check = (name, operation) => {
+    operation();
+    checks.push(name);
+  };
+  exactSha(candidateSha, "candidate");
+  check("candidate_identity", () => {
+    assert.equal(gitAt(repoRoot, "rev-parse", "HEAD"), candidateSha);
+    assert.equal(gitAt(repoRoot, "cat-file", "-t", candidateSha), "commit");
+    assert.equal(
+      normalizeRepository(gitAt(repoRoot, "remote", "get-url", "origin")),
+      "https://github.com/DarksiedCEO/zbestmedia",
+    );
+  });
+  const parents = gitAt(repoRoot, "show", "-s", "--format=%P", candidateSha).split(" ");
+  check("ordered_parentage", () => {
+    assert.equal(parents.length, 2, "candidate must have exactly two parents");
+    assert.equal(parents[0], ORIGINAL_CANDIDATE, "first parent is not original candidate");
+    assert.match(parents[1], /^[0-9a-f]{40}$/, "trusted parent is not immutable");
+  });
+  const trustedParent = parents[1];
+  check("required_ancestry", () => {
+    verifyCanonicalBoundedAncestry({ ancestryAuthorityRoot });
+    verifyCanonicalTrustedReconciliationAncestry({ trustedReconciliationAuthorityRoot });
+    gitAt(repoRoot, "merge-base", "--is-ancestor", TRUSTED_RECONCILIATION_BASE, trustedParent);
+    gitAt(repoRoot, "merge-base", "--is-ancestor", ORIGINAL_CANDIDATE, candidateSha);
+    gitAt(repoRoot, "merge-base", "--is-ancestor", trustedParent, candidateSha);
+  });
+  check("exact_scope", () => {
+    const changed = gitAt(repoRoot, "diff", "--name-only", `${trustedParent}..${candidateSha}`)
+      .split("\n").filter(Boolean).sort();
+    assert.deepEqual(changed, [...CANDIDATE_OWNED_FILES].sort());
+  });
+  check("candidate_blob_identity", () => {
+    for (const file of EXACT_CANDIDATE_OWNED_FILES) {
+      assert.equal(gitAt(repoRoot, "rev-parse", `${candidateSha}:${file}`),
+        gitAt(repoRoot, "rev-parse", `${ORIGINAL_CANDIDATE}:${file}`), file);
+    }
+  });
+  check("trusted_blob_identity", () => {
+    for (const file of TRUSTED_INFRASTRUCTURE_FILES) {
+      if (file === ".github/workflows/ci.yml") continue;
+      assert.equal(gitAt(repoRoot, "rev-parse", `${candidateSha}:${file}`),
+        gitAt(repoRoot, "rev-parse", `${trustedParent}:${file}`), file);
+    }
+  });
+  check("ordinary_ci_composition", () => {
+    const git = (...args) => gitAt(repoRoot, ...args);
+    validateComposedCandidateCi(git, candidateSha, trustedParent);
+  });
+  check("candidate_documents", () => {
+    const packageLoad = (file) => JSON.parse(readFileSync(path.join(repoRoot, file), "utf8"));
+    const model = packageLoad("docs/security/p1-a/model.json");
+    const evidence = packageLoad("docs/security/p1-a/evidence-register.json");
+    const manifest = packageLoad("docs/security/p1-a/validation-manifest.json");
+    const markdown = readFileSync(path.join(repoRoot, "docs/security/p1-a/threat-model.md"), "utf8");
+    validateData(model, evidence, manifest, markdown);
+    assert.deepEqual(manifest.requiredTests, REQUIRED_CHECKS);
+    assert.deepEqual(model.gate, {
+      runtimeChanged: false, productionClaimed: false, p1bAuthorized: false, selfCertified: false,
+    });
+  });
+  check("custody_separation", () => {
+    assert.ok(!process.env.P1A_WORKFLOW_SHA, "candidate cannot select workflow SHA");
+    assert.ok(!process.env.P1A_VERIFIER_SHA, "candidate cannot select verifier SHA");
+    assert.ok(!process.env.P1A_RUNTIME_APP_PRIVATE_KEY, "protected credential present");
+    if (process.env.P1A_TRUSTED_EXECUTION_ROOT) {
+      assert.notEqual(path.resolve(repoRoot), path.resolve(process.env.P1A_TRUSTED_EXECUTION_ROOT));
+    }
+  });
+  assert.equal(gitAt(repoRoot, "status", "--porcelain"), "", "dirty candidate worktree");
+  return Object.freeze({
+    scope: "CANDIDATE_DATA_VALIDATED", candidateSha, required: checks.length,
+    executed: checks.length, passed: checks.length, failed: 0, skipped: 0,
+    cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+    certified: false, protectedOperations: 0,
   });
 }
 
@@ -1014,6 +1590,8 @@ export function validateDualBaseScope({
   reconciliationBaseSha,
   originalCandidateSha,
   workflowSha,
+  ancestryAuthorityRoot = process.env.P1A_ANCESTRY_AUTHORITY_ROOT,
+  trustedReconciliationAuthorityRoot = process.env.P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT,
 }) {
   for (const [label, value, expected] of [
     ["evidence/model base", evidenceBaseSha, AUTHORIZED_BASE],
@@ -1028,8 +1606,18 @@ export function validateDualBaseScope({
   assert.match(workflowSha ?? "", /^[0-9a-f]{40}$/, "workflow SHA absent");
   assert.equal(git("cat-file", "-t", candidateSha), "commit", "candidate is not a commit");
   assert.equal(git("cat-file", "-t", workflowSha), "commit", "workflow is not a commit");
-  git("merge-base", "--is-ancestor", evidenceBaseSha, originalCandidateSha);
-  git("merge-base", "--is-ancestor", evidenceBaseSha, reconciliationBaseSha);
+  verifyCanonicalBoundedAncestry({
+    ancestryAuthorityRoot,
+    evidenceBaseSha,
+    originalCandidateSha,
+    authorizedBoundarySha: evidenceBaseSha,
+  });
+  verifyCanonicalTrustedReconciliationAncestry({
+    trustedReconciliationAuthorityRoot,
+    evidenceBaseSha,
+    originalCandidateSha: reconciliationBaseSha,
+    authorizedBoundarySha: evidenceBaseSha,
+  });
   git("merge-base", "--is-ancestor", reconciliationBaseSha, workflowSha);
   git("merge-base", "--is-ancestor", workflowSha, candidateSha);
   git("merge-base", "--is-ancestor", originalCandidateSha, candidateSha);
@@ -1098,6 +1686,7 @@ function validateGitScope(manifest, candidateSha) {
     reconciliationBaseSha: process.env.P1A_RECONCILIATION_BASE_SHA,
     originalCandidateSha: process.env.P1A_ORIGINAL_CANDIDATE_SHA,
     workflowSha: process.env.P1A_WORKFLOW_SHA,
+    ancestryAuthorityRoot: process.env.P1A_ANCESTRY_AUTHORITY_ROOT,
   });
   for (const file of CANDIDATE_OWNED_FILES) {
     const stat = lstatSync(path.join(candidateRoot, file));
@@ -1256,6 +1845,11 @@ function runCheck(name, context) {
 }
 
 function main() {
+  if (process.argv.includes("--candidate-data-only")) {
+    const summary = validateCandidateDataOnly({ candidateSha: process.env.P1A_CANDIDATE_SHA });
+    console.log(JSON.stringify(summary));
+    return;
+  }
   const candidateIndex = process.argv.indexOf("--candidate-sha");
   const candidateSha =
     candidateIndex >= 0

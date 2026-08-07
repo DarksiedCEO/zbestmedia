@@ -89,7 +89,10 @@ blobs preserved from the original candidate. Independently merged bootstrap
 paths unchanged by the amendment must match the trusted reconciliation base;
 amendment-controlled paths must match the exact executing workflow commit.
 Ordinary `.github/workflows/ci.yml` is candidate-owned only for one exact
-addition: the hermetic `pnpm test:p1a-threat-model` step. Removing trusted
+addition: the trusted-owned `--candidate-data-only` validation step. The
+historical `pnpm test:p1a-threat-model` command is prohibited from the
+reconciled root and remains valid only inside the isolated exact-original
+checkout. Removing trusted
 bootstrap tests, changing any other CI byte, introducing protected secrets, or
 executing candidate-controlled credentialed code fails closed.
 The candidate must descend from the reconciliation base, and its delta may
