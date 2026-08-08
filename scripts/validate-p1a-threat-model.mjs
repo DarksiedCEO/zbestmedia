@@ -1397,7 +1397,8 @@ const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candid
 `;
 const TWO_STAGE_CI_START = "      - name: Acquire bounded trusted-reconciliation staging objects\n";
 const TWO_STAGE_CI_END = "      - name: P1-A trusted verifier controls\n";
-const TWO_STAGE_CI_SHA256 = "3fb24871674a86d9f3940b3c236215aa763d29018ff858e046fc2efbcaef8625";
+const HISTORICAL_TWO_STAGE_CI_SHA256 = "3fb24871674a86d9f3940b3c236215aa763d29018ff858e046fc2efbcaef8625";
+const TWO_STAGE_CI_SHA256 = "d02a9180af17eb9f67674a8d21aceba5f9e712bacd54b16e590ef51c6068baa0";
 function exactTwoStageCustodyFragment(source) {
   assert.equal(source.split(TWO_STAGE_CI_START).length - 1, 1,
     "two-stage custody: staging acquisition missing or duplicated");
@@ -1405,6 +1406,8 @@ function exactTwoStageCustodyFragment(source) {
   const end = source.indexOf(TWO_STAGE_CI_END, start);
   assert.ok(end > start, "two-stage custody: verifier placement missing");
   const fragment = source.slice(start, end);
+  assert.notEqual(TWO_STAGE_CI_SHA256, HISTORICAL_TWO_STAGE_CI_SHA256,
+    "two-stage custody: current and historical profiles must remain distinct");
   assert.equal(sha256(fragment), TWO_STAGE_CI_SHA256,
     "two-stage custody: exact fragment digest mismatch");
   for (const required of [
@@ -1456,6 +1459,10 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority",
   "          P1A_PR16_CHAIN_AUTHORITY_ROOT: .p1a-pr16-remediation-chain-authority",
   "          P1A_PR16_HISTORICAL_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-cleanliness",
+  "          P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: .p1a-pr16-chain-staging-trusted-base",
+  "          P1A_PR16_ACTION_INVENTORY_SOURCE_ROOT: .p1a-pr16-chain-staging-action-inventory",
+  "          P1A_PR16_ORIGINAL_AMENDMENT_SOURCE_ROOT: .p1a-pr16-chain-staging-original-amendment",
+  "          P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-chain",
   "        run: node scripts/test-p1a-dual-base-verifier.mjs",
   "",
   "      - name: Remove isolated P1-A authority checkouts",

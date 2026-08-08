@@ -385,6 +385,8 @@ jobs:
             .p1a-pr16-chain-staging-action-inventory
           )
           historical_path_source=.p1a-pr16-chain-staging-rejected-cleanliness
+          trusted_base_source=.p1a-pr16-chain-staging-trusted-base
+          action_inventory_source=.p1a-pr16-chain-staging-action-inventory
           historical_path=.github/workflows/ci.yml
           historical_blob=60d9cede50402f10837a630598b9f8dbf6fb839e
           test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
@@ -407,6 +409,9 @@ jobs:
           test "$(git -C "$historical_path_source" rev-parse HEAD)" = "${shas[3]}"
           test "$(git -C "$historical_path_source" rev-parse "${shas[3]}:$historical_path")" = "$historical_blob"
           test "$(git -C "$historical_path_source" cat-file -t "$historical_blob")" = blob
+          test "$(git -C "$trusted_base_source" rev-parse HEAD)" = "${shas[0]}"
+          test "$(git -C "$trusted_base_source" rev-parse "${shas[0]}:$historical_path")" = "$historical_blob"
+          test "$(git -C "$action_inventory_source" rev-parse HEAD)" = "${shas[4]}"
           test "$(git -C "$authority" cat-file -p "${shas[1]}" | sed -n 's/^parent //p')" = "${shas[0]}"
           test "$(git -C "$authority" cat-file -p "${shas[2]}" | sed -n 's/^parent //p')" = "${shas[1]}"
           test "$(git -C "$authority" cat-file -p "${shas[3]}" | sed -n 's/^parent //p')" = "${shas[2]}"
@@ -418,13 +423,8 @@ jobs:
           test ! -e "$authority/.git/objects/info/alternates"
           test -z "$(git -C "$authority" for-each-ref --format='%(refname)' refs/replace)"
           test ! -s "$authority/.git/info/grafts"
-          for source in "${staging[@]}"; do
-            if test "$source" = "$historical_path_source"; then
-              continue
-            fi
-            rm -rf "$source"
-            test ! -e "$source"
-          done
+          # Retain the independently acquired exact sources until verifier execution.
+          # The unconditional cleanup step removes every source afterward.
 
       - name: P1-A trusted verifier controls
         env:
@@ -450,6 +450,10 @@ jobs:
           P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority
           P1A_PR16_CHAIN_AUTHORITY_ROOT: .p1a-pr16-remediation-chain-authority
           P1A_PR16_HISTORICAL_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-cleanliness
+          P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: .p1a-pr16-chain-staging-trusted-base
+          P1A_PR16_ACTION_INVENTORY_SOURCE_ROOT: .p1a-pr16-chain-staging-action-inventory
+          P1A_PR16_ORIGINAL_AMENDMENT_SOURCE_ROOT: .p1a-pr16-chain-staging-original-amendment
+          P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-chain
         run: node scripts/test-p1a-dual-base-verifier.mjs
 
       - name: Remove isolated P1-A authority checkouts

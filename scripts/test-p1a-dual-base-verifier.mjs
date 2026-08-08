@@ -25,8 +25,11 @@ const ORIGINAL_PR16_AMENDMENT = "6e855ba08c69374cb4b25f9777a8ebd190375897";
 const REJECTED_PR16_CLEANLINESS_CANDIDATE = "0164130fc62209c7a71ca4f7e58a2e24117e2fd5";
 const REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE = "966ab9160ad133adb10d58f7877f8549efd06831";
 const REJECTED_PR16_ACTION_INVENTORY_CANDIDATE = "6867d43d17c8b614ab7d0e0c5e338127020bb772";
+const REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE = "5c302bdae987a43104fecb5c4bfcf4fcca82c540";
 const HISTORICAL_WORKFLOW_PATH = ".github/workflows/ci.yml";
 const HISTORICAL_WORKFLOW_BLOB = "60d9cede50402f10837a630598b9f8dbf6fb839e";
+const TRUSTED_BASE_WORKFLOW_BLOB = "60d9cede50402f10837a630598b9f8dbf6fb839e";
+const ACTION_INVENTORY_WORKFLOW_BLOB = "f5fdd0da1fd17c1e843086999aa69e00d44948ea";
 const PATH_EVIDENCE_STATES = Object.freeze({
   COMMIT_NOT_AVAILABLE: "COMMIT_NOT_AVAILABLE",
   OBJECT_NOT_IMPORTED: "OBJECT_NOT_IMPORTED",
@@ -38,6 +41,7 @@ const PATH_SOURCE_CLASSES = Object.freeze({
   FULL_EXACT_COMMIT_SOURCE: "FULL_EXACT_COMMIT_SOURCE",
   CURRENT_CANDIDATE_SOURCE: "CURRENT_CANDIDATE_SOURCE",
   TRUSTED_BASE_SOURCE: "TRUSTED_BASE_SOURCE",
+  TRUSTED_BASE_FULL_SOURCE: "TRUSTED_BASE_FULL_SOURCE",
 });
 const REJECTED_RECONCILIATION = "4cbdee7b4aded69275efdc78aea41ed21bae32dc";
 const AUTHORIZED_EPHEMERAL_AUTHORITY_ROOTS = Object.freeze([
@@ -72,6 +76,10 @@ const authorityRoots = {
   trustedReconciliation: process.env.P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT,
   pr16RemediationChain: process.env.P1A_PR16_CHAIN_AUTHORITY_ROOT,
   pr16HistoricalSource: process.env.P1A_PR16_HISTORICAL_SOURCE_ROOT,
+  trustedBaseFullSource: process.env.P1A_TRUSTED_BASE_FULL_SOURCE_ROOT,
+  pr16ActionInventorySource: process.env.P1A_PR16_ACTION_INVENTORY_SOURCE_ROOT,
+  pr16OriginalAmendmentSource: process.env.P1A_PR16_ORIGINAL_AMENDMENT_SOURCE_ROOT,
+  pr16RejectedChainSource: process.env.P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT,
 };
 const workspaceOptions = (expectedRelative) => process.env.GITHUB_WORKSPACE
   ? { workspaceRoot: process.env.GITHUB_WORKSPACE, expectedRelative }
@@ -111,6 +119,35 @@ function canonicalGitHubRepositoryUrl(value) {
   return OFFICIAL_REPOSITORY;
 }
 
+function verifyExactWorkflowSource(label, suppliedRoot, expectedSha, expectedBlob,
+  expectedRelative, sourceClass) {
+  assert.ok(suppliedRoot, `${label}: full exact source absent`);
+  assert.ok(Object.values(PATH_SOURCE_CLASSES).includes(sourceClass), `${label}: source class omitted or invalid`);
+  assert.match(expectedSha, EXACT_SHA, `${label}: exact lowercase SHA required`);
+  assert.match(expectedBlob, EXACT_SHA, `${label}: exact blob required`);
+  assert.ok(!lstatSync(path.resolve(suppliedRoot)).isSymbolicLink(), `${label}: symlink source forbidden`);
+  const resolved = realpathSync(path.resolve(suppliedRoot));
+  assert.notEqual(resolved, realpathSync(root), `${label}: primary candidate checkout forbidden`);
+  if (process.env.GITHUB_WORKSPACE) {
+    assert.equal(resolved, realpathSync(path.resolve(process.env.GITHUB_WORKSPACE, expectedRelative)),
+      `${label}: candidate-selected or escaping source root`);
+  }
+  assert.equal(gitAt(resolved, "rev-parse", "HEAD"), expectedSha, `${label}: wrong source HEAD`);
+  assert.equal(canonicalGitHubRepositoryUrl(gitAt(resolved, "remote", "get-url", "origin")), OFFICIAL_REPOSITORY,
+    `${label}: wrong repository identity`);
+  assert.equal(gitAt(resolved, "status", "--porcelain=v1"), "", `${label}: dirty source forbidden`);
+  const config = readFileSync(path.join(resolved, ".git/config"), "utf8");
+  assert.ok(!/x-access-token|authorization:|http\..*extraheader|credential\.helper/i.test(config),
+    `${label}: persisted credential material detected`);
+  assert.equal(gitAt(resolved, "cat-file", "-t", expectedSha), "commit", `${label}: commit object absent`);
+  assert.equal(gitAt(resolved, "cat-file", "-t", `${expectedSha}^{tree}`), "tree", `${label}: tree object absent`);
+  const blob = gitAt(resolved, "rev-parse", `${expectedSha}:${HISTORICAL_WORKFLOW_PATH}`);
+  assert.equal(blob, expectedBlob, `${label}: workflow blob mismatch`);
+  assert.equal(gitAt(resolved, "cat-file", "-t", blob), "blob", `${label}: workflow blob absent`);
+  return Object.freeze({ root: resolved, sourceClass, exactSourceSha: expectedSha,
+    path: HISTORICAL_WORKFLOW_PATH, blob, state: PATH_EVIDENCE_STATES.PATH_PRESENT_IN_COMMIT });
+}
+
 function resolveAuthorizedLinearAmendment(head, parentLookup) {
   assert.match(head, EXACT_SHA, "provenance: exact amendment SHA required");
   assert.equal(typeof parentLookup, "function", "provenance: trusted parent lookup required");
@@ -130,9 +167,15 @@ function resolveAuthorizedLinearAmendment(head, parentLookup) {
   } else if (head === REJECTED_PR16_ACTION_INVENTORY_CANDIDATE) {
     assert.deepEqual(parentLookup(head), [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE],
       "provenance: rejected action-inventory candidate parent mismatch");
-  } else {
+  } else if (head === REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE) {
     assert.deepEqual(parentLookup(head), [REJECTED_PR16_ACTION_INVENTORY_CANDIDATE],
-      "provenance: replacement must have exact rejected action-inventory candidate parent");
+      "provenance: rejected semantic-provenance candidate parent mismatch");
+  } else {
+    assert.deepEqual(parentLookup(head), [REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE],
+      "provenance: replacement must have exact rejected semantic-provenance candidate parent");
+    assert.deepEqual(parentLookup(REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE),
+      [REJECTED_PR16_ACTION_INVENTORY_CANDIDATE],
+      "provenance: rejected semantic-provenance candidate parent mismatch");
     assert.deepEqual(parentLookup(REJECTED_PR16_ACTION_INVENTORY_CANDIDATE),
       [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE],
       "provenance: rejected action-inventory candidate parent mismatch");
@@ -193,7 +236,8 @@ const exactTopology = new Map([
   [REJECTED_PR16_CLEANLINESS_CANDIDATE, [ORIGINAL_PR16_AMENDMENT]],
   [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE, [REJECTED_PR16_CLEANLINESS_CANDIDATE]],
   [REJECTED_PR16_ACTION_INVENTORY_CANDIDATE, [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE]],
-  [topologyReplacement, [REJECTED_PR16_ACTION_INVENTORY_CANDIDATE]],
+  [REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE, [REJECTED_PR16_ACTION_INVENTORY_CANDIDATE]],
+  [topologyReplacement, [REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE]],
   [topologyExtra, [topologyReplacement]],
 ]);
 const topologyParents = (sha) => {
@@ -398,6 +442,10 @@ function validatePr16WorkflowContract(source) {
     "pr16-workflow: fixed authority binding absent");
   assert.ok(source.includes("P1A_PR16_HISTORICAL_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-cleanliness"),
     "pr16-workflow: full exact historical source binding absent");
+  assert.ok(source.includes("P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: .p1a-pr16-chain-staging-trusted-base"),
+    "pr16-workflow: full exact trusted-base source binding absent");
+  assert.ok(source.includes("P1A_PR16_ACTION_INVENTORY_SOURCE_ROOT: .p1a-pr16-chain-staging-action-inventory"),
+    "pr16-workflow: full exact action-inventory source binding absent");
   assert.ok(pr16Section.includes("historical_path=.github/workflows/ci.yml"),
     "pr16-workflow: exact historical path proof absent");
   assert.ok(pr16Section.includes(`historical_blob=${HISTORICAL_WORKFLOW_BLOB}`),
@@ -419,10 +467,23 @@ function validatePr16WorkflowContract(source) {
 
 const pr16WorkflowSource = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
 validatePr16WorkflowContract(pr16WorkflowSource);
-const historicalOrdinaryCi = gitAt(root, "show",
-  `${CURRENT_TRUSTED_BASE}:.github/workflows/ci.yml`);
-const predecessorOrdinaryCi = gitAt(root, "show",
-  `${REJECTED_PR16_ACTION_INVENTORY_CANDIDATE}:.github/workflows/ci.yml`);
+const trustedBaseWorkflowSource = verifyExactWorkflowSource("trusted-base", authorityRoots.trustedBaseFullSource,
+  CURRENT_TRUSTED_BASE, TRUSTED_BASE_WORKFLOW_BLOB, ".p1a-pr16-chain-staging-trusted-base",
+  PATH_SOURCE_CLASSES.TRUSTED_BASE_FULL_SOURCE);
+const predecessorWorkflowSource = verifyExactWorkflowSource("action-inventory-predecessor",
+  authorityRoots.pr16ActionInventorySource, REJECTED_PR16_ACTION_INVENTORY_CANDIDATE,
+  ACTION_INVENTORY_WORKFLOW_BLOB, ".p1a-pr16-chain-staging-action-inventory",
+  PATH_SOURCE_CLASSES.FULL_EXACT_COMMIT_SOURCE);
+const originalAmendmentWorkflowSource = verifyExactWorkflowSource("original-amendment-predecessor",
+  authorityRoots.pr16OriginalAmendmentSource, ORIGINAL_PR16_AMENDMENT, HISTORICAL_WORKFLOW_BLOB,
+  ".p1a-pr16-chain-staging-original-amendment", PATH_SOURCE_CLASSES.FULL_EXACT_COMMIT_SOURCE);
+const rejectedChainWorkflowSource = verifyExactWorkflowSource("rejected-chain-predecessor",
+  authorityRoots.pr16RejectedChainSource, REJECTED_PR16_CLEANLINESS_CANDIDATE, HISTORICAL_WORKFLOW_BLOB,
+  ".p1a-pr16-chain-staging-rejected-chain", PATH_SOURCE_CLASSES.FULL_EXACT_COMMIT_SOURCE);
+const historicalOrdinaryCi = gitAt(trustedBaseWorkflowSource.root, "show",
+  `${CURRENT_TRUSTED_BASE}:${HISTORICAL_WORKFLOW_PATH}`);
+const predecessorOrdinaryCi = gitAt(predecessorWorkflowSource.root, "show",
+  `${REJECTED_PR16_ACTION_INVENTORY_CANDIDATE}:${HISTORICAL_WORKFLOW_PATH}`);
 const historicalActionInventory = parseOrdinaryCiActionInventory(historicalOrdinaryCi);
 const predecessorActionInventory = parseOrdinaryCiActionInventory(predecessorOrdinaryCi);
 const currentActionInventory = parseOrdinaryCiActionInventory(pr16WorkflowSource);
@@ -679,7 +740,9 @@ function resolveAmendmentSource() {
   const parents = commitParents(root, head);
   if (parents.length === 1) {
     return resolveAuthorizedLinearAmendment(head,
-      (sha) => sha === head ? parents : chainAuthority.parents(sha));
+      (sha) => sha === head ? parents
+        : sha === REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE ? commitParents(root, sha)
+          : chainAuthority.parents(sha));
   }
   assert.deepEqual(parents.slice(0, 1), [ORIGINAL_CANDIDATE],
     "provenance: disposable reconciliation first parent mismatch");
@@ -687,7 +750,9 @@ function resolveAmendmentSource() {
   const amendment = parents[1];
   const amendmentParents = commitParents(root, amendment);
   return resolveAuthorizedLinearAmendment(amendment,
-    (sha) => sha === amendment ? amendmentParents : chainAuthority.parents(sha));
+    (sha) => sha === amendment ? amendmentParents
+      : sha === REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE ? commitParents(root, sha)
+        : chainAuthority.parents(sha));
 }
 
 function rejects(operation) {
@@ -1110,8 +1175,16 @@ console.log("PASS shallow_primary_missing_trusted_tree_reproduced");
 
 const amendmentSourceSha = resolveAmendmentSource();
 const trustedSourceRoot = path.join(temporary, "trusted-fixture-source");
-run(temporary, ["git", "clone", "-q", "--no-hardlinks", "--no-checkout", root, trustedSourceRoot]);
+run(temporary, ["git", "clone", "-q", "--no-hardlinks", "--no-checkout", trustedBaseWorkflowSource.root,
+  trustedSourceRoot]);
 gitAt(trustedSourceRoot, "remote", "set-url", "origin", `${OFFICIAL_REPOSITORY}.git`);
+run(trustedSourceRoot, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", root,
+  amendmentSourceSha]);
+for (const source of [originalAmendmentWorkflowSource, rejectedChainWorkflowSource,
+  predecessorWorkflowSource]) {
+  run(trustedSourceRoot, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", source.root,
+    source.exactSourceSha]);
+}
 gitAt(trustedSourceRoot, "checkout", "-q", "--detach", CURRENT_TRUSTED_BASE);
 assert.equal(gitAt(trustedSourceRoot, "rev-parse", "HEAD"), CURRENT_TRUSTED_BASE,
   "provenance: isolated trusted source HEAD mismatch");
@@ -1716,7 +1789,8 @@ const missingBlobFixture = createPathObjectFixture("missing-blob", {
   importTrees: [historicalRootTree, historicalGithubTree, historicalWorkflowsTree],
 });
 const wrongHeadFixture = path.join(temporary, "path-evidence-wrong-head");
-run(temporary, ["git", "clone", "-q", "--no-hardlinks", historicalSourceRoot, wrongHeadFixture]);
+run(temporary, ["git", "clone", "-q", "--no-hardlinks", rejectedChainWorkflowSource.root,
+  wrongHeadFixture]);
 gitAt(wrongHeadFixture, "checkout", "-q", "--detach", REJECTED_PR16_CLEANLINESS_CANDIDATE);
 gitAt(wrongHeadFixture, "remote", "set-url", "origin", OFFICIAL_REPOSITORY);
 const wrongHistoricalRepositoryFixture = path.join(temporary, "path-evidence-wrong-repository");
@@ -1754,8 +1828,9 @@ const semanticPositiveControls = [
     ({ exactSourceSha }) => exactSourceSha === CURRENT_TRUSTED_BASE))],
   ["topology_through_6867", () => assert.deepEqual(preverifiedPr16ChainAuthority.parents(
     REJECTED_PR16_ACTION_INVENTORY_CANDIDATE), [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE])],
-  ["replacement_parent_6867", () => assert.deepEqual(commitParents(trustedSourceRoot, amendmentSourceSha),
-    [REJECTED_PR16_ACTION_INVENTORY_CANDIDATE])],
+  ["replacement_parent_current_remote_head", () => assert.deepEqual(
+    commitParents(trustedSourceRoot, amendmentSourceSha),
+    [REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE])],
   ["action_inventory_exact_15", () => assert.equal(currentActionResult.required, 15)],
   ["candidate_data_required_9", () => assert.equal(semanticCandidateSummary.required, 9)],
   ["candidate_data_uncertified", () => assert.equal(semanticCandidateSummary.certified, false)],
@@ -2244,6 +2319,13 @@ const replaceOnce = (source, needle, replacement) => {
   assert.equal(source.split(needle).length - 1, 1, `fixture needle count: ${needle}`);
   return source.replace(needle, replacement);
 };
+const RETAINED_SOURCE_BINDINGS = [
+  "          P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: .p1a-pr16-chain-staging-trusted-base",
+  "          P1A_PR16_ACTION_INVENTORY_SOURCE_ROOT: .p1a-pr16-chain-staging-action-inventory",
+  "          P1A_PR16_ORIGINAL_AMENDMENT_SOURCE_ROOT: .p1a-pr16-chain-staging-original-amendment",
+  "          P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-chain",
+  "",
+].join("\n");
 const negativeCases = [
   ["direct_candidate_composition_on_untrusted_baseline", () => composeCandidateCi(baselineCi)],
   ["missing_trusted_fragment", (ci) => replaceOnce(ci, "      - name: Acquire exact original P1-A candidate object\n", "")],
@@ -2291,6 +2373,25 @@ const negativeCases = [
   ["fragment_only_in_dead_conditional", (ci) => replaceOnce(ci, "      - name: P1-A candidate-data validation\n", "      - name: P1-A candidate-data validation\n        if: ${{ false }}\n")],
   ["trusted_fragment_candidate_script", (ci) => replaceOnce(ci, "git fetch --no-tags --no-write-fetch-head .p1a-original-candidate", "node candidate/untrusted.mjs")],
   ["accounting_without_both_authorities", (ci) => replaceOnce(ci, "      - name: Acquire exact original P1-A candidate object\n", "      - name: authority accounting claims complete\n")],
+  ["retained_source_bindings_omitted", (ci) => replaceOnce(ci, RETAINED_SOURCE_BINDINGS, "")],
+  ["retained_source_bindings_duplicated", (ci) => replaceOnce(ci, RETAINED_SOURCE_BINDINGS,
+    `${RETAINED_SOURCE_BINDINGS}${RETAINED_SOURCE_BINDINGS}`)],
+  ["retained_source_bindings_reordered_after_verifier", (ci) => replaceOnce(
+    replaceOnce(ci, RETAINED_SOURCE_BINDINGS, ""),
+    "        run: node scripts/test-p1a-dual-base-verifier.mjs\n",
+    `        run: node scripts/test-p1a-dual-base-verifier.mjs\n${RETAINED_SOURCE_BINDINGS}`)],
+  ["retained_source_wrong_checkout", (ci) => replaceOnce(ci,
+    ".p1a-pr16-chain-staging-trusted-base", ".p1a-pr16-chain-staging-rejected-cleanliness")],
+  ["retained_source_primary_checkout", (ci) => replaceOnce(ci,
+    ".p1a-pr16-chain-staging-trusted-base", ".")],
+  ["retained_source_topology_only_authority", (ci) => replaceOnce(ci,
+    ".p1a-pr16-chain-staging-trusted-base", ".p1a-pr16-remediation-chain-authority")],
+  ["retained_source_partial_fragment", (ci) => replaceOnce(ci,
+    "          P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-chain\n", "")],
+  ["retained_source_historical_profile_substitution", (ci) => replaceOnce(ci,
+    ".p1a-pr16-chain-staging-action-inventory", ".p1a-pr16-chain-staging-original-amendment")],
+  ["retained_source_parser_uncertainty", (ci) => replaceOnce(ci,
+    "          P1A_TRUSTED_BASE_FULL_SOURCE_ROOT:", "         P1A_TRUSTED_BASE_FULL_SOURCE_ROOT:")],
 ];
 
 const summarize = (outcomes, required = outcomes.length) => {
