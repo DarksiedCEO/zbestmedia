@@ -12,6 +12,7 @@ import {
   AMENDMENT_CONTROLLED_FILES, CANDIDATE_OWNED_FILES, COMPOSED_CI_BASE,
   REQUIRED_CI_ADDITION, composeCandidateCi, composeFinalCi, composeTrustedCi,
   removeTwoStageCustodyFragment, validateDualBaseScope,
+  parseOrdinaryCiActionInventory, validateOrdinaryCiActionPins,
 } from "./validate-p1a-threat-model.mjs";
 import { validateCertificationBundle } from "./validate-p1a-certification-accounting.mjs";
 
@@ -22,6 +23,7 @@ const OFFICIAL_REPOSITORY_URLS = new Set([OFFICIAL_REPOSITORY, `${OFFICIAL_REPOS
 const CURRENT_TRUSTED_BASE = "2f4baca937ef8b36d1560a010e8e7f430819197c";
 const ORIGINAL_PR16_AMENDMENT = "6e855ba08c69374cb4b25f9777a8ebd190375897";
 const REJECTED_PR16_CLEANLINESS_CANDIDATE = "0164130fc62209c7a71ca4f7e58a2e24117e2fd5";
+const REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE = "966ab9160ad133adb10d58f7877f8549efd06831";
 const REJECTED_RECONCILIATION = "4cbdee7b4aded69275efdc78aea41ed21bae32dc";
 const AUTHORIZED_EPHEMERAL_AUTHORITY_ROOTS = Object.freeze([
   ".p1a-original-candidate",
@@ -30,9 +32,12 @@ const AUTHORIZED_EPHEMERAL_AUTHORITY_ROOTS = Object.freeze([
   ".p1a-evidence-base-authority",
   ".p1a-ancestry-authority",
   ".p1a-trusted-reconciliation-authority",
+  ".p1a-pr16-remediation-chain-authority",
 ]);
 const AMENDMENT_OWNED_FIXTURE_FILES = Object.freeze([
+  ".github/workflows/ci.yml",
   "scripts/test-p1a-dual-base-verifier.mjs",
+  "scripts/validate-p1a-threat-model.mjs",
 ]);
 const EXPECTED_COMPOSED_CI_BLOB = "9a3f1a04f99e83d9dad84cf384d86117a7d282f1";
 const ANCESTRY_CHAIN = AUTHORIZED_ANCESTRY_CHAIN;
@@ -49,6 +54,7 @@ const authorityRoots = {
   evidenceBase: process.env.P1A_EVIDENCE_BASE_AUTHORITY_ROOT,
   ancestry: process.env.P1A_ANCESTRY_AUTHORITY_ROOT,
   trustedReconciliation: process.env.P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT,
+  pr16RemediationChain: process.env.P1A_PR16_CHAIN_AUTHORITY_ROOT,
 };
 const workspaceOptions = (expectedRelative) => process.env.GITHUB_WORKSPACE
   ? { workspaceRoot: process.env.GITHUB_WORKSPACE, expectedRelative }
@@ -99,9 +105,17 @@ function resolveAuthorizedLinearAmendment(head, parentLookup) {
   if (head === REJECTED_PR16_CLEANLINESS_CANDIDATE) {
     assert.deepEqual(parentLookup(head), [ORIGINAL_PR16_AMENDMENT],
       "provenance: rejected cleanliness candidate parent mismatch");
-  } else {
+  } else if (head === REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE) {
     assert.deepEqual(parentLookup(head), [REJECTED_PR16_CLEANLINESS_CANDIDATE],
-      "provenance: replacement must have exact rejected cleanliness candidate parent");
+      "provenance: rejected authority-cleanliness candidate parent mismatch");
+    assert.deepEqual(parentLookup(REJECTED_PR16_CLEANLINESS_CANDIDATE), [ORIGINAL_PR16_AMENDMENT],
+      "provenance: rejected cleanliness candidate is not anchored to original PR #16 amendment");
+  } else {
+    assert.deepEqual(parentLookup(head), [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE],
+      "provenance: replacement must have exact rejected authority-cleanliness candidate parent");
+    assert.deepEqual(parentLookup(REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE),
+      [REJECTED_PR16_CLEANLINESS_CANDIDATE],
+      "provenance: rejected authority-cleanliness candidate parent mismatch");
     assert.deepEqual(parentLookup(REJECTED_PR16_CLEANLINESS_CANDIDATE), [ORIGINAL_PR16_AMENDMENT],
       "provenance: rejected cleanliness candidate is not anchored to original PR #16 amendment");
   }
@@ -154,7 +168,8 @@ const exactTopology = new Map([
   [CURRENT_TRUSTED_BASE, []],
   [ORIGINAL_PR16_AMENDMENT, [CURRENT_TRUSTED_BASE]],
   [REJECTED_PR16_CLEANLINESS_CANDIDATE, [ORIGINAL_PR16_AMENDMENT]],
-  [topologyReplacement, [REJECTED_PR16_CLEANLINESS_CANDIDATE]],
+  [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE, [REJECTED_PR16_CLEANLINESS_CANDIDATE]],
+  [topologyReplacement, [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE]],
   [topologyExtra, [topologyReplacement]],
 ]);
 const topologyParents = (sha) => {
@@ -163,16 +178,20 @@ const topologyParents = (sha) => {
 };
 assert.equal(resolveAuthorizedLinearAmendment(REJECTED_PR16_CLEANLINESS_CANDIDATE, topologyParents),
   REJECTED_PR16_CLEANLINESS_CANDIDATE);
+assert.equal(resolveAuthorizedLinearAmendment(REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE, topologyParents),
+  REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE);
 assert.equal(resolveAuthorizedLinearAmendment(topologyReplacement, topologyParents), topologyReplacement);
 const remediationTopologyHostileCases = [
-  ["replacement_wrong_parent", topologyReplacement, new Map(exactTopology).set(topologyReplacement, [ORIGINAL_PR16_AMENDMENT])],
+  ["replacement_wrong_parent", topologyReplacement, new Map(exactTopology).set(topologyReplacement, [REJECTED_PR16_CLEANLINESS_CANDIDATE])],
+  ["authority_cleanliness_wrong_parent", topologyReplacement, new Map(exactTopology).set(
+    REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE, [ORIGINAL_PR16_AMENDMENT])],
   ["rejected_candidate_wrong_parent", topologyReplacement, new Map(exactTopology).set(REJECTED_PR16_CLEANLINESS_CANDIDATE, [CURRENT_TRUSTED_BASE])],
   ["original_wrong_parent", topologyReplacement, new Map(exactTopology).set(ORIGINAL_PR16_AMENDMENT, ["3".repeat(40)])],
   ["extra_intermediate", topologyExtra, exactTopology],
   ["merge_masquerade", topologyReplacement, new Map(exactTopology).set(topologyReplacement,
-    [REJECTED_PR16_CLEANLINESS_CANDIDATE, ORIGINAL_PR16_AMENDMENT])],
+    [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE, REJECTED_PR16_CLEANLINESS_CANDIDATE])],
   ["parent_order_manipulation", topologyReplacement, new Map(exactTopology).set(topologyReplacement,
-    [ORIGINAL_PR16_AMENDMENT, REJECTED_PR16_CLEANLINESS_CANDIDATE])],
+    [REJECTED_PR16_CLEANLINESS_CANDIDATE, REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE])],
   ["sibling_from_original", "4".repeat(40), new Map(exactTopology).set("4".repeat(40), [ORIGINAL_PR16_AMENDMENT])],
   ["unrelated_descendant", "5".repeat(40), new Map(exactTopology).set("5".repeat(40), [topologyExtra])],
   ["missing_original", topologyReplacement, new Map(exactTopology).delete(ORIGINAL_PR16_AMENDMENT)],
@@ -195,6 +214,7 @@ console.log(JSON.stringify({
   hostilePassed: remediationTopologyHostileCases.length,
   trustedBaseSha: CURRENT_TRUSTED_BASE,
   originalAmendmentSha: ORIGINAL_PR16_AMENDMENT,
+  rejectedAuthorityCleanlinessSha: REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE,
   arbitraryDescendantsAccepted: false,
   failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
 }));
@@ -240,25 +260,356 @@ function assertAmendmentSourceWorktreeClean(repositoryRoot = root) {
   assertClassifiedWorktreeEntries(repositoryRoot, parsePorcelainV1Z(status));
 }
 
+const PR16_CHAIN = Object.freeze([
+  CURRENT_TRUSTED_BASE,
+  ORIGINAL_PR16_AMENDMENT,
+  REJECTED_PR16_CLEANLINESS_CANDIDATE,
+  REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE,
+]);
+
+function verifyPr16RemediationChainAuthority(suppliedRoot, options = {}) {
+  assert.ok(suppliedRoot, "pr16-chain: isolated predecessor authority root absent");
+  assert.ok(!lstatSync(path.resolve(suppliedRoot)).isSymbolicLink(),
+    "pr16-chain: symlink authority forbidden");
+  const resolved = realpathSync(path.resolve(suppliedRoot));
+  assert.notEqual(resolved, realpathSync(root), "pr16-chain: primary candidate checkout forbidden");
+  if (options.workspaceRoot) {
+    assert.equal(resolved, realpathSync(path.resolve(options.workspaceRoot,
+      ".p1a-pr16-remediation-chain-authority")),
+    "pr16-chain: candidate-selected or escaping authority root");
+  }
+  assert.equal(canonicalGitHubRepositoryUrl(gitAt(resolved, "remote", "get-url", "origin")),
+    OFFICIAL_REPOSITORY, "pr16-chain: wrong repository");
+  assert.equal(gitAt(resolved, "status", "--porcelain=v1"), "",
+    "pr16-chain: authority checkout modified");
+  const gitDirValue = gitAt(resolved, "rev-parse", "--git-dir");
+  const gitDir = realpathSync(path.isAbsolute(gitDirValue) ? gitDirValue : path.resolve(resolved, gitDirValue));
+  assert.notEqual(gitDir, realpathSync(path.join(root, ".git")),
+    "pr16-chain: shared primary object store forbidden");
+  assert.ok(!existsSync(path.join(gitDir, "objects/info/alternates")),
+    "pr16-chain: alternates forbidden");
+  assert.equal(gitAt(resolved, "for-each-ref", "--format=%(refname)", "refs/replace"), "",
+    "pr16-chain: replace refs forbidden");
+  assert.ok(!existsSync(path.join(gitDir, "info/grafts")) ||
+    readFileSync(path.join(gitDir, "info/grafts"), "utf8") === "", "pr16-chain: grafts forbidden");
+  const config = readFileSync(path.join(gitDir, "config"), "utf8");
+  assert.ok(!/x-access-token|authorization:|http\..*extraheader/i.test(config),
+    "pr16-chain: persisted credentials detected");
+  const inventory = gitAt(resolved, "cat-file", "--batch-all-objects", "--batch-check=%(objectname) %(objecttype)")
+    .split("\n").filter((line) => line.endsWith(" commit")).map((line) => line.slice(0, 40)).sort();
+  assert.deepEqual(inventory, [...PR16_CHAIN].sort(), "pr16-chain: exact commit inventory mismatch");
+  const provenance = PR16_CHAIN.map((sha, index) => {
+    assert.equal(gitAt(resolved, "cat-file", "-t", sha), "commit", "pr16-chain: object is not commit");
+    const parents = commitParents(resolved, sha);
+    const expectedParents = index === 0 ? commitParents(resolved, sha) : [PR16_CHAIN[index - 1]];
+    if (index > 0) assert.deepEqual(parents, expectedParents, "pr16-chain: exact parent mismatch");
+    return Object.freeze({
+      role: ["TRUSTED_BASE", "ORIGINAL_PR16_AMENDMENT", "REJECTED_URL_CHAIN_REMEDIATION",
+        "REJECTED_CLEANLINESS_REMEDIATION"][index],
+      exactSha: sha,
+      sourceClass: "WORKFLOW_OWNED_PREDECESSOR_AUTHORITY",
+      sourceRepository: OFFICIAL_REPOSITORY,
+      acquisitionMethod: "PINNED_ACTIONS_CHECKOUT_DEPTH_1_AND_COMMIT_OBJECT_IMPORT",
+      objectType: "commit",
+      exactParents: parents,
+      expectedParents,
+      equal: index === 0 || JSON.stringify(parents) === JSON.stringify(expectedParents),
+      authorityStorePath: resolved,
+    });
+  });
+  return Object.freeze({ root: resolved, gitDir, provenance,
+    parents: (sha) => commitParents(resolved, sha) });
+}
+
+function createPr16ChainFixture(name, shas = PR16_CHAIN) {
+  const fixture = path.join(temporary, `pr16-chain-${name}`);
+  gitAt(temporary, "init", "-q", fixture);
+  gitAt(fixture, "remote", "add", "origin", OFFICIAL_REPOSITORY);
+  for (const sha of shas) {
+    const rawCommit = execFileSync("git", ["cat-file", "commit", sha], {
+      cwd: authorityRoots.pr16RemediationChain, stdio: ["ignore", "pipe", "pipe"],
+    });
+    assert.equal(execFileSync("git", ["hash-object", "-w", "-t", "commit", "--stdin"], {
+      cwd: fixture, input: rawCommit, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+    }).trim(), sha);
+  }
+  return fixture;
+}
+
+function validatePr16WorkflowContract(source) {
+  assert.ok(source.includes("permissions:\n  contents: read"), "pr16-workflow: read-only permission absent");
+  assert.ok(!source.includes("contents: write"), "pr16-workflow: write permission forbidden");
+  assert.ok(!/BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY/.test(source),
+    "pr16-workflow: sensitive private-key material forbidden");
+  for (const sha of PR16_CHAIN) {
+    assert.ok(source.includes(`ref: ${sha}`), `pr16-workflow: exact checkout absent: ${sha}`);
+  }
+  assert.equal((source.match(/path: \.p1a-pr16-chain-staging-/g) ?? []).length, 4,
+    "pr16-workflow: exact staging checkout count required");
+  const pr16Section = source.slice(source.indexOf("Acquire exact PR16 trusted-base predecessor object"),
+    source.indexOf("P1-A trusted verifier controls"));
+  assert.equal((pr16Section.match(/uses: actions\/checkout@11d5960a326750d5838078e36cf38b85af677262/g) ?? []).length, 4,
+    "pr16-workflow: pinned checkout provenance mismatch");
+  assert.equal((pr16Section.match(/fetch-depth: 1/g) ?? []).length, 4,
+    "pr16-workflow: exact depth-one acquisition required");
+  assert.equal((pr16Section.match(/persist-credentials: false/g) ?? []).length, 4,
+    "pr16-workflow: credential persistence forbidden");
+  assert.ok(pr16Section.includes("mapfile -t actual"), "pr16-workflow: exact inventory accounting absent");
+  assert.ok(pr16Section.includes("test \"${actual[*]}\" = \"${expected[*]}\""),
+    "pr16-workflow: exact inventory comparison absent");
+  assert.ok(pr16Section.includes("persisted PR16 acquisition credential material detected"),
+    "pr16-workflow: credential persistence detector absent");
+  assert.ok(source.includes("P1A_PR16_CHAIN_AUTHORITY_ROOT: .p1a-pr16-remediation-chain-authority"),
+    "pr16-workflow: fixed authority binding absent");
+  assert.ok(source.includes("if: always()"), "pr16-workflow: unconditional cleanup absent");
+  assert.ok(source.includes("test ! -e .p1a-pr16-remediation-chain-authority"),
+    "pr16-workflow: authority cleanup proof absent");
+  assert.ok(!pr16Section.includes("fetch-depth: 0"), "pr16-workflow: full history fetch forbidden");
+  assert.ok(!pr16Section.includes("ref: codex/"), "pr16-workflow: mutable branch authority forbidden");
+}
+
+const pr16WorkflowSource = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
+validatePr16WorkflowContract(pr16WorkflowSource);
+const historicalOrdinaryCi = gitAt(root, "show",
+  `${REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE}:.github/workflows/ci.yml`);
+const historicalActionInventory = parseOrdinaryCiActionInventory(historicalOrdinaryCi);
+const currentActionInventory = parseOrdinaryCiActionInventory(pr16WorkflowSource);
+const historicalActionResult = validateOrdinaryCiActionPins(historicalOrdinaryCi,
+  { profile: "HISTORICAL_10" });
+const currentActionResult = validateOrdinaryCiActionPins(pr16WorkflowSource);
+const checkoutPin = "11d5960a326750d5838078e36cf38b85af677262";
+const setupNodePin = "49933ea5288caeca8642d1e84afbd3f7d6820020";
+const cachePin = "0057852bfaa89a56745cba8c7296529d2fc39830";
+const actionlintPin = "3d39aea434753780c3b3d4a1a31c854b4dbf49d7";
+const countRepository = (inventory, repository) => inventory.filter((item) => item.repository === repository).length;
+const actionInventoryPositiveControls = [
+  ["historical_ten", () => assert.equal(historicalActionResult.required, 10)],
+  ["current_fourteen", () => assert.equal(currentActionResult.required, 14)],
+  ["authorized_delta_four", () => assert.equal(currentActionInventory.length - historicalActionInventory.length, 4)],
+  ["four_added_checkouts", () => assert.equal(countRepository(currentActionInventory, "actions/checkout") -
+    countRepository(historicalActionInventory, "actions/checkout"), 4)],
+  ["all_added_checkout_pins_exact", () => assert.equal(currentActionInventory.filter(
+    ({ repository, revision }) => repository === "actions/checkout" && revision === checkoutPin).length, 11)],
+  ["setup_node_pin_preserved", () => assert.equal(countRepository(currentActionInventory, "actions/setup-node"), 1)],
+  ["cache_pin_preserved", () => assert.equal(countRepository(currentActionInventory, "actions/cache"), 1)],
+  ["actionlint_pin_preserved", () => assert.equal(countRepository(currentActionInventory, "raven-actions/actionlint"), 1)],
+  ["validator_workflow_agreement", () => assert.equal(currentActionResult.executed, currentActionInventory.length)],
+  ["zero_unexpected", () => assert.deepEqual({ unexpected: currentActionResult.unexpected,
+    missing: currentActionResult.missing, mutable: currentActionResult.mutable,
+    incorrectPins: currentActionResult.incorrectPins },
+  { unexpected: 0, missing: 0, mutable: 0, incorrectPins: 0 })],
+  ["comment_fake_not_counted", () => assert.equal(parseOrdinaryCiActionInventory(
+    `${pr16WorkflowSource}\n# uses: attacker/fake@${"a".repeat(40)}\n`).length, 14)],
+  ["scalar_uses_text_not_counted", () => assert.equal(parseOrdinaryCiActionInventory(
+    `${pr16WorkflowSource}\nmetadata: |\n  uses: attacker/fake@${"a".repeat(40)}\n`).length, 14)],
+];
+const appendStep = (source, uses) => `${source}\n      - uses: ${uses}\n`;
+const removeFirst = (source, needle) => {
+  assert.ok(source.includes(needle), `action-inventory fixture missing: ${needle}`);
+  return source.replace(needle, "");
+};
+const replaceFirst = (source, needle, replacement) => {
+  assert.ok(source.includes(needle), `action-inventory fixture missing: ${needle}`);
+  return source.replace(needle, replacement);
+};
+const actionInventoryHostileControls = [
+  ["fifteenth_action", (ci) => appendStep(ci, `actions/checkout@${checkoutPin}`)],
+  ["thirteen_actions", (ci) => removeFirst(ci, `        uses: actions/cache@${cachePin} # v4\n`)],
+  ["required_checkout_omitted", (ci) => removeFirst(ci, `        uses: actions/checkout@${checkoutPin} # v4\n`)],
+  ["extra_checkout", (ci) => appendStep(ci, `actions/checkout@${checkoutPin}`)],
+  ["checkout_v4", (ci) => replaceFirst(ci, `actions/checkout@${checkoutPin}`, "actions/checkout@v4")],
+  ["checkout_abbreviated", (ci) => replaceFirst(ci, checkoutPin, checkoutPin.slice(0, 12))],
+  ["checkout_other_full_sha", (ci) => replaceFirst(ci, checkoutPin, "f".repeat(40))],
+  ["setup_node_changed", (ci) => replaceFirst(ci, setupNodePin, "f".repeat(40))],
+  ["cache_changed", (ci) => replaceFirst(ci, cachePin, "f".repeat(40))],
+  ["actionlint_changed", (ci) => replaceFirst(ci, actionlintPin, "f".repeat(40))],
+  ["unrelated_github_action", (ci) => appendStep(ci, `actions/upload-artifact@${"a".repeat(40)}`)],
+  ["third_party_action", (ci) => appendStep(ci, `attacker/action@${"a".repeat(40)}`)],
+  ["owner_case_substitution", (ci) => replaceFirst(ci, "actions/checkout@", "Actions/checkout@")],
+  ["duplicate_cache", (ci) => appendStep(ci, `actions/cache@${cachePin}`)],
+  ["existing_replaced_by_checkout", (ci) => replaceFirst(ci, `actions/setup-node@${setupNodePin}`,
+    `actions/checkout@${checkoutPin}`)],
+  ["yaml_anchor", (ci) => `${ci}\nx-action: &checkout actions/checkout@${checkoutPin}\n`],
+  ["yaml_alias", (ci) => `${ci}\nx-action: *checkout\n`],
+  ["reusable_workflow", (ci) => `${ci}\n  hostile_job:\n    uses: attacker/repo/.github/workflows/x.yml@${"a".repeat(40)}\n`],
+  ["local_action", (ci) => appendStep(ci, "./.github/actions/local")],
+  ["docker_action", (ci) => appendStep(ci, "docker://alpine:latest")],
+  ["mutable_branch", (ci) => replaceFirst(ci, `actions/checkout@${checkoutPin}`, "actions/checkout@main")],
+  ["mutable_tag", (ci) => replaceFirst(ci, `actions/checkout@${checkoutPin}`, "actions/checkout@v4")],
+  ["semver_alias", (ci) => replaceFirst(ci, `actions/setup-node@${setupNodePin}`, "actions/setup-node@v4.0.0")],
+  ["dynamic_revision", (ci) => replaceFirst(ci, checkoutPin, "${{ github.event.inputs.action_sha }}")],
+  ["parser_tab", (ci) => `${ci}\n\tuses: actions/checkout@${checkoutPin}\n`],
+  ["malformed_action", (ci) => appendStep(ci, "actions/checkout")],
+];
+const actionInventoryPositiveOutcomes = actionInventoryPositiveControls.map(([name, operation]) => {
+  try { operation(); console.log(`PASS action_inventory_positive:${name}`); return true; }
+  catch (error) { console.error(`FAIL action_inventory_positive:${name}: ${error.message}`); return false; }
+});
+const actionInventoryHostileOutcomes = actionInventoryHostileControls.map(([name, mutate]) => {
+  const rejected = rejects(() => validateOrdinaryCiActionPins(mutate(pr16WorkflowSource)));
+  if (rejected) console.log(`PASS action_inventory_hostile:${name}`);
+  else console.error(`FAIL action_inventory_hostile:${name}: hostile inventory accepted`);
+  return rejected;
+});
+assert.ok(actionInventoryPositiveOutcomes.every(Boolean), "action inventory positive control failed");
+assert.ok(actionInventoryHostileOutcomes.every(Boolean), "action inventory hostile control survived");
+console.log(JSON.stringify({
+  suite: "p1-a-ordinary-ci-expanded-action-inventory",
+  historicalRequired: 10, historicalExecuted: historicalActionInventory.length,
+  currentRequired: 14, currentExecuted: currentActionInventory.length,
+  authorizedDelta: 4,
+  positiveRequired: actionInventoryPositiveControls.length,
+  positiveExecuted: actionInventoryPositiveControls.length,
+  positivePassed: actionInventoryPositiveOutcomes.filter(Boolean).length,
+  hostileRequired: actionInventoryHostileControls.length,
+  hostileExecuted: actionInventoryHostileControls.length,
+  hostilePassed: actionInventoryHostileOutcomes.filter(Boolean).length,
+  unexpected: 0, missing: 0, mutable: 0, incorrectPins: 0,
+  failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
+const preverifiedPr16ChainAuthority = verifyPr16RemediationChainAuthority(
+  authorityRoots.pr16RemediationChain,
+  process.env.GITHUB_WORKSPACE ? { workspaceRoot: process.env.GITHUB_WORKSPACE } : {},
+);
+const pr16ShallowPrimary = path.join(temporary, "pr16-shallow-primary");
+run(temporary, ["git", "clone", "-q", "--depth", "1", `file://${root}`, pr16ShallowPrimary]);
+assert.equal(gitAt(pr16ShallowPrimary, "rev-parse", "HEAD"), gitAt(root, "rev-parse", "HEAD"));
+assert.ok(existsSync(path.join(pr16ShallowPrimary, ".git/shallow")), "pr16-chain: primary shallow proof absent");
+assert.ok(rejects(() => gitAt(pr16ShallowPrimary, "cat-file", "-t", REJECTED_PR16_CLEANLINESS_CANDIDATE)),
+  "pr16-chain: predecessor unexpectedly present in shallow primary");
+console.log("PASS PRIMARY_SHALLOW_PREDECESSOR_ABSENCE_REPRODUCED");
+
+const pr16PositiveControls = [
+  ["exact_authority", () => verifyPr16RemediationChainAuthority(authorityRoots.pr16RemediationChain)],
+  ["trusted_base_commit", () => assert.equal(gitAt(preverifiedPr16ChainAuthority.root, "cat-file", "-t", CURRENT_TRUSTED_BASE), "commit")],
+  ["original_amendment_commit", () => assert.equal(gitAt(preverifiedPr16ChainAuthority.root, "cat-file", "-t", ORIGINAL_PR16_AMENDMENT), "commit")],
+  ["rejected_chain_commit", () => assert.equal(gitAt(preverifiedPr16ChainAuthority.root, "cat-file", "-t", REJECTED_PR16_CLEANLINESS_CANDIDATE), "commit")],
+  ["rejected_cleanliness_commit", () => assert.equal(gitAt(preverifiedPr16ChainAuthority.root, "cat-file", "-t", REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE), "commit")],
+  ["original_parent", () => assert.deepEqual(preverifiedPr16ChainAuthority.parents(ORIGINAL_PR16_AMENDMENT), [CURRENT_TRUSTED_BASE])],
+  ["rejected_chain_parent", () => assert.deepEqual(preverifiedPr16ChainAuthority.parents(REJECTED_PR16_CLEANLINESS_CANDIDATE), [ORIGINAL_PR16_AMENDMENT])],
+  ["rejected_cleanliness_parent", () => assert.deepEqual(preverifiedPr16ChainAuthority.parents(REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE), [REJECTED_PR16_CLEANLINESS_CANDIDATE])],
+  ["shallow_primary_absence", () => assert.ok(rejects(() => gitAt(pr16ShallowPrimary, "cat-file", "-t", REJECTED_PR16_CLEANLINESS_CANDIDATE)))],
+  ["authority_independent_of_shallow_primary", () => assert.equal(gitAt(preverifiedPr16ChainAuthority.root, "cat-file", "-t", REJECTED_PR16_CLEANLINESS_CANDIDATE), "commit")],
+  ["no_mutable_ref", () => assert.equal(gitAt(preverifiedPr16ChainAuthority.root, "for-each-ref", "--format=%(refname)"), "")],
+  ["workflow_contract", () => validatePr16WorkflowContract(pr16WorkflowSource)],
+  ["candidate_data_uncertified", () => assert.ok(pr16WorkflowSource.includes("P1-A current candidate-data contract controls"))],
+  ["protected_operations_absent", () => assert.ok(!pr16WorkflowSource.includes("P1A_PR16_PROTECTED_OPERATION"))],
+];
+const missingObjectFixture = createPr16ChainFixture("missing-object", PR16_CHAIN.filter(
+  (sha) => sha !== REJECTED_PR16_CLEANLINESS_CANDIDATE));
+const wrongRepositoryFixture = createPr16ChainFixture("wrong-repository");
+gitAt(wrongRepositoryFixture, "remote", "set-url", "origin", "https://github.com/attacker/zbestmedia");
+const alternatesFixture = createPr16ChainFixture("alternates");
+mkdirSync(path.join(alternatesFixture, ".git/objects/info"), { recursive: true });
+writeFileSync(path.join(alternatesFixture, ".git/objects/info/alternates"), `${path.join(root, ".git/objects")}\n`);
+const replaceFixture = createPr16ChainFixture("replace");
+gitAt(replaceFixture, "update-ref", `refs/replace/${ORIGINAL_PR16_AMENDMENT}`, CURRENT_TRUSTED_BASE);
+const graftFixture = createPr16ChainFixture("grafts");
+writeFileSync(path.join(graftFixture, ".git/info/grafts"), `${ORIGINAL_PR16_AMENDMENT} ${CURRENT_TRUSTED_BASE}\n`);
+const credentialFixture = createPr16ChainFixture("credential");
+gitAt(credentialFixture, "config", "http.https://github.com/.extraheader", "AUTHORIZATION: redacted-test-marker");
+const dirtyFixture = createPr16ChainFixture("dirty");
+writeFileSync(path.join(dirtyFixture, "untracked.txt"), "hostile\n");
+const symlinkChainFixture = path.join(temporary, "pr16-chain-symlink");
+symlinkSync(preverifiedPr16ChainAuthority.root, symlinkChainFixture);
+const workflowWithoutCredentialBootstrap = pr16WorkflowSource.replace(
+  "Acquire exact PR16 trusted-base predecessor object", "removed credential bootstrap");
+const workflowWithMutableRef = pr16WorkflowSource.replace(`ref: ${ORIGINAL_PR16_AMENDMENT}`, "ref: codex/bt-1");
+const workflowWithFullHistory = pr16WorkflowSource.replace(
+  `ref: ${CURRENT_TRUSTED_BASE}\n          fetch-depth: 1`,
+  `ref: ${CURRENT_TRUSTED_BASE}\n          fetch-depth: 0`);
+const workflowWithPersistentCredential = pr16WorkflowSource.replace(
+  `ref: ${CURRENT_TRUSTED_BASE}\n          fetch-depth: 1\n          persist-credentials: false`,
+  `ref: ${CURRENT_TRUSTED_BASE}\n          fetch-depth: 1\n          persist-credentials: true`);
+const pr16HostileControls = [
+  ["missing_authority", () => verifyPr16RemediationChainAuthority(undefined)],
+  ["symlink_authority", () => verifyPr16RemediationChainAuthority(symlinkChainFixture)],
+  ["primary_checkout", () => verifyPr16RemediationChainAuthority(root)],
+  ["alternates", () => verifyPr16RemediationChainAuthority(alternatesFixture)],
+  ["replace_refs", () => verifyPr16RemediationChainAuthority(replaceFixture)],
+  ["grafts", () => verifyPr16RemediationChainAuthority(graftFixture)],
+  ["wrong_repository", () => verifyPr16RemediationChainAuthority(wrongRepositoryFixture)],
+  ["missing_rejected_chain", () => verifyPr16RemediationChainAuthority(missingObjectFixture)],
+  ["persisted_credentials", () => verifyPr16RemediationChainAuthority(credentialFixture)],
+  ["dirty_authority", () => verifyPr16RemediationChainAuthority(dirtyFixture)],
+  ["mutable_branch", () => resolveAuthorizedLinearAmendment("codex/bt-1", preverifiedPr16ChainAuthority.parents)],
+  ["mutable_tag", () => resolveAuthorizedLinearAmendment("v1.0.0", preverifiedPr16ChainAuthority.parents)],
+  ["abbreviated_sha", () => resolveAuthorizedLinearAmendment(REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE.slice(0, 12), preverifiedPr16ChainAuthority.parents)],
+  ["wrong_trusted_base", () => resolveAuthorizedLinearAmendment(topologyReplacement,
+    (sha) => sha === ORIGINAL_PR16_AMENDMENT ? ["f".repeat(40)] : exactTopology.get(sha))],
+  ["wrong_original_amendment", () => resolveAuthorizedLinearAmendment(topologyReplacement,
+    (sha) => sha === REJECTED_PR16_CLEANLINESS_CANDIDATE ? [CURRENT_TRUSTED_BASE] : exactTopology.get(sha))],
+  ["wrong_rejected_chain", () => resolveAuthorizedLinearAmendment(topologyReplacement,
+    (sha) => sha === REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE ? [ORIGINAL_PR16_AMENDMENT] : exactTopology.get(sha))],
+  ["replacement_skips_rejected_cleanliness", () => resolveAuthorizedLinearAmendment(topologyReplacement,
+    (sha) => sha === topologyReplacement ? [REJECTED_PR16_CLEANLINESS_CANDIDATE] : exactTopology.get(sha))],
+  ["replacement_skips_to_original", () => resolveAuthorizedLinearAmendment(topologyReplacement,
+    (sha) => sha === topologyReplacement ? [ORIGINAL_PR16_AMENDMENT] : exactTopology.get(sha))],
+  ["replacement_skips_to_base", () => resolveAuthorizedLinearAmendment(topologyReplacement,
+    (sha) => sha === topologyReplacement ? [CURRENT_TRUSTED_BASE] : exactTopology.get(sha))],
+  ["extra_intermediate", () => resolveAuthorizedLinearAmendment(topologyExtra, topologyParents)],
+  ["merge_commit", () => resolveAuthorizedLinearAmendment(topologyReplacement,
+    (sha) => sha === topologyReplacement ? [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE, ORIGINAL_PR16_AMENDMENT] : exactTopology.get(sha))],
+  ["branch_selected_predecessor", () => validatePr16WorkflowContract(workflowWithMutableRef)],
+  ["environment_selected_predecessor", () => resolveAuthorizedLinearAmendment(
+    process.env.P1A_PR16_PREDECESSOR_SHA ?? "", topologyParents)],
+  ["candidate_selected_predecessor", () => resolveAuthorizedLinearAmendment("c".repeat(40), topologyParents)],
+  ["primary_fallback", () => verifyPr16RemediationChainAuthority(root)],
+  ["full_history_fetch", () => validatePr16WorkflowContract(workflowWithFullHistory)],
+  ["credential_persistence", () => validatePr16WorkflowContract(workflowWithPersistentCredential)],
+  ["credential_bootstrap_absent", () => validatePr16WorkflowContract(workflowWithoutCredentialBootstrap)],
+  ["authority_cleanup_absent", () => validatePr16WorkflowContract(pr16WorkflowSource.replace(
+    "test ! -e .p1a-pr16-remediation-chain-authority", "cleanup proof removed"))],
+  ["sensitive_leak_marker", () => validatePr16WorkflowContract(`${pr16WorkflowSource}\n-----BEGIN PRIVATE KEY-----\n`)],
+];
+const pr16PositiveOutcomes = pr16PositiveControls.map(([name, operation]) => {
+  try { operation(); console.log(`PASS pr16_chain_authority_positive:${name}`); return true; }
+  catch (error) { console.error(`FAIL pr16_chain_authority_positive:${name}: ${error.message}`); return false; }
+});
+const pr16HostileOutcomes = pr16HostileControls.map(([name, operation]) => {
+  const rejected = rejects(operation);
+  if (rejected) console.log(`PASS pr16_chain_authority_hostile:${name}`);
+  else console.error(`FAIL pr16_chain_authority_hostile:${name}: hostile condition accepted`);
+  return rejected;
+});
+assert.ok(pr16PositiveOutcomes.every(Boolean), "pr16-chain: positive control failed");
+assert.ok(pr16HostileOutcomes.every(Boolean), "pr16-chain: hostile control survived");
+console.log(JSON.stringify({
+  suite: "p1-a-pr16-predecessor-object-authority",
+  positiveRequired: pr16PositiveControls.length,
+  positiveExecuted: pr16PositiveControls.length,
+  positivePassed: pr16PositiveOutcomes.filter(Boolean).length,
+  hostileRequired: pr16HostileControls.length,
+  hostileExecuted: pr16HostileControls.length,
+  hostilePassed: pr16HostileOutcomes.filter(Boolean).length,
+  provenance: preverifiedPr16ChainAuthority.provenance,
+  primaryShallowPredecessorAbsence: "REPRODUCED",
+  failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
+
 function resolveAmendmentSource() {
   assert.equal(canonicalGitHubRepositoryUrl(gitAt(root, "remote", "get-url", "origin")), OFFICIAL_REPOSITORY,
     "provenance: primary repository identity mismatch");
   assertAmendmentSourceWorktreeClean();
+  const chainAuthority = preverifiedPr16ChainAuthority;
   const head = gitAt(root, "rev-parse", "HEAD");
   const parents = commitParents(root, head);
   if (parents.length === 1) {
-    return resolveAuthorizedLinearAmendment(head, (sha) => commitParents(root, sha));
+    return resolveAuthorizedLinearAmendment(head,
+      (sha) => sha === head ? parents : chainAuthority.parents(sha));
   }
   assert.deepEqual(parents.slice(0, 1), [ORIGINAL_CANDIDATE],
     "provenance: disposable reconciliation first parent mismatch");
   assert.equal(parents.length, 2, "provenance: disposable reconciliation requires exactly two parents");
   const amendment = parents[1];
-  return resolveAuthorizedLinearAmendment(amendment, (sha) => commitParents(root, sha));
+  const amendmentParents = commitParents(root, amendment);
+  return resolveAuthorizedLinearAmendment(amendment,
+    (sha) => sha === amendment ? amendmentParents : chainAuthority.parents(sha));
 }
 
-const rejects = (operation) => {
+function rejects(operation) {
   try { operation(); return false; } catch { return true; }
-};
+}
 
 function createCleanlinessFixture(name) {
   const fixture = path.join(temporary, `cleanliness-${name}`);
@@ -301,12 +652,20 @@ const exactRootsFixture = createCleanlinessFixture("exact-roots");
 populateAuthorizedAuthorityRoots(exactRootsFixture);
 assert.doesNotThrow(() => assertAmendmentSourceWorktreeClean(exactRootsFixture));
 
+const pr16AuthorityDescendantFixture = createCleanlinessFixture("pr16-authority-descendant");
+mkdirSync(path.join(pr16AuthorityDescendantFixture,
+  ".p1a-pr16-remediation-chain-authority/objects/nested"), { recursive: true });
+writeFileSync(path.join(pr16AuthorityDescendantFixture,
+  ".p1a-pr16-remediation-chain-authority/objects/nested/object"), "authority evidence\n");
+assert.doesNotThrow(() => assertAmendmentSourceWorktreeClean(pr16AuthorityDescendantFixture));
+
 const cleanlinessHostileCases = [
   ["unrelated_file", (fixture) => writeFileSync(path.join(fixture, "random.txt"), "unauthorized\n")],
   ["unrelated_directory", (fixture) => { mkdirSync(path.join(fixture, "tmp")); writeFileSync(path.join(fixture, "tmp/file"), "unauthorized\n"); }],
   ["unapproved_p1a_root", (fixture) => { mkdirSync(path.join(fixture, ".p1a-evil")); writeFileSync(path.join(fixture, ".p1a-evil/file"), "unauthorized\n"); }],
   ["authority_prefix_collision", (fixture) => { mkdirSync(path.join(fixture, ".p1a-original-candidate-evil")); writeFileSync(path.join(fixture, ".p1a-original-candidate-evil/file"), "unauthorized\n"); }],
   ["authority_suffix_collision", (fixture) => { mkdirSync(path.join(fixture, ".p1a-original-candidate2")); writeFileSync(path.join(fixture, ".p1a-original-candidate2/file"), "unauthorized\n"); }],
+  ["pr16_authority_prefix_collision", (fixture) => { mkdirSync(path.join(fixture, ".p1a-pr16-remediation-chain-authority-evil")); writeFileSync(path.join(fixture, ".p1a-pr16-remediation-chain-authority-evil/file"), "unauthorized\n"); }],
   ["nested_unrelated_outside_root", (fixture) => { mkdirSync(path.join(fixture, "outside/nested"), { recursive: true }); writeFileSync(path.join(fixture, "outside/nested/file"), "unauthorized\n"); }],
   ["modified_verifier", (fixture) => writeFileSync(path.join(fixture, "scripts/test-p1a-dual-base-verifier.mjs"), "// dirty\n")],
   ["modified_workflow", (fixture) => writeFileSync(path.join(fixture, ".github/workflows/ci.yml"), "name: dirty\n")],
@@ -335,7 +694,7 @@ for (const [name, contaminate] of cleanlinessHostileCases) {
 console.log(JSON.stringify({
   suite: "p1-a-authority-checkout-cleanliness-controls",
   authorityRoots: AUTHORIZED_EPHEMERAL_AUTHORITY_ROOTS,
-  positiveRequired: 4, positiveExecuted: 4, positivePassed: 4,
+  positiveRequired: 5, positiveExecuted: 5, positivePassed: 5,
   hostileRequired: cleanlinessHostileCases.length,
   hostileExecuted: cleanlinessHostileCases.length,
   hostilePassed: cleanlinessHostilePassed,
@@ -1141,9 +1500,9 @@ const workflowSha = trustedWorkflow();
 assert.equal(trustedFixtureProvenance.length, AMENDMENT_CONTROLLED_FILES.length,
   "provenance: incomplete trusted fixture accounting");
 assert.ok(trustedFixtureProvenance.every(({ equal }) => equal), "provenance: trusted fixture mismatch");
-const trustedBaseCiBlob = sourceEntry(trustedSourceRoot, CURRENT_TRUSTED_BASE, ".github/workflows/ci.yml").blob;
+const trustedBaseCiBlob = sourceEntry(trustedSourceRoot, amendmentSourceSha, ".github/workflows/ci.yml").blob;
 assert.equal(git("rev-parse", `${workflowSha}:.github/workflows/ci.yml`), trustedBaseCiBlob,
-  "provenance: trusted CI was not sourced from exact trusted base");
+  "provenance: trusted CI was not sourced from exact amendment subject");
 const rejectedCiBlob = gitAt(root, "rev-parse", `${REJECTED_RECONCILIATION}:.github/workflows/ci.yml`);
 assert.notEqual(rejectedCiBlob, trustedBaseCiBlob,
   "provenance before-proof requires contaminated candidate CI to differ from trusted base");

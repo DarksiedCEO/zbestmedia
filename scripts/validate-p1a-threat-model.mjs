@@ -1002,6 +1002,7 @@ export const REQUIRED_CI_ADDITION = [
   "          P1A_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}",
   "          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority",
   "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority",
+  "          P1A_PR16_CHAIN_AUTHORITY_ROOT: .p1a-pr16-remediation-chain-authority",
   "        run: node scripts/validate-p1a-threat-model.mjs --candidate-data-only",
   "",
   "",
@@ -1018,6 +1019,12 @@ export const ORDINARY_CI_ACTION_PINS = Object.freeze({
   "raven-actions/actionlint": "3d39aea434753780c3b3d4a1a31c854b4dbf49d7",
 });
 const ORDINARY_CI_ACTION_COUNTS = Object.freeze({
+  "actions/checkout": 11,
+  "actions/setup-node": 1,
+  "actions/cache": 1,
+  "raven-actions/actionlint": 1,
+});
+const HISTORICAL_ORDINARY_CI_ACTION_COUNTS = Object.freeze({
   "actions/checkout": 7,
   "actions/setup-node": 1,
   "actions/cache": 1,
@@ -1045,11 +1052,62 @@ function pinBaselineActions(source) {
   return pinned;
 }
 
-export function validateOrdinaryCiActionPins(source) {
+export function parseOrdinaryCiActionInventory(source) {
   assert.ok(typeof source === "string" && source, "ordinary CI absent");
-  const uses = [...source.matchAll(/^\s*(?:-\s*)?uses:\s*([^\s@]+)@([^\s#]+)(?:\s+#.*)?$/gm)]
-    .map((match) => ({ repository: match[1], revision: match[2] }));
-  assert.equal(uses.length, 10, "ordinary CI action inventory changed");
+  assert.ok(!source.includes("\t"), "ordinary CI tabs are forbidden");
+  assert.ok(!/(?:^|\s)[&*][A-Za-z0-9_-]+(?:\s|$)/m.test(source),
+    "ordinary CI YAML anchors and aliases are forbidden in action inventory");
+  const uses = [];
+  let inJobs = false;
+  let inJob = false;
+  let inSteps = false;
+  for (const rawLine of source.split("\n")) {
+    if (!rawLine.trim() || rawLine.trimStart().startsWith("#")) continue;
+    const indent = rawLine.length - rawLine.trimStart().length;
+    const line = rawLine.trim();
+    if (indent === 0) {
+      inJobs = line === "jobs:";
+      inJob = false;
+      inSteps = false;
+      continue;
+    }
+    if (!inJobs) continue;
+    if (indent === 2 && /^[A-Za-z0-9_-]+:$/.test(line)) {
+      inJob = true;
+      inSteps = false;
+      continue;
+    }
+    if (!inJob) continue;
+    if (indent === 4 && line === "steps:") {
+      inSteps = true;
+      continue;
+    }
+    const jobUses = indent === 4 && line.startsWith("uses:") ? line.slice(5).trim() : null;
+    const stepUses = inSteps && ((indent === 6 && line.startsWith("- uses:"))
+      ? line.slice(7).trim()
+      : (indent === 8 && line.startsWith("uses:") ? line.slice(5).trim() : null));
+    const valueWithComment = jobUses ?? stepUses;
+    if (!valueWithComment) continue;
+    const value = valueWithComment.replace(/\s+#.*$/, "").replace(/^['\"]|['\"]$/g, "");
+    assert.ok(!value.startsWith("./") && !value.startsWith("docker://"),
+      `unclassified local or Docker action: ${value}`);
+    const separator = value.lastIndexOf("@");
+    assert.ok(separator > 0 && separator < value.length - 1,
+      `ordinary CI action reference malformed: ${value}`);
+    uses.push(Object.freeze({ repository: value.slice(0, separator), revision: value.slice(separator + 1) }));
+  }
+  return Object.freeze(uses);
+}
+
+export function validateOrdinaryCiActionPins(source, { profile = "CURRENT_14" } = {}) {
+  const uses = parseOrdinaryCiActionInventory(source);
+  const expectedCounts = profile === "CURRENT_14"
+    ? ORDINARY_CI_ACTION_COUNTS
+    : profile === "HISTORICAL_10"
+      ? HISTORICAL_ORDINARY_CI_ACTION_COUNTS
+      : assert.fail("ordinary CI action profile unrecognized");
+  const expectedTotal = Object.values(expectedCounts).reduce((total, count) => total + count, 0);
+  assert.equal(uses.length, expectedTotal, "ordinary CI action inventory changed");
   const counts = new Map();
   for (const { repository, revision } of uses) {
     assert.ok(Object.hasOwn(ORDINARY_CI_ACTION_PINS, repository),
@@ -1062,10 +1120,11 @@ export function validateOrdinaryCiActionPins(source) {
   }
   assert.deepEqual(
     Object.fromEntries([...counts].sort()),
-    Object.fromEntries(Object.entries(ORDINARY_CI_ACTION_COUNTS).sort()),
+    Object.fromEntries(Object.entries(expectedCounts).sort()),
     "ordinary CI action counts changed",
   );
-  return Object.freeze({ required: uses.length, passed: uses.length });
+  return Object.freeze({ profile, required: expectedTotal, executed: uses.length, passed: uses.length,
+    unexpected: 0, missing: 0, mutable: 0, incorrectPins: 0 });
 }
 
 export function validateCurrentWorkflowShaCustody({
@@ -1330,7 +1389,7 @@ const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candid
 `;
 const TWO_STAGE_CI_START = "      - name: Acquire bounded trusted-reconciliation staging objects\n";
 const TWO_STAGE_CI_END = "      - name: P1-A trusted verifier controls\n";
-const TWO_STAGE_CI_SHA256 = "3aa63fcaf34a0c90dcd78e59e0a8395c18a766faaed2b815b53135134d2bb3f5";
+const TWO_STAGE_CI_SHA256 = "9965e312f2fc9f7b1e082798dc07262778a89550eaef4b8e31f5bb0f1913bb03";
 function exactTwoStageCustodyFragment(source) {
   assert.equal(source.split(TWO_STAGE_CI_START).length - 1, 1,
     "two-stage custody: staging acquisition missing or duplicated");
@@ -1387,12 +1446,13 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          P1A_EVIDENCE_BASE_AUTHORITY_ROOT: .p1a-evidence-base-authority",
   "          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority",
   "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority",
+  "          P1A_PR16_CHAIN_AUTHORITY_ROOT: .p1a-pr16-remediation-chain-authority",
   "        run: node scripts/test-p1a-dual-base-verifier.mjs",
   "",
   "      - name: Remove isolated P1-A authority checkouts",
   "        if: always()",
   "        run: |",
-  "          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority",
+  "          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-remediation-chain-authority",
   "          test ! -e .p1a-original-candidate",
   "          test ! -e .p1a-trusted-baseline",
   "          test ! -e .p1a-dual-base-authority",
@@ -1400,6 +1460,11 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          test ! -e .p1a-ancestry-authority",
   "          test ! -e .p1a-trusted-reconciliation-authority",
   "          test ! -e .p1a-trusted-reconciliation-staging",
+  "          test ! -e .p1a-pr16-chain-staging-trusted-base",
+  "          test ! -e .p1a-pr16-chain-staging-original-amendment",
+  "          test ! -e .p1a-pr16-chain-staging-rejected-chain",
+  "          test ! -e .p1a-pr16-chain-staging-rejected-cleanliness",
+  "          test ! -e .p1a-pr16-remediation-chain-authority",
   "",
   "      - name: P1-A trusted-bootstrap secret-detector tests",
 ].join("\n");
