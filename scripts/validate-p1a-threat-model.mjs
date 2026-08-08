@@ -1018,8 +1018,14 @@ export const ORDINARY_CI_ACTION_PINS = Object.freeze({
   "actions/cache": "0057852bfaa89a56745cba8c7296529d2fc39830",
   "raven-actions/actionlint": "3d39aea434753780c3b3d4a1a31c854b4dbf49d7",
 });
-const ORDINARY_CI_ACTION_COUNTS = Object.freeze({
+const CURRENT_PREDECESSOR_AUTHORITY_V1_ACTION_COUNTS = Object.freeze({
   "actions/checkout": 11,
+  "actions/setup-node": 1,
+  "actions/cache": 1,
+  "raven-actions/actionlint": 1,
+});
+const CURRENT_PREDECESSOR_AUTHORITY_V2_ACTION_COUNTS = Object.freeze({
+  "actions/checkout": 12,
   "actions/setup-node": 1,
   "actions/cache": 1,
   "raven-actions/actionlint": 1,
@@ -1099,10 +1105,12 @@ export function parseOrdinaryCiActionInventory(source) {
   return Object.freeze(uses);
 }
 
-export function validateOrdinaryCiActionPins(source, { profile = "CURRENT_14" } = {}) {
+export function validateOrdinaryCiActionPins(source, { profile = "CURRENT_PREDECESSOR_AUTHORITY_V2_15" } = {}) {
   const uses = parseOrdinaryCiActionInventory(source);
-  const expectedCounts = profile === "CURRENT_14"
-    ? ORDINARY_CI_ACTION_COUNTS
+  const expectedCounts = profile === "CURRENT_PREDECESSOR_AUTHORITY_V2_15"
+    ? CURRENT_PREDECESSOR_AUTHORITY_V2_ACTION_COUNTS
+    : profile === "CURRENT_PREDECESSOR_AUTHORITY_V1_14"
+      ? CURRENT_PREDECESSOR_AUTHORITY_V1_ACTION_COUNTS
     : profile === "HISTORICAL_10"
       ? HISTORICAL_ORDINARY_CI_ACTION_COUNTS
       : assert.fail("ordinary CI action profile unrecognized");
@@ -1389,7 +1397,7 @@ const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candid
 `;
 const TWO_STAGE_CI_START = "      - name: Acquire bounded trusted-reconciliation staging objects\n";
 const TWO_STAGE_CI_END = "      - name: P1-A trusted verifier controls\n";
-const TWO_STAGE_CI_SHA256 = "9965e312f2fc9f7b1e082798dc07262778a89550eaef4b8e31f5bb0f1913bb03";
+const TWO_STAGE_CI_SHA256 = "3fb24871674a86d9f3940b3c236215aa763d29018ff858e046fc2efbcaef8625";
 function exactTwoStageCustodyFragment(source) {
   assert.equal(source.split(TWO_STAGE_CI_START).length - 1, 1,
     "two-stage custody: staging acquisition missing or duplicated");
@@ -1447,12 +1455,13 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority",
   "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority",
   "          P1A_PR16_CHAIN_AUTHORITY_ROOT: .p1a-pr16-remediation-chain-authority",
+  "          P1A_PR16_HISTORICAL_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-cleanliness",
   "        run: node scripts/test-p1a-dual-base-verifier.mjs",
   "",
   "      - name: Remove isolated P1-A authority checkouts",
   "        if: always()",
   "        run: |",
-  "          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-remediation-chain-authority",
+  "          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-chain-staging-action-inventory .p1a-pr16-remediation-chain-authority",
   "          test ! -e .p1a-original-candidate",
   "          test ! -e .p1a-trusted-baseline",
   "          test ! -e .p1a-dual-base-authority",
@@ -1464,6 +1473,7 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          test ! -e .p1a-pr16-chain-staging-original-amendment",
   "          test ! -e .p1a-pr16-chain-staging-rejected-chain",
   "          test ! -e .p1a-pr16-chain-staging-rejected-cleanliness",
+  "          test ! -e .p1a-pr16-chain-staging-action-inventory",
   "          test ! -e .p1a-pr16-remediation-chain-authority",
   "",
   "      - name: P1-A trusted-bootstrap secret-detector tests",

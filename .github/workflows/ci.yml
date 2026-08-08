@@ -357,6 +357,15 @@ jobs:
           persist-credentials: false
           path: .p1a-pr16-chain-staging-rejected-cleanliness
 
+      - name: Acquire exact PR16 action-inventory predecessor object
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 6867d43d17c8b614ab7d0e0c5e338127020bb772
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-action-inventory
+
       - name: Construct exact PR16 remediation-chain predecessor authority
         run: |
           set -euo pipefail
@@ -366,13 +375,18 @@ jobs:
             6e855ba08c69374cb4b25f9777a8ebd190375897
             0164130fc62209c7a71ca4f7e58a2e24117e2fd5
             966ab9160ad133adb10d58f7877f8549efd06831
+            6867d43d17c8b614ab7d0e0c5e338127020bb772
           )
           staging=(
             .p1a-pr16-chain-staging-trusted-base
             .p1a-pr16-chain-staging-original-amendment
             .p1a-pr16-chain-staging-rejected-chain
             .p1a-pr16-chain-staging-rejected-cleanliness
+            .p1a-pr16-chain-staging-action-inventory
           )
+          historical_path_source=.p1a-pr16-chain-staging-rejected-cleanliness
+          historical_path=.github/workflows/ci.yml
+          historical_blob=60d9cede50402f10837a630598b9f8dbf6fb839e
           test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
           git init -q "$authority"
           git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
@@ -390,9 +404,13 @@ jobs:
             imported="$(git -C "$source" cat-file commit "$sha" | git -C "$authority" hash-object -w -t commit --stdin)"
             test "$imported" = "$sha"
           done
+          test "$(git -C "$historical_path_source" rev-parse HEAD)" = "${shas[3]}"
+          test "$(git -C "$historical_path_source" rev-parse "${shas[3]}:$historical_path")" = "$historical_blob"
+          test "$(git -C "$historical_path_source" cat-file -t "$historical_blob")" = blob
           test "$(git -C "$authority" cat-file -p "${shas[1]}" | sed -n 's/^parent //p')" = "${shas[0]}"
           test "$(git -C "$authority" cat-file -p "${shas[2]}" | sed -n 's/^parent //p')" = "${shas[1]}"
           test "$(git -C "$authority" cat-file -p "${shas[3]}" | sed -n 's/^parent //p')" = "${shas[2]}"
+          test "$(git -C "$authority" cat-file -p "${shas[4]}" | sed -n 's/^parent //p')" = "${shas[3]}"
           mapfile -t actual < <(git -C "$authority" cat-file --batch-all-objects \
             --batch-check='%(objectname) %(objecttype)' | awk '$2 == "commit" {print $1}' | sort)
           mapfile -t expected < <(printf '%s\n' "${shas[@]}" | sort)
@@ -401,6 +419,9 @@ jobs:
           test -z "$(git -C "$authority" for-each-ref --format='%(refname)' refs/replace)"
           test ! -s "$authority/.git/info/grafts"
           for source in "${staging[@]}"; do
+            if test "$source" = "$historical_path_source"; then
+              continue
+            fi
             rm -rf "$source"
             test ! -e "$source"
           done
@@ -428,12 +449,13 @@ jobs:
           P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority
           P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority
           P1A_PR16_CHAIN_AUTHORITY_ROOT: .p1a-pr16-remediation-chain-authority
+          P1A_PR16_HISTORICAL_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-cleanliness
         run: node scripts/test-p1a-dual-base-verifier.mjs
 
       - name: Remove isolated P1-A authority checkouts
         if: always()
         run: |
-          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-remediation-chain-authority
+          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-chain-staging-action-inventory .p1a-pr16-remediation-chain-authority
           test ! -e .p1a-original-candidate
           test ! -e .p1a-trusted-baseline
           test ! -e .p1a-dual-base-authority
@@ -445,6 +467,7 @@ jobs:
           test ! -e .p1a-pr16-chain-staging-original-amendment
           test ! -e .p1a-pr16-chain-staging-rejected-chain
           test ! -e .p1a-pr16-chain-staging-rejected-cleanliness
+          test ! -e .p1a-pr16-chain-staging-action-inventory
           test ! -e .p1a-pr16-remediation-chain-authority
 
       - name: P1-A trusted-bootstrap secret-detector tests
