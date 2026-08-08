@@ -992,7 +992,20 @@ const validCi = `${git("show", `${validCandidate}:.github/workflows/ci.yml`)}\n`
 const positiveCases = [
   ["exact_baseline_recognized", () => assert.equal(git("rev-parse", `${COMPOSED_CI_BASE}:.github/workflows/ci.yml`), "9a3f1a04f99e83d9dad84cf384d86117a7d282f1")],
   ["baseline_plus_trusted_fragment", () => assert.equal(trustedCi, composeTrustedCi(baselineCi))],
-  ["baseline_plus_candidate_fragment", () => assert.ok(composeCandidateCi(baselineCi).includes("--candidate-data-only"))],
+  ["trusted_then_candidate_fragment", () => {
+    const trustedFirst = composeTrustedCi(baselineCi);
+    const trustedThenCandidate = composeCandidateCi(trustedFirst);
+    const candidateSummary = candidateDataRun();
+    assert.equal(trustedFirst, trustedCi);
+    assert.equal(trustedThenCandidate.split(REQUIRED_CI_ADDITION).length - 1, 1);
+    assert.ok(trustedThenCandidate.indexOf("Acquire exact immutable P1-A ancestry authority") < trustedThenCandidate.indexOf(REQUIRED_CI_ADDITION));
+    assert.ok(trustedThenCandidate.indexOf("Construct exact trusted-reconciliation authority store") < trustedThenCandidate.indexOf(REQUIRED_CI_ADDITION));
+    assert.ok(trustedThenCandidate.indexOf(REQUIRED_CI_ADDITION) < trustedThenCandidate.indexOf("Remove isolated P1-A authority checkouts"));
+    assert.ok(REQUIRED_CI_ADDITION.includes("P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority"));
+    assert.ok(REQUIRED_CI_ADDITION.includes("P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority"));
+    assert.equal(candidateSummary.certified, false);
+    assert.equal(candidateSummary.protectedOperations, 0);
+  }],
   ["baseline_plus_both_fragments", () => assert.equal(validCi, composeCandidateCi(trustedCi))],
   ["candidate_after_ancestry_authority", () => {
     const authority = validCi.indexOf("Acquire exact immutable P1-A ancestry authority");
@@ -1020,6 +1033,7 @@ const replaceOnce = (source, needle, replacement) => {
   return source.replace(needle, replacement);
 };
 const negativeCases = [
+  ["direct_candidate_composition_on_untrusted_baseline", () => composeCandidateCi(baselineCi)],
   ["missing_trusted_fragment", (ci) => replaceOnce(ci, "      - name: Acquire exact original P1-A candidate object\n", "")],
   ["missing_candidate_fragment", (ci) => replaceOnce(ci, "      - name: P1-A candidate-data validation\n", "")],
   ["duplicate_trusted_fragment", (ci) => `${ci}\n      - name: Acquire exact original P1-A candidate object\n`],
