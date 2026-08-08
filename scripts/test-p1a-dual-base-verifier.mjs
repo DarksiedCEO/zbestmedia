@@ -18,6 +18,11 @@ import { validateCertificationBundle } from "./validate-p1a-certification-accoun
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EXACT_SHA = /^[0-9a-f]{40}$/;
 const OFFICIAL_REPOSITORY = "https://github.com/DarksiedCEO/zbestmedia";
+const CURRENT_TRUSTED_BASE = "2f4baca937ef8b36d1560a010e8e7f430819197c";
+const REJECTED_RECONCILIATION = "4cbdee7b4aded69275efdc78aea41ed21bae32dc";
+const AMENDMENT_OWNED_FIXTURE_FILES = Object.freeze([
+  "scripts/test-p1a-dual-base-verifier.mjs",
+]);
 const EXPECTED_COMPOSED_CI_BLOB = "9a3f1a04f99e83d9dad84cf384d86117a7d282f1";
 const ANCESTRY_CHAIN = AUTHORIZED_ANCESTRY_CHAIN;
 const EXPECTED_TREES = Object.freeze({
@@ -57,6 +62,34 @@ const run = (cwd, args, options = {}) => execFileSync(args[0], args.slice(1), {
   cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], ...options,
 }).trim();
 const gitAt = (cwd, ...args) => run(cwd, ["git", ...args]);
+
+function commitParents(cwd, sha) {
+  assert.match(sha, EXACT_SHA, "provenance: exact lowercase commit SHA required");
+  assert.equal(gitAt(cwd, "cat-file", "-t", sha), "commit", "provenance: source is not a commit");
+  return gitAt(cwd, "cat-file", "-p", sha).split("\n")
+    .filter((line) => line.startsWith("parent ")).map((line) => line.slice(7));
+}
+
+function resolveAmendmentSource() {
+  assert.equal(gitAt(root, "remote", "get-url", "origin"), `${OFFICIAL_REPOSITORY}.git`,
+    "provenance: primary repository identity mismatch");
+  assert.equal(gitAt(root, "status", "--porcelain=v1"), "",
+    "provenance: amendment source worktree must be clean");
+  const head = gitAt(root, "rev-parse", "HEAD");
+  const parents = commitParents(root, head);
+  if (parents.length === 1) {
+    assert.equal(parents[0], CURRENT_TRUSTED_BASE,
+      "provenance: amendment candidate must descend directly from exact trusted base");
+    return head;
+  }
+  assert.deepEqual(parents.slice(0, 1), [ORIGINAL_CANDIDATE],
+    "provenance: disposable reconciliation first parent mismatch");
+  assert.equal(parents.length, 2, "provenance: disposable reconciliation requires exactly two parents");
+  const amendment = parents[1];
+  assert.deepEqual(commitParents(root, amendment), [CURRENT_TRUSTED_BASE],
+    "provenance: reconciliation amendment parent is not exact trusted base");
+  return amendment;
+}
 
 const rejects = (operation) => {
   try { operation(); return false; } catch { return true; }
@@ -384,6 +417,24 @@ try {
 assert.ok(shallowFailureReproduced, "shallow primary checkout did not reproduce missing trusted tree");
 console.log("PASS shallow_primary_missing_trusted_tree_reproduced");
 
+const amendmentSourceSha = resolveAmendmentSource();
+const trustedSourceRoot = path.join(temporary, "trusted-fixture-source");
+run(temporary, ["git", "clone", "-q", "--no-hardlinks", "--no-checkout", root, trustedSourceRoot]);
+gitAt(trustedSourceRoot, "remote", "set-url", "origin", `${OFFICIAL_REPOSITORY}.git`);
+gitAt(trustedSourceRoot, "checkout", "-q", "--detach", CURRENT_TRUSTED_BASE);
+assert.equal(gitAt(trustedSourceRoot, "rev-parse", "HEAD"), CURRENT_TRUSTED_BASE,
+  "provenance: isolated trusted source HEAD mismatch");
+assert.equal(gitAt(trustedSourceRoot, "remote", "get-url", "origin"), `${OFFICIAL_REPOSITORY}.git`,
+  "provenance: isolated trusted source repository mismatch");
+assert.equal(gitAt(trustedSourceRoot, "status", "--porcelain=v1"), "",
+  "provenance: isolated trusted source modified");
+assert.equal(existsSync(path.join(trustedSourceRoot, ".git/objects/info/alternates")), false,
+  "provenance: isolated trusted source uses alternates");
+assert.equal(gitAt(trustedSourceRoot, "cat-file", "-t", CURRENT_TRUSTED_BASE), "commit",
+  "provenance: exact trusted base absent");
+assert.equal(gitAt(trustedSourceRoot, "cat-file", "-t", amendmentSourceSha), "commit",
+  "provenance: exact amendment source absent");
+
 run(temporary, ["git", "init", "-q", repository]);
 const git = (...args) => run(repository, ["git", ...args]);
 git("config", "user.email", "p1a-dual-base@example.invalid");
@@ -396,6 +447,10 @@ for (const [name, sha] of [["original", ORIGINAL_CANDIDATE], ["baseline", COMPOS
 for (const sha of ANCESTRY_CHAIN) {
   run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", verifiedAuthorities.ancestry.root, sha]);
   assert.equal(git("cat-file", "-t", sha), "commit", `ancestry import failed: ${sha}`);
+}
+for (const sha of [CURRENT_TRUSTED_BASE, amendmentSourceSha]) {
+  run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", trustedSourceRoot, sha]);
+  assert.equal(git("cat-file", "-t", sha), "commit", `trusted fixture source import failed: ${sha}`);
 }
 
 const freshReconciliationFixture = (name, prepare) => {
@@ -798,18 +853,61 @@ function entry(commit, file) {
   return { mode: match[1], blob: match[2] };
 }
 
+function sourceEntry(sourceRoot, commit, file) {
+  const match = /^(\d+)\s+blob\s+([0-9a-f]{40})\t/.exec(gitAt(sourceRoot, "ls-tree", commit, "--", file));
+  assert.ok(match, `${file}: trusted provenance entry absent`);
+  return { mode: match[1], blob: match[2] };
+}
+
+function trustedSourceFor(file) {
+  return AMENDMENT_OWNED_FIXTURE_FILES.includes(file)
+    ? { sourceClass: "AMENDMENT_OWNED", sourceSha: amendmentSourceSha }
+    : { sourceClass: "TRUSTED_BASE_OWNED", sourceSha: CURRENT_TRUSTED_BASE };
+}
+
 let sequence = 0;
+const trustedFixtureProvenance = [];
 function trustedWorkflow() {
   const env = { ...process.env, GIT_INDEX_FILE: path.join(temporary, "workflow-index") };
-  run(repository, ["git", "read-tree", TRUSTED_RECONCILIATION_BASE], { env });
+  run(repository, ["git", "read-tree", CURRENT_TRUSTED_BASE], { env });
   for (const file of AMENDMENT_CONTROLLED_FILES) {
-    const blob = run(repository, ["git", "hash-object", "-w", path.join(root, file)], { env });
-    run(repository, ["git", "update-index", "--add", "--cacheinfo", "100644", blob, file], { env });
+    const provenance = trustedSourceFor(file);
+    const source = sourceEntry(trustedSourceRoot, provenance.sourceSha, file);
+    run(repository, ["git", "update-index", "--add", "--cacheinfo", source.mode, source.blob, file], { env });
+    const installed = run(repository, ["git", "ls-files", "--stage", "--", file], { env }).split(/\s+/)[1];
+    assert.equal(installed, source.blob, `${file}: trusted fixture installed blob mismatch`);
+    trustedFixtureProvenance.push({
+      path: file,
+      expectedSourceClass: provenance.sourceClass,
+      exactSourceSha: provenance.sourceSha,
+      exactSourceBlobSha: source.blob,
+      actualInstalledBlobSha: installed,
+      equal: installed === source.blob,
+    });
   }
   const tree = run(repository, ["git", "write-tree"], { env });
-  return run(repository, ["git", "commit-tree", tree, "-p", TRUSTED_RECONCILIATION_BASE, "-m", "trusted amendment fixture"], { env });
+  return run(repository, ["git", "commit-tree", tree, "-p", CURRENT_TRUSTED_BASE, "-m", "trusted amendment fixture"], { env });
 }
 const workflowSha = trustedWorkflow();
+assert.equal(trustedFixtureProvenance.length, AMENDMENT_CONTROLLED_FILES.length,
+  "provenance: incomplete trusted fixture accounting");
+assert.ok(trustedFixtureProvenance.every(({ equal }) => equal), "provenance: trusted fixture mismatch");
+const trustedBaseCiBlob = sourceEntry(trustedSourceRoot, CURRENT_TRUSTED_BASE, ".github/workflows/ci.yml").blob;
+assert.equal(git("rev-parse", `${workflowSha}:.github/workflows/ci.yml`), trustedBaseCiBlob,
+  "provenance: trusted CI was not sourced from exact trusted base");
+const rejectedCiBlob = gitAt(root, "rev-parse", `${REJECTED_RECONCILIATION}:.github/workflows/ci.yml`);
+assert.notEqual(rejectedCiBlob, trustedBaseCiBlob,
+  "provenance before-proof requires contaminated candidate CI to differ from trusted base");
+console.log("PASS trusted_harness_before_contamination_reproduced");
+console.log("PASS trusted_harness_after_exact_base_independence");
+console.log(JSON.stringify({
+  suite: "p1-a-trusted-harness-provenance",
+  trustedBaseSha: CURRENT_TRUSTED_BASE,
+  amendmentSourceSha,
+  rejectedReconciliationSha: REJECTED_RECONCILIATION,
+  files: trustedFixtureProvenance,
+  failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
 
 function candidate({ omit, add, mutate, ciAppend = "", ciTransform,
   omitOriginalParent = false, reverseParents = false } = {}) {
@@ -853,21 +951,16 @@ function candidate({ omit, add, mutate, ciAppend = "", ciTransform,
 }
 
 const validCandidate = candidate();
-// Reproduce the exact remote failure against the generated reconciliation
-// candidate, then propagate the verified DAG into that same fixture.
-let reconciliationFailureBeforePropagation = false;
-try {
-  git("merge-base", "--is-ancestor", TRUSTED_RECONCILIATION_BASE, validCandidate);
-} catch (error) {
-  reconciliationFailureBeforePropagation = /1ab3a7796cc587e4634c8cc36d2e5defa6c871e0/.test(error.stderr ?? "");
-}
-assert.ok(reconciliationFailureBeforePropagation,
-  "reconciliation fixture: missing trusted-DAG failure was not reproduced");
-console.log("PASS reconciliation_fixture_before_propagation_failure_reproduced");
+// Provenance-pure construction starts from the current trusted base, so native
+// ancestry must already hold. Re-propagation independently checks the historical
+// trusted DAG inventory without being used to manufacture that ancestry.
+git("merge-base", "--is-ancestor", TRUSTED_RECONCILIATION_BASE, validCandidate);
+const reconciliationFailureBeforePropagation = false;
+console.log("PASS reconciliation_fixture_native_ancestry_from_exact_trusted_source");
+const reconciliationPropagationRoot = freshReconciliationFixture("independent-propagation-proof");
 const reconciliationFixture = propagateTrustedReconciliationDag({
   trustedReconciliationAuthorityRoot: verifiedAuthorities.trustedReconciliation.root,
-  reconciliationFixtureRoot: repository,
-  authorizedGeneratedCommits: [workflowSha, validCandidate],
+  reconciliationFixtureRoot: reconciliationPropagationRoot,
 });
 assert.equal(reconciliationFixture.importedCommits, 10);
 assert.equal(reconciliationFixture.boundarySha, AUTHORIZED_BASE);
@@ -878,10 +971,10 @@ const reconciliationFixturePositiveControls = [
   ["exact_source_authority", () => assert.equal(reconciliationFixture.sourceRoot, verifiedAuthorities.trustedReconciliation.root)],
   ["ten_exact_commits", () => assert.equal(reconciliationFixture.importedCommits, 10)],
   ["exact_tree_identities", () => assert.ok(reconciliationFixture.importedTrees >= 1)],
-  ["sole_common_boundary", () => assert.equal(readFileSync(path.join(repository, ".git/shallow"), "utf8"), `${AUTHORIZED_BASE}\n`)],
-  ["forbidden_parent_absent", () => assert.ok(rejects(() => git("cat-file", "-e", `${PRE_BASE_PARENT}^{commit}`)))],
-  ["no_alternates", () => assert.ok(!existsSync(path.join(repository, ".git/objects/info/alternates")))],
-  ["no_shared_store", () => assert.notEqual(realpathSync(path.join(repository, ".git")), verifiedAuthorities.trustedReconciliation.gitDir)],
+  ["sole_common_boundary", () => assert.equal(readFileSync(path.join(reconciliationPropagationRoot, ".git/shallow"), "utf8"), `${AUTHORIZED_BASE}\n`)],
+  ["forbidden_parent_absent", () => assert.ok(rejects(() => gitAt(reconciliationPropagationRoot, "cat-file", "-e", `${PRE_BASE_PARENT}^{commit}`)))],
+  ["no_alternates", () => assert.ok(!existsSync(path.join(reconciliationPropagationRoot, ".git/objects/info/alternates")))],
+  ["no_shared_store", () => assert.notEqual(realpathSync(path.join(reconciliationPropagationRoot, ".git")), verifiedAuthorities.trustedReconciliation.gitDir)],
   ["boundary_to_trusted_head", () => git("merge-base", "--is-ancestor", AUTHORIZED_BASE, TRUSTED_RECONCILIATION_BASE)],
   ["trusted_head_to_workflow", () => git("merge-base", "--is-ancestor", TRUSTED_RECONCILIATION_BASE, workflowSha)],
   ["trusted_head_to_candidate", () => git("merge-base", "--is-ancestor", TRUSTED_RECONCILIATION_BASE, validCandidate)],
