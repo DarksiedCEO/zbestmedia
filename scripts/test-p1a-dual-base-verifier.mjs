@@ -18,7 +18,9 @@ import { validateCertificationBundle } from "./validate-p1a-certification-accoun
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EXACT_SHA = /^[0-9a-f]{40}$/;
 const OFFICIAL_REPOSITORY = "https://github.com/DarksiedCEO/zbestmedia";
+const OFFICIAL_REPOSITORY_URLS = new Set([OFFICIAL_REPOSITORY, `${OFFICIAL_REPOSITORY}.git`]);
 const CURRENT_TRUSTED_BASE = "2f4baca937ef8b36d1560a010e8e7f430819197c";
+const ORIGINAL_PR16_AMENDMENT = "6e855ba08c69374cb4b25f9777a8ebd190375897";
 const REJECTED_RECONCILIATION = "4cbdee7b4aded69275efdc78aea41ed21bae32dc";
 const AMENDMENT_OWNED_FIXTURE_FILES = Object.freeze([
   "scripts/test-p1a-dual-base-verifier.mjs",
@@ -70,25 +72,131 @@ function commitParents(cwd, sha) {
     .filter((line) => line.startsWith("parent ")).map((line) => line.slice(7));
 }
 
+function canonicalGitHubRepositoryUrl(value) {
+  assert.equal(typeof value, "string", "provenance: repository URL must be a string");
+  assert.ok(OFFICIAL_REPOSITORY_URLS.has(value),
+    "provenance: repository URL is not an approved exact identity");
+  return OFFICIAL_REPOSITORY;
+}
+
+function resolveAuthorizedLinearAmendment(head, parentLookup) {
+  assert.match(head, EXACT_SHA, "provenance: exact amendment SHA required");
+  assert.equal(typeof parentLookup, "function", "provenance: trusted parent lookup required");
+  if (head === ORIGINAL_PR16_AMENDMENT) {
+    assert.deepEqual(parentLookup(head), [CURRENT_TRUSTED_BASE],
+      "provenance: original PR #16 amendment parent mismatch");
+    return head;
+  }
+  assert.deepEqual(parentLookup(head), [ORIGINAL_PR16_AMENDMENT],
+    "provenance: replacement must have exact original PR #16 amendment parent");
+  assert.deepEqual(parentLookup(ORIGINAL_PR16_AMENDMENT), [CURRENT_TRUSTED_BASE],
+    "provenance: original PR #16 amendment is not anchored to exact trusted base");
+  return head;
+}
+
+const repositoryIdentityPositiveCases = [OFFICIAL_REPOSITORY, `${OFFICIAL_REPOSITORY}.git`];
+const repositoryIdentityHostileCases = [
+  "http://github.com/DarksiedCEO/zbestmedia",
+  "https://github.com/DarksiedCEO/zbestmedia-other",
+  "https://github.com/DarksiedCEO/zbestmedia.git.evil",
+  "https://github.com/OtherOwner/zbestmedia",
+  "https://github.com/DarksiedCEO/other",
+  "https://evil.example/DarksiedCEO/zbestmedia",
+  "https://github.com.evil.example/DarksiedCEO/zbestmedia",
+  "https://user@github.com/DarksiedCEO/zbestmedia",
+  "https://user:pass@github.com/DarksiedCEO/zbestmedia",
+  "https://github.com/DarksiedCEO/zbestmedia?x=1",
+  "https://github.com/DarksiedCEO/zbestmedia#fragment",
+  "https://github.com:444/DarksiedCEO/zbestmedia",
+  "git@github.com:DarksiedCEO/zbestmedia.git",
+  "git://github.com/DarksiedCEO/zbestmedia.git",
+  "",
+  "not a URL",
+];
+assert.notEqual(OFFICIAL_REPOSITORY, `${OFFICIAL_REPOSITORY}.git`,
+  "provenance before-proof: literal comparison unexpectedly accepted the remote-equivalent URL");
+for (const repositoryUrl of repositoryIdentityPositiveCases) {
+  assert.equal(canonicalGitHubRepositoryUrl(repositoryUrl), OFFICIAL_REPOSITORY,
+    "provenance: canonical repository identity mismatch");
+}
+for (const repositoryUrl of repositoryIdentityHostileCases) {
+  assert.throws(() => canonicalGitHubRepositoryUrl(repositoryUrl),
+    "provenance: hostile repository identity accepted");
+}
+console.log(JSON.stringify({
+  suite: "p1-a-canonical-repository-identity-controls",
+  positiveRequired: 2, positiveExecuted: 2, positivePassed: 2,
+  hostileRequired: 16, hostileExecuted: 16, hostilePassed: 16,
+  beforeLiteralMismatchReproduced: true,
+  canonicalIdentity: OFFICIAL_REPOSITORY,
+  failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
+
+const topologyReplacement = "1".repeat(40);
+const topologyExtra = "2".repeat(40);
+const exactTopology = new Map([
+  [CURRENT_TRUSTED_BASE, []],
+  [ORIGINAL_PR16_AMENDMENT, [CURRENT_TRUSTED_BASE]],
+  [topologyReplacement, [ORIGINAL_PR16_AMENDMENT]],
+  [topologyExtra, [topologyReplacement]],
+]);
+const topologyParents = (sha) => {
+  assert.ok(exactTopology.has(sha), "provenance: required intermediate object absent");
+  return exactTopology.get(sha);
+};
+assert.equal(resolveAuthorizedLinearAmendment(ORIGINAL_PR16_AMENDMENT, topologyParents),
+  ORIGINAL_PR16_AMENDMENT);
+assert.equal(resolveAuthorizedLinearAmendment(topologyReplacement, topologyParents), topologyReplacement);
+const remediationTopologyHostileCases = [
+  ["replacement_wrong_parent", topologyReplacement, new Map(exactTopology).set(topologyReplacement, [CURRENT_TRUSTED_BASE])],
+  ["original_wrong_parent", topologyReplacement, new Map(exactTopology).set(ORIGINAL_PR16_AMENDMENT, ["3".repeat(40)])],
+  ["extra_intermediate", topologyExtra, exactTopology],
+  ["merge_masquerade", topologyReplacement, new Map(exactTopology).set(topologyReplacement,
+    [ORIGINAL_PR16_AMENDMENT, CURRENT_TRUSTED_BASE])],
+  ["parent_order_manipulation", topologyReplacement, new Map(exactTopology).set(topologyReplacement,
+    [CURRENT_TRUSTED_BASE, ORIGINAL_PR16_AMENDMENT])],
+  ["sibling_from_base", "4".repeat(40), new Map(exactTopology).set("4".repeat(40), [CURRENT_TRUSTED_BASE])],
+  ["unrelated_descendant", "5".repeat(40), new Map(exactTopology).set("5".repeat(40), [topologyExtra])],
+  ["missing_original", topologyReplacement, new Map(exactTopology).delete(ORIGINAL_PR16_AMENDMENT)],
+  ["mutable_branch", "codex/bt-1", exactTopology],
+  ["mutable_tag", "v1.0.0", exactTopology],
+  ["abbreviated_sha", topologyReplacement.slice(0, 12), exactTopology],
+  ["missing_replacement", "6".repeat(40), exactTopology],
+  ["fail_open_mismatch", topologyReplacement, new Map(exactTopology).set(topologyReplacement, [])],
+];
+for (const [name, head, graph] of remediationTopologyHostileCases) {
+  assert.throws(() => resolveAuthorizedLinearAmendment(head, (sha) => {
+    assert.ok(graph.has(sha), `${name}: required object absent`);
+    return graph.get(sha);
+  }), `${name}: hostile remediation topology accepted`);
+}
+console.log(JSON.stringify({
+  suite: "p1-a-exact-remediation-chain-controls",
+  positiveRequired: 2, positiveExecuted: 2, positivePassed: 2,
+  hostileRequired: remediationTopologyHostileCases.length,
+  hostileExecuted: remediationTopologyHostileCases.length,
+  hostilePassed: remediationTopologyHostileCases.length,
+  trustedBaseSha: CURRENT_TRUSTED_BASE,
+  originalAmendmentSha: ORIGINAL_PR16_AMENDMENT,
+  arbitraryDescendantsAccepted: false,
+  failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
+
 function resolveAmendmentSource() {
-  assert.equal(gitAt(root, "remote", "get-url", "origin"), `${OFFICIAL_REPOSITORY}.git`,
+  assert.equal(canonicalGitHubRepositoryUrl(gitAt(root, "remote", "get-url", "origin")), OFFICIAL_REPOSITORY,
     "provenance: primary repository identity mismatch");
   assert.equal(gitAt(root, "status", "--porcelain=v1"), "",
     "provenance: amendment source worktree must be clean");
   const head = gitAt(root, "rev-parse", "HEAD");
   const parents = commitParents(root, head);
   if (parents.length === 1) {
-    assert.equal(parents[0], CURRENT_TRUSTED_BASE,
-      "provenance: amendment candidate must descend directly from exact trusted base");
-    return head;
+    return resolveAuthorizedLinearAmendment(head, (sha) => commitParents(root, sha));
   }
   assert.deepEqual(parents.slice(0, 1), [ORIGINAL_CANDIDATE],
     "provenance: disposable reconciliation first parent mismatch");
   assert.equal(parents.length, 2, "provenance: disposable reconciliation requires exactly two parents");
   const amendment = parents[1];
-  assert.deepEqual(commitParents(root, amendment), [CURRENT_TRUSTED_BASE],
-    "provenance: reconciliation amendment parent is not exact trusted base");
-  return amendment;
+  return resolveAuthorizedLinearAmendment(amendment, (sha) => commitParents(root, sha));
 }
 
 const rejects = (operation) => {
