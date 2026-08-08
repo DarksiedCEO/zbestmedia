@@ -1000,6 +1000,8 @@ export const REQUIRED_CI_ADDITION = [
   "      - name: P1-A candidate-data validation",
   "        env:",
   "          P1A_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}",
+  "          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority",
+  "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority",
   "        run: node scripts/validate-p1a-threat-model.mjs --candidate-data-only",
   "",
   "",
@@ -1368,10 +1370,10 @@ const ISOLATED_TRUSTED_VERIFIER_STEP = `      - name: P1-A trusted verifier cont
           P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
         run: node scripts/test-p1a-trusted-verifier.mjs
 `;
-const CI_IDENTITY_MARKER =
-  "      - name: P1-A trusted-bootstrap exact-SHA identity";
 const CI_TRUSTED_VERIFIER_MARKER =
   "      - name: P1-A trusted verifier controls";
+const CI_CURRENT_CONTRACT_MARKER =
+  "      - name: P1-A current candidate-data contract controls";
 const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          node --check scripts/test-p1a-trusted-verifier.mjs",
   "          node --check scripts/test-p1a-dual-base-verifier.mjs",
@@ -1449,9 +1451,9 @@ export function composeTrustedCi(baseline) {
 export function composeCandidateCi(baseline) {
   return replaceExactlyOnce(
     baseline,
-    CI_IDENTITY_MARKER,
-    `${REQUIRED_CI_ADDITION}${CI_IDENTITY_MARKER}`,
-    "candidate hermetic placement",
+    CI_CURRENT_CONTRACT_MARKER,
+    `${REQUIRED_CI_ADDITION}${CI_CURRENT_CONTRACT_MARKER}`,
+    "candidate data placement after trusted authority acquisition",
   );
 }
 
@@ -1476,6 +1478,17 @@ export function validateComposedCandidateCi(git, candidateSha, workflowSha) {
   removeTwoStageCustodyFragment(candidate);
   assert.equal(candidate.split(REQUIRED_CI_ADDITION).length - 1, 1,
     `${path}: candidate fragment missing or duplicated`);
+  const candidateDataIndex = candidate.indexOf(REQUIRED_CI_ADDITION);
+  for (const authorityMarker of [
+    "      - name: Acquire exact immutable P1-A ancestry authority",
+    "      - name: Construct exact trusted-reconciliation authority store",
+  ]) {
+    const authorityIndex = candidate.indexOf(authorityMarker);
+    assert.ok(authorityIndex >= 0 && authorityIndex < candidateDataIndex,
+      `${path}: candidate validation precedes ${authorityMarker.trim()}`);
+  }
+  const cleanupIndex = candidate.indexOf("      - name: Remove isolated P1-A authority checkouts");
+  assert.ok(cleanupIndex > candidateDataIndex, `${path}: authority cleanup precedes candidate validation`);
   for (const forbidden of [
     "P1A_RUNTIME_APP_PRIVATE_KEY", "-----BEGIN PRIVATE KEY-----",
     "-----BEGIN RSA PRIVATE KEY-----", "pull_request_target", "node candidate/",
