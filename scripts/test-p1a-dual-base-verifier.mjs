@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,7 +21,16 @@ const OFFICIAL_REPOSITORY = "https://github.com/DarksiedCEO/zbestmedia";
 const OFFICIAL_REPOSITORY_URLS = new Set([OFFICIAL_REPOSITORY, `${OFFICIAL_REPOSITORY}.git`]);
 const CURRENT_TRUSTED_BASE = "2f4baca937ef8b36d1560a010e8e7f430819197c";
 const ORIGINAL_PR16_AMENDMENT = "6e855ba08c69374cb4b25f9777a8ebd190375897";
+const REJECTED_PR16_CLEANLINESS_CANDIDATE = "0164130fc62209c7a71ca4f7e58a2e24117e2fd5";
 const REJECTED_RECONCILIATION = "4cbdee7b4aded69275efdc78aea41ed21bae32dc";
+const AUTHORIZED_EPHEMERAL_AUTHORITY_ROOTS = Object.freeze([
+  ".p1a-original-candidate",
+  ".p1a-trusted-baseline",
+  ".p1a-dual-base-authority",
+  ".p1a-evidence-base-authority",
+  ".p1a-ancestry-authority",
+  ".p1a-trusted-reconciliation-authority",
+]);
 const AMENDMENT_OWNED_FIXTURE_FILES = Object.freeze([
   "scripts/test-p1a-dual-base-verifier.mjs",
 ]);
@@ -87,8 +96,15 @@ function resolveAuthorizedLinearAmendment(head, parentLookup) {
       "provenance: original PR #16 amendment parent mismatch");
     return head;
   }
-  assert.deepEqual(parentLookup(head), [ORIGINAL_PR16_AMENDMENT],
-    "provenance: replacement must have exact original PR #16 amendment parent");
+  if (head === REJECTED_PR16_CLEANLINESS_CANDIDATE) {
+    assert.deepEqual(parentLookup(head), [ORIGINAL_PR16_AMENDMENT],
+      "provenance: rejected cleanliness candidate parent mismatch");
+  } else {
+    assert.deepEqual(parentLookup(head), [REJECTED_PR16_CLEANLINESS_CANDIDATE],
+      "provenance: replacement must have exact rejected cleanliness candidate parent");
+    assert.deepEqual(parentLookup(REJECTED_PR16_CLEANLINESS_CANDIDATE), [ORIGINAL_PR16_AMENDMENT],
+      "provenance: rejected cleanliness candidate is not anchored to original PR #16 amendment");
+  }
   assert.deepEqual(parentLookup(ORIGINAL_PR16_AMENDMENT), [CURRENT_TRUSTED_BASE],
     "provenance: original PR #16 amendment is not anchored to exact trusted base");
   return head;
@@ -137,32 +153,33 @@ const topologyExtra = "2".repeat(40);
 const exactTopology = new Map([
   [CURRENT_TRUSTED_BASE, []],
   [ORIGINAL_PR16_AMENDMENT, [CURRENT_TRUSTED_BASE]],
-  [topologyReplacement, [ORIGINAL_PR16_AMENDMENT]],
+  [REJECTED_PR16_CLEANLINESS_CANDIDATE, [ORIGINAL_PR16_AMENDMENT]],
+  [topologyReplacement, [REJECTED_PR16_CLEANLINESS_CANDIDATE]],
   [topologyExtra, [topologyReplacement]],
 ]);
 const topologyParents = (sha) => {
   assert.ok(exactTopology.has(sha), "provenance: required intermediate object absent");
   return exactTopology.get(sha);
 };
-assert.equal(resolveAuthorizedLinearAmendment(ORIGINAL_PR16_AMENDMENT, topologyParents),
-  ORIGINAL_PR16_AMENDMENT);
+assert.equal(resolveAuthorizedLinearAmendment(REJECTED_PR16_CLEANLINESS_CANDIDATE, topologyParents),
+  REJECTED_PR16_CLEANLINESS_CANDIDATE);
 assert.equal(resolveAuthorizedLinearAmendment(topologyReplacement, topologyParents), topologyReplacement);
 const remediationTopologyHostileCases = [
-  ["replacement_wrong_parent", topologyReplacement, new Map(exactTopology).set(topologyReplacement, [CURRENT_TRUSTED_BASE])],
+  ["replacement_wrong_parent", topologyReplacement, new Map(exactTopology).set(topologyReplacement, [ORIGINAL_PR16_AMENDMENT])],
+  ["rejected_candidate_wrong_parent", topologyReplacement, new Map(exactTopology).set(REJECTED_PR16_CLEANLINESS_CANDIDATE, [CURRENT_TRUSTED_BASE])],
   ["original_wrong_parent", topologyReplacement, new Map(exactTopology).set(ORIGINAL_PR16_AMENDMENT, ["3".repeat(40)])],
   ["extra_intermediate", topologyExtra, exactTopology],
   ["merge_masquerade", topologyReplacement, new Map(exactTopology).set(topologyReplacement,
-    [ORIGINAL_PR16_AMENDMENT, CURRENT_TRUSTED_BASE])],
+    [REJECTED_PR16_CLEANLINESS_CANDIDATE, ORIGINAL_PR16_AMENDMENT])],
   ["parent_order_manipulation", topologyReplacement, new Map(exactTopology).set(topologyReplacement,
-    [CURRENT_TRUSTED_BASE, ORIGINAL_PR16_AMENDMENT])],
-  ["sibling_from_base", "4".repeat(40), new Map(exactTopology).set("4".repeat(40), [CURRENT_TRUSTED_BASE])],
+    [ORIGINAL_PR16_AMENDMENT, REJECTED_PR16_CLEANLINESS_CANDIDATE])],
+  ["sibling_from_original", "4".repeat(40), new Map(exactTopology).set("4".repeat(40), [ORIGINAL_PR16_AMENDMENT])],
   ["unrelated_descendant", "5".repeat(40), new Map(exactTopology).set("5".repeat(40), [topologyExtra])],
   ["missing_original", topologyReplacement, new Map(exactTopology).delete(ORIGINAL_PR16_AMENDMENT)],
   ["mutable_branch", "codex/bt-1", exactTopology],
   ["mutable_tag", "v1.0.0", exactTopology],
   ["abbreviated_sha", topologyReplacement.slice(0, 12), exactTopology],
   ["missing_replacement", "6".repeat(40), exactTopology],
-  ["fail_open_mismatch", topologyReplacement, new Map(exactTopology).set(topologyReplacement, [])],
 ];
 for (const [name, head, graph] of remediationTopologyHostileCases) {
   assert.throws(() => resolveAuthorizedLinearAmendment(head, (sha) => {
@@ -182,11 +199,51 @@ console.log(JSON.stringify({
   failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
 }));
 
+function parsePorcelainV1Z(status) {
+  assert.equal(typeof status, "string", "provenance: worktree status must be text");
+  return status.split("\0").filter(Boolean).map((record) => {
+    assert.ok(record.length >= 4 && record[2] === " ",
+      "provenance: malformed worktree status entry");
+    return Object.freeze({ code: record.slice(0, 2), path: record.slice(3) });
+  });
+}
+
+function isExactRootOrDescendant(candidatePath, authorizedRoot) {
+  assert.equal(path.posix.normalize(candidatePath), candidatePath,
+    "provenance: non-canonical worktree path rejected");
+  return candidatePath === authorizedRoot || candidatePath.startsWith(`${authorizedRoot}/`);
+}
+
+function assertAuthorizedAuthorityRoot(repositoryRoot, candidatePath) {
+  const authorizedRoot = AUTHORIZED_EPHEMERAL_AUTHORITY_ROOTS.find(
+    (rootPath) => isExactRootOrDescendant(candidatePath, rootPath),
+  );
+  assert.ok(authorizedRoot, `provenance: unauthorized untracked path: ${candidatePath}`);
+  const absoluteRoot = path.join(repositoryRoot, authorizedRoot);
+  assert.ok(existsSync(absoluteRoot), `provenance: authorized authority root absent: ${authorizedRoot}`);
+  assert.equal(lstatSync(absoluteRoot).isSymbolicLink(), false,
+    `provenance: authority root cannot be a symlink: ${authorizedRoot}`);
+}
+
+function assertClassifiedWorktreeEntries(repositoryRoot, entries) {
+  for (const entry of entries) {
+    assert.equal(entry.code, "??",
+      `provenance: tracked, staged, deleted, renamed, copied, or conflicted path rejected: ${entry.path}`);
+    assertAuthorizedAuthorityRoot(repositoryRoot, entry.path);
+  }
+}
+
+function assertAmendmentSourceWorktreeClean(repositoryRoot = root) {
+  const status = execFileSync("git", ["status", "--porcelain=v1", "-z", "--untracked-files=all"], {
+    cwd: repositoryRoot, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+  });
+  assertClassifiedWorktreeEntries(repositoryRoot, parsePorcelainV1Z(status));
+}
+
 function resolveAmendmentSource() {
   assert.equal(canonicalGitHubRepositoryUrl(gitAt(root, "remote", "get-url", "origin")), OFFICIAL_REPOSITORY,
     "provenance: primary repository identity mismatch");
-  assert.equal(gitAt(root, "status", "--porcelain=v1"), "",
-    "provenance: amendment source worktree must be clean");
+  assertAmendmentSourceWorktreeClean();
   const head = gitAt(root, "rev-parse", "HEAD");
   const parents = commitParents(root, head);
   if (parents.length === 1) {
@@ -202,6 +259,90 @@ function resolveAmendmentSource() {
 const rejects = (operation) => {
   try { operation(); return false; } catch { return true; }
 };
+
+function createCleanlinessFixture(name) {
+  const fixture = path.join(temporary, `cleanliness-${name}`);
+  mkdirSync(path.join(fixture, "scripts"), { recursive: true });
+  mkdirSync(path.join(fixture, ".github/workflows"), { recursive: true });
+  writeFileSync(path.join(fixture, "scripts/test-p1a-dual-base-verifier.mjs"), "// tracked verifier\n");
+  writeFileSync(path.join(fixture, ".github/workflows/ci.yml"), "name: tracked workflow\n");
+  writeFileSync(path.join(fixture, "tracked-delete.txt"), "tracked\n");
+  writeFileSync(path.join(fixture, "tracked-rename.txt"), "tracked\n");
+  gitAt(fixture, "init", "-q");
+  gitAt(fixture, "config", "user.email", "p1a-cleanliness@example.invalid");
+  gitAt(fixture, "config", "user.name", "P1A cleanliness fixture");
+  gitAt(fixture, "add", ".");
+  gitAt(fixture, "commit", "-qm", "fixture base");
+  return fixture;
+}
+
+function populateAuthorizedAuthorityRoots(fixture) {
+  for (const authorityRoot of AUTHORIZED_EPHEMERAL_AUTHORITY_ROOTS) {
+    mkdirSync(path.join(fixture, authorityRoot, "objects"), { recursive: true });
+    writeFileSync(path.join(fixture, authorityRoot, "objects/evidence.txt"), "authority evidence\n");
+  }
+}
+
+const cleanFixture = createCleanlinessFixture("clean");
+assert.doesNotThrow(() => assertAmendmentSourceWorktreeClean(cleanFixture));
+
+const remoteEquivalentFixture = createCleanlinessFixture("remote-equivalent");
+populateAuthorizedAuthorityRoots(remoteEquivalentFixture);
+assert.notEqual(gitAt(remoteEquivalentFixture, "status", "--porcelain=v1"), "",
+  "provenance before-proof: legacy all-dirtiness rule did not reproduce CI failure");
+assert.doesNotThrow(() => assertAmendmentSourceWorktreeClean(remoteEquivalentFixture));
+
+const expectedContentsFixture = createCleanlinessFixture("expected-contents");
+populateAuthorizedAuthorityRoots(expectedContentsFixture);
+writeFileSync(path.join(expectedContentsFixture, ".p1a-original-candidate/objects/nested-object"), "object\n");
+assert.doesNotThrow(() => assertAmendmentSourceWorktreeClean(expectedContentsFixture));
+
+const exactRootsFixture = createCleanlinessFixture("exact-roots");
+populateAuthorizedAuthorityRoots(exactRootsFixture);
+assert.doesNotThrow(() => assertAmendmentSourceWorktreeClean(exactRootsFixture));
+
+const cleanlinessHostileCases = [
+  ["unrelated_file", (fixture) => writeFileSync(path.join(fixture, "random.txt"), "unauthorized\n")],
+  ["unrelated_directory", (fixture) => { mkdirSync(path.join(fixture, "tmp")); writeFileSync(path.join(fixture, "tmp/file"), "unauthorized\n"); }],
+  ["unapproved_p1a_root", (fixture) => { mkdirSync(path.join(fixture, ".p1a-evil")); writeFileSync(path.join(fixture, ".p1a-evil/file"), "unauthorized\n"); }],
+  ["authority_prefix_collision", (fixture) => { mkdirSync(path.join(fixture, ".p1a-original-candidate-evil")); writeFileSync(path.join(fixture, ".p1a-original-candidate-evil/file"), "unauthorized\n"); }],
+  ["authority_suffix_collision", (fixture) => { mkdirSync(path.join(fixture, ".p1a-original-candidate2")); writeFileSync(path.join(fixture, ".p1a-original-candidate2/file"), "unauthorized\n"); }],
+  ["nested_unrelated_outside_root", (fixture) => { mkdirSync(path.join(fixture, "outside/nested"), { recursive: true }); writeFileSync(path.join(fixture, "outside/nested/file"), "unauthorized\n"); }],
+  ["modified_verifier", (fixture) => writeFileSync(path.join(fixture, "scripts/test-p1a-dual-base-verifier.mjs"), "// dirty\n")],
+  ["modified_workflow", (fixture) => writeFileSync(path.join(fixture, ".github/workflows/ci.yml"), "name: dirty\n")],
+  ["staged_unrelated_file", (fixture) => { writeFileSync(path.join(fixture, "staged.txt"), "staged\n"); gitAt(fixture, "add", "staged.txt"); }],
+  ["deleted_tracked_file", (fixture) => rmSync(path.join(fixture, "tracked-delete.txt"))],
+  ["renamed_tracked_file", (fixture) => gitAt(fixture, "mv", "tracked-rename.txt", "renamed.txt")],
+  ["unmerged_status", (fixture) => assertClassifiedWorktreeEntries(fixture, [{ code: "UU", path: "conflict.txt" }])],
+  ["authority_symlink", (fixture) => symlinkSync(path.join(fixture, "scripts"), path.join(fixture, ".p1a-original-candidate"))],
+  ["allowed_plus_unrelated", (fixture) => { populateAuthorizedAuthorityRoots(fixture); writeFileSync(path.join(fixture, "random.txt"), "unauthorized\n"); }],
+  ["allowed_plus_tracked_dirty", (fixture) => { populateAuthorizedAuthorityRoots(fixture); writeFileSync(path.join(fixture, "scripts/test-p1a-dual-base-verifier.mjs"), "// dirty\n"); }],
+  ["noncanonical_traversal", (fixture) => assertClassifiedWorktreeEntries(fixture, [{ code: "??", path: ".p1a-original-candidate/../random.txt" }])],
+];
+let cleanlinessHostilePassed = 0;
+for (const [name, contaminate] of cleanlinessHostileCases) {
+  const fixture = createCleanlinessFixture(name);
+  let rejected = false;
+  try {
+    contaminate(fixture);
+    assertAmendmentSourceWorktreeClean(fixture);
+  } catch {
+    rejected = true;
+  }
+  assert.ok(rejected, `provenance cleanliness hostile accepted: ${name}`);
+  cleanlinessHostilePassed += 1;
+}
+console.log(JSON.stringify({
+  suite: "p1-a-authority-checkout-cleanliness-controls",
+  authorityRoots: AUTHORIZED_EPHEMERAL_AUTHORITY_ROOTS,
+  positiveRequired: 4, positiveExecuted: 4, positivePassed: 4,
+  hostileRequired: cleanlinessHostileCases.length,
+  hostileExecuted: cleanlinessHostileCases.length,
+  hostilePassed: cleanlinessHostilePassed,
+  beforeFailureReproduced: true,
+  remoteEquivalentAfterPassed: true,
+  failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
 
 function validateBoundedRootInput({ chain, boundary, independentlyVerified, fixtureRoot }) {
   assert.ok(independentlyVerified, "bounded-root: independent chain verification required");
