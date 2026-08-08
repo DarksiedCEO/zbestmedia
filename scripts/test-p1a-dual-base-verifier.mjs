@@ -824,8 +824,7 @@ function candidate({ omit, add, mutate, ciAppend = "", ciTransform,
   }
   if (omit !== ".github/workflows/ci.yml") {
     const trustedCi = git("show", `${workflowSha}:.github/workflows/ci.yml`);
-    const marker = "      - name: P1-A trusted-bootstrap exact-SHA identity";
-    const composedCi = `${trustedCi.replace(marker, `${REQUIRED_CI_ADDITION}${marker}`)}${ciAppend}`;
+    const composedCi = `${composeCandidateCi(trustedCi)}${ciAppend}`;
     const resolvedCi = ciTransform ? ciTransform(composedCi) : composedCi;
     const blob = run(repository, ["git", "hash-object", "-w", "--stdin"], { env, input: `${resolvedCi}\n` });
     run(repository, ["git", "update-index", "--add", "--cacheinfo", "100644", blob, ".github/workflows/ci.yml"], { env });
@@ -993,8 +992,34 @@ const validCi = `${git("show", `${validCandidate}:.github/workflows/ci.yml`)}\n`
 const positiveCases = [
   ["exact_baseline_recognized", () => assert.equal(git("rev-parse", `${COMPOSED_CI_BASE}:.github/workflows/ci.yml`), "9a3f1a04f99e83d9dad84cf384d86117a7d282f1")],
   ["baseline_plus_trusted_fragment", () => assert.equal(trustedCi, composeTrustedCi(baselineCi))],
-  ["baseline_plus_candidate_fragment", () => assert.ok(composeCandidateCi(baselineCi).includes("--candidate-data-only"))],
+  ["trusted_then_candidate_fragment", () => {
+    const trustedFirst = composeTrustedCi(baselineCi);
+    const trustedThenCandidate = composeCandidateCi(trustedFirst);
+    const candidateSummary = candidateDataRun();
+    assert.equal(trustedFirst, trustedCi);
+    assert.equal(trustedThenCandidate.split(REQUIRED_CI_ADDITION).length - 1, 1);
+    assert.ok(trustedThenCandidate.indexOf("Acquire exact immutable P1-A ancestry authority") < trustedThenCandidate.indexOf(REQUIRED_CI_ADDITION));
+    assert.ok(trustedThenCandidate.indexOf("Construct exact trusted-reconciliation authority store") < trustedThenCandidate.indexOf(REQUIRED_CI_ADDITION));
+    assert.ok(trustedThenCandidate.indexOf(REQUIRED_CI_ADDITION) < trustedThenCandidate.indexOf("Remove isolated P1-A authority checkouts"));
+    assert.ok(REQUIRED_CI_ADDITION.includes("P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority"));
+    assert.ok(REQUIRED_CI_ADDITION.includes("P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority"));
+    assert.equal(candidateSummary.certified, false);
+    assert.equal(candidateSummary.protectedOperations, 0);
+  }],
   ["baseline_plus_both_fragments", () => assert.equal(validCi, composeCandidateCi(trustedCi))],
+  ["candidate_after_ancestry_authority", () => {
+    const authority = validCi.indexOf("Acquire exact immutable P1-A ancestry authority");
+    assert.ok(authority >= 0 && authority < validCi.indexOf(REQUIRED_CI_ADDITION));
+  }],
+  ["candidate_after_trusted_reconciliation_authority", () => {
+    const authority = validCi.indexOf("Construct exact trusted-reconciliation authority store");
+    assert.ok(authority >= 0 && authority < validCi.indexOf(REQUIRED_CI_ADDITION));
+  }],
+  ["candidate_before_authority_cleanup", () => assert.ok(validCi.indexOf(REQUIRED_CI_ADDITION) < validCi.indexOf("Remove isolated P1-A authority checkouts"))],
+  ["trusted_owned_authority_bindings", () => {
+    assert.ok(REQUIRED_CI_ADDITION.includes("P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority"));
+    assert.ok(REQUIRED_CI_ADDITION.includes("P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority"));
+  }],
   ["immutable_candidate_checkout", () => assert.ok(validCi.includes("ref: ${{ github.event.pull_request.head.sha || github.sha }}"))],
   ["read_only_permissions", () => { assert.ok(validCi.includes("permissions:\n  contents: read")); assert.ok(!validCi.includes("contents: write")); }],
   ["exact_historical_commit_acquired", () => assert.ok(validCi.includes(`ref: ${ORIGINAL_CANDIDATE}`))],
@@ -1008,12 +1033,26 @@ const replaceOnce = (source, needle, replacement) => {
   return source.replace(needle, replacement);
 };
 const negativeCases = [
+  ["direct_candidate_composition_on_untrusted_baseline", () => composeCandidateCi(baselineCi)],
   ["missing_trusted_fragment", (ci) => replaceOnce(ci, "      - name: Acquire exact original P1-A candidate object\n", "")],
   ["missing_candidate_fragment", (ci) => replaceOnce(ci, "      - name: P1-A candidate-data validation\n", "")],
   ["duplicate_trusted_fragment", (ci) => `${ci}\n      - name: Acquire exact original P1-A candidate object\n`],
   ["duplicate_candidate_fragment", (ci) => `${ci}\n      - name: P1-A candidate-data validation\n`],
   ["modified_trusted_command", (ci) => replaceOnce(ci, "git fetch --no-tags --no-write-fetch-head", "git fetch --no-tags")],
   ["modified_candidate_command", (ci) => replaceOnce(ci, "node scripts/validate-p1a-threat-model.mjs --candidate-data-only", "node scripts/validate-p1a-threat-model.mjs --candidate-data-only || true")],
+  ["missing_ancestry_root_binding", (ci) => replaceOnce(ci, "          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority\n", "")],
+  ["missing_trusted_root_binding", (ci) => replaceOnce(ci, "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority\n", "")],
+  ["candidate_selected_ancestry_root", (ci) => replaceOnce(ci, "          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority", "          P1A_ANCESTRY_AUTHORITY_ROOT: ${{ github.event.inputs.ancestry_root }}")],
+  ["candidate_selected_trusted_root", (ci) => replaceOnce(ci, "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority", "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: ${{ github.event.inputs.trusted_root }}")],
+  ["candidate_before_ancestry_authority", (ci) => replaceOnce(ci, REQUIRED_CI_ADDITION, "").replace("      - name: Acquire exact immutable P1-A ancestry authority", `${REQUIRED_CI_ADDITION}      - name: Acquire exact immutable P1-A ancestry authority`)],
+  ["candidate_before_trusted_authority", (ci) => replaceOnce(ci, REQUIRED_CI_ADDITION, "").replace("      - name: Construct exact trusted-reconciliation authority store", `${REQUIRED_CI_ADDITION}      - name: Construct exact trusted-reconciliation authority store`)],
+  ["cleanup_before_candidate_validation", (ci) => {
+    const cleanupStart = ci.indexOf("      - name: Remove isolated P1-A authority checkouts");
+    const cleanupEnd = ci.indexOf("      - name: P1-A trusted-bootstrap secret-detector tests", cleanupStart);
+    assert.ok(cleanupStart >= 0 && cleanupEnd > cleanupStart);
+    const cleanup = ci.slice(cleanupStart, cleanupEnd);
+    return replaceOnce(ci.slice(0, cleanupStart) + ci.slice(cleanupEnd), REQUIRED_CI_ADDITION, `${cleanup}${REQUIRED_CI_ADDITION}`);
+  }],
   ["historical_root_command_restored", (ci) => `${ci}\n      - name: obsolete historical root\n        run: pnpm test:p1a-threat-model\n`],
   ["candidate_data_relabelled_certified", (ci) => `${ci}\n# CERTIFIED\n`],
   ["reordered_security_critical_fragment", (ci) => replaceOnce(ci, "      - name: Acquire exact original P1-A candidate object", "      - name: Reordered acquisition")],
