@@ -321,6 +321,169 @@ jobs:
           fi
           git -C "$authority" merge-base --is-ancestor "${authorized[0]}" "${authorized[9]}"
 
+      - name: Acquire exact PR16 trusted-base predecessor object
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 2f4baca937ef8b36d1560a010e8e7f430819197c
+          fetch-depth: 6
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-trusted-base
+
+      - name: Acquire exact PR16 original-amendment predecessor object
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 6e855ba08c69374cb4b25f9777a8ebd190375897
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-original-amendment
+
+      - name: Acquire exact PR16 rejected-chain predecessor object
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 0164130fc62209c7a71ca4f7e58a2e24117e2fd5
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-rejected-chain
+
+      - name: Acquire exact PR16 rejected-cleanliness predecessor object
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 966ab9160ad133adb10d58f7877f8549efd06831
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-rejected-cleanliness
+
+      - name: Acquire exact PR16 action-inventory predecessor object
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 6867d43d17c8b614ab7d0e0c5e338127020bb772
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-action-inventory
+
+      - name: Acquire exact PR16 current-predecessor chain objects
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c
+          fetch-depth: 2
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-current-predecessor
+
+      - name: Acquire exact PR16 minimum-depth historical workflow source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 184d3961ab7fbf67150b392e09a95408bca6f009
+          fetch-depth: 3
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-minimum-depth
+
+      - name: Construct exact PR16 remediation-chain predecessor authority
+        run: |
+          set -euo pipefail
+          authority=.p1a-pr16-remediation-chain-authority
+          shas=(
+            2f4baca937ef8b36d1560a010e8e7f430819197c
+            6e855ba08c69374cb4b25f9777a8ebd190375897
+            0164130fc62209c7a71ca4f7e58a2e24117e2fd5
+            966ab9160ad133adb10d58f7877f8549efd06831
+            6867d43d17c8b614ab7d0e0c5e338127020bb772
+            af29acb57895319ae6a5ed35d923054383ceed12
+            9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c
+          )
+          source_heads=(
+            2f4baca937ef8b36d1560a010e8e7f430819197c
+            6e855ba08c69374cb4b25f9777a8ebd190375897
+            0164130fc62209c7a71ca4f7e58a2e24117e2fd5
+            966ab9160ad133adb10d58f7877f8549efd06831
+            6867d43d17c8b614ab7d0e0c5e338127020bb772
+            9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c
+            184d3961ab7fbf67150b392e09a95408bca6f009
+          )
+          sources=(
+            .p1a-pr16-chain-staging-trusted-base
+            .p1a-pr16-chain-staging-original-amendment
+            .p1a-pr16-chain-staging-rejected-chain
+            .p1a-pr16-chain-staging-rejected-cleanliness
+            .p1a-pr16-chain-staging-action-inventory
+            .p1a-pr16-chain-staging-current-predecessor
+            .p1a-pr16-chain-staging-minimum-depth
+          )
+          object_sources=(
+            .p1a-pr16-chain-staging-trusted-base
+            .p1a-pr16-chain-staging-original-amendment
+            .p1a-pr16-chain-staging-rejected-chain
+            .p1a-pr16-chain-staging-rejected-cleanliness
+            .p1a-pr16-chain-staging-action-inventory
+            .p1a-pr16-chain-staging-current-predecessor
+            .p1a-pr16-chain-staging-current-predecessor
+          )
+          historical_path_source=.p1a-pr16-chain-staging-rejected-cleanliness
+          trusted_base_source=.p1a-pr16-chain-staging-trusted-base
+          action_inventory_source=.p1a-pr16-chain-staging-action-inventory
+          current_predecessor_source=.p1a-pr16-chain-staging-current-predecessor
+          minimum_depth_source=.p1a-pr16-chain-staging-minimum-depth
+          historical_path=.github/workflows/ci.yml
+          historical_blob=60d9cede50402f10837a630598b9f8dbf6fb839e
+          minimum_depth_blob=3aba273771fd2874adf8f33ad1e2d7a02fb02c60
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          git init -q "$authority"
+          git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
+          for index in "${!sources[@]}"; do
+            source="${sources[$index]}"
+            expected_head="${source_heads[$index]}"
+            test "$(git -C "$source" rev-parse HEAD)" = "$expected_head"
+            test "$(git -C "$source" remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+            test -z "$(git -C "$source" status --porcelain=v1)"
+            if grep -Eiq 'x-access-token|authorization:|http\..*extraheader' "$source/.git/config"; then
+              echo "persisted PR16 acquisition credential material detected" >&2
+              exit 1
+            fi
+          done
+          for index in "${!shas[@]}"; do
+            sha="${shas[$index]}"
+            source="${object_sources[$index]}"
+            test "$(git -C "$source" cat-file -t "$sha")" = commit
+            imported="$(git -C "$source" cat-file commit "$sha" | git -C "$authority" hash-object -w -t commit --stdin)"
+            test "$imported" = "$sha"
+          done
+          test "$(git -C "$historical_path_source" rev-parse HEAD)" = "${shas[3]}"
+          test "$(git -C "$historical_path_source" rev-parse "${shas[3]}:$historical_path")" = "$historical_blob"
+          test "$(git -C "$historical_path_source" cat-file -t "$historical_blob")" = blob
+          test "$(git -C "$trusted_base_source" rev-parse HEAD)" = "${shas[0]}"
+          test "$(git -C "$trusted_base_source" rev-parse "${shas[0]}:$historical_path")" = "$historical_blob"
+          test "$(git -C "$action_inventory_source" rev-parse HEAD)" = "${shas[4]}"
+          test "$(git -C "$current_predecessor_source" rev-parse HEAD)" = "${shas[6]}"
+          test "$(git -C "$minimum_depth_source" rev-parse HEAD)" = "184d3961ab7fbf67150b392e09a95408bca6f009"
+          test "$(git -C "$minimum_depth_source" cat-file -t "184d3961ab7fbf67150b392e09a95408bca6f009")" = commit
+          test "$(git -C "$minimum_depth_source" cat-file -p "184d3961ab7fbf67150b392e09a95408bca6f009" | sed -n 's/^parent //p')" = "5cbae450617285d81435b8f3196eb45c9f293f5d"
+          test "$(git -C "$minimum_depth_source" cat-file -t "5cbae450617285d81435b8f3196eb45c9f293f5d")" = commit
+          test "$(git -C "$minimum_depth_source" cat-file -p "5cbae450617285d81435b8f3196eb45c9f293f5d" | sed -n 's/^parent //p')" = "fe3a898e94eac0ac1695051b2ae71cfa27efaebc"
+          test "$(git -C "$minimum_depth_source" cat-file -t "fe3a898e94eac0ac1695051b2ae71cfa27efaebc")" = commit
+          test "$(git -C "$minimum_depth_source" rev-parse "fe3a898e94eac0ac1695051b2ae71cfa27efaebc:$historical_path")" = "$minimum_depth_blob"
+          test "$(git -C "$minimum_depth_source" cat-file -t "$minimum_depth_blob")" = blob
+          test "$(git -C "$authority" cat-file -p "${shas[1]}" | sed -n 's/^parent //p')" = "${shas[0]}"
+          test "$(git -C "$authority" cat-file -p "${shas[2]}" | sed -n 's/^parent //p')" = "${shas[1]}"
+          test "$(git -C "$authority" cat-file -p "${shas[3]}" | sed -n 's/^parent //p')" = "${shas[2]}"
+          test "$(git -C "$authority" cat-file -p "${shas[4]}" | sed -n 's/^parent //p')" = "${shas[3]}"
+          test "$(git -C "$authority" cat-file -p "${shas[5]}" | sed -n 's/^parent //p')" = "5c302bdae987a43104fecb5c4bfcf4fcca82c540"
+          test "$(git -C "$authority" cat-file -p "${shas[6]}" | sed -n 's/^parent //p')" = "${shas[5]}"
+          mapfile -t actual < <(git -C "$authority" cat-file --batch-all-objects \
+            --batch-check='%(objectname) %(objecttype)' | awk '$2 == "commit" {print $1}' | sort)
+          mapfile -t expected < <(printf '%s\n' "${shas[@]}" | sort)
+          test "${actual[*]}" = "${expected[*]}"
+          test ! -e "$authority/.git/objects/info/alternates"
+          test -z "$(git -C "$authority" for-each-ref --format='%(refname)' refs/replace)"
+          test ! -s "$authority/.git/info/grafts"
+          # Retain the independently acquired exact sources until verifier execution.
+          # The unconditional cleanup step removes every source afterward.
+
       - name: P1-A trusted verifier controls
         env:
           P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
@@ -343,12 +506,20 @@ jobs:
           P1A_EVIDENCE_BASE_AUTHORITY_ROOT: .p1a-evidence-base-authority
           P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority
           P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority
+          P1A_PR16_CHAIN_AUTHORITY_ROOT: .p1a-pr16-remediation-chain-authority
+          P1A_PR16_HISTORICAL_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-cleanliness
+          P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: .p1a-pr16-chain-staging-trusted-base
+          P1A_PR16_ACTION_INVENTORY_SOURCE_ROOT: .p1a-pr16-chain-staging-action-inventory
+          P1A_PR16_ORIGINAL_AMENDMENT_SOURCE_ROOT: .p1a-pr16-chain-staging-original-amendment
+          P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-chain
+          P1A_PR16_CURRENT_PREDECESSOR_SOURCE_ROOT: .p1a-pr16-chain-staging-current-predecessor
+          P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT: .p1a-pr16-chain-staging-minimum-depth
         run: node scripts/test-p1a-dual-base-verifier.mjs
 
       - name: Remove isolated P1-A authority checkouts
         if: always()
         run: |
-          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority
+          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-chain-staging-action-inventory .p1a-pr16-chain-staging-current-predecessor .p1a-pr16-chain-staging-minimum-depth .p1a-pr16-remediation-chain-authority
           test ! -e .p1a-original-candidate
           test ! -e .p1a-trusted-baseline
           test ! -e .p1a-dual-base-authority
@@ -356,6 +527,14 @@ jobs:
           test ! -e .p1a-ancestry-authority
           test ! -e .p1a-trusted-reconciliation-authority
           test ! -e .p1a-trusted-reconciliation-staging
+          test ! -e .p1a-pr16-chain-staging-trusted-base
+          test ! -e .p1a-pr16-chain-staging-current-predecessor
+          test ! -e .p1a-pr16-chain-staging-original-amendment
+          test ! -e .p1a-pr16-chain-staging-rejected-chain
+          test ! -e .p1a-pr16-chain-staging-rejected-cleanliness
+          test ! -e .p1a-pr16-chain-staging-action-inventory
+          test ! -e .p1a-pr16-chain-staging-minimum-depth
+          test ! -e .p1a-pr16-remediation-chain-authority
 
       - name: P1-A trusted-bootstrap secret-detector tests
         run: node scripts/test-p1a-ci-secret-detector.mjs

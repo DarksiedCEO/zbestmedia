@@ -24,6 +24,8 @@ export const AUTHORIZED_BASE =
   "7056ea4ce24379c93549f0ac9b45ddd7a2600dd6";
 export const TRUSTED_RECONCILIATION_BASE =
   "5056fb0df6e1ef739231cd2273a453fb1c644273";
+export const CURRENT_TRUSTED_BASE =
+  "2f4baca937ef8b36d1560a010e8e7f430819197c";
 export const COMPOSED_CI_BASE =
   "06e6497ac3420998671f255a42a20d8cb8b9ca50";
 export const COMPOSED_CI_BASE_BLOB =
@@ -1002,6 +1004,7 @@ export const REQUIRED_CI_ADDITION = [
   "          P1A_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}",
   "          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority",
   "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority",
+  "          P1A_PR16_CHAIN_AUTHORITY_ROOT: .p1a-pr16-remediation-chain-authority",
   "        run: node scripts/validate-p1a-threat-model.mjs --candidate-data-only",
   "",
   "",
@@ -1017,7 +1020,31 @@ export const ORDINARY_CI_ACTION_PINS = Object.freeze({
   "actions/cache": "0057852bfaa89a56745cba8c7296529d2fc39830",
   "raven-actions/actionlint": "3d39aea434753780c3b3d4a1a31c854b4dbf49d7",
 });
-const ORDINARY_CI_ACTION_COUNTS = Object.freeze({
+const CURRENT_PREDECESSOR_AUTHORITY_V1_ACTION_COUNTS = Object.freeze({
+  "actions/checkout": 11,
+  "actions/setup-node": 1,
+  "actions/cache": 1,
+  "raven-actions/actionlint": 1,
+});
+const CURRENT_PREDECESSOR_AUTHORITY_V2_ACTION_COUNTS = Object.freeze({
+  "actions/checkout": 12,
+  "actions/setup-node": 1,
+  "actions/cache": 1,
+  "raven-actions/actionlint": 1,
+});
+const CURRENT_PREDECESSOR_AUTHORITY_V3_ACTION_COUNTS = Object.freeze({
+  "actions/cache": 1,
+  "actions/checkout": 13,
+  "actions/setup-node": 1,
+  "raven-actions/actionlint": 1,
+});
+const CURRENT_PREDECESSOR_AUTHORITY_V4_ACTION_COUNTS = Object.freeze({
+  "actions/cache": 1,
+  "actions/checkout": 14,
+  "actions/setup-node": 1,
+  "raven-actions/actionlint": 1,
+});
+const HISTORICAL_ORDINARY_CI_ACTION_COUNTS = Object.freeze({
   "actions/checkout": 7,
   "actions/setup-node": 1,
   "actions/cache": 1,
@@ -1045,11 +1072,68 @@ function pinBaselineActions(source) {
   return pinned;
 }
 
-export function validateOrdinaryCiActionPins(source) {
+export function parseOrdinaryCiActionInventory(source) {
   assert.ok(typeof source === "string" && source, "ordinary CI absent");
-  const uses = [...source.matchAll(/^\s*(?:-\s*)?uses:\s*([^\s@]+)@([^\s#]+)(?:\s+#.*)?$/gm)]
-    .map((match) => ({ repository: match[1], revision: match[2] }));
-  assert.equal(uses.length, 10, "ordinary CI action inventory changed");
+  assert.ok(!source.includes("\t"), "ordinary CI tabs are forbidden");
+  assert.ok(!/(?:^|\s)[&*][A-Za-z0-9_-]+(?:\s|$)/m.test(source),
+    "ordinary CI YAML anchors and aliases are forbidden in action inventory");
+  const uses = [];
+  let inJobs = false;
+  let inJob = false;
+  let inSteps = false;
+  for (const rawLine of source.split("\n")) {
+    if (!rawLine.trim() || rawLine.trimStart().startsWith("#")) continue;
+    const indent = rawLine.length - rawLine.trimStart().length;
+    const line = rawLine.trim();
+    if (indent === 0) {
+      inJobs = line === "jobs:";
+      inJob = false;
+      inSteps = false;
+      continue;
+    }
+    if (!inJobs) continue;
+    if (indent === 2 && /^[A-Za-z0-9_-]+:$/.test(line)) {
+      inJob = true;
+      inSteps = false;
+      continue;
+    }
+    if (!inJob) continue;
+    if (indent === 4 && line === "steps:") {
+      inSteps = true;
+      continue;
+    }
+    const jobUses = indent === 4 && line.startsWith("uses:") ? line.slice(5).trim() : null;
+    const stepUses = inSteps && ((indent === 6 && line.startsWith("- uses:"))
+      ? line.slice(7).trim()
+      : (indent === 8 && line.startsWith("uses:") ? line.slice(5).trim() : null));
+    const valueWithComment = jobUses ?? stepUses;
+    if (!valueWithComment) continue;
+    const value = valueWithComment.replace(/\s+#.*$/, "").replace(/^['\"]|['\"]$/g, "");
+    assert.ok(!value.startsWith("./") && !value.startsWith("docker://"),
+      `unclassified local or Docker action: ${value}`);
+    const separator = value.lastIndexOf("@");
+    assert.ok(separator > 0 && separator < value.length - 1,
+      `ordinary CI action reference malformed: ${value}`);
+    uses.push(Object.freeze({ repository: value.slice(0, separator), revision: value.slice(separator + 1) }));
+  }
+  return Object.freeze(uses);
+}
+
+export function validateOrdinaryCiActionPins(source, { profile = "CURRENT_PREDECESSOR_AUTHORITY_V4_17" } = {}) {
+  const uses = parseOrdinaryCiActionInventory(source);
+  const expectedCounts = profile === "CURRENT_PREDECESSOR_AUTHORITY_V4_17"
+    ? CURRENT_PREDECESSOR_AUTHORITY_V4_ACTION_COUNTS
+    : profile === "CURRENT_PREDECESSOR_AUTHORITY_V3_16"
+      ? CURRENT_PREDECESSOR_AUTHORITY_V3_ACTION_COUNTS
+    : profile === "CURRENT_PREDECESSOR_AUTHORITY_V2_15"
+      ? CURRENT_PREDECESSOR_AUTHORITY_V2_ACTION_COUNTS
+    : profile === "CURRENT_PREDECESSOR_AUTHORITY_V1_14"
+      ? CURRENT_PREDECESSOR_AUTHORITY_V1_ACTION_COUNTS
+    : profile === "HISTORICAL_10"
+      ? HISTORICAL_ORDINARY_CI_ACTION_COUNTS
+      : assert.fail("ordinary CI action profile unrecognized");
+  const expectedTotal = Object.values(expectedCounts).reduce((total, count) => total + count, 0);
+  assert.equal(uses.length, expectedTotal, "ordinary CI action inventory changed");
   const counts = new Map();
   for (const { repository, revision } of uses) {
     assert.ok(Object.hasOwn(ORDINARY_CI_ACTION_PINS, repository),
@@ -1062,10 +1146,11 @@ export function validateOrdinaryCiActionPins(source) {
   }
   assert.deepEqual(
     Object.fromEntries([...counts].sort()),
-    Object.fromEntries(Object.entries(ORDINARY_CI_ACTION_COUNTS).sort()),
+    Object.fromEntries(Object.entries(expectedCounts).sort()),
     "ordinary CI action counts changed",
   );
-  return Object.freeze({ required: uses.length, passed: uses.length });
+  return Object.freeze({ profile, required: expectedTotal, executed: uses.length, passed: uses.length,
+    unexpected: 0, missing: 0, mutable: 0, incorrectPins: 0 });
 }
 
 export function validateCurrentWorkflowShaCustody({
@@ -1330,7 +1415,8 @@ const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candid
 `;
 const TWO_STAGE_CI_START = "      - name: Acquire bounded trusted-reconciliation staging objects\n";
 const TWO_STAGE_CI_END = "      - name: P1-A trusted verifier controls\n";
-const TWO_STAGE_CI_SHA256 = "3aa63fcaf34a0c90dcd78e59e0a8395c18a766faaed2b815b53135134d2bb3f5";
+const HISTORICAL_TWO_STAGE_CI_SHA256 = "3fb24871674a86d9f3940b3c236215aa763d29018ff858e046fc2efbcaef8625";
+const TWO_STAGE_CI_SHA256 = "d1c1f07684344928b35edf4847b83c03145dcb6b771daa83b42c7fca8b471e3d";
 function exactTwoStageCustodyFragment(source) {
   assert.equal(source.split(TWO_STAGE_CI_START).length - 1, 1,
     "two-stage custody: staging acquisition missing or duplicated");
@@ -1338,6 +1424,8 @@ function exactTwoStageCustodyFragment(source) {
   const end = source.indexOf(TWO_STAGE_CI_END, start);
   assert.ok(end > start, "two-stage custody: verifier placement missing");
   const fragment = source.slice(start, end);
+  assert.notEqual(TWO_STAGE_CI_SHA256, HISTORICAL_TWO_STAGE_CI_SHA256,
+    "two-stage custody: current and historical profiles must remain distinct");
   assert.equal(sha256(fragment), TWO_STAGE_CI_SHA256,
     "two-stage custody: exact fragment digest mismatch");
   for (const required of [
@@ -1387,12 +1475,20 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          P1A_EVIDENCE_BASE_AUTHORITY_ROOT: .p1a-evidence-base-authority",
   "          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority",
   "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority",
+  "          P1A_PR16_CHAIN_AUTHORITY_ROOT: .p1a-pr16-remediation-chain-authority",
+  "          P1A_PR16_HISTORICAL_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-cleanliness",
+  "          P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: .p1a-pr16-chain-staging-trusted-base",
+  "          P1A_PR16_ACTION_INVENTORY_SOURCE_ROOT: .p1a-pr16-chain-staging-action-inventory",
+  "          P1A_PR16_ORIGINAL_AMENDMENT_SOURCE_ROOT: .p1a-pr16-chain-staging-original-amendment",
+  "          P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-chain",
+  "          P1A_PR16_CURRENT_PREDECESSOR_SOURCE_ROOT: .p1a-pr16-chain-staging-current-predecessor",
+  "          P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT: .p1a-pr16-chain-staging-minimum-depth",
   "        run: node scripts/test-p1a-dual-base-verifier.mjs",
   "",
   "      - name: Remove isolated P1-A authority checkouts",
   "        if: always()",
   "        run: |",
-  "          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority",
+  "          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-chain-staging-action-inventory .p1a-pr16-chain-staging-current-predecessor .p1a-pr16-chain-staging-minimum-depth .p1a-pr16-remediation-chain-authority",
   "          test ! -e .p1a-original-candidate",
   "          test ! -e .p1a-trusted-baseline",
   "          test ! -e .p1a-dual-base-authority",
@@ -1400,6 +1496,14 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          test ! -e .p1a-ancestry-authority",
   "          test ! -e .p1a-trusted-reconciliation-authority",
   "          test ! -e .p1a-trusted-reconciliation-staging",
+  "          test ! -e .p1a-pr16-chain-staging-trusted-base",
+  "          test ! -e .p1a-pr16-chain-staging-current-predecessor",
+  "          test ! -e .p1a-pr16-chain-staging-original-amendment",
+  "          test ! -e .p1a-pr16-chain-staging-rejected-chain",
+  "          test ! -e .p1a-pr16-chain-staging-rejected-cleanliness",
+  "          test ! -e .p1a-pr16-chain-staging-action-inventory",
+  "          test ! -e .p1a-pr16-chain-staging-minimum-depth",
+  "          test ! -e .p1a-pr16-remediation-chain-authority",
   "",
   "      - name: P1-A trusted-bootstrap secret-detector tests",
 ].join("\n");
@@ -1516,6 +1620,7 @@ export function validateCandidateDataOnly({
   candidateSha,
   ancestryAuthorityRoot = process.env.P1A_ANCESTRY_AUTHORITY_ROOT,
   trustedReconciliationAuthorityRoot = process.env.P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT,
+  trustedBaseFullSourceRoot = process.env.P1A_TRUSTED_BASE_FULL_SOURCE_ROOT,
 } = {}) {
   const checks = [];
   const check = (name, operation) => {
@@ -1541,9 +1646,19 @@ export function validateCandidateDataOnly({
   check("required_ancestry", () => {
     verifyCanonicalBoundedAncestry({ ancestryAuthorityRoot });
     verifyCanonicalTrustedReconciliationAncestry({ trustedReconciliationAuthorityRoot });
-    gitAt(repoRoot, "merge-base", "--is-ancestor", TRUSTED_RECONCILIATION_BASE, trustedParent);
-    gitAt(repoRoot, "merge-base", "--is-ancestor", ORIGINAL_CANDIDATE, candidateSha);
-    gitAt(repoRoot, "merge-base", "--is-ancestor", trustedParent, candidateSha);
+    assert.ok(trustedBaseFullSourceRoot, "trusted-base full source absent");
+    assert.equal(gitAt(repoRoot, "show", "-s", "--format=%P", trustedParent), CURRENT_TRUSTED_BASE,
+      "trusted parent is not based directly on the authorized trusted base");
+    assert.equal(gitAt(trustedBaseFullSourceRoot, "rev-parse", "HEAD"), CURRENT_TRUSTED_BASE,
+      "trusted-base full source HEAD mismatch");
+    assert.equal(normalizeRepository(gitAt(trustedBaseFullSourceRoot, "remote", "get-url", "origin")),
+      "https://github.com/DarksiedCEO/zbestmedia", "trusted-base full source repository mismatch");
+    gitAt(trustedBaseFullSourceRoot, "merge-base", "--is-ancestor",
+      TRUSTED_RECONCILIATION_BASE, CURRENT_TRUSTED_BASE);
+    assert.equal(parents[0], ORIGINAL_CANDIDATE,
+      "candidate is not a direct descendant of the original candidate");
+    assert.equal(parents[1], trustedParent,
+      "candidate is not a direct descendant of the trusted parent");
   });
   check("exact_scope", () => {
     const changed = gitAt(repoRoot, "diff", "--name-only", `${trustedParent}..${candidateSha}`)
@@ -1605,6 +1720,7 @@ export function validateDualBaseScope({
   workflowSha,
   ancestryAuthorityRoot = process.env.P1A_ANCESTRY_AUTHORITY_ROOT,
   trustedReconciliationAuthorityRoot = process.env.P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT,
+  trustedBaseFullSourceRoot = process.env.P1A_TRUSTED_BASE_FULL_SOURCE_ROOT,
 }) {
   for (const [label, value, expected] of [
     ["evidence/model base", evidenceBaseSha, AUTHORIZED_BASE],
@@ -1631,9 +1747,17 @@ export function validateDualBaseScope({
     originalCandidateSha: reconciliationBaseSha,
     authorizedBoundarySha: evidenceBaseSha,
   });
-  git("merge-base", "--is-ancestor", reconciliationBaseSha, workflowSha);
-  git("merge-base", "--is-ancestor", workflowSha, candidateSha);
-  git("merge-base", "--is-ancestor", originalCandidateSha, candidateSha);
+  assert.ok(trustedBaseFullSourceRoot, "trusted-base full source absent");
+  assert.equal(git("show", "-s", "--format=%P", workflowSha), CURRENT_TRUSTED_BASE,
+    "workflow amendment is not based directly on the authorized trusted base");
+  assert.equal(gitAt(trustedBaseFullSourceRoot, "rev-parse", "HEAD"), CURRENT_TRUSTED_BASE,
+    "trusted-base full source HEAD mismatch");
+  assert.equal(normalizeRepository(gitAt(trustedBaseFullSourceRoot, "remote", "get-url", "origin")),
+    "https://github.com/DarksiedCEO/zbestmedia", "trusted-base full source repository mismatch");
+  gitAt(trustedBaseFullSourceRoot, "merge-base", "--is-ancestor",
+    reconciliationBaseSha, CURRENT_TRUSTED_BASE);
+  assert.deepEqual(git("show", "-s", "--format=%P", candidateSha).split(" "),
+    [originalCandidateSha, workflowSha], "reconciled candidate ordered parentage mismatch");
 
   const historical = gitLines(
     git,
