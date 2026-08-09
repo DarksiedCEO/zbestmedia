@@ -15,6 +15,7 @@ import {
   removeTwoStageCustodyFragment, validateDualBaseScope,
   parseOrdinaryCiActionInventory, validateOrdinaryCiActionPins,
   CURRENT_TRUSTED_BASE, CURRENT_TRUSTED_BASE_TREE, CURRENT_TRUSTED_BASE_PARENTS,
+  POST_PR17_TRUSTED_BASE, POST_PR17_TRUSTED_BASE_TREE, POST_PR17_TRUSTED_BASE_PARENTS,
   verifyExactCurrentTrustedBaseTopology,
 } from "./validate-p1a-threat-model.mjs";
 import { validateCertificationBundle } from "./validate-p1a-certification-accounting.mjs";
@@ -273,6 +274,82 @@ function verifyExactMergedTrustedBase(head, parentLookup, treeLookup) {
     "merged trusted base: exact tree required");
   return head;
 }
+
+function verifyExactPostPr17TrustedBase(head, parentLookup, treeLookup) {
+  assert.equal(head, POST_PR17_TRUSTED_BASE,
+    "post-pr17 trusted base: exact fixed SHA required");
+  assert.equal(typeof parentLookup, "function", "post-pr17 trusted base: parent authority required");
+  assert.equal(typeof treeLookup, "function", "post-pr17 trusted base: tree authority required");
+  assert.deepEqual(parentLookup(head), [...POST_PR17_TRUSTED_BASE_PARENTS],
+    "post-pr17 trusted base: exact ordered parents required");
+  assert.equal(treeLookup(head), POST_PR17_TRUSTED_BASE_TREE,
+    "post-pr17 trusted base: exact tree required");
+  return head;
+}
+
+function classifyCurrentCiSubject({ head, parents, tree, parentLookup, treeLookup }) {
+  if (head === POST_PR17_TRUSTED_BASE) {
+    verifyExactPostPr17TrustedBase(head, parentLookup, treeLookup);
+    assert.equal(tree, POST_PR17_TRUSTED_BASE_TREE,
+      "subject classification: post-pr17 trusted-base tree mismatch");
+    return "POST_PR17_TRUSTED_BASE_MERGE";
+  }
+  if (parents.length === 1 && parents[0] === POST_PR17_TRUSTED_BASE) {
+    assert.match(head, EXACT_SHA, "subject classification: amendment SHA must be immutable");
+    return "POST_PR17_VERIFIER_AMENDMENT";
+  }
+  assert.equal(parents.length, 2,
+    "subject classification: disposable reconciliation requires exactly two parents");
+  assert.equal(parents[0], ORIGINAL_CANDIDATE,
+    "subject classification: disposable reconciliation first parent mismatch");
+  assert.notEqual(parents[1], head,
+    "subject classification: reconciliation cannot select itself as trusted authority");
+  return "PR8_DISPOSABLE_RECONCILIATION";
+}
+
+const postPr17ParentAuthority = new Map([
+  [POST_PR17_TRUSTED_BASE, [...POST_PR17_TRUSTED_BASE_PARENTS]],
+]);
+const postPr17TreeAuthority = new Map([[POST_PR17_TRUSTED_BASE, POST_PR17_TRUSTED_BASE_TREE]]);
+assert.equal(classifyCurrentCiSubject({
+  head: POST_PR17_TRUSTED_BASE,
+  parents: [...POST_PR17_TRUSTED_BASE_PARENTS],
+  tree: POST_PR17_TRUSTED_BASE_TREE,
+  parentLookup: (sha) => postPr17ParentAuthority.get(sha),
+  treeLookup: (sha) => postPr17TreeAuthority.get(sha),
+}), "POST_PR17_TRUSTED_BASE_MERGE");
+const postPr17Hostiles = [
+  ["wrong_merge_sha", "a".repeat(40), [...POST_PR17_TRUSTED_BASE_PARENTS], POST_PR17_TRUSTED_BASE_TREE],
+  ["reordered_parents", POST_PR17_TRUSTED_BASE, [...POST_PR17_TRUSTED_BASE_PARENTS].reverse(), POST_PR17_TRUSTED_BASE_TREE],
+  ["wrong_tree", POST_PR17_TRUSTED_BASE, [...POST_PR17_TRUSTED_BASE_PARENTS], "b".repeat(40)],
+  ["sibling_merge", POST_PR17_TRUSTED_BASE, [CURRENT_TRUSTED_BASE, "c".repeat(40)], POST_PR17_TRUSTED_BASE_TREE],
+  ["arbitrary_descendant", "d".repeat(40), ["e".repeat(40)], POST_PR17_TRUSTED_BASE_TREE],
+  ["pr17_head_as_merge", POST_PR17_TRUSTED_BASE_PARENTS[1], [...POST_PR17_TRUSTED_BASE_PARENTS], POST_PR17_TRUSTED_BASE_TREE],
+];
+for (const [name, head, parents, tree] of postPr17Hostiles) {
+  assert.ok(rejects(() => classifyCurrentCiSubject({
+    head, parents, tree,
+    parentLookup: () => parents,
+    treeLookup: () => tree,
+  })), `${name}: hostile post-PR17 subject accepted`);
+}
+assert.ok(rejects(() => classifyCurrentCiSubject({
+  head: "e".repeat(40), parents: [CURRENT_TRUSTED_BASE, POST_PR17_TRUSTED_BASE_PARENTS[1]],
+  tree: POST_PR17_TRUSTED_BASE_TREE, parentLookup: () => [], treeLookup: () => "",
+})), "trusted merge misclassified as PR8 reconciliation");
+assert.ok(rejects(() => classifyCurrentCiSubject({
+  head: "f".repeat(40), parents: [CURRENT_TRUSTED_BASE, POST_PR17_TRUSTED_BASE],
+  tree: POST_PR17_TRUSTED_BASE_TREE, parentLookup: () => [], treeLookup: () => "",
+})), "fake reconciliation without original first parent accepted");
+console.log(JSON.stringify({
+  suite: "p1-a-post-pr17-subject-classification",
+  positiveRequired: 1, positiveExecuted: 1, positivePassed: 1,
+  hostileRequired: postPr17Hostiles.length + 2,
+  hostileExecuted: postPr17Hostiles.length + 2,
+  hostilePassed: postPr17Hostiles.length + 2,
+  genericMergeAcceptance: false, candidateSelectedAuthority: false,
+  failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
 
 const mergedTrustedBaseParents = new Map([
   [CURRENT_TRUSTED_BASE, [...CURRENT_TRUSTED_BASE_PARENTS]],
@@ -983,6 +1060,14 @@ function resolveAmendmentSource() {
   const chainAuthority = preverifiedPr16ChainAuthority;
   const head = gitAt(root, "rev-parse", "HEAD");
   const parents = commitParents(root, head);
+  const tree = gitAt(root, "show", "-s", "--format=%T", head);
+  const subjectClass = classifyCurrentCiSubject({
+    head, parents, tree,
+    parentLookup: (sha) => commitParents(root, sha),
+    treeLookup: (sha) => gitAt(root, "show", "-s", "--format=%T", sha),
+  });
+  if (subjectClass === "POST_PR17_TRUSTED_BASE_MERGE") return head;
+  if (subjectClass === "POST_PR17_VERIFIER_AMENDMENT") return head;
   if (parents.length === 1) {
     if (parents[0] === CURRENT_TRUSTED_BASE) {
       verifyExactCurrentTrustedBaseTopology({ trustedBaseRoot: authorityRoots.trustedBaseFullSource });
@@ -2209,9 +2294,11 @@ const semanticPositiveControls = [
     ({ exactSourceSha }) => exactSourceSha === CURRENT_TRUSTED_BASE))],
   ["topology_through_6867", () => assert.deepEqual(preverifiedPr16ChainAuthority.parents(
     REJECTED_PR16_ACTION_INVENTORY_CANDIDATE), [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE])],
-  ["topology_amendment_parent_exact_merged_trusted_base", () => assert.deepEqual(
+  ["current_subject_parentage_matches_exact_classification", () => assert.deepEqual(
     commitParents(trustedSourceRoot, amendmentSourceSha),
-    [CURRENT_TRUSTED_BASE])],
+    amendmentSourceSha === POST_PR17_TRUSTED_BASE
+      ? [...POST_PR17_TRUSTED_BASE_PARENTS]
+      : [POST_PR17_TRUSTED_BASE])],
   ["remote_head_parent_historical_digest", () => assert.deepEqual(
     commitParents(trustedSourceRoot, REJECTED_PR16_SEVEN_SOURCE_CANDIDATE),
     [REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE])],
