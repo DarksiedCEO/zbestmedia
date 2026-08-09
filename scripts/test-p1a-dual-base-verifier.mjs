@@ -17,6 +17,7 @@ import {
   CURRENT_TRUSTED_BASE, CURRENT_TRUSTED_BASE_TREE, CURRENT_TRUSTED_BASE_PARENTS,
   POST_PR17_TRUSTED_BASE, POST_PR17_TRUSTED_BASE_TREE, POST_PR17_TRUSTED_BASE_PARENTS,
   POST_PR18_TRUSTED_BASE, POST_PR18_TRUSTED_BASE_TREE, POST_PR18_TRUSTED_BASE_PARENTS,
+  POST_PR19_TRUSTED_BASE, POST_PR19_TRUSTED_BASE_TREE, POST_PR19_TRUSTED_BASE_PARENTS,
   verifyExactCurrentTrustedBaseTopology,
 } from "./validate-p1a-threat-model.mjs";
 import { validateCertificationBundle } from "./validate-p1a-certification-accounting.mjs";
@@ -300,7 +301,29 @@ function verifyExactPostPr18TrustedBase(head, parentLookup, treeLookup) {
   return head;
 }
 
+function verifyExactPostPr19TrustedBase(head, parentLookup, treeLookup) {
+  assert.equal(head, POST_PR19_TRUSTED_BASE,
+    "post-pr19 trusted base: exact fixed SHA required");
+  assert.equal(typeof parentLookup, "function", "post-pr19 trusted base: parent authority required");
+  assert.equal(typeof treeLookup, "function", "post-pr19 trusted base: tree authority required");
+  assert.deepEqual(parentLookup(head), [...POST_PR19_TRUSTED_BASE_PARENTS],
+    "post-pr19 trusted base: exact ordered parents required");
+  assert.equal(treeLookup(head), POST_PR19_TRUSTED_BASE_TREE,
+    "post-pr19 trusted base: exact tree required");
+  return head;
+}
+
 function classifyCurrentCiSubject({ head, parents, tree, parentLookup, treeLookup }) {
+  if (head === POST_PR19_TRUSTED_BASE) {
+    verifyExactPostPr19TrustedBase(head, parentLookup, treeLookup);
+    assert.equal(tree, POST_PR19_TRUSTED_BASE_TREE,
+      "subject classification: post-pr19 trusted-base tree mismatch");
+    return "POST_PR19_TRUSTED_BASE_MERGE";
+  }
+  if (parents.length === 1 && parents[0] === POST_PR19_TRUSTED_BASE) {
+    assert.match(head, EXACT_SHA, "subject classification: post-pr19 amendment SHA must be immutable");
+    return "POST_PR19_VERIFIER_AMENDMENT";
+  }
   if (head === POST_PR18_TRUSTED_BASE) {
     verifyExactPostPr18TrustedBase(head, parentLookup, treeLookup);
     assert.equal(tree, POST_PR18_TRUSTED_BASE_TREE,
@@ -411,6 +434,47 @@ console.log(JSON.stringify({
   hostileRequired: postPr18Hostiles.length + 1,
   hostileExecuted: postPr18Hostiles.length + 1,
   hostilePassed: postPr18Hostiles.length + 1,
+  genericMergeAcceptance: false, candidateSelectedAuthority: false,
+  failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
+
+const postPr19ParentAuthority = new Map([
+  [POST_PR19_TRUSTED_BASE, [...POST_PR19_TRUSTED_BASE_PARENTS]],
+]);
+const postPr19TreeAuthority = new Map([[POST_PR19_TRUSTED_BASE, POST_PR19_TRUSTED_BASE_TREE]]);
+assert.equal(classifyCurrentCiSubject({
+  head: POST_PR19_TRUSTED_BASE,
+  parents: [...POST_PR19_TRUSTED_BASE_PARENTS],
+  tree: POST_PR19_TRUSTED_BASE_TREE,
+  parentLookup: (sha) => postPr19ParentAuthority.get(sha),
+  treeLookup: (sha) => postPr19TreeAuthority.get(sha),
+}), "POST_PR19_TRUSTED_BASE_MERGE");
+const postPr19Hostiles = [
+  ["wrong_merge_sha", "7".repeat(40), [...POST_PR19_TRUSTED_BASE_PARENTS], POST_PR19_TRUSTED_BASE_TREE],
+  ["reordered_parents", POST_PR19_TRUSTED_BASE, [...POST_PR19_TRUSTED_BASE_PARENTS].reverse(), POST_PR19_TRUSTED_BASE_TREE],
+  ["wrong_tree", POST_PR19_TRUSTED_BASE, [...POST_PR19_TRUSTED_BASE_PARENTS], "8".repeat(40)],
+  ["sibling_merge", POST_PR19_TRUSTED_BASE, [POST_PR18_TRUSTED_BASE, "9".repeat(40)], POST_PR19_TRUSTED_BASE_TREE],
+  ["arbitrary_descendant", "a".repeat(40), ["c".repeat(40)], POST_PR19_TRUSTED_BASE_TREE],
+  ["pr19_head_as_merge", POST_PR19_TRUSTED_BASE_PARENTS[1], [...POST_PR19_TRUSTED_BASE_PARENTS], POST_PR19_TRUSTED_BASE_TREE],
+  ["post_pr18_as_post_pr19", POST_PR18_TRUSTED_BASE, [...POST_PR19_TRUSTED_BASE_PARENTS], POST_PR19_TRUSTED_BASE_TREE],
+];
+for (const [name, head, parents, tree] of postPr19Hostiles) {
+  assert.ok(rejects(() => classifyCurrentCiSubject({
+    head, parents, tree,
+    parentLookup: () => parents,
+    treeLookup: () => tree,
+  })), `${name}: hostile post-PR19 subject accepted`);
+}
+assert.ok(rejects(() => classifyCurrentCiSubject({
+  head: "b".repeat(40), parents: [POST_PR18_TRUSTED_BASE, POST_PR19_TRUSTED_BASE],
+  tree: POST_PR19_TRUSTED_BASE_TREE, parentLookup: () => [], treeLookup: () => "",
+})), "fake reconciliation without original first parent accepted after PR19");
+console.log(JSON.stringify({
+  suite: "p1-a-post-pr19-subject-classification",
+  positiveRequired: 1, positiveExecuted: 1, positivePassed: 1,
+  hostileRequired: postPr19Hostiles.length + 1,
+  hostileExecuted: postPr19Hostiles.length + 1,
+  hostilePassed: postPr19Hostiles.length + 1,
   genericMergeAcceptance: false, candidateSelectedAuthority: false,
   failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
 }));
@@ -1134,6 +1198,8 @@ function resolveAmendmentSource() {
   if (subjectClass === "POST_PR17_VERIFIER_AMENDMENT") return head;
   if (subjectClass === "POST_PR18_TRUSTED_BASE_MERGE") return head;
   if (subjectClass === "POST_PR18_VERIFIER_AMENDMENT") return head;
+  if (subjectClass === "POST_PR19_TRUSTED_BASE_MERGE") return head;
+  if (subjectClass === "POST_PR19_VERIFIER_AMENDMENT") return head;
   if (parents.length === 1) {
     if (parents[0] === CURRENT_TRUSTED_BASE) {
       verifyExactCurrentTrustedBaseTopology({ trustedBaseRoot: authorityRoots.trustedBaseFullSource });
@@ -2366,7 +2432,9 @@ const semanticPositiveControls = [
       ? [...POST_PR17_TRUSTED_BASE_PARENTS]
       : amendmentSourceSha === POST_PR18_TRUSTED_BASE
         ? [...POST_PR18_TRUSTED_BASE_PARENTS]
-        : [POST_PR18_TRUSTED_BASE])],
+        : amendmentSourceSha === POST_PR19_TRUSTED_BASE
+          ? [...POST_PR19_TRUSTED_BASE_PARENTS]
+          : [POST_PR19_TRUSTED_BASE])],
   ["remote_head_parent_historical_digest", () => assert.deepEqual(
     commitParents(trustedSourceRoot, REJECTED_PR16_SEVEN_SOURCE_CANDIDATE),
     [REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE])],
