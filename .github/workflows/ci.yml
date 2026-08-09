@@ -326,7 +326,7 @@ jobs:
         with:
           repository: DarksiedCEO/zbestmedia
           ref: 2f4baca937ef8b36d1560a010e8e7f430819197c
-          fetch-depth: 1
+          fetch-depth: 6
           persist-credentials: false
           path: .p1a-pr16-chain-staging-trusted-base
 
@@ -366,6 +366,15 @@ jobs:
           persist-credentials: false
           path: .p1a-pr16-chain-staging-action-inventory
 
+      - name: Acquire exact PR16 current-predecessor chain objects
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c
+          fetch-depth: 2
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-current-predecessor
+
       - name: Construct exact PR16 remediation-chain predecessor authority
         run: |
           set -euo pipefail
@@ -376,6 +385,8 @@ jobs:
             0164130fc62209c7a71ca4f7e58a2e24117e2fd5
             966ab9160ad133adb10d58f7877f8549efd06831
             6867d43d17c8b614ab7d0e0c5e338127020bb772
+            af29acb57895319ae6a5ed35d923054383ceed12
+            9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c
           )
           staging=(
             .p1a-pr16-chain-staging-trusted-base
@@ -383,10 +394,13 @@ jobs:
             .p1a-pr16-chain-staging-rejected-chain
             .p1a-pr16-chain-staging-rejected-cleanliness
             .p1a-pr16-chain-staging-action-inventory
+            .p1a-pr16-chain-staging-current-predecessor
+            .p1a-pr16-chain-staging-current-predecessor
           )
           historical_path_source=.p1a-pr16-chain-staging-rejected-cleanliness
           trusted_base_source=.p1a-pr16-chain-staging-trusted-base
           action_inventory_source=.p1a-pr16-chain-staging-action-inventory
+          current_predecessor_source=.p1a-pr16-chain-staging-current-predecessor
           historical_path=.github/workflows/ci.yml
           historical_blob=60d9cede50402f10837a630598b9f8dbf6fb839e
           test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
@@ -412,10 +426,13 @@ jobs:
           test "$(git -C "$trusted_base_source" rev-parse HEAD)" = "${shas[0]}"
           test "$(git -C "$trusted_base_source" rev-parse "${shas[0]}:$historical_path")" = "$historical_blob"
           test "$(git -C "$action_inventory_source" rev-parse HEAD)" = "${shas[4]}"
+          test "$(git -C "$current_predecessor_source" rev-parse HEAD)" = "${shas[6]}"
           test "$(git -C "$authority" cat-file -p "${shas[1]}" | sed -n 's/^parent //p')" = "${shas[0]}"
           test "$(git -C "$authority" cat-file -p "${shas[2]}" | sed -n 's/^parent //p')" = "${shas[1]}"
           test "$(git -C "$authority" cat-file -p "${shas[3]}" | sed -n 's/^parent //p')" = "${shas[2]}"
           test "$(git -C "$authority" cat-file -p "${shas[4]}" | sed -n 's/^parent //p')" = "${shas[3]}"
+          test "$(git -C "$authority" cat-file -p "${shas[5]}" | sed -n 's/^parent //p')" = "5c302bdae987a43104fecb5c4bfcf4fcca82c540"
+          test "$(git -C "$authority" cat-file -p "${shas[6]}" | sed -n 's/^parent //p')" = "${shas[5]}"
           mapfile -t actual < <(git -C "$authority" cat-file --batch-all-objects \
             --batch-check='%(objectname) %(objecttype)' | awk '$2 == "commit" {print $1}' | sort)
           mapfile -t expected < <(printf '%s\n' "${shas[@]}" | sort)
@@ -454,12 +471,13 @@ jobs:
           P1A_PR16_ACTION_INVENTORY_SOURCE_ROOT: .p1a-pr16-chain-staging-action-inventory
           P1A_PR16_ORIGINAL_AMENDMENT_SOURCE_ROOT: .p1a-pr16-chain-staging-original-amendment
           P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-chain
+          P1A_PR16_CURRENT_PREDECESSOR_SOURCE_ROOT: .p1a-pr16-chain-staging-current-predecessor
         run: node scripts/test-p1a-dual-base-verifier.mjs
 
       - name: Remove isolated P1-A authority checkouts
         if: always()
         run: |
-          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-chain-staging-action-inventory .p1a-pr16-remediation-chain-authority
+          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-chain-staging-action-inventory .p1a-pr16-chain-staging-current-predecessor .p1a-pr16-remediation-chain-authority
           test ! -e .p1a-original-candidate
           test ! -e .p1a-trusted-baseline
           test ! -e .p1a-dual-base-authority
@@ -468,6 +486,7 @@ jobs:
           test ! -e .p1a-trusted-reconciliation-authority
           test ! -e .p1a-trusted-reconciliation-staging
           test ! -e .p1a-pr16-chain-staging-trusted-base
+          test ! -e .p1a-pr16-chain-staging-current-predecessor
           test ! -e .p1a-pr16-chain-staging-original-amendment
           test ! -e .p1a-pr16-chain-staging-rejected-chain
           test ! -e .p1a-pr16-chain-staging-rejected-cleanliness

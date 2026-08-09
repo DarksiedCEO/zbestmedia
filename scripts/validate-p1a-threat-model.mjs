@@ -24,6 +24,8 @@ export const AUTHORIZED_BASE =
   "7056ea4ce24379c93549f0ac9b45ddd7a2600dd6";
 export const TRUSTED_RECONCILIATION_BASE =
   "5056fb0df6e1ef739231cd2273a453fb1c644273";
+export const CURRENT_TRUSTED_BASE =
+  "2f4baca937ef8b36d1560a010e8e7f430819197c";
 export const COMPOSED_CI_BASE =
   "06e6497ac3420998671f255a42a20d8cb8b9ca50";
 export const COMPOSED_CI_BASE_BLOB =
@@ -1030,6 +1032,12 @@ const CURRENT_PREDECESSOR_AUTHORITY_V2_ACTION_COUNTS = Object.freeze({
   "actions/cache": 1,
   "raven-actions/actionlint": 1,
 });
+const CURRENT_PREDECESSOR_AUTHORITY_V3_ACTION_COUNTS = Object.freeze({
+  "actions/cache": 1,
+  "actions/checkout": 13,
+  "actions/setup-node": 1,
+  "raven-actions/actionlint": 1,
+});
 const HISTORICAL_ORDINARY_CI_ACTION_COUNTS = Object.freeze({
   "actions/checkout": 7,
   "actions/setup-node": 1,
@@ -1105,10 +1113,12 @@ export function parseOrdinaryCiActionInventory(source) {
   return Object.freeze(uses);
 }
 
-export function validateOrdinaryCiActionPins(source, { profile = "CURRENT_PREDECESSOR_AUTHORITY_V2_15" } = {}) {
+export function validateOrdinaryCiActionPins(source, { profile = "CURRENT_PREDECESSOR_AUTHORITY_V3_16" } = {}) {
   const uses = parseOrdinaryCiActionInventory(source);
-  const expectedCounts = profile === "CURRENT_PREDECESSOR_AUTHORITY_V2_15"
-    ? CURRENT_PREDECESSOR_AUTHORITY_V2_ACTION_COUNTS
+  const expectedCounts = profile === "CURRENT_PREDECESSOR_AUTHORITY_V3_16"
+    ? CURRENT_PREDECESSOR_AUTHORITY_V3_ACTION_COUNTS
+    : profile === "CURRENT_PREDECESSOR_AUTHORITY_V2_15"
+      ? CURRENT_PREDECESSOR_AUTHORITY_V2_ACTION_COUNTS
     : profile === "CURRENT_PREDECESSOR_AUTHORITY_V1_14"
       ? CURRENT_PREDECESSOR_AUTHORITY_V1_ACTION_COUNTS
     : profile === "HISTORICAL_10"
@@ -1398,7 +1408,7 @@ const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candid
 const TWO_STAGE_CI_START = "      - name: Acquire bounded trusted-reconciliation staging objects\n";
 const TWO_STAGE_CI_END = "      - name: P1-A trusted verifier controls\n";
 const HISTORICAL_TWO_STAGE_CI_SHA256 = "3fb24871674a86d9f3940b3c236215aa763d29018ff858e046fc2efbcaef8625";
-const TWO_STAGE_CI_SHA256 = "d02a9180af17eb9f67674a8d21aceba5f9e712bacd54b16e590ef51c6068baa0";
+const TWO_STAGE_CI_SHA256 = "eb7e175d744e66c5bddfe440c6be11656f3f243ae70a2eb12215e9920d7079d5";
 function exactTwoStageCustodyFragment(source) {
   assert.equal(source.split(TWO_STAGE_CI_START).length - 1, 1,
     "two-stage custody: staging acquisition missing or duplicated");
@@ -1463,12 +1473,13 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          P1A_PR16_ACTION_INVENTORY_SOURCE_ROOT: .p1a-pr16-chain-staging-action-inventory",
   "          P1A_PR16_ORIGINAL_AMENDMENT_SOURCE_ROOT: .p1a-pr16-chain-staging-original-amendment",
   "          P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-chain",
+  "          P1A_PR16_CURRENT_PREDECESSOR_SOURCE_ROOT: .p1a-pr16-chain-staging-current-predecessor",
   "        run: node scripts/test-p1a-dual-base-verifier.mjs",
   "",
   "      - name: Remove isolated P1-A authority checkouts",
   "        if: always()",
   "        run: |",
-  "          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-chain-staging-action-inventory .p1a-pr16-remediation-chain-authority",
+  "          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-chain-staging-action-inventory .p1a-pr16-chain-staging-current-predecessor .p1a-pr16-remediation-chain-authority",
   "          test ! -e .p1a-original-candidate",
   "          test ! -e .p1a-trusted-baseline",
   "          test ! -e .p1a-dual-base-authority",
@@ -1477,6 +1488,7 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          test ! -e .p1a-trusted-reconciliation-authority",
   "          test ! -e .p1a-trusted-reconciliation-staging",
   "          test ! -e .p1a-pr16-chain-staging-trusted-base",
+  "          test ! -e .p1a-pr16-chain-staging-current-predecessor",
   "          test ! -e .p1a-pr16-chain-staging-original-amendment",
   "          test ! -e .p1a-pr16-chain-staging-rejected-chain",
   "          test ! -e .p1a-pr16-chain-staging-rejected-cleanliness",
@@ -1598,6 +1610,7 @@ export function validateCandidateDataOnly({
   candidateSha,
   ancestryAuthorityRoot = process.env.P1A_ANCESTRY_AUTHORITY_ROOT,
   trustedReconciliationAuthorityRoot = process.env.P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT,
+  trustedBaseFullSourceRoot = process.env.P1A_TRUSTED_BASE_FULL_SOURCE_ROOT,
 } = {}) {
   const checks = [];
   const check = (name, operation) => {
@@ -1623,9 +1636,19 @@ export function validateCandidateDataOnly({
   check("required_ancestry", () => {
     verifyCanonicalBoundedAncestry({ ancestryAuthorityRoot });
     verifyCanonicalTrustedReconciliationAncestry({ trustedReconciliationAuthorityRoot });
-    gitAt(repoRoot, "merge-base", "--is-ancestor", TRUSTED_RECONCILIATION_BASE, trustedParent);
-    gitAt(repoRoot, "merge-base", "--is-ancestor", ORIGINAL_CANDIDATE, candidateSha);
-    gitAt(repoRoot, "merge-base", "--is-ancestor", trustedParent, candidateSha);
+    assert.ok(trustedBaseFullSourceRoot, "trusted-base full source absent");
+    assert.equal(gitAt(repoRoot, "show", "-s", "--format=%P", trustedParent), CURRENT_TRUSTED_BASE,
+      "trusted parent is not based directly on the authorized trusted base");
+    assert.equal(gitAt(trustedBaseFullSourceRoot, "rev-parse", "HEAD"), CURRENT_TRUSTED_BASE,
+      "trusted-base full source HEAD mismatch");
+    assert.equal(normalizeRepository(gitAt(trustedBaseFullSourceRoot, "remote", "get-url", "origin")),
+      "https://github.com/DarksiedCEO/zbestmedia", "trusted-base full source repository mismatch");
+    gitAt(trustedBaseFullSourceRoot, "merge-base", "--is-ancestor",
+      TRUSTED_RECONCILIATION_BASE, CURRENT_TRUSTED_BASE);
+    assert.equal(parents[0], ORIGINAL_CANDIDATE,
+      "candidate is not a direct descendant of the original candidate");
+    assert.equal(parents[1], trustedParent,
+      "candidate is not a direct descendant of the trusted parent");
   });
   check("exact_scope", () => {
     const changed = gitAt(repoRoot, "diff", "--name-only", `${trustedParent}..${candidateSha}`)
@@ -1687,6 +1710,7 @@ export function validateDualBaseScope({
   workflowSha,
   ancestryAuthorityRoot = process.env.P1A_ANCESTRY_AUTHORITY_ROOT,
   trustedReconciliationAuthorityRoot = process.env.P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT,
+  trustedBaseFullSourceRoot = process.env.P1A_TRUSTED_BASE_FULL_SOURCE_ROOT,
 }) {
   for (const [label, value, expected] of [
     ["evidence/model base", evidenceBaseSha, AUTHORIZED_BASE],
@@ -1713,9 +1737,17 @@ export function validateDualBaseScope({
     originalCandidateSha: reconciliationBaseSha,
     authorizedBoundarySha: evidenceBaseSha,
   });
-  git("merge-base", "--is-ancestor", reconciliationBaseSha, workflowSha);
-  git("merge-base", "--is-ancestor", workflowSha, candidateSha);
-  git("merge-base", "--is-ancestor", originalCandidateSha, candidateSha);
+  assert.ok(trustedBaseFullSourceRoot, "trusted-base full source absent");
+  assert.equal(git("show", "-s", "--format=%P", workflowSha), CURRENT_TRUSTED_BASE,
+    "workflow amendment is not based directly on the authorized trusted base");
+  assert.equal(gitAt(trustedBaseFullSourceRoot, "rev-parse", "HEAD"), CURRENT_TRUSTED_BASE,
+    "trusted-base full source HEAD mismatch");
+  assert.equal(normalizeRepository(gitAt(trustedBaseFullSourceRoot, "remote", "get-url", "origin")),
+    "https://github.com/DarksiedCEO/zbestmedia", "trusted-base full source repository mismatch");
+  gitAt(trustedBaseFullSourceRoot, "merge-base", "--is-ancestor",
+    reconciliationBaseSha, CURRENT_TRUSTED_BASE);
+  assert.deepEqual(git("show", "-s", "--format=%P", candidateSha).split(" "),
+    [originalCandidateSha, workflowSha], "reconciled candidate ordered parentage mismatch");
 
   const historical = gitLines(
     git,
