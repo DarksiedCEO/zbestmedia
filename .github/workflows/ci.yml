@@ -325,8 +325,8 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: DarksiedCEO/zbestmedia
-          ref: 2f4baca937ef8b36d1560a010e8e7f430819197c
-          fetch-depth: 6
+          ref: 1648d21e78088a8e0df4bb2eac7bde797d4ac665
+          fetch-depth: 7
           persist-credentials: false
           path: .p1a-pr16-chain-staging-trusted-base
 
@@ -398,7 +398,7 @@ jobs:
             9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c
           )
           source_heads=(
-            2f4baca937ef8b36d1560a010e8e7f430819197c
+            1648d21e78088a8e0df4bb2eac7bde797d4ac665
             6e855ba08c69374cb4b25f9777a8ebd190375897
             0164130fc62209c7a71ca4f7e58a2e24117e2fd5
             966ab9160ad133adb10d58f7877f8549efd06831
@@ -431,6 +431,10 @@ jobs:
           minimum_depth_source=.p1a-pr16-chain-staging-minimum-depth
           historical_path=.github/workflows/ci.yml
           historical_blob=60d9cede50402f10837a630598b9f8dbf6fb839e
+          trusted_base_blob=983bb59cbe4e49ff0c573f64bf9d3ffeaa563c33
+          trusted_base_tree=588f349716dc51c39b2ababd1dd94be5871761bf
+          trusted_base_parent_1=2f4baca937ef8b36d1560a010e8e7f430819197c
+          trusted_base_parent_2=f939fa7e8561477a42e8edb0249fd18642577976
           minimum_depth_blob=3aba273771fd2874adf8f33ad1e2d7a02fb02c60
           test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
           git init -q "$authority"
@@ -456,7 +460,13 @@ jobs:
           test "$(git -C "$historical_path_source" rev-parse HEAD)" = "${shas[3]}"
           test "$(git -C "$historical_path_source" rev-parse "${shas[3]}:$historical_path")" = "$historical_blob"
           test "$(git -C "$historical_path_source" cat-file -t "$historical_blob")" = blob
-          test "$(git -C "$trusted_base_source" rev-parse HEAD)" = "${shas[0]}"
+          test "$(git -C "$trusted_base_source" rev-parse HEAD)" = "1648d21e78088a8e0df4bb2eac7bde797d4ac665"
+          test "$(git -C "$trusted_base_source" show -s --format=%T HEAD)" = "$trusted_base_tree"
+          mapfile -t trusted_base_parents < <(git -C "$trusted_base_source" cat-file -p HEAD | sed -n 's/^parent //p')
+          test "${#trusted_base_parents[@]}" -eq 2
+          test "${trusted_base_parents[0]}" = "$trusted_base_parent_1"
+          test "${trusted_base_parents[1]}" = "$trusted_base_parent_2"
+          test "$(git -C "$trusted_base_source" rev-parse "HEAD:$historical_path")" = "$trusted_base_blob"
           test "$(git -C "$trusted_base_source" rev-parse "${shas[0]}:$historical_path")" = "$historical_blob"
           test "$(git -C "$action_inventory_source" rev-parse HEAD)" = "${shas[4]}"
           test "$(git -C "$current_predecessor_source" rev-parse HEAD)" = "${shas[6]}"

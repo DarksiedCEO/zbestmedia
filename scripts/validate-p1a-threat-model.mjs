@@ -25,7 +25,13 @@ export const AUTHORIZED_BASE =
 export const TRUSTED_RECONCILIATION_BASE =
   "5056fb0df6e1ef739231cd2273a453fb1c644273";
 export const CURRENT_TRUSTED_BASE =
-  "2f4baca937ef8b36d1560a010e8e7f430819197c";
+  "1648d21e78088a8e0df4bb2eac7bde797d4ac665";
+export const CURRENT_TRUSTED_BASE_TREE =
+  "588f349716dc51c39b2ababd1dd94be5871761bf";
+export const CURRENT_TRUSTED_BASE_PARENTS = Object.freeze([
+  "2f4baca937ef8b36d1560a010e8e7f430819197c",
+  "f939fa7e8561477a42e8edb0249fd18642577976",
+]);
 export const COMPOSED_CI_BASE =
   "06e6497ac3420998671f255a42a20d8cb8b9ca50";
 export const COMPOSED_CI_BASE_BLOB =
@@ -455,6 +461,37 @@ function normalizeRepository(value) {
   return value
     ?.replace(/^git@github\.com:/, "https://github.com/")
     .replace(/\.git$/, "");
+}
+
+export function verifyExactCurrentTrustedBaseTopology({ trustedBaseRoot } = {}) {
+  assert.ok(trustedBaseRoot, "trusted-base topology: independent source absent");
+  const resolved = realpathSync(path.resolve(trustedBaseRoot));
+  assert.equal(normalizeRepository(gitAt(resolved, "remote", "get-url", "origin")),
+    "https://github.com/DarksiedCEO/zbestmedia", "trusted-base topology: repository mismatch");
+  assert.equal(gitAt(resolved, "rev-parse", "HEAD"), CURRENT_TRUSTED_BASE,
+    "trusted-base topology: exact merge SHA mismatch");
+  assert.equal(gitAt(resolved, "cat-file", "-t", CURRENT_TRUSTED_BASE), "commit",
+    "trusted-base topology: commit object absent");
+  assert.equal(gitAt(resolved, "show", "-s", "--format=%T", CURRENT_TRUSTED_BASE),
+    CURRENT_TRUSTED_BASE_TREE, "trusted-base topology: tree mismatch");
+  assert.deepEqual(gitAt(resolved, "show", "-s", "--format=%P", CURRENT_TRUSTED_BASE).split(" "),
+    [...CURRENT_TRUSTED_BASE_PARENTS], "trusted-base topology: ordered parents mismatch");
+  assert.equal(gitAt(resolved, "status", "--porcelain=v1"), "",
+    "trusted-base topology: source is dirty");
+  const gitDirValue = gitAt(resolved, "rev-parse", "--git-dir");
+  const gitDir = path.isAbsolute(gitDirValue) ? gitDirValue : path.resolve(resolved, gitDirValue);
+  assert.ok(!existsSync(path.join(gitDir, "objects/info/alternates")),
+    "trusted-base topology: alternates forbidden");
+  assert.equal(gitAt(resolved, "for-each-ref", "--format=%(refname)", "refs/replace"), "",
+    "trusted-base topology: replace refs forbidden");
+  assert.ok(!existsSync(path.join(gitDir, "info/grafts")) ||
+    readFileSync(path.join(gitDir, "info/grafts"), "utf8").trim() === "",
+  "trusted-base topology: grafts forbidden");
+  return Object.freeze({
+    sha: CURRENT_TRUSTED_BASE,
+    tree: CURRENT_TRUSTED_BASE_TREE,
+    parents: CURRENT_TRUSTED_BASE_PARENTS,
+  });
 }
 
 // Canonical evidence-base -> original-candidate ancestry primitive. Authority
@@ -1416,7 +1453,7 @@ const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candid
 const TWO_STAGE_CI_START = "      - name: Acquire bounded trusted-reconciliation staging objects\n";
 const TWO_STAGE_CI_END = "      - name: P1-A trusted verifier controls\n";
 const HISTORICAL_TWO_STAGE_CI_SHA256 = "3fb24871674a86d9f3940b3c236215aa763d29018ff858e046fc2efbcaef8625";
-const TWO_STAGE_CI_SHA256 = "d1c1f07684344928b35edf4847b83c03145dcb6b771daa83b42c7fca8b471e3d";
+const TWO_STAGE_CI_SHA256 = "205f9b4d4768803e608a8a91632c10c9cbee2e732b1a22e492783ec6bfe3e133";
 function exactTwoStageCustodyFragment(source) {
   assert.equal(source.split(TWO_STAGE_CI_START).length - 1, 1,
     "two-stage custody: staging acquisition missing or duplicated");
@@ -1647,6 +1684,7 @@ export function validateCandidateDataOnly({
     verifyCanonicalBoundedAncestry({ ancestryAuthorityRoot });
     verifyCanonicalTrustedReconciliationAncestry({ trustedReconciliationAuthorityRoot });
     assert.ok(trustedBaseFullSourceRoot, "trusted-base full source absent");
+    verifyExactCurrentTrustedBaseTopology({ trustedBaseRoot: trustedBaseFullSourceRoot });
     assert.equal(gitAt(repoRoot, "show", "-s", "--format=%P", trustedParent), CURRENT_TRUSTED_BASE,
       "trusted parent is not based directly on the authorized trusted base");
     assert.equal(gitAt(trustedBaseFullSourceRoot, "rev-parse", "HEAD"), CURRENT_TRUSTED_BASE,
@@ -1748,6 +1786,7 @@ export function validateDualBaseScope({
     authorizedBoundarySha: evidenceBaseSha,
   });
   assert.ok(trustedBaseFullSourceRoot, "trusted-base full source absent");
+  verifyExactCurrentTrustedBaseTopology({ trustedBaseRoot: trustedBaseFullSourceRoot });
   assert.equal(git("show", "-s", "--format=%P", workflowSha), CURRENT_TRUSTED_BASE,
     "workflow amendment is not based directly on the authorized trusted base");
   assert.equal(gitAt(trustedBaseFullSourceRoot, "rev-parse", "HEAD"), CURRENT_TRUSTED_BASE,
