@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -28,6 +29,7 @@ const REJECTED_PR16_ACTION_INVENTORY_CANDIDATE = "6867d43d17c8b614ab7d0e0c5e3381
 const REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE = "5c302bdae987a43104fecb5c4bfcf4fcca82c540";
 const REJECTED_PR16_RETAINED_SOURCE_CANDIDATE = "af29acb57895319ae6a5ed35d923054383ceed12";
 const REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE = "9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c";
+const REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE = "fe3a898e94eac0ac1695051b2ae71cfa27efaebc";
 const MINIMUM_TRUSTED_BASE_FETCH_DEPTH = 6;
 const HISTORICAL_WORKFLOW_PATH = ".github/workflows/ci.yml";
 const HISTORICAL_WORKFLOW_BLOB = "60d9cede50402f10837a630598b9f8dbf6fb839e";
@@ -188,9 +190,15 @@ function resolveAuthorizedLinearAmendment(head, parentLookup) {
   } else if (head === REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE) {
     assert.deepEqual(parentLookup(head), [REJECTED_PR16_RETAINED_SOURCE_CANDIDATE],
       "provenance: current predecessor parent mismatch");
-  } else {
+  } else if (head === REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE) {
     assert.deepEqual(parentLookup(head), [REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE],
-      "provenance: replacement must have exact current predecessor parent");
+      "provenance: minimum-depth candidate must be the exact current-predecessor child");
+  } else {
+    assert.deepEqual(parentLookup(head), [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE],
+      "provenance: replacement must have exact rejected remote parent");
+    assert.deepEqual(parentLookup(REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE),
+      [REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE],
+      "provenance: rejected remote candidate must be the exact current-predecessor child");
     assert.deepEqual(parentLookup(REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE),
       [REJECTED_PR16_RETAINED_SOURCE_CANDIDATE],
       "provenance: current predecessor parent mismatch");
@@ -252,7 +260,8 @@ const exactTopology = new Map([
   [REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE, [REJECTED_PR16_ACTION_INVENTORY_CANDIDATE]],
   [REJECTED_PR16_RETAINED_SOURCE_CANDIDATE, [REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE]],
   [REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE, [REJECTED_PR16_RETAINED_SOURCE_CANDIDATE]],
-  [topologyReplacement, [REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE]],
+  [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE, [REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE]],
+  [topologyReplacement, [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE]],
   [topologyExtra, [topologyReplacement]],
 ]);
 const topologyParents = (sha) => {
@@ -523,6 +532,43 @@ function validatePr16WorkflowContract(source) {
 }
 
 const pr16WorkflowSource = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
+const TWO_STAGE_START = "      - name: Acquire bounded trusted-reconciliation staging objects\n";
+const TWO_STAGE_END = "      - name: P1-A trusted verifier controls\n";
+const OLD_TWO_STAGE_DIGEST = "eb7e175d744e66c5bddfe440c6be11656f3f243ae70a2eb12215e9920d7079d5";
+const NEW_TWO_STAGE_DIGEST = "2bcfff4a10747345a1792eaa79039aabefbd6ec57172f80e8710388a098824c8";
+const digest = (value) => createHash("sha256").update(value).digest("hex");
+const custodyFragment = (source) => {
+  assert.equal(source.split(TWO_STAGE_START).length - 1, 1, "custody fragment start must be unique");
+  const start = source.indexOf(TWO_STAGE_START);
+  const end = source.indexOf(TWO_STAGE_END, start);
+  assert.ok(end > start, "custody fragment end must follow start");
+  return source.slice(start, end);
+};
+const historicalWorkflow = gitAt(root, "show",
+  `${REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE}:.github/workflows/ci.yml`);
+assert.equal(digest(custodyFragment(historicalWorkflow)), OLD_TWO_STAGE_DIGEST,
+  "historical workflow must retain its historical custody profile");
+assert.equal(digest(custodyFragment(pr16WorkflowSource)), NEW_TWO_STAGE_DIGEST,
+  "repaired workflow custody digest must be independently reproduced");
+assert.ok(rejects(() => removeTwoStageCustodyFragment(historicalWorkflow)),
+  "historical custody profile must not satisfy the repaired profile");
+const custodyHostileSources = [
+  ["truncated_fragment", pr16WorkflowSource.replace("          source_heads=(\n", "          source_heads=(")],
+  ["extended_fragment", pr16WorkflowSource.replace("          source_heads=(\n", "          source_heads=(\n            # unauthorized insertion\n")],
+  ["reordered_fragment", pr16WorkflowSource.replace(
+    "          source_heads=(\n            2f4baca937ef8b36d1560a010e8e7f430819197c\n",
+    "            2f4baca937ef8b36d1560a010e8e7f430819197c\n          source_heads=(\n")],
+  ["duplicate_source_import", pr16WorkflowSource.replace(
+    "            .p1a-pr16-chain-staging-current-predecessor\n          )\n          object_sources=(",
+    "            .p1a-pr16-chain-staging-current-predecessor\n            .p1a-pr16-chain-staging-current-predecessor\n          )\n          object_sources=(")],
+  ["duplicate_object_import", pr16WorkflowSource.replace(
+    "          object_sources=(\n", "          object_sources=(\n            .p1a-pr16-chain-staging-current-predecessor\n")],
+  ["duplicated_start_marker", pr16WorkflowSource.replace(TWO_STAGE_END, `${TWO_STAGE_START}${TWO_STAGE_END}`)],
+];
+for (const [name, hostileSource] of custodyHostileSources) {
+  assert.ok(rejects(() => removeTwoStageCustodyFragment(hostileSource)),
+    `two-stage custody hostile source accepted: ${name}`);
+}
 validatePr16WorkflowContract(pr16WorkflowSource);
 const trustedBaseWorkflowSource = verifyExactWorkflowSource("trusted-base", authorityRoots.trustedBaseFullSource,
   CURRENT_TRUSTED_BASE, TRUSTED_BASE_WORKFLOW_BLOB, ".p1a-pr16-chain-staging-trusted-base",
@@ -817,6 +863,7 @@ function resolveAmendmentSource() {
   if (parents.length === 1) {
     return resolveAuthorizedLinearAmendment(head,
       (sha) => sha === head ? parents
+        : sha === REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE ? commitParents(root, sha)
         : chainAuthority.parents(sha));
   }
   assert.deepEqual(parents.slice(0, 1), [ORIGINAL_CANDIDATE],

@@ -1408,7 +1408,7 @@ const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candid
 const TWO_STAGE_CI_START = "      - name: Acquire bounded trusted-reconciliation staging objects\n";
 const TWO_STAGE_CI_END = "      - name: P1-A trusted verifier controls\n";
 const HISTORICAL_TWO_STAGE_CI_SHA256 = "3fb24871674a86d9f3940b3c236215aa763d29018ff858e046fc2efbcaef8625";
-const TWO_STAGE_CI_SHA256 = "eb7e175d744e66c5bddfe440c6be11656f3f243ae70a2eb12215e9920d7079d5";
+const TWO_STAGE_CI_SHA256 = "2bcfff4a10747345a1792eaa79039aabefbd6ec57172f80e8710388a098824c8";
 function exactTwoStageCustodyFragment(source) {
   assert.equal(source.split(TWO_STAGE_CI_START).length - 1, 1,
     "two-stage custody: staging acquisition missing or duplicated");

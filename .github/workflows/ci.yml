@@ -388,7 +388,23 @@ jobs:
             af29acb57895319ae6a5ed35d923054383ceed12
             9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c
           )
-          staging=(
+          source_heads=(
+            2f4baca937ef8b36d1560a010e8e7f430819197c
+            6e855ba08c69374cb4b25f9777a8ebd190375897
+            0164130fc62209c7a71ca4f7e58a2e24117e2fd5
+            966ab9160ad133adb10d58f7877f8549efd06831
+            6867d43d17c8b614ab7d0e0c5e338127020bb772
+            9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c
+          )
+          sources=(
+            .p1a-pr16-chain-staging-trusted-base
+            .p1a-pr16-chain-staging-original-amendment
+            .p1a-pr16-chain-staging-rejected-chain
+            .p1a-pr16-chain-staging-rejected-cleanliness
+            .p1a-pr16-chain-staging-action-inventory
+            .p1a-pr16-chain-staging-current-predecessor
+          )
+          object_sources=(
             .p1a-pr16-chain-staging-trusted-base
             .p1a-pr16-chain-staging-original-amendment
             .p1a-pr16-chain-staging-rejected-chain
@@ -406,16 +422,20 @@ jobs:
           test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
           git init -q "$authority"
           git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
-          for index in "${!shas[@]}"; do
-            sha="${shas[$index]}"
-            source="${staging[$index]}"
-            test "$(git -C "$source" rev-parse HEAD)" = "$sha"
+          for index in "${!sources[@]}"; do
+            source="${sources[$index]}"
+            expected_head="${source_heads[$index]}"
+            test "$(git -C "$source" rev-parse HEAD)" = "$expected_head"
             test "$(git -C "$source" remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
             test -z "$(git -C "$source" status --porcelain=v1)"
             if grep -Eiq 'x-access-token|authorization:|http\..*extraheader' "$source/.git/config"; then
               echo "persisted PR16 acquisition credential material detected" >&2
               exit 1
             fi
+          done
+          for index in "${!shas[@]}"; do
+            sha="${shas[$index]}"
+            source="${object_sources[$index]}"
             test "$(git -C "$source" cat-file -t "$sha")" = commit
             imported="$(git -C "$source" cat-file commit "$sha" | git -C "$authority" hash-object -w -t commit --stdin)"
             test "$imported" = "$sha"
