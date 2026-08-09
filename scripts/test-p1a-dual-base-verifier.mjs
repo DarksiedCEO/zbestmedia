@@ -31,6 +31,7 @@ const REJECTED_PR16_RETAINED_SOURCE_CANDIDATE = "af29acb57895319ae6a5ed35d923054
 const REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE = "9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c";
 const REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE = "fe3a898e94eac0ac1695051b2ae71cfa27efaebc";
 const REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE = "5cbae450617285d81435b8f3196eb45c9f293f5d";
+const REJECTED_PR16_SEVEN_SOURCE_CANDIDATE = "184d3961ab7fbf67150b392e09a95408bca6f009";
 const MINIMUM_TRUSTED_BASE_FETCH_DEPTH = 6;
 const HISTORICAL_WORKFLOW_PATH = ".github/workflows/ci.yml";
 const HISTORICAL_WORKFLOW_BLOB = "60d9cede50402f10837a630598b9f8dbf6fb839e";
@@ -50,7 +51,6 @@ const PATH_SOURCE_CLASSES = Object.freeze({
   TRUSTED_BASE_SOURCE: "TRUSTED_BASE_SOURCE",
   TRUSTED_BASE_FULL_SOURCE: "TRUSTED_BASE_FULL_SOURCE",
 });
-const REJECTED_RECONCILIATION = "4cbdee7b4aded69275efdc78aea41ed21bae32dc";
 const PR16_RETAINED_STAGING_ROOTS = Object.freeze([
   ".p1a-pr16-chain-staging-action-inventory",
   ".p1a-pr16-chain-staging-original-amendment",
@@ -123,6 +123,36 @@ const run = (cwd, args, options = {}) => execFileSync(args[0], args.slice(1), {
 }).trim();
 const gitAt = (cwd, ...args) => run(cwd, ["git", ...args]);
 
+function importExactCandidateObjectGraph(sourceRoot, destinationRoot, commitSha) {
+  assert.match(commitSha, EXACT_SHA, "candidate import: exact lowercase SHA required");
+  assert.equal(gitAt(sourceRoot, "cat-file", "-t", commitSha), "commit",
+    "candidate import: exact commit absent from candidate checkout");
+  const objects = new Map([[commitSha, "commit"]]);
+  const tree = gitAt(sourceRoot, "cat-file", "-p", commitSha).split("\n")
+    .find((line) => line.startsWith("tree "))?.slice(5);
+  assert.match(tree ?? "", EXACT_SHA, "candidate import: commit tree identity absent");
+  objects.set(tree, "tree");
+  const listed = gitAt(sourceRoot, "ls-tree", "-r", "-t", "--format=%(objectname) %(objecttype)", commitSha);
+  for (const line of listed.split("\n").filter(Boolean)) {
+    const [sha, type] = line.split(" ");
+    assert.match(sha, EXACT_SHA, "candidate import: malformed object identity");
+    assert.ok(["blob", "tree"].includes(type), "candidate import: unexpected object type");
+    objects.set(sha, type);
+  }
+  for (const [sha, type] of objects) {
+    const raw = execFileSync("git", ["cat-file", type, sha], {
+      cwd: sourceRoot, maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"],
+    });
+    const imported = execFileSync("git", ["hash-object", "-w", "-t", type, "--stdin"], {
+      cwd: destinationRoot, input: raw, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
+    assert.equal(imported, sha, `candidate import: ${type} identity changed`);
+  }
+  assert.equal(gitAt(destinationRoot, "cat-file", "-t", commitSha), "commit",
+    "candidate import: destination commit absent");
+  return Object.freeze({ commitSha, tree, importedObjects: objects.size });
+}
+
 function commitParents(cwd, sha) {
   assert.match(sha, EXACT_SHA, "provenance: exact lowercase commit SHA required");
   assert.equal(gitAt(cwd, "cat-file", "-t", sha), "commit", "provenance: source is not a commit");
@@ -137,11 +167,12 @@ function canonicalGitHubRepositoryUrl(value) {
   return OFFICIAL_REPOSITORY;
 }
 
-function verifyExactWorkflowSource(label, suppliedRoot, expectedSha, expectedBlob,
-  expectedRelative, sourceClass) {
+function verifyExactWorkflowSource(label, suppliedRoot, expectedHeadSha, expectedBlob,
+  expectedRelative, sourceClass, expectedEvidenceSha = expectedHeadSha) {
   assert.ok(suppliedRoot, `${label}: full exact source absent`);
   assert.ok(Object.values(PATH_SOURCE_CLASSES).includes(sourceClass), `${label}: source class omitted or invalid`);
-  assert.match(expectedSha, EXACT_SHA, `${label}: exact lowercase SHA required`);
+  assert.match(expectedHeadSha, EXACT_SHA, `${label}: exact lowercase HEAD SHA required`);
+  assert.match(expectedEvidenceSha, EXACT_SHA, `${label}: exact lowercase evidence SHA required`);
   assert.match(expectedBlob, EXACT_SHA, `${label}: exact blob required`);
   assert.ok(!lstatSync(path.resolve(suppliedRoot)).isSymbolicLink(), `${label}: symlink source forbidden`);
   const resolved = realpathSync(path.resolve(suppliedRoot));
@@ -150,19 +181,21 @@ function verifyExactWorkflowSource(label, suppliedRoot, expectedSha, expectedBlo
     assert.equal(resolved, realpathSync(path.resolve(process.env.GITHUB_WORKSPACE, expectedRelative)),
       `${label}: candidate-selected or escaping source root`);
   }
-  assert.equal(gitAt(resolved, "rev-parse", "HEAD"), expectedSha, `${label}: wrong source HEAD`);
+  assert.equal(gitAt(resolved, "rev-parse", "HEAD"), expectedHeadSha, `${label}: wrong source HEAD`);
   assert.equal(canonicalGitHubRepositoryUrl(gitAt(resolved, "remote", "get-url", "origin")), OFFICIAL_REPOSITORY,
     `${label}: wrong repository identity`);
   assert.equal(gitAt(resolved, "status", "--porcelain=v1"), "", `${label}: dirty source forbidden`);
   const config = readFileSync(path.join(resolved, ".git/config"), "utf8");
   assert.ok(!/x-access-token|authorization:|http\..*extraheader|credential\.helper/i.test(config),
     `${label}: persisted credential material detected`);
-  assert.equal(gitAt(resolved, "cat-file", "-t", expectedSha), "commit", `${label}: commit object absent`);
-  assert.equal(gitAt(resolved, "cat-file", "-t", `${expectedSha}^{tree}`), "tree", `${label}: tree object absent`);
-  const blob = gitAt(resolved, "rev-parse", `${expectedSha}:${HISTORICAL_WORKFLOW_PATH}`);
+  assert.equal(gitAt(resolved, "cat-file", "-t", expectedHeadSha), "commit", `${label}: HEAD commit object absent`);
+  assert.equal(gitAt(resolved, "cat-file", "-t", expectedEvidenceSha), "commit", `${label}: evidence commit object absent`);
+  assert.equal(gitAt(resolved, "cat-file", "-t", `${expectedEvidenceSha}^{tree}`), "tree", `${label}: tree object absent`);
+  const blob = gitAt(resolved, "rev-parse", `${expectedEvidenceSha}:${HISTORICAL_WORKFLOW_PATH}`);
   assert.equal(blob, expectedBlob, `${label}: workflow blob mismatch`);
   assert.equal(gitAt(resolved, "cat-file", "-t", blob), "blob", `${label}: workflow blob absent`);
-  return Object.freeze({ root: resolved, sourceClass, exactSourceSha: expectedSha,
+  return Object.freeze({ root: resolved, sourceClass, exactSourceSha: expectedHeadSha,
+    exactEvidenceSha: expectedEvidenceSha,
     path: HISTORICAL_WORKFLOW_PATH, blob, state: PATH_EVIDENCE_STATES.PATH_PRESENT_IN_COMMIT });
 }
 
@@ -200,9 +233,15 @@ function resolveAuthorizedLinearAmendment(head, parentLookup) {
   } else if (head === REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE) {
     assert.deepEqual(parentLookup(head), [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE],
       "provenance: historical-digest candidate must be the exact minimum-depth child");
-  } else {
+  } else if (head === REJECTED_PR16_SEVEN_SOURCE_CANDIDATE) {
     assert.deepEqual(parentLookup(head), [REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE],
+      "provenance: seven-source candidate must have exact historical-digest parent");
+  } else {
+    assert.deepEqual(parentLookup(head), [REJECTED_PR16_SEVEN_SOURCE_CANDIDATE],
       "provenance: replacement must have exact rejected remote parent");
+    assert.deepEqual(parentLookup(REJECTED_PR16_SEVEN_SOURCE_CANDIDATE),
+      [REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE],
+      "provenance: rejected remote candidate must be the exact historical-digest child");
     assert.deepEqual(parentLookup(REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE),
       [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE],
       "provenance: rejected remote candidate must be the exact minimum-depth child");
@@ -272,7 +311,8 @@ const exactTopology = new Map([
   [REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE, [REJECTED_PR16_RETAINED_SOURCE_CANDIDATE]],
   [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE, [REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE]],
   [REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE, [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE]],
-  [topologyReplacement, [REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE]],
+  [REJECTED_PR16_SEVEN_SOURCE_CANDIDATE, [REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE]],
+  [topologyReplacement, [REJECTED_PR16_SEVEN_SOURCE_CANDIDATE]],
   [topologyExtra, [topologyReplacement]],
 ]);
 const topologyParents = (sha) => {
@@ -502,18 +542,20 @@ function validatePr16WorkflowContract(source) {
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: DarksiedCEO/zbestmedia
-          ref: ${REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE}
-          fetch-depth: 1
+          ref: ${REJECTED_PR16_SEVEN_SOURCE_CANDIDATE}
+          fetch-depth: 3
           persist-credentials: false
           path: .p1a-pr16-chain-staging-minimum-depth`;
   assert.equal(pr16Section.split(minimumDepthCheckout).length - 1, 1,
     "pr16-workflow: exact minimum-depth historical checkout required once");
   assert.equal((pr16Section.match(/uses: actions\/checkout@11d5960a326750d5838078e36cf38b85af677262/g) ?? []).length, 7,
     "pr16-workflow: pinned checkout provenance mismatch");
-  assert.equal((pr16Section.match(/fetch-depth: 1/g) ?? []).length, 5,
+  assert.equal((pr16Section.match(/fetch-depth: 1/g) ?? []).length, 4,
     "pr16-workflow: exact depth-one predecessor acquisition count required");
   assert.equal((pr16Section.match(/fetch-depth: 2/g) ?? []).length, 1,
     "pr16-workflow: exact depth-two current-predecessor acquisition required");
+  assert.equal((pr16Section.match(/fetch-depth: 3/g) ?? []).length, 1,
+    "pr16-workflow: exact depth-three seven-source acquisition required");
   assert.equal((pr16Section.match(/fetch-depth: 6/g) ?? []).length, 1,
     "pr16-workflow: exact minimum depth-six trusted-base acquisition required");
   assert.equal((pr16Section.match(/persist-credentials: false/g) ?? []).length, 7,
@@ -559,7 +601,7 @@ const TWO_STAGE_START = "      - name: Acquire bounded trusted-reconciliation st
 const TWO_STAGE_END = "      - name: P1-A trusted verifier controls\n";
 const OLD_TWO_STAGE_DIGEST = "eb7e175d744e66c5bddfe440c6be11656f3f243ae70a2eb12215e9920d7079d5";
 const REJECTED_TWO_STAGE_DIGEST = "2bcfff4a10747345a1792eaa79039aabefbd6ec57172f80e8710388a098824c8";
-const NEW_TWO_STAGE_DIGEST = "e8a51db174547f42733892f5c5077aecb3c539f86b0b5d3eb7a7622ac08f72cf";
+const NEW_TWO_STAGE_DIGEST = "d1c1f07684344928b35edf4847b83c03145dcb6b771daa83b42c7fca8b471e3d";
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 const custodyFragment = (source) => {
   assert.equal(source.split(TWO_STAGE_START).length - 1, 1, "custody fragment start must be unique");
@@ -569,9 +611,9 @@ const custodyFragment = (source) => {
   return source.slice(start, end);
 };
 const minimumDepthWorkflowSource = verifyExactWorkflowSource("minimum-depth-historical-source",
-  authorityRoots.pr16MinimumDepthSource, REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE,
+  authorityRoots.pr16MinimumDepthSource, REJECTED_PR16_SEVEN_SOURCE_CANDIDATE,
   MINIMUM_DEPTH_WORKFLOW_BLOB, ".p1a-pr16-chain-staging-minimum-depth",
-  PATH_SOURCE_CLASSES.FULL_EXACT_COMMIT_SOURCE);
+  PATH_SOURCE_CLASSES.FULL_EXACT_COMMIT_SOURCE, REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE);
 const historicalWorkflow = gitAt(minimumDepthWorkflowSource.root, "show",
   `${REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE}:${HISTORICAL_WORKFLOW_PATH}`);
 assert.equal(digest(custodyFragment(historicalWorkflow)), OLD_TWO_STAGE_DIGEST,
@@ -894,7 +936,9 @@ function resolveAmendmentSource() {
     return resolveAuthorizedLinearAmendment(head,
       (sha) => sha === head ? parents
         : [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE,
-            REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE].includes(sha) ? commitParents(root, sha)
+            REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE,
+            REJECTED_PR16_SEVEN_SOURCE_CANDIDATE].includes(sha)
+          ? commitParents(minimumDepthWorkflowSource.root, sha)
         : chainAuthority.parents(sha));
   }
   assert.deepEqual(parents.slice(0, 1), [ORIGINAL_CANDIDATE],
@@ -1412,10 +1456,10 @@ const trustedSourceRoot = path.join(temporary, "trusted-fixture-source");
 run(temporary, ["git", "clone", "-q", "--no-hardlinks", "--no-checkout", trustedBaseWorkflowSource.root,
   trustedSourceRoot]);
 gitAt(trustedSourceRoot, "remote", "set-url", "origin", `${OFFICIAL_REPOSITORY}.git`);
-run(trustedSourceRoot, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", root,
-  amendmentSourceSha]);
+const candidateObjectImport = importExactCandidateObjectGraph(root, trustedSourceRoot,
+  amendmentSourceSha);
 for (const source of [originalAmendmentWorkflowSource, rejectedChainWorkflowSource,
-  predecessorWorkflowSource]) {
+  predecessorWorkflowSource, minimumDepthWorkflowSource]) {
   run(trustedSourceRoot, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", source.root,
     source.exactSourceSha]);
 }
@@ -1449,10 +1493,14 @@ for (const sha of ANCESTRY_CHAIN) {
   run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", verifiedAuthorities.ancestry.root, sha]);
   assert.equal(git("cat-file", "-t", sha), "commit", `ancestry import failed: ${sha}`);
 }
-for (const sha of [CURRENT_TRUSTED_BASE, amendmentSourceSha]) {
+for (const sha of [CURRENT_TRUSTED_BASE]) {
   run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", trustedSourceRoot, sha]);
   assert.equal(git("cat-file", "-t", sha), "commit", `trusted fixture source import failed: ${sha}`);
 }
+const fixtureCandidateObjectImport = importExactCandidateObjectGraph(trustedSourceRoot, repository,
+  amendmentSourceSha);
+assert.equal(fixtureCandidateObjectImport.commitSha, candidateObjectImport.commitSha,
+  "candidate import: fixture candidate identity mismatch");
 
 const freshReconciliationFixture = (name, prepare) => {
   const fixture = path.join(temporary, `reconciliation-${name}`);
@@ -2105,7 +2153,13 @@ const semanticPositiveControls = [
     REJECTED_PR16_ACTION_INVENTORY_CANDIDATE), [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE])],
   ["replacement_parent_current_remote_head", () => assert.deepEqual(
     commitParents(trustedSourceRoot, amendmentSourceSha),
-    [REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE])],
+    [REJECTED_PR16_SEVEN_SOURCE_CANDIDATE])],
+  ["remote_head_parent_historical_digest", () => assert.deepEqual(
+    commitParents(trustedSourceRoot, REJECTED_PR16_SEVEN_SOURCE_CANDIDATE),
+    [REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE])],
+  ["historical_digest_parent_minimum_depth", () => assert.deepEqual(
+    commitParents(trustedSourceRoot, REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE),
+    [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE])],
   ["action_inventory_exact_17", () => assert.equal(currentActionResult.required, 17)],
   ["candidate_data_required_9", () => assert.equal(semanticCandidateSummary.required, 9)],
   ["candidate_data_uncertified", () => assert.equal(semanticCandidateSummary.certified, false)],
@@ -2327,16 +2381,17 @@ assert.ok(trustedFixtureProvenance.every(({ equal }) => equal), "provenance: tru
 const trustedBaseCiBlob = sourceEntry(trustedSourceRoot, amendmentSourceSha, ".github/workflows/ci.yml").blob;
 assert.equal(git("rev-parse", `${workflowSha}:.github/workflows/ci.yml`), trustedBaseCiBlob,
   "provenance: trusted CI was not sourced from exact amendment subject");
-const rejectedCiBlob = gitAt(root, "rev-parse", `${REJECTED_RECONCILIATION}:.github/workflows/ci.yml`);
-assert.notEqual(rejectedCiBlob, trustedBaseCiBlob,
-  "provenance before-proof requires contaminated candidate CI to differ from trusted base");
+const originalCandidateCiBlob = sourceEntry(verifiedAuthorities.original.root,
+  ORIGINAL_CANDIDATE, ".github/workflows/ci.yml").blob;
+assert.notEqual(originalCandidateCiBlob, trustedBaseCiBlob,
+  "provenance before-proof requires original candidate CI to differ from trusted base");
 console.log("PASS trusted_harness_before_contamination_reproduced");
 console.log("PASS trusted_harness_after_exact_base_independence");
 console.log(JSON.stringify({
   suite: "p1-a-trusted-harness-provenance",
   trustedBaseSha: CURRENT_TRUSTED_BASE,
   amendmentSourceSha,
-  rejectedReconciliationSha: REJECTED_RECONCILIATION,
+  originalCandidateSha: ORIGINAL_CANDIDATE,
   files: trustedFixtureProvenance,
   failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
 }));

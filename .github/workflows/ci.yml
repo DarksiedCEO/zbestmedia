@@ -379,8 +379,8 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: DarksiedCEO/zbestmedia
-          ref: fe3a898e94eac0ac1695051b2ae71cfa27efaebc
-          fetch-depth: 1
+          ref: 184d3961ab7fbf67150b392e09a95408bca6f009
+          fetch-depth: 3
           persist-credentials: false
           path: .p1a-pr16-chain-staging-minimum-depth
 
@@ -404,7 +404,7 @@ jobs:
             966ab9160ad133adb10d58f7877f8549efd06831
             6867d43d17c8b614ab7d0e0c5e338127020bb772
             9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c
-            fe3a898e94eac0ac1695051b2ae71cfa27efaebc
+            184d3961ab7fbf67150b392e09a95408bca6f009
           )
           sources=(
             .p1a-pr16-chain-staging-trusted-base
@@ -460,7 +460,12 @@ jobs:
           test "$(git -C "$trusted_base_source" rev-parse "${shas[0]}:$historical_path")" = "$historical_blob"
           test "$(git -C "$action_inventory_source" rev-parse HEAD)" = "${shas[4]}"
           test "$(git -C "$current_predecessor_source" rev-parse HEAD)" = "${shas[6]}"
-          test "$(git -C "$minimum_depth_source" rev-parse HEAD)" = "fe3a898e94eac0ac1695051b2ae71cfa27efaebc"
+          test "$(git -C "$minimum_depth_source" rev-parse HEAD)" = "184d3961ab7fbf67150b392e09a95408bca6f009"
+          test "$(git -C "$minimum_depth_source" cat-file -t "184d3961ab7fbf67150b392e09a95408bca6f009")" = commit
+          test "$(git -C "$minimum_depth_source" cat-file -p "184d3961ab7fbf67150b392e09a95408bca6f009" | sed -n 's/^parent //p')" = "5cbae450617285d81435b8f3196eb45c9f293f5d"
+          test "$(git -C "$minimum_depth_source" cat-file -t "5cbae450617285d81435b8f3196eb45c9f293f5d")" = commit
+          test "$(git -C "$minimum_depth_source" cat-file -p "5cbae450617285d81435b8f3196eb45c9f293f5d" | sed -n 's/^parent //p')" = "fe3a898e94eac0ac1695051b2ae71cfa27efaebc"
+          test "$(git -C "$minimum_depth_source" cat-file -t "fe3a898e94eac0ac1695051b2ae71cfa27efaebc")" = commit
           test "$(git -C "$minimum_depth_source" rev-parse "fe3a898e94eac0ac1695051b2ae71cfa27efaebc:$historical_path")" = "$minimum_depth_blob"
           test "$(git -C "$minimum_depth_source" cat-file -t "$minimum_depth_blob")" = blob
           test "$(git -C "$authority" cat-file -p "${shas[1]}" | sed -n 's/^parent //p')" = "${shas[0]}"
