@@ -1038,6 +1038,12 @@ const CURRENT_PREDECESSOR_AUTHORITY_V3_ACTION_COUNTS = Object.freeze({
   "actions/setup-node": 1,
   "raven-actions/actionlint": 1,
 });
+const CURRENT_PREDECESSOR_AUTHORITY_V4_ACTION_COUNTS = Object.freeze({
+  "actions/cache": 1,
+  "actions/checkout": 14,
+  "actions/setup-node": 1,
+  "raven-actions/actionlint": 1,
+});
 const HISTORICAL_ORDINARY_CI_ACTION_COUNTS = Object.freeze({
   "actions/checkout": 7,
   "actions/setup-node": 1,
@@ -1113,10 +1119,12 @@ export function parseOrdinaryCiActionInventory(source) {
   return Object.freeze(uses);
 }
 
-export function validateOrdinaryCiActionPins(source, { profile = "CURRENT_PREDECESSOR_AUTHORITY_V3_16" } = {}) {
+export function validateOrdinaryCiActionPins(source, { profile = "CURRENT_PREDECESSOR_AUTHORITY_V4_17" } = {}) {
   const uses = parseOrdinaryCiActionInventory(source);
-  const expectedCounts = profile === "CURRENT_PREDECESSOR_AUTHORITY_V3_16"
-    ? CURRENT_PREDECESSOR_AUTHORITY_V3_ACTION_COUNTS
+  const expectedCounts = profile === "CURRENT_PREDECESSOR_AUTHORITY_V4_17"
+    ? CURRENT_PREDECESSOR_AUTHORITY_V4_ACTION_COUNTS
+    : profile === "CURRENT_PREDECESSOR_AUTHORITY_V3_16"
+      ? CURRENT_PREDECESSOR_AUTHORITY_V3_ACTION_COUNTS
     : profile === "CURRENT_PREDECESSOR_AUTHORITY_V2_15"
       ? CURRENT_PREDECESSOR_AUTHORITY_V2_ACTION_COUNTS
     : profile === "CURRENT_PREDECESSOR_AUTHORITY_V1_14"
@@ -1408,7 +1416,7 @@ const TRUSTED_CI_ACQUISITION = `      - name: Acquire exact original P1-A candid
 const TWO_STAGE_CI_START = "      - name: Acquire bounded trusted-reconciliation staging objects\n";
 const TWO_STAGE_CI_END = "      - name: P1-A trusted verifier controls\n";
 const HISTORICAL_TWO_STAGE_CI_SHA256 = "3fb24871674a86d9f3940b3c236215aa763d29018ff858e046fc2efbcaef8625";
-const TWO_STAGE_CI_SHA256 = "2bcfff4a10747345a1792eaa79039aabefbd6ec57172f80e8710388a098824c8";
+const TWO_STAGE_CI_SHA256 = "e8a51db174547f42733892f5c5077aecb3c539f86b0b5d3eb7a7622ac08f72cf";
 function exactTwoStageCustodyFragment(source) {
   assert.equal(source.split(TWO_STAGE_CI_START).length - 1, 1,
     "two-stage custody: staging acquisition missing or duplicated");
@@ -1474,12 +1482,13 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          P1A_PR16_ORIGINAL_AMENDMENT_SOURCE_ROOT: .p1a-pr16-chain-staging-original-amendment",
   "          P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-chain",
   "          P1A_PR16_CURRENT_PREDECESSOR_SOURCE_ROOT: .p1a-pr16-chain-staging-current-predecessor",
+  "          P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT: .p1a-pr16-chain-staging-minimum-depth",
   "        run: node scripts/test-p1a-dual-base-verifier.mjs",
   "",
   "      - name: Remove isolated P1-A authority checkouts",
   "        if: always()",
   "        run: |",
-  "          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-chain-staging-action-inventory .p1a-pr16-chain-staging-current-predecessor .p1a-pr16-remediation-chain-authority",
+  "          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-chain-staging-action-inventory .p1a-pr16-chain-staging-current-predecessor .p1a-pr16-chain-staging-minimum-depth .p1a-pr16-remediation-chain-authority",
   "          test ! -e .p1a-original-candidate",
   "          test ! -e .p1a-trusted-baseline",
   "          test ! -e .p1a-dual-base-authority",
@@ -1493,6 +1502,7 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          test ! -e .p1a-pr16-chain-staging-rejected-chain",
   "          test ! -e .p1a-pr16-chain-staging-rejected-cleanliness",
   "          test ! -e .p1a-pr16-chain-staging-action-inventory",
+  "          test ! -e .p1a-pr16-chain-staging-minimum-depth",
   "          test ! -e .p1a-pr16-remediation-chain-authority",
   "",
   "      - name: P1-A trusted-bootstrap secret-detector tests",

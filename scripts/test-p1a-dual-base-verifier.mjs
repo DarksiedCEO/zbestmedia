@@ -30,11 +30,13 @@ const REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE = "5c302bdae987a43104fecb5c4bf
 const REJECTED_PR16_RETAINED_SOURCE_CANDIDATE = "af29acb57895319ae6a5ed35d923054383ceed12";
 const REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE = "9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c";
 const REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE = "fe3a898e94eac0ac1695051b2ae71cfa27efaebc";
+const REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE = "5cbae450617285d81435b8f3196eb45c9f293f5d";
 const MINIMUM_TRUSTED_BASE_FETCH_DEPTH = 6;
 const HISTORICAL_WORKFLOW_PATH = ".github/workflows/ci.yml";
 const HISTORICAL_WORKFLOW_BLOB = "60d9cede50402f10837a630598b9f8dbf6fb839e";
 const TRUSTED_BASE_WORKFLOW_BLOB = "60d9cede50402f10837a630598b9f8dbf6fb839e";
 const ACTION_INVENTORY_WORKFLOW_BLOB = "f5fdd0da1fd17c1e843086999aa69e00d44948ea";
+const MINIMUM_DEPTH_WORKFLOW_BLOB = "3aba273771fd2874adf8f33ad1e2d7a02fb02c60";
 const PATH_EVIDENCE_STATES = Object.freeze({
   COMMIT_NOT_AVAILABLE: "COMMIT_NOT_AVAILABLE",
   OBJECT_NOT_IMPORTED: "OBJECT_NOT_IMPORTED",
@@ -56,6 +58,7 @@ const PR16_RETAINED_STAGING_ROOTS = Object.freeze([
   ".p1a-pr16-chain-staging-rejected-cleanliness",
   ".p1a-pr16-chain-staging-trusted-base",
   ".p1a-pr16-chain-staging-current-predecessor",
+  ".p1a-pr16-chain-staging-minimum-depth",
 ]);
 const AUTHORIZED_EPHEMERAL_AUTHORITY_ROOTS = Object.freeze([
   ".p1a-original-candidate",
@@ -94,6 +97,7 @@ const authorityRoots = {
   pr16OriginalAmendmentSource: process.env.P1A_PR16_ORIGINAL_AMENDMENT_SOURCE_ROOT,
   pr16RejectedChainSource: process.env.P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT,
   pr16CurrentPredecessorSource: process.env.P1A_PR16_CURRENT_PREDECESSOR_SOURCE_ROOT,
+  pr16MinimumDepthSource: process.env.P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT,
 };
 const workspaceOptions = (expectedRelative) => process.env.GITHUB_WORKSPACE
   ? { workspaceRoot: process.env.GITHUB_WORKSPACE, expectedRelative }
@@ -193,9 +197,15 @@ function resolveAuthorizedLinearAmendment(head, parentLookup) {
   } else if (head === REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE) {
     assert.deepEqual(parentLookup(head), [REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE],
       "provenance: minimum-depth candidate must be the exact current-predecessor child");
-  } else {
+  } else if (head === REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE) {
     assert.deepEqual(parentLookup(head), [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE],
+      "provenance: historical-digest candidate must be the exact minimum-depth child");
+  } else {
+    assert.deepEqual(parentLookup(head), [REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE],
       "provenance: replacement must have exact rejected remote parent");
+    assert.deepEqual(parentLookup(REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE),
+      [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE],
+      "provenance: rejected remote candidate must be the exact minimum-depth child");
     assert.deepEqual(parentLookup(REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE),
       [REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE],
       "provenance: rejected remote candidate must be the exact current-predecessor child");
@@ -261,7 +271,8 @@ const exactTopology = new Map([
   [REJECTED_PR16_RETAINED_SOURCE_CANDIDATE, [REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE]],
   [REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE, [REJECTED_PR16_RETAINED_SOURCE_CANDIDATE]],
   [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE, [REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE]],
-  [topologyReplacement, [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE]],
+  [REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE, [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE]],
+  [topologyReplacement, [REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE]],
   [topologyExtra, [topologyReplacement]],
 ]);
 const topologyParents = (sha) => {
@@ -473,7 +484,7 @@ function validatePr16WorkflowContract(source) {
   }
   assert.ok(source.includes(REJECTED_PR16_RETAINED_SOURCE_CANDIDATE),
     "pr16-workflow: depth-two parent object is not explicitly bound");
-  assert.equal((source.match(/path: \.p1a-pr16-chain-staging-/g) ?? []).length, 6,
+  assert.equal((source.match(/path: \.p1a-pr16-chain-staging-/g) ?? []).length, 7,
     "pr16-workflow: exact staging checkout count required");
   const pr16Section = source.slice(source.indexOf("Acquire exact PR16 trusted-base predecessor object"),
     source.indexOf("P1-A trusted verifier controls"));
@@ -487,15 +498,25 @@ function validatePr16WorkflowContract(source) {
           path: .p1a-pr16-chain-staging-action-inventory`;
   assert.equal(pr16Section.split(fifthCheckout).length - 1, 1,
     "pr16-workflow: exact fifth predecessor checkout required once");
-  assert.equal((pr16Section.match(/uses: actions\/checkout@11d5960a326750d5838078e36cf38b85af677262/g) ?? []).length, 6,
+  const minimumDepthCheckout = `      - name: Acquire exact PR16 minimum-depth historical workflow source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: ${REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE}
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-minimum-depth`;
+  assert.equal(pr16Section.split(minimumDepthCheckout).length - 1, 1,
+    "pr16-workflow: exact minimum-depth historical checkout required once");
+  assert.equal((pr16Section.match(/uses: actions\/checkout@11d5960a326750d5838078e36cf38b85af677262/g) ?? []).length, 7,
     "pr16-workflow: pinned checkout provenance mismatch");
-  assert.equal((pr16Section.match(/fetch-depth: 1/g) ?? []).length, 4,
+  assert.equal((pr16Section.match(/fetch-depth: 1/g) ?? []).length, 5,
     "pr16-workflow: exact depth-one predecessor acquisition count required");
   assert.equal((pr16Section.match(/fetch-depth: 2/g) ?? []).length, 1,
     "pr16-workflow: exact depth-two current-predecessor acquisition required");
   assert.equal((pr16Section.match(/fetch-depth: 6/g) ?? []).length, 1,
     "pr16-workflow: exact minimum depth-six trusted-base acquisition required");
-  assert.equal((pr16Section.match(/persist-credentials: false/g) ?? []).length, 6,
+  assert.equal((pr16Section.match(/persist-credentials: false/g) ?? []).length, 7,
     "pr16-workflow: credential persistence forbidden");
   assert.ok(pr16Section.includes("mapfile -t actual"), "pr16-workflow: exact inventory accounting absent");
   assert.ok(pr16Section.includes("test \"${actual[*]}\" = \"${expected[*]}\""),
@@ -512,6 +533,8 @@ function validatePr16WorkflowContract(source) {
     "pr16-workflow: full exact action-inventory source binding absent");
   assert.ok(source.includes("P1A_PR16_CURRENT_PREDECESSOR_SOURCE_ROOT: .p1a-pr16-chain-staging-current-predecessor"),
     "pr16-workflow: current-predecessor source binding absent");
+  assert.ok(source.includes("P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT: .p1a-pr16-chain-staging-minimum-depth"),
+    "pr16-workflow: minimum-depth historical source binding absent");
   assert.ok(pr16Section.includes("historical_path=.github/workflows/ci.yml"),
     "pr16-workflow: exact historical path proof absent");
   assert.ok(pr16Section.includes(`historical_blob=${HISTORICAL_WORKFLOW_BLOB}`),
@@ -535,7 +558,8 @@ const pr16WorkflowSource = readFileSync(path.join(root, ".github/workflows/ci.ym
 const TWO_STAGE_START = "      - name: Acquire bounded trusted-reconciliation staging objects\n";
 const TWO_STAGE_END = "      - name: P1-A trusted verifier controls\n";
 const OLD_TWO_STAGE_DIGEST = "eb7e175d744e66c5bddfe440c6be11656f3f243ae70a2eb12215e9920d7079d5";
-const NEW_TWO_STAGE_DIGEST = "2bcfff4a10747345a1792eaa79039aabefbd6ec57172f80e8710388a098824c8";
+const REJECTED_TWO_STAGE_DIGEST = "2bcfff4a10747345a1792eaa79039aabefbd6ec57172f80e8710388a098824c8";
+const NEW_TWO_STAGE_DIGEST = "e8a51db174547f42733892f5c5077aecb3c539f86b0b5d3eb7a7622ac08f72cf";
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 const custodyFragment = (source) => {
   assert.equal(source.split(TWO_STAGE_START).length - 1, 1, "custody fragment start must be unique");
@@ -544,12 +568,18 @@ const custodyFragment = (source) => {
   assert.ok(end > start, "custody fragment end must follow start");
   return source.slice(start, end);
 };
-const historicalWorkflow = gitAt(root, "show",
-  `${REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE}:.github/workflows/ci.yml`);
+const minimumDepthWorkflowSource = verifyExactWorkflowSource("minimum-depth-historical-source",
+  authorityRoots.pr16MinimumDepthSource, REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE,
+  MINIMUM_DEPTH_WORKFLOW_BLOB, ".p1a-pr16-chain-staging-minimum-depth",
+  PATH_SOURCE_CLASSES.FULL_EXACT_COMMIT_SOURCE);
+const historicalWorkflow = gitAt(minimumDepthWorkflowSource.root, "show",
+  `${REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE}:${HISTORICAL_WORKFLOW_PATH}`);
 assert.equal(digest(custodyFragment(historicalWorkflow)), OLD_TWO_STAGE_DIGEST,
   "historical workflow must retain its historical custody profile");
 assert.equal(digest(custodyFragment(pr16WorkflowSource)), NEW_TWO_STAGE_DIGEST,
   "repaired workflow custody digest must be independently reproduced");
+assert.notEqual(digest(custodyFragment(pr16WorkflowSource)), REJECTED_TWO_STAGE_DIGEST,
+  "repaired workflow must reject the predecessor custody profile");
 assert.ok(rejects(() => removeTwoStageCustodyFragment(historicalWorkflow)),
   "historical custody profile must not satisfy the repaired profile");
 const custodyHostileSources = [
@@ -559,8 +589,8 @@ const custodyHostileSources = [
     "          source_heads=(\n            2f4baca937ef8b36d1560a010e8e7f430819197c\n",
     "            2f4baca937ef8b36d1560a010e8e7f430819197c\n          source_heads=(\n")],
   ["duplicate_source_import", pr16WorkflowSource.replace(
-    "            .p1a-pr16-chain-staging-current-predecessor\n          )\n          object_sources=(",
-    "            .p1a-pr16-chain-staging-current-predecessor\n            .p1a-pr16-chain-staging-current-predecessor\n          )\n          object_sources=(")],
+    "            .p1a-pr16-chain-staging-minimum-depth\n          )\n          object_sources=(",
+    "            .p1a-pr16-chain-staging-minimum-depth\n            .p1a-pr16-chain-staging-minimum-depth\n          )\n          object_sources=(")],
   ["duplicate_object_import", pr16WorkflowSource.replace(
     "          object_sources=(\n", "          object_sources=(\n            .p1a-pr16-chain-staging-current-predecessor\n")],
   ["duplicated_start_marker", pr16WorkflowSource.replace(TWO_STAGE_END, `${TWO_STAGE_START}${TWO_STAGE_END}`)],
@@ -612,13 +642,13 @@ const actionInventoryPositiveControls = [
   ["historical_ten", () => assert.equal(historicalActionResult.required, 10)],
   ["predecessor_fourteen", () => assert.equal(predecessorActionResult.required, 14)],
   ["retained_roots_predecessor_fifteen", () => assert.equal(retainedRootsActionResult.required, 15)],
-  ["current_sixteen", () => assert.equal(currentActionResult.required, 16)],
-  ["authorized_delta_six", () => assert.equal(currentActionInventory.length - historicalActionInventory.length, 6)],
-  ["one_action_after_retained_roots_predecessor", () => assert.equal(currentActionInventory.length - 15, 1)],
-  ["six_added_checkouts", () => assert.equal(countRepository(currentActionInventory, "actions/checkout") -
-    countRepository(historicalActionInventory, "actions/checkout"), 6)],
+  ["current_seventeen", () => assert.equal(currentActionResult.required, 17)],
+  ["authorized_delta_seven", () => assert.equal(currentActionInventory.length - historicalActionInventory.length, 7)],
+  ["two_actions_after_retained_roots_predecessor", () => assert.equal(currentActionInventory.length - 15, 2)],
+  ["seven_added_checkouts", () => assert.equal(countRepository(currentActionInventory, "actions/checkout") -
+    countRepository(historicalActionInventory, "actions/checkout"), 7)],
   ["all_added_checkout_pins_exact", () => assert.equal(currentActionInventory.filter(
-    ({ repository, revision }) => repository === "actions/checkout" && revision === checkoutPin).length, 13)],
+    ({ repository, revision }) => repository === "actions/checkout" && revision === checkoutPin).length, 14)],
   ["setup_node_pin_preserved", () => assert.equal(countRepository(currentActionInventory, "actions/setup-node"), 1)],
   ["cache_pin_preserved", () => assert.equal(countRepository(currentActionInventory, "actions/cache"), 1)],
   ["actionlint_pin_preserved", () => assert.equal(countRepository(currentActionInventory, "raven-actions/actionlint"), 1)],
@@ -628,9 +658,9 @@ const actionInventoryPositiveControls = [
     incorrectPins: currentActionResult.incorrectPins },
   { unexpected: 0, missing: 0, mutable: 0, incorrectPins: 0 })],
   ["comment_fake_not_counted", () => assert.equal(parseOrdinaryCiActionInventory(
-    `${pr16WorkflowSource}\n# uses: attacker/fake@${"a".repeat(40)}\n`).length, 16)],
+    `${pr16WorkflowSource}\n# uses: attacker/fake@${"a".repeat(40)}\n`).length, 17)],
   ["scalar_uses_text_not_counted", () => assert.equal(parseOrdinaryCiActionInventory(
-    `${pr16WorkflowSource}\nmetadata: |\n  uses: attacker/fake@${"a".repeat(40)}\n`).length, 16)],
+    `${pr16WorkflowSource}\nmetadata: |\n  uses: attacker/fake@${"a".repeat(40)}\n`).length, 17)],
 ];
 const appendStep = (source, uses) => `${source}\n      - uses: ${uses}\n`;
 const removeFirst = (source, needle) => {
@@ -642,7 +672,7 @@ const replaceFirst = (source, needle, replacement) => {
   return source.replace(needle, replacement);
 };
 const actionInventoryHostileControls = [
-  ["seventeenth_action", (ci) => appendStep(ci, `actions/checkout@${checkoutPin}`)],
+  ["eighteenth_action", (ci) => appendStep(ci, `actions/checkout@${checkoutPin}`)],
   ["fifteen_actions", (ci) => removeFirst(ci, `        uses: actions/cache@${cachePin} # v4\n`)],
   ["required_checkout_omitted", (ci) => removeFirst(ci, `        uses: actions/checkout@${checkoutPin} # v4\n`)],
   ["extra_checkout", (ci) => appendStep(ci, `actions/checkout@${checkoutPin}`)],
@@ -686,8 +716,8 @@ console.log(JSON.stringify({
   suite: "p1-a-ordinary-ci-expanded-action-inventory",
   historicalRequired: 10, historicalExecuted: historicalActionInventory.length,
   predecessorRequired: 14, predecessorExecuted: predecessorActionInventory.length,
-  currentRequired: 16, currentExecuted: currentActionInventory.length,
-  authorizedDelta: 6,
+  currentRequired: 17, currentExecuted: currentActionInventory.length,
+  authorizedDelta: 7,
   positiveRequired: actionInventoryPositiveControls.length,
   positiveExecuted: actionInventoryPositiveControls.length,
   positivePassed: actionInventoryPositiveOutcomes.filter(Boolean).length,
@@ -863,7 +893,8 @@ function resolveAmendmentSource() {
   if (parents.length === 1) {
     return resolveAuthorizedLinearAmendment(head,
       (sha) => sha === head ? parents
-        : sha === REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE ? commitParents(root, sha)
+        : [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE,
+            REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE].includes(sha) ? commitParents(root, sha)
         : chainAuthority.parents(sha));
   }
   assert.deepEqual(parents.slice(0, 1), [ORIGINAL_CANDIDATE],
@@ -927,7 +958,7 @@ const legacyRetainedRoots = Object.freeze([
 const missingRetainedRootsBeforeRepair = PR16_RETAINED_STAGING_ROOTS.filter(
   (rootPath) => !legacyRetainedRoots.includes(rootPath),
 );
-assert.equal(missingRetainedRootsBeforeRepair.length, 5,
+assert.equal(missingRetainedRootsBeforeRepair.length, 6,
   "provenance before-proof: exact missing retained-root count changed");
 for (const rootPath of missingRetainedRootsBeforeRepair) {
   const fixture = createCleanlinessFixture(`before-${path.basename(rootPath)}`);
@@ -953,10 +984,10 @@ for (const rootPath of PR16_RETAINED_STAGING_ROOTS) {
   ]));
   retainedRootPositivePassed += 1;
 }
-assert.equal(new Set(PR16_RETAINED_STAGING_ROOTS).size, 6,
-  "provenance: retained staging roots must be exactly six unique literals");
+assert.equal(new Set(PR16_RETAINED_STAGING_ROOTS).size, 7,
+  "provenance: retained staging roots must be exactly seven unique literals");
 assert.equal(PR16_RETAINED_STAGING_ROOTS.filter((rootPath) =>
-  rootPath.startsWith(".p1a-pr16-chain-staging-")).length, 6,
+  rootPath.startsWith(".p1a-pr16-chain-staging-")).length, 7,
 "provenance: retained staging root namespace mismatch");
 
 const retainedRootHostileCases = [
@@ -994,11 +1025,11 @@ console.log(JSON.stringify({
   roots: PR16_RETAINED_STAGING_ROOTS,
   missingBeforeRepair: missingRetainedRootsBeforeRepair.length,
   missingAfterRepair: 0,
-  positiveRequired: 18,
-  positiveExecuted: 18,
+  positiveRequired: 21,
+  positiveExecuted: 21,
   positivePassed: retainedRootPositivePassed,
-  hostileRequired: 78,
-  hostileExecuted: 78,
+  hostileRequired: 91,
+  hostileExecuted: 91,
   hostilePassed: retainedRootHostilePassed,
   failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
 }));
@@ -2075,7 +2106,7 @@ const semanticPositiveControls = [
   ["replacement_parent_current_remote_head", () => assert.deepEqual(
     commitParents(trustedSourceRoot, amendmentSourceSha),
     [REJECTED_PR16_COMPLETE_RETAINED_ROOTS_CANDIDATE])],
-  ["action_inventory_exact_16", () => assert.equal(currentActionResult.required, 16)],
+  ["action_inventory_exact_17", () => assert.equal(currentActionResult.required, 17)],
   ["candidate_data_required_9", () => assert.equal(semanticCandidateSummary.required, 9)],
   ["candidate_data_uncertified", () => assert.equal(semanticCandidateSummary.certified, false)],
   ["protected_operations_zero", () => assert.equal(semanticCandidateSummary.protectedOperations, 0)],
@@ -2587,6 +2618,7 @@ const RETAINED_SOURCE_BINDINGS = [
   "          P1A_PR16_ACTION_INVENTORY_SOURCE_ROOT: .p1a-pr16-chain-staging-action-inventory",
   "          P1A_PR16_ORIGINAL_AMENDMENT_SOURCE_ROOT: .p1a-pr16-chain-staging-original-amendment",
   "          P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-chain",
+  "          P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT: .p1a-pr16-chain-staging-minimum-depth",
   "",
 ].join("\n");
 const negativeCases = [

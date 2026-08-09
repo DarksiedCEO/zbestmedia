@@ -375,6 +375,15 @@ jobs:
           persist-credentials: false
           path: .p1a-pr16-chain-staging-current-predecessor
 
+      - name: Acquire exact PR16 minimum-depth historical workflow source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: fe3a898e94eac0ac1695051b2ae71cfa27efaebc
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-minimum-depth
+
       - name: Construct exact PR16 remediation-chain predecessor authority
         run: |
           set -euo pipefail
@@ -395,6 +404,7 @@ jobs:
             966ab9160ad133adb10d58f7877f8549efd06831
             6867d43d17c8b614ab7d0e0c5e338127020bb772
             9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c
+            fe3a898e94eac0ac1695051b2ae71cfa27efaebc
           )
           sources=(
             .p1a-pr16-chain-staging-trusted-base
@@ -403,6 +413,7 @@ jobs:
             .p1a-pr16-chain-staging-rejected-cleanliness
             .p1a-pr16-chain-staging-action-inventory
             .p1a-pr16-chain-staging-current-predecessor
+            .p1a-pr16-chain-staging-minimum-depth
           )
           object_sources=(
             .p1a-pr16-chain-staging-trusted-base
@@ -417,8 +428,10 @@ jobs:
           trusted_base_source=.p1a-pr16-chain-staging-trusted-base
           action_inventory_source=.p1a-pr16-chain-staging-action-inventory
           current_predecessor_source=.p1a-pr16-chain-staging-current-predecessor
+          minimum_depth_source=.p1a-pr16-chain-staging-minimum-depth
           historical_path=.github/workflows/ci.yml
           historical_blob=60d9cede50402f10837a630598b9f8dbf6fb839e
+          minimum_depth_blob=3aba273771fd2874adf8f33ad1e2d7a02fb02c60
           test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
           git init -q "$authority"
           git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
@@ -447,6 +460,9 @@ jobs:
           test "$(git -C "$trusted_base_source" rev-parse "${shas[0]}:$historical_path")" = "$historical_blob"
           test "$(git -C "$action_inventory_source" rev-parse HEAD)" = "${shas[4]}"
           test "$(git -C "$current_predecessor_source" rev-parse HEAD)" = "${shas[6]}"
+          test "$(git -C "$minimum_depth_source" rev-parse HEAD)" = "fe3a898e94eac0ac1695051b2ae71cfa27efaebc"
+          test "$(git -C "$minimum_depth_source" rev-parse "fe3a898e94eac0ac1695051b2ae71cfa27efaebc:$historical_path")" = "$minimum_depth_blob"
+          test "$(git -C "$minimum_depth_source" cat-file -t "$minimum_depth_blob")" = blob
           test "$(git -C "$authority" cat-file -p "${shas[1]}" | sed -n 's/^parent //p')" = "${shas[0]}"
           test "$(git -C "$authority" cat-file -p "${shas[2]}" | sed -n 's/^parent //p')" = "${shas[1]}"
           test "$(git -C "$authority" cat-file -p "${shas[3]}" | sed -n 's/^parent //p')" = "${shas[2]}"
@@ -492,12 +508,13 @@ jobs:
           P1A_PR16_ORIGINAL_AMENDMENT_SOURCE_ROOT: .p1a-pr16-chain-staging-original-amendment
           P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-chain
           P1A_PR16_CURRENT_PREDECESSOR_SOURCE_ROOT: .p1a-pr16-chain-staging-current-predecessor
+          P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT: .p1a-pr16-chain-staging-minimum-depth
         run: node scripts/test-p1a-dual-base-verifier.mjs
 
       - name: Remove isolated P1-A authority checkouts
         if: always()
         run: |
-          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-chain-staging-action-inventory .p1a-pr16-chain-staging-current-predecessor .p1a-pr16-remediation-chain-authority
+          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-chain-staging-action-inventory .p1a-pr16-chain-staging-current-predecessor .p1a-pr16-chain-staging-minimum-depth .p1a-pr16-remediation-chain-authority
           test ! -e .p1a-original-candidate
           test ! -e .p1a-trusted-baseline
           test ! -e .p1a-dual-base-authority
@@ -511,6 +528,7 @@ jobs:
           test ! -e .p1a-pr16-chain-staging-rejected-chain
           test ! -e .p1a-pr16-chain-staging-rejected-cleanliness
           test ! -e .p1a-pr16-chain-staging-action-inventory
+          test ! -e .p1a-pr16-chain-staging-minimum-depth
           test ! -e .p1a-pr16-remediation-chain-authority
 
       - name: P1-A trusted-bootstrap secret-detector tests
