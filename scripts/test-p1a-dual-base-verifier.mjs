@@ -26,6 +26,7 @@ const REJECTED_PR16_CLEANLINESS_CANDIDATE = "0164130fc62209c7a71ca4f7e58a2e24117
 const REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE = "966ab9160ad133adb10d58f7877f8549efd06831";
 const REJECTED_PR16_ACTION_INVENTORY_CANDIDATE = "6867d43d17c8b614ab7d0e0c5e338127020bb772";
 const REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE = "5c302bdae987a43104fecb5c4bfcf4fcca82c540";
+const REJECTED_PR16_RETAINED_SOURCE_CANDIDATE = "af29acb57895319ae6a5ed35d923054383ceed12";
 const HISTORICAL_WORKFLOW_PATH = ".github/workflows/ci.yml";
 const HISTORICAL_WORKFLOW_BLOB = "60d9cede50402f10837a630598b9f8dbf6fb839e";
 const TRUSTED_BASE_WORKFLOW_BLOB = "60d9cede50402f10837a630598b9f8dbf6fb839e";
@@ -44,6 +45,13 @@ const PATH_SOURCE_CLASSES = Object.freeze({
   TRUSTED_BASE_FULL_SOURCE: "TRUSTED_BASE_FULL_SOURCE",
 });
 const REJECTED_RECONCILIATION = "4cbdee7b4aded69275efdc78aea41ed21bae32dc";
+const PR16_RETAINED_STAGING_ROOTS = Object.freeze([
+  ".p1a-pr16-chain-staging-action-inventory",
+  ".p1a-pr16-chain-staging-original-amendment",
+  ".p1a-pr16-chain-staging-rejected-chain",
+  ".p1a-pr16-chain-staging-rejected-cleanliness",
+  ".p1a-pr16-chain-staging-trusted-base",
+]);
 const AUTHORIZED_EPHEMERAL_AUTHORITY_ROOTS = Object.freeze([
   ".p1a-original-candidate",
   ".p1a-trusted-baseline",
@@ -52,7 +60,7 @@ const AUTHORIZED_EPHEMERAL_AUTHORITY_ROOTS = Object.freeze([
   ".p1a-ancestry-authority",
   ".p1a-trusted-reconciliation-authority",
   ".p1a-pr16-remediation-chain-authority",
-  ".p1a-pr16-chain-staging-rejected-cleanliness",
+  ...PR16_RETAINED_STAGING_ROOTS,
 ]);
 const AMENDMENT_OWNED_FIXTURE_FILES = Object.freeze([
   ".github/workflows/ci.yml",
@@ -170,9 +178,15 @@ function resolveAuthorizedLinearAmendment(head, parentLookup) {
   } else if (head === REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE) {
     assert.deepEqual(parentLookup(head), [REJECTED_PR16_ACTION_INVENTORY_CANDIDATE],
       "provenance: rejected semantic-provenance candidate parent mismatch");
-  } else {
+  } else if (head === REJECTED_PR16_RETAINED_SOURCE_CANDIDATE) {
     assert.deepEqual(parentLookup(head), [REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE],
-      "provenance: replacement must have exact rejected semantic-provenance candidate parent");
+      "provenance: rejected retained-source candidate parent mismatch");
+  } else {
+    assert.deepEqual(parentLookup(head), [REJECTED_PR16_RETAINED_SOURCE_CANDIDATE],
+      "provenance: replacement must have exact rejected retained-source candidate parent");
+    assert.deepEqual(parentLookup(REJECTED_PR16_RETAINED_SOURCE_CANDIDATE),
+      [REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE],
+      "provenance: rejected retained-source candidate parent mismatch");
     assert.deepEqual(parentLookup(REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE),
       [REJECTED_PR16_ACTION_INVENTORY_CANDIDATE],
       "provenance: rejected semantic-provenance candidate parent mismatch");
@@ -237,7 +251,8 @@ const exactTopology = new Map([
   [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE, [REJECTED_PR16_CLEANLINESS_CANDIDATE]],
   [REJECTED_PR16_ACTION_INVENTORY_CANDIDATE, [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE]],
   [REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE, [REJECTED_PR16_ACTION_INVENTORY_CANDIDATE]],
-  [topologyReplacement, [REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE]],
+  [REJECTED_PR16_RETAINED_SOURCE_CANDIDATE, [REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE]],
+  [topologyReplacement, [REJECTED_PR16_RETAINED_SOURCE_CANDIDATE]],
   [topologyExtra, [topologyReplacement]],
 ]);
 const topologyParents = (sha) => {
@@ -302,15 +317,30 @@ function isExactRootOrDescendant(candidatePath, authorizedRoot) {
   return candidatePath === authorizedRoot || candidatePath.startsWith(`${authorizedRoot}/`);
 }
 
-function assertAuthorizedAuthorityRoot(repositoryRoot, candidatePath) {
-  const authorizedRoot = AUTHORIZED_EPHEMERAL_AUTHORITY_ROOTS.find(
+function assertAuthorizedAuthorityRoot(
+  repositoryRoot,
+  candidatePath,
+  authorityRoots = AUTHORIZED_EPHEMERAL_AUTHORITY_ROOTS,
+) {
+  const matchingRoots = authorityRoots.filter(
     (rootPath) => isExactRootOrDescendant(candidatePath, rootPath),
   );
-  assert.ok(authorizedRoot, `provenance: unauthorized untracked path: ${candidatePath}`);
+  assert.equal(matchingRoots.length, 1,
+    `provenance: unauthorized or ambiguous untracked path: ${candidatePath}`);
+  const [authorizedRoot] = matchingRoots;
   const absoluteRoot = path.join(repositoryRoot, authorizedRoot);
   assert.ok(existsSync(absoluteRoot), `provenance: authorized authority root absent: ${authorizedRoot}`);
   assert.equal(lstatSync(absoluteRoot).isSymbolicLink(), false,
     `provenance: authority root cannot be a symlink: ${authorizedRoot}`);
+  const relativeDescendant = path.posix.relative(authorizedRoot, candidatePath);
+  let currentPath = absoluteRoot;
+  for (const segment of relativeDescendant.split("/").filter(Boolean)) {
+    currentPath = path.join(currentPath, segment);
+    if (existsSync(currentPath)) {
+      assert.equal(lstatSync(currentPath).isSymbolicLink(), false,
+        `provenance: authority descendant cannot be a symlink: ${candidatePath}`);
+    }
+  }
 }
 
 function assertClassifiedWorktreeEntries(repositoryRoot, entries) {
@@ -741,7 +771,8 @@ function resolveAmendmentSource() {
   if (parents.length === 1) {
     return resolveAuthorizedLinearAmendment(head,
       (sha) => sha === head ? parents
-        : sha === REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE ? commitParents(root, sha)
+        : [REJECTED_PR16_RETAINED_SOURCE_CANDIDATE,
+            REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE].includes(sha) ? commitParents(root, sha)
           : chainAuthority.parents(sha));
   }
   assert.deepEqual(parents.slice(0, 1), [ORIGINAL_CANDIDATE],
@@ -751,7 +782,8 @@ function resolveAmendmentSource() {
   const amendmentParents = commitParents(root, amendment);
   return resolveAuthorizedLinearAmendment(amendment,
     (sha) => sha === amendment ? amendmentParents
-      : sha === REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE ? commitParents(root, sha)
+      : [REJECTED_PR16_RETAINED_SOURCE_CANDIDATE,
+          REJECTED_PR16_SEMANTIC_PROVENANCE_CANDIDATE].includes(sha) ? commitParents(root, sha)
         : chainAuthority.parents(sha));
 }
 
@@ -799,6 +831,88 @@ assert.doesNotThrow(() => assertAmendmentSourceWorktreeClean(expectedContentsFix
 const exactRootsFixture = createCleanlinessFixture("exact-roots");
 populateAuthorizedAuthorityRoots(exactRootsFixture);
 assert.doesNotThrow(() => assertAmendmentSourceWorktreeClean(exactRootsFixture));
+
+const legacyRetainedRoots = Object.freeze([
+  ".p1a-pr16-chain-staging-rejected-cleanliness",
+]);
+const missingRetainedRootsBeforeRepair = PR16_RETAINED_STAGING_ROOTS.filter(
+  (rootPath) => !legacyRetainedRoots.includes(rootPath),
+);
+assert.equal(missingRetainedRootsBeforeRepair.length, 4,
+  "provenance before-proof: exact missing retained-root count changed");
+for (const rootPath of missingRetainedRootsBeforeRepair) {
+  const fixture = createCleanlinessFixture(`before-${path.basename(rootPath)}`);
+  mkdirSync(path.join(fixture, rootPath, "objects"), { recursive: true });
+  assert.throws(() => assertAuthorizedAuthorityRoot(fixture, rootPath, legacyRetainedRoots),
+    `provenance before-proof: missing retained root unexpectedly accepted: ${rootPath}`);
+}
+
+let retainedRootPositivePassed = 0;
+for (const rootPath of PR16_RETAINED_STAGING_ROOTS) {
+  const fixture = createCleanlinessFixture(`positive-${path.basename(rootPath)}`);
+  mkdirSync(path.join(fixture, rootPath, "objects/nested"), { recursive: true });
+  writeFileSync(path.join(fixture, rootPath, "objects/nested/object"), "authority evidence\n");
+  assert.doesNotThrow(() => assertAuthorizedAuthorityRoot(fixture, rootPath));
+  retainedRootPositivePassed += 1;
+  assert.doesNotThrow(() => assertAuthorizedAuthorityRoot(
+    fixture,
+    `${rootPath}/objects/nested/object`,
+  ));
+  retainedRootPositivePassed += 1;
+  assert.doesNotThrow(() => assertClassifiedWorktreeEntries(fixture, [
+    { code: "??", path: `${rootPath}/` },
+  ]));
+  retainedRootPositivePassed += 1;
+}
+assert.equal(new Set(PR16_RETAINED_STAGING_ROOTS).size, 5,
+  "provenance: retained staging roots must be exactly five unique literals");
+assert.equal(PR16_RETAINED_STAGING_ROOTS.filter((rootPath) =>
+  rootPath.startsWith(".p1a-pr16-chain-staging-")).length, 5,
+"provenance: retained staging root namespace mismatch");
+
+const retainedRootHostileCases = [
+  ["evil_suffix", (fixture, rootPath) => { mkdirSync(path.join(fixture, `${rootPath}-evil`)); writeFileSync(path.join(fixture, `${rootPath}-evil/file`), "unauthorized\n"); }],
+  ["numeric_suffix", (fixture, rootPath) => { mkdirSync(path.join(fixture, `${rootPath}2`)); writeFileSync(path.join(fixture, `${rootPath}2/file`), "unauthorized\n"); }],
+  ["backup_suffix", (fixture, rootPath) => { mkdirSync(path.join(fixture, `${rootPath}-backup`)); writeFileSync(path.join(fixture, `${rootPath}-backup/file`), "unauthorized\n"); }],
+  ["underscore_suffix", (fixture, rootPath) => { mkdirSync(path.join(fixture, `${rootPath}_`)); writeFileSync(path.join(fixture, `${rootPath}_/file`), "unauthorized\n"); }],
+  ["traversal", (fixture, rootPath) => assertClassifiedWorktreeEntries(fixture, [{ code: "??", path: `${rootPath}/../evil` }])],
+  ["absolute_escape", (fixture) => assertClassifiedWorktreeEntries(fixture, [{ code: "??", path: "/tmp/p1a-retained-root-escape" }])],
+  ["root_symlink", (fixture, rootPath) => symlinkSync(path.join(fixture, "scripts"), path.join(fixture, rootPath))],
+  ["descendant_symlink", (fixture, rootPath) => { mkdirSync(path.join(fixture, rootPath)); symlinkSync(path.join(fixture, "scripts"), path.join(fixture, rootPath, "escape")); }],
+  ["tracked_modification", (fixture, rootPath) => { mkdirSync(path.join(fixture, rootPath)); writeFileSync(path.join(fixture, rootPath, "tracked.txt"), "tracked\n"); gitAt(fixture, "add", rootPath); gitAt(fixture, "commit", "-qm", "track retained root"); writeFileSync(path.join(fixture, rootPath, "tracked.txt"), "dirty\n"); }],
+  ["staged_file", (fixture, rootPath) => { mkdirSync(path.join(fixture, rootPath)); writeFileSync(path.join(fixture, rootPath, "staged.txt"), "staged\n"); gitAt(fixture, "add", rootPath); }],
+  ["deleted_tracked_file", (fixture, rootPath) => { mkdirSync(path.join(fixture, rootPath)); writeFileSync(path.join(fixture, rootPath, "tracked.txt"), "tracked\n"); gitAt(fixture, "add", rootPath); gitAt(fixture, "commit", "-qm", "track retained root"); rmSync(path.join(fixture, rootPath, "tracked.txt")); }],
+  ["renamed_tracked_file", (fixture, rootPath) => { mkdirSync(path.join(fixture, rootPath)); writeFileSync(path.join(fixture, rootPath, "tracked.txt"), "tracked\n"); gitAt(fixture, "add", rootPath); gitAt(fixture, "commit", "-qm", "track retained root"); gitAt(fixture, "mv", `${rootPath}/tracked.txt`, `${rootPath}/renamed.txt`); }],
+  ["conflicted_path", (fixture, rootPath) => assertClassifiedWorktreeEntries(fixture, [{ code: "UU", path: `${rootPath}/conflict.txt` }])],
+];
+let retainedRootHostilePassed = 0;
+for (const rootPath of PR16_RETAINED_STAGING_ROOTS) {
+  for (const [name, contaminate] of retainedRootHostileCases) {
+    const fixture = createCleanlinessFixture(`retained-${path.basename(rootPath)}-${name}`);
+    let rejected = false;
+    try {
+      contaminate(fixture, rootPath);
+      assertAmendmentSourceWorktreeClean(fixture);
+    } catch {
+      rejected = true;
+    }
+    assert.ok(rejected, `provenance retained-root hostile accepted: ${rootPath}:${name}`);
+    retainedRootHostilePassed += 1;
+  }
+}
+console.log(JSON.stringify({
+  suite: "p1-a-pr16-retained-staging-root-classification-controls",
+  roots: PR16_RETAINED_STAGING_ROOTS,
+  missingBeforeRepair: missingRetainedRootsBeforeRepair.length,
+  missingAfterRepair: 0,
+  positiveRequired: 15,
+  positiveExecuted: 15,
+  positivePassed: retainedRootPositivePassed,
+  hostileRequired: 65,
+  hostileExecuted: 65,
+  hostilePassed: retainedRootHostilePassed,
+  failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
 
 const pr16AuthorityDescendantFixture = createCleanlinessFixture("pr16-authority-descendant");
 mkdirSync(path.join(pr16AuthorityDescendantFixture,
@@ -1741,6 +1855,44 @@ if (!authorityRoots.pr16HistoricalSource) {
   gitAt(historicalSourceRoot, "checkout", "-q", "--detach", REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE);
   gitAt(historicalSourceRoot, "remote", "set-url", "origin", OFFICIAL_REPOSITORY);
 }
+
+const retainedSourceRoleSwapControls = [
+  ["action_inventory_to_trusted_base", () => verifyExactWorkflowSource(
+    "action-inventory-predecessor", authorityRoots.trustedBaseFullSource,
+    REJECTED_PR16_ACTION_INVENTORY_CANDIDATE, ACTION_INVENTORY_WORKFLOW_BLOB,
+    ".p1a-pr16-chain-staging-action-inventory", PATH_SOURCE_CLASSES.FULL_EXACT_COMMIT_SOURCE,
+  )],
+  ["trusted_base_to_action_inventory", () => verifyExactWorkflowSource(
+    "trusted-base", authorityRoots.pr16ActionInventorySource,
+    CURRENT_TRUSTED_BASE, TRUSTED_BASE_WORKFLOW_BLOB,
+    ".p1a-pr16-chain-staging-trusted-base", PATH_SOURCE_CLASSES.TRUSTED_BASE_FULL_SOURCE,
+  )],
+  ["original_amendment_to_rejected_chain", () => verifyExactWorkflowSource(
+    "original-amendment-predecessor", authorityRoots.pr16RejectedChainSource,
+    ORIGINAL_PR16_AMENDMENT, HISTORICAL_WORKFLOW_BLOB,
+    ".p1a-pr16-chain-staging-original-amendment", PATH_SOURCE_CLASSES.FULL_EXACT_COMMIT_SOURCE,
+  )],
+  ["rejected_chain_to_rejected_cleanliness", () => verifyExactWorkflowSource(
+    "rejected-chain-predecessor", authorityRoots.pr16HistoricalSource,
+    REJECTED_PR16_CLEANLINESS_CANDIDATE, HISTORICAL_WORKFLOW_BLOB,
+    ".p1a-pr16-chain-staging-rejected-chain", PATH_SOURCE_CLASSES.FULL_EXACT_COMMIT_SOURCE,
+  )],
+  ["historical_source_to_trusted_base", () => assertHistoricalWorkflowPresent({
+    sourceRoot: authorityRoots.trustedBaseFullSource,
+  })],
+];
+let retainedSourceRoleSwapPassed = 0;
+for (const [name, operation] of retainedSourceRoleSwapControls) {
+  assert.throws(operation, `provenance retained-source role swap accepted: ${name}`);
+  retainedSourceRoleSwapPassed += 1;
+}
+console.log(JSON.stringify({
+  suite: "p1-a-pr16-retained-source-role-swap-controls",
+  required: 5,
+  executed: 5,
+  passed: retainedSourceRoleSwapPassed,
+  failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
 
 const topologyOnlyObservation = assertExactPathEvidence({
   sourceRoot: preverifiedPr16ChainAuthority.root,
