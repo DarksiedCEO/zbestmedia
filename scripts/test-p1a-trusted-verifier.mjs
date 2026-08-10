@@ -20,6 +20,8 @@ import {
   AUTHORIZED_BASE,
   AUTHORIZED_RUNTIME,
   COMPOSED_CI_BASE,
+  CURRENT_TRUSTED_WORKFLOW_BLOB,
+  CURRENT_TRUSTED_WORKFLOW_SHA,
   ORIGINAL_CANDIDATE,
   parseLineRange,
   runPackage,
@@ -63,10 +65,6 @@ const workflow = readFileSync(
   "utf8",
 );
 const ordinaryCi = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
-const CURRENT_TRUSTED_WORKFLOW_SHA =
-  "bce95a11fb18b2d4539a555ae686c2fe083e5970";
-const CURRENT_TRUSTED_WORKFLOW_BLOB =
-  "c6baddd0f3eb2246315e573ea1e53c7a6ed92dad";
 const currentWorkflowAuthorityRoot = process.env.P1A_CURRENT_WORKFLOW_AUTHORITY_ROOT
   ? path.resolve(root, process.env.P1A_CURRENT_WORKFLOW_AUTHORITY_ROOT)
   : null;
@@ -134,8 +132,8 @@ const CURRENT_TRUSTED_VERIFIER_CONTROL_STEP = `      - name: P1-A trusted verifi
           P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
         run: |
           set -euo pipefail
-          trusted_sha=bce95a11fb18b2d4539a555ae686c2fe083e5970
-          trusted_blob=c6baddd0f3eb2246315e573ea1e53c7a6ed92dad
+          trusted_sha=94941bbf6afbd0073f6619b2c63b0e6c5c6ca4e8
+          trusted_blob=a1066580b0b477cf17c53f5c11ebefcedac0a883
           authority="$RUNNER_TEMP/p1a-current-workflow-authority-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           trap 'rm -rf -- "$authority"' EXIT
           test -n "$P1A_CURRENT_WORKFLOW_FETCH_TOKEN"
@@ -167,11 +165,18 @@ const CURRENT_TRUSTED_VERIFIER_CONTROL_STEP = `      - name: P1-A trusted verifi
           rm -rf -- "$authority"
           test ! -e "$authority"
           trap - EXIT`;
+const PREVIOUS_TRUSTED_VERIFIER_CONTROL_STEP = CURRENT_TRUSTED_VERIFIER_CONTROL_STEP
+  .replace(CURRENT_TRUSTED_WORKFLOW_SHA,
+    "bce95a11fb18b2d4539a555ae686c2fe083e5970")
+  .replace(CURRENT_TRUSTED_WORKFLOW_BLOB,
+    "c6baddd0f3eb2246315e573ea1e53c7a6ed92dad");
 
 function composeCurrentTrustedWorkflow(source) {
-  assert.equal(source.split(BASE_TRUSTED_VERIFIER_CONTROL_STEP).length - 1, 1,
-    "current trusted workflow base step count mismatch");
-  return source.replace(BASE_TRUSTED_VERIFIER_CONTROL_STEP,
+  assert.equal(source.split(PREVIOUS_TRUSTED_VERIFIER_CONTROL_STEP).length - 1, 1,
+    "previous trusted workflow step count mismatch");
+  assert.equal(source.split(BASE_TRUSTED_VERIFIER_CONTROL_STEP).length - 1, 0,
+    "obsolete unauthenticated workflow step present");
+  return source.replace(PREVIOUS_TRUSTED_VERIFIER_CONTROL_STEP,
     CURRENT_TRUSTED_VERIFIER_CONTROL_STEP);
 }
 const baselineCi = baselineRepositoryRoot

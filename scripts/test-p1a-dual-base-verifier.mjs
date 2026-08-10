@@ -15,6 +15,7 @@ import {
   removeTwoStageCustodyFragment, validateDualBaseScope,
   parseOrdinaryCiActionInventory, validateOrdinaryCiActionPins,
   CURRENT_TRUSTED_BASE, CURRENT_TRUSTED_BASE_TREE, CURRENT_TRUSTED_BASE_PARENTS,
+  CURRENT_TRUSTED_WORKFLOW_BLOB, CURRENT_TRUSTED_WORKFLOW_SHA,
   POST_PR17_TRUSTED_BASE, POST_PR17_TRUSTED_BASE_TREE, POST_PR17_TRUSTED_BASE_PARENTS,
   POST_PR18_TRUSTED_BASE, POST_PR18_TRUSTED_BASE_TREE, POST_PR18_TRUSTED_BASE_PARENTS,
   POST_PR19_TRUSTED_BASE, POST_PR19_TRUSTED_BASE_TREE, POST_PR19_TRUSTED_BASE_PARENTS,
@@ -90,8 +91,8 @@ const CURRENT_TRUSTED_VERIFIER_CONTROL_STEP = `      - name: P1-A trusted verifi
           P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
         run: |
           set -euo pipefail
-          trusted_sha=bce95a11fb18b2d4539a555ae686c2fe083e5970
-          trusted_blob=c6baddd0f3eb2246315e573ea1e53c7a6ed92dad
+          trusted_sha=${CURRENT_TRUSTED_WORKFLOW_SHA}
+          trusted_blob=${CURRENT_TRUSTED_WORKFLOW_BLOB}
           authority="$RUNNER_TEMP/p1a-current-workflow-authority-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           trap 'rm -rf -- "$authority"' EXIT
           test -n "$P1A_CURRENT_WORKFLOW_FETCH_TOKEN"
