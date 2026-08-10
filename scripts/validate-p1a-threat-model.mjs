@@ -57,6 +57,10 @@ export const POST_PR19_TRUSTED_BASE_PARENTS = Object.freeze([
   "65880c7ad8086639596939866cbfdc5faefe3509",
 ]);
 export const EVENT_BOUND_TARGET_REPOSITORY = "DarksiedCEO/zbestmedia";
+export const CURRENT_TRUSTED_WORKFLOW_SHA =
+  "94941bbf6afbd0073f6619b2c63b0e6c5c6ca4e8";
+export const CURRENT_TRUSTED_WORKFLOW_BLOB =
+  "a1066580b0b477cf17c53f5c11ebefcedac0a883";
 export const EVENT_BOUND_AMENDMENT_CLASS_A_FILES = Object.freeze([
   ".github/workflows/ci.yml",
   "scripts/test-p1a-dual-base-verifier.mjs",
