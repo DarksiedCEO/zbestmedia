@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: true
     steps:
@@ -23,9 +23,6 @@ jobs:
           # PR workflows otherwise check out GitHub's synthetic merge commit,
           # which cannot be used as exact candidate identity.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          # P1-A verifies the authorized base is an actual ancestor and must
-          # fail rather than infer that fact from a shallow checkout.
-          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Node
@@ -81,8 +78,563 @@ jobs:
           P0_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: pnpm test:p0-reconciliation
 
-      - name: P1-A validator control suite (hermetic)
-        run: pnpm test:p1a-threat-model
+      - name: P1-A trusted-bootstrap exact-SHA identity
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          printf '%s\n' "Bootstrap CI exact SHA: $EXPECTED_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Acquire exact original P1-A candidate object
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 365c59757756f3f91480d3bfeb841b543010201f
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-original-candidate
+
+      - name: Verify and materialize exact original P1-A candidate object
+        env:
+          P1A_ORIGINAL_CANDIDATE: 365c59757756f3f91480d3bfeb841b543010201f
+          P1A_ORIGINAL_MODEL_BLOB: 0bb71b21e3532f9690226b6a504967f3b2504621
+          P1A_ORIGINAL_EVIDENCE_BLOB: 205dc5451bfc639bdfcbd58d380e11439e6f9764
+          P1A_ORIGINAL_MANIFEST_BLOB: d5e86d2445f750bc85a951c348ae52f76f2ce51a
+          P1A_ORIGINAL_MARKDOWN_BLOB: b675f420e0e50c32e84bba37c13e0aade0cfd5e5
+          P1A_ORIGINAL_TEST_BLOB: 1ad3be9777b6aaea530a07fbd0b183311d604be5
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          [[ "$P1A_ORIGINAL_CANDIDATE" =~ ^[0-9a-f]{40}$ ]]
+          test "$P1A_ORIGINAL_CANDIDATE" = "365c59757756f3f91480d3bfeb841b543010201f"
+          test "$(git -C .p1a-original-candidate rev-parse HEAD)" = "$P1A_ORIGINAL_CANDIDATE"
+          test "$(git -C .p1a-original-candidate cat-file -t "$P1A_ORIGINAL_CANDIDATE")" = "commit"
+          test "$(git -C .p1a-original-candidate remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          if grep -Eiq 'x-access-token|authorization:' .p1a-original-candidate/.git/config; then
+            echo "persisted credential material detected" >&2
+            exit 1
+          fi
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE^{commit}")" = "$P1A_ORIGINAL_CANDIDATE"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/model.json")" = "$P1A_ORIGINAL_MODEL_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/evidence-register.json")" = "$P1A_ORIGINAL_EVIDENCE_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/validation-manifest.json")" = "$P1A_ORIGINAL_MANIFEST_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:docs/security/p1-a/threat-model.md")" = "$P1A_ORIGINAL_MARKDOWN_BLOB"
+          test "$(git -C .p1a-original-candidate rev-parse "$P1A_ORIGINAL_CANDIDATE:scripts/test-p1a-threat-model.mjs")" = "$P1A_ORIGINAL_TEST_BLOB"
+
+      - name: Acquire exact trusted CI baseline
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 06e6497ac3420998671f255a42a20d8cb8b9ca50
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-trusted-baseline
+
+      - name: Verify exact trusted CI baseline
+        env:
+          P1A_TRUSTED_BASELINE: 06e6497ac3420998671f255a42a20d8cb8b9ca50
+          P1A_TRUSTED_CI_BLOB: 9a3f1a04f99e83d9dad84cf384d86117a7d282f1
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          [[ "$P1A_TRUSTED_BASELINE" =~ ^[0-9a-f]{40}$ ]]
+          test "$P1A_TRUSTED_BASELINE" = "06e6497ac3420998671f255a42a20d8cb8b9ca50"
+          test "$(git -C .p1a-trusted-baseline rev-parse HEAD)" = "$P1A_TRUSTED_BASELINE"
+          test "$(git -C .p1a-trusted-baseline cat-file -t "$P1A_TRUSTED_BASELINE")" = "commit"
+          test "$(git -C .p1a-trusted-baseline remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          test -f .p1a-trusted-baseline/.github/workflows/ci.yml
+          test "$(git -C .p1a-trusted-baseline rev-parse "$P1A_TRUSTED_BASELINE:.github/workflows/ci.yml")" = "$P1A_TRUSTED_CI_BLOB"
+          if grep -Eiq 'x-access-token|authorization:' .p1a-trusted-baseline/.git/config; then
+            echo "persisted baseline credential material detected" >&2
+            exit 1
+          fi
+
+      - name: Acquire exact dual-base trusted authority
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 5056fb0df6e1ef739231cd2273a453fb1c644273
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-dual-base-authority
+
+      - name: Verify exact dual-base trusted authority
+        env:
+          P1A_DUAL_BASE_AUTHORITY: 5056fb0df6e1ef739231cd2273a453fb1c644273
+          P1A_DUAL_BASE_TREE: 37345329da7051a818eb2e5b02f1f06f74d667a7
+          P1A_DUAL_BASE_CI_BLOB: 9a3f1a04f99e83d9dad84cf384d86117a7d282f1
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          [[ "$P1A_DUAL_BASE_AUTHORITY" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git -C .p1a-dual-base-authority rev-parse HEAD)" = "$P1A_DUAL_BASE_AUTHORITY"
+          test "$(git -C .p1a-dual-base-authority cat-file -t "$P1A_DUAL_BASE_AUTHORITY")" = "commit"
+          test "$(git -C .p1a-dual-base-authority cat-file -t "$P1A_DUAL_BASE_AUTHORITY^{tree}")" = "tree"
+          test "$(git -C .p1a-dual-base-authority rev-parse "$P1A_DUAL_BASE_AUTHORITY^{tree}")" = "$P1A_DUAL_BASE_TREE"
+          test "$(git -C .p1a-dual-base-authority remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          test "$(git -C .p1a-dual-base-authority rev-parse "$P1A_DUAL_BASE_AUTHORITY:.github/workflows/ci.yml")" = "$P1A_DUAL_BASE_CI_BLOB"
+          test -z "$(git -C .p1a-dual-base-authority status --porcelain=v1)"
+          if grep -Eiq 'x-access-token|authorization:|http\..*extraheader' .p1a-dual-base-authority/.git/config; then
+            echo "persisted dual-base authority credential material detected" >&2
+            exit 1
+          fi
+
+      - name: Acquire exact historical evidence-base authority
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-evidence-base-authority
+
+      - name: Verify exact historical evidence-base authority
+        env:
+          P1A_EVIDENCE_BASE_AUTHORITY: 7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+          P1A_EVIDENCE_BASE_TREE: a929da05a15a0c37644a224697dddec9762b00a0
+          P1A_EVIDENCE_BASE_CI_BLOB: 92d0002609c084a280a582b5e1ab39476032ca71
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          [[ "$P1A_EVIDENCE_BASE_AUTHORITY" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git -C .p1a-evidence-base-authority rev-parse HEAD)" = "$P1A_EVIDENCE_BASE_AUTHORITY"
+          test "$(git -C .p1a-evidence-base-authority cat-file -t "$P1A_EVIDENCE_BASE_AUTHORITY")" = "commit"
+          test "$(git -C .p1a-evidence-base-authority cat-file -t "$P1A_EVIDENCE_BASE_AUTHORITY^{tree}")" = "tree"
+          test "$(git -C .p1a-evidence-base-authority rev-parse "$P1A_EVIDENCE_BASE_AUTHORITY^{tree}")" = "$P1A_EVIDENCE_BASE_TREE"
+          test "$(git -C .p1a-evidence-base-authority remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          test "$(git -C .p1a-evidence-base-authority rev-parse "$P1A_EVIDENCE_BASE_AUTHORITY:.github/workflows/ci.yml")" = "$P1A_EVIDENCE_BASE_CI_BLOB"
+          test -z "$(git -C .p1a-evidence-base-authority status --porcelain=v1)"
+          if grep -Eiq 'x-access-token|authorization:|http\..*extraheader' .p1a-evidence-base-authority/.git/config; then
+            echo "persisted evidence-base authority credential material detected" >&2
+            exit 1
+          fi
+
+      - name: Acquire exact immutable P1-A ancestry authority
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 365c59757756f3f91480d3bfeb841b543010201f
+          fetch-depth: 11
+          persist-credentials: false
+          path: .p1a-ancestry-authority
+
+      - name: Verify exact immutable P1-A ancestry authority
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          expected=(
+            7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+            c9c6198e9dc3018bfdbcf98dd3e63335dd2c0e6e
+            bf3b0478afcab9cb5b58e8af904b98ea53ae3f3e
+            fec9d68fc142a122c3568a7e8b73e5503081cc28
+            73227f2bde0f3b70e8a126eaaa16cb1ee0946b71
+            06545d264030199f87df1558b414aa7f051871cd
+            f3f2966ec511b64b2d46f38c0363be269bb4246a
+            36d5b1f2fadddbb60a80f7cac601455c51286240
+            aa7014e691a6222a0b93e61d6aa2ffa12aa4ced1
+            e10b602c31b8a3838fdfd76a86b022b7abceb12c
+            365c59757756f3f91480d3bfeb841b543010201f
+          )
+          test "$(git -C .p1a-ancestry-authority rev-parse HEAD)" = "${expected[10]}"
+          test "$(git -C .p1a-ancestry-authority remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          test -z "$(git -C .p1a-ancestry-authority status --porcelain=v1)"
+          if grep -Eiq 'x-access-token|authorization:|http\..*extraheader' .p1a-ancestry-authority/.git/config; then
+            echo "persisted ancestry authority credential material detected" >&2
+            exit 1
+          fi
+          mapfile -t actual < <(git -C .p1a-ancestry-authority rev-list --reverse "${expected[10]}")
+          test "${#actual[@]}" -eq "${#expected[@]}"
+          for index in "${!expected[@]}"; do
+            sha="${expected[$index]}"
+            [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+            test "${actual[$index]}" = "$sha"
+            test "$(git -C .p1a-ancestry-authority cat-file -t "$sha")" = commit
+            tree="$(git -C .p1a-ancestry-authority show -s --format=%T "$sha")"
+            [[ "$tree" =~ ^[0-9a-f]{40}$ ]]
+            test "$(git -C .p1a-ancestry-authority cat-file -t "$tree")" = tree
+            if (( index > 0 )); then
+              parent="$(git -C .p1a-ancestry-authority cat-file -p "$sha" | sed -n 's/^parent //p')"
+              test "$parent" = "${expected[$((index - 1))]}"
+            fi
+          done
+          git -C .p1a-ancestry-authority merge-base --is-ancestor "${expected[0]}" "${expected[10]}"
+
+      - name: Acquire bounded trusted-reconciliation staging objects
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 5056fb0df6e1ef739231cd2273a453fb1c644273
+          fetch-depth: 10
+          persist-credentials: false
+          path: .p1a-trusted-reconciliation-staging
+
+      - name: Construct exact trusted-reconciliation authority store
+        run: |
+          set -euo pipefail
+          staging=.p1a-trusted-reconciliation-staging
+          authority=.p1a-trusted-reconciliation-authority
+          authorized=(
+            7056ea4ce24379c93549f0ac9b45ddd7a2600dd6
+            8bd4e384609d526d45bb503bf8bfa78b584a4bd9
+            a87ad2e383d59fa0c0f0bf60d1ae794ea695693d
+            82fd3dee5ad2ac35f5d75336f1280a07b0e3b034
+            16d990e82f944dd111743f3f09168402da69ff04
+            30c157e589f97b5009853ce8612f8af09db203cc
+            1ab3a7796cc587e4634c8cc36d2e5defa6c871e0
+            6001e13f9359bc6c454d42154d9816409457388c
+            a227202ddf63fdae6dc4c2ff6e51cec24e2bc429
+            5056fb0df6e1ef739231cd2273a453fb1c644273
+          )
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          test "$(git -C "$staging" remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          test -z "$(git -C "$staging" status --porcelain=v1)"
+          if grep -Eiq 'x-access-token|authorization:|http\..*extraheader' "$staging/.git/config"; then
+            echo "persisted staging credential material detected" >&2
+            exit 1
+          fi
+          mapfile -t staging_commits < <(git -C "$staging" rev-list --all)
+          test "${#staging_commits[@]}" -ge "${#authorized[@]}"
+          git init -q "$authority"
+          git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
+          for sha in "${authorized[@]}"; do
+            test "$(git -C "$staging" cat-file -t "$sha")" = commit
+            imported="$(git -C "$staging" cat-file commit "$sha" | git -C "$authority" hash-object -w -t commit --stdin)"
+            test "$imported" = "$sha"
+            tree="$(git -C "$staging" show -s --format=%T "$sha")"
+            test "$(git -C "$staging" cat-file -t "$tree")" = tree
+            imported_tree="$(git -C "$staging" cat-file tree "$tree" | git -C "$authority" hash-object -w -t tree --stdin)"
+            test "$imported_tree" = "$tree"
+          done
+          printf '%s\n' "${authorized[0]}" > "$authority/.git/shallow"
+          rm -rf "$staging"
+          test ! -e "$staging"
+          test ! -e "$authority/.git/objects/info/alternates"
+          test -z "$(git -C "$authority" for-each-ref --format='%(refname)' refs/replace)"
+          test ! -s "$authority/.git/info/grafts"
+          test "$(cat "$authority/.git/shallow")" = "${authorized[0]}"
+          mapfile -t exact_commits < <(git -C "$authority" cat-file --batch-all-objects --batch-check='%(objectname) %(objecttype)' | awk '$2 == "commit" {print $1}' | sort)
+          mapfile -t expected_commits < <(printf '%s\n' "${authorized[@]}" | sort)
+          test "${exact_commits[*]}" = "${expected_commits[*]}"
+          if git -C "$authority" cat-file -e '816c3a7c199e3c6bc4e482435eed60c1fcf0a11c^{commit}'; then
+            echo "forbidden pre-boundary commit imported" >&2
+            exit 1
+          fi
+          git -C "$authority" merge-base --is-ancestor "${authorized[0]}" "${authorized[9]}"
+
+      - name: Acquire exact PR16 trusted-base predecessor object
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 1648d21e78088a8e0df4bb2eac7bde797d4ac665
+          fetch-depth: 7
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-trusted-base
+
+      - name: Acquire exact PR16 original-amendment predecessor object
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 6e855ba08c69374cb4b25f9777a8ebd190375897
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-original-amendment
+
+      - name: Acquire exact PR16 rejected-chain predecessor object
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 0164130fc62209c7a71ca4f7e58a2e24117e2fd5
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-rejected-chain
+
+      - name: Acquire exact PR16 rejected-cleanliness predecessor object
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 966ab9160ad133adb10d58f7877f8549efd06831
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-rejected-cleanliness
+
+      - name: Acquire exact PR16 action-inventory predecessor object
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 6867d43d17c8b614ab7d0e0c5e338127020bb772
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-action-inventory
+
+      - name: Acquire exact PR16 current-predecessor chain objects
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c
+          fetch-depth: 2
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-current-predecessor
+
+      - name: Acquire exact PR16 minimum-depth historical workflow source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: 184d3961ab7fbf67150b392e09a95408bca6f009
+          fetch-depth: 3
+          persist-credentials: false
+          path: .p1a-pr16-chain-staging-minimum-depth
+
+      - name: Construct exact PR16 remediation-chain predecessor authority
+        run: |
+          set -euo pipefail
+          authority=.p1a-pr16-remediation-chain-authority
+          shas=(
+            2f4baca937ef8b36d1560a010e8e7f430819197c
+            6e855ba08c69374cb4b25f9777a8ebd190375897
+            0164130fc62209c7a71ca4f7e58a2e24117e2fd5
+            966ab9160ad133adb10d58f7877f8549efd06831
+            6867d43d17c8b614ab7d0e0c5e338127020bb772
+            af29acb57895319ae6a5ed35d923054383ceed12
+            9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c
+          )
+          source_heads=(
+            1648d21e78088a8e0df4bb2eac7bde797d4ac665
+            6e855ba08c69374cb4b25f9777a8ebd190375897
+            0164130fc62209c7a71ca4f7e58a2e24117e2fd5
+            966ab9160ad133adb10d58f7877f8549efd06831
+            6867d43d17c8b614ab7d0e0c5e338127020bb772
+            9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c
+            184d3961ab7fbf67150b392e09a95408bca6f009
+          )
+          sources=(
+            .p1a-pr16-chain-staging-trusted-base
+            .p1a-pr16-chain-staging-original-amendment
+            .p1a-pr16-chain-staging-rejected-chain
+            .p1a-pr16-chain-staging-rejected-cleanliness
+            .p1a-pr16-chain-staging-action-inventory
+            .p1a-pr16-chain-staging-current-predecessor
+            .p1a-pr16-chain-staging-minimum-depth
+          )
+          object_sources=(
+            .p1a-pr16-chain-staging-trusted-base
+            .p1a-pr16-chain-staging-original-amendment
+            .p1a-pr16-chain-staging-rejected-chain
+            .p1a-pr16-chain-staging-rejected-cleanliness
+            .p1a-pr16-chain-staging-action-inventory
+            .p1a-pr16-chain-staging-current-predecessor
+            .p1a-pr16-chain-staging-current-predecessor
+          )
+          historical_path_source=.p1a-pr16-chain-staging-rejected-cleanliness
+          trusted_base_source=.p1a-pr16-chain-staging-trusted-base
+          action_inventory_source=.p1a-pr16-chain-staging-action-inventory
+          current_predecessor_source=.p1a-pr16-chain-staging-current-predecessor
+          minimum_depth_source=.p1a-pr16-chain-staging-minimum-depth
+          historical_path=.github/workflows/ci.yml
+          historical_blob=60d9cede50402f10837a630598b9f8dbf6fb839e
+          trusted_base_blob=983bb59cbe4e49ff0c573f64bf9d3ffeaa563c33
+          trusted_base_tree=588f349716dc51c39b2ababd1dd94be5871761bf
+          trusted_base_parent_1=2f4baca937ef8b36d1560a010e8e7f430819197c
+          trusted_base_parent_2=f939fa7e8561477a42e8edb0249fd18642577976
+          minimum_depth_blob=3aba273771fd2874adf8f33ad1e2d7a02fb02c60
+          test "$GITHUB_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          git init -q "$authority"
+          git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
+          for index in "${!sources[@]}"; do
+            source="${sources[$index]}"
+            expected_head="${source_heads[$index]}"
+            test "$(git -C "$source" rev-parse HEAD)" = "$expected_head"
+            test "$(git -C "$source" remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+            test -z "$(git -C "$source" status --porcelain=v1)"
+            if grep -Eiq 'x-access-token|authorization:|http\..*extraheader' "$source/.git/config"; then
+              echo "persisted PR16 acquisition credential material detected" >&2
+              exit 1
+            fi
+          done
+          for index in "${!shas[@]}"; do
+            sha="${shas[$index]}"
+            source="${object_sources[$index]}"
+            test "$(git -C "$source" cat-file -t "$sha")" = commit
+            imported="$(git -C "$source" cat-file commit "$sha" | git -C "$authority" hash-object -w -t commit --stdin)"
+            test "$imported" = "$sha"
+          done
+          test "$(git -C "$historical_path_source" rev-parse HEAD)" = "${shas[3]}"
+          test "$(git -C "$historical_path_source" rev-parse "${shas[3]}:$historical_path")" = "$historical_blob"
+          test "$(git -C "$historical_path_source" cat-file -t "$historical_blob")" = blob
+          test "$(git -C "$trusted_base_source" rev-parse HEAD)" = "1648d21e78088a8e0df4bb2eac7bde797d4ac665"
+          test "$(git -C "$trusted_base_source" show -s --format=%T HEAD)" = "$trusted_base_tree"
+          mapfile -t trusted_base_parents < <(git -C "$trusted_base_source" cat-file -p HEAD | sed -n 's/^parent //p')
+          test "${#trusted_base_parents[@]}" -eq 2
+          test "${trusted_base_parents[0]}" = "$trusted_base_parent_1"
+          test "${trusted_base_parents[1]}" = "$trusted_base_parent_2"
+          test "$(git -C "$trusted_base_source" rev-parse "HEAD:$historical_path")" = "$trusted_base_blob"
+          test "$(git -C "$trusted_base_source" rev-parse "${shas[0]}:$historical_path")" = "$historical_blob"
+          test "$(git -C "$action_inventory_source" rev-parse HEAD)" = "${shas[4]}"
+          test "$(git -C "$current_predecessor_source" rev-parse HEAD)" = "${shas[6]}"
+          test "$(git -C "$minimum_depth_source" rev-parse HEAD)" = "184d3961ab7fbf67150b392e09a95408bca6f009"
+          test "$(git -C "$minimum_depth_source" cat-file -t "184d3961ab7fbf67150b392e09a95408bca6f009")" = commit
+          test "$(git -C "$minimum_depth_source" cat-file -p "184d3961ab7fbf67150b392e09a95408bca6f009" | sed -n 's/^parent //p')" = "5cbae450617285d81435b8f3196eb45c9f293f5d"
+          test "$(git -C "$minimum_depth_source" cat-file -t "5cbae450617285d81435b8f3196eb45c9f293f5d")" = commit
+          test "$(git -C "$minimum_depth_source" cat-file -p "5cbae450617285d81435b8f3196eb45c9f293f5d" | sed -n 's/^parent //p')" = "fe3a898e94eac0ac1695051b2ae71cfa27efaebc"
+          test "$(git -C "$minimum_depth_source" cat-file -t "fe3a898e94eac0ac1695051b2ae71cfa27efaebc")" = commit
+          test "$(git -C "$minimum_depth_source" rev-parse "fe3a898e94eac0ac1695051b2ae71cfa27efaebc:$historical_path")" = "$minimum_depth_blob"
+          test "$(git -C "$minimum_depth_source" cat-file -t "$minimum_depth_blob")" = blob
+          test "$(git -C "$authority" cat-file -p "${shas[1]}" | sed -n 's/^parent //p')" = "${shas[0]}"
+          test "$(git -C "$authority" cat-file -p "${shas[2]}" | sed -n 's/^parent //p')" = "${shas[1]}"
+          test "$(git -C "$authority" cat-file -p "${shas[3]}" | sed -n 's/^parent //p')" = "${shas[2]}"
+          test "$(git -C "$authority" cat-file -p "${shas[4]}" | sed -n 's/^parent //p')" = "${shas[3]}"
+          test "$(git -C "$authority" cat-file -p "${shas[5]}" | sed -n 's/^parent //p')" = "5c302bdae987a43104fecb5c4bfcf4fcca82c540"
+          test "$(git -C "$authority" cat-file -p "${shas[6]}" | sed -n 's/^parent //p')" = "${shas[5]}"
+          mapfile -t actual < <(git -C "$authority" cat-file --batch-all-objects \
+            --batch-check='%(objectname) %(objecttype)' | awk '$2 == "commit" {print $1}' | sort)
+          mapfile -t expected < <(printf '%s\n' "${shas[@]}" | sort)
+          test "${actual[*]}" = "${expected[*]}"
+          test ! -e "$authority/.git/objects/info/alternates"
+          test -z "$(git -C "$authority" for-each-ref --format='%(refname)' refs/replace)"
+          test ! -s "$authority/.git/info/grafts"
+          # Retain the independently acquired exact sources until verifier execution.
+          # The unconditional cleanup step removes every source afterward.
+
+      - name: P1-A trusted verifier controls
+        env:
+          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
+          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
+        run: node scripts/test-p1a-trusted-verifier.mjs
+
+      - name: P1-A trusted-bootstrap Node syntax
+        run: |
+          node --check scripts/detect-p1a-ordinary-ci-secrets.mjs
+          node --check scripts/test-p1a-ci-secret-detector.mjs
+          node --check scripts/test-p1a-trusted-verifier.mjs
+          node --check scripts/test-p1a-dual-base-verifier.mjs
+          node --check scripts/validate-p1a-threat-model.mjs
+
+      - name: P1-A candidate-data validation
+        env:
+          P1A_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority
+          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority
+          P1A_PR16_CHAIN_AUTHORITY_ROOT: .p1a-pr16-remediation-chain-authority
+        run: node scripts/validate-p1a-threat-model.mjs --candidate-data-only
+
+      - name: P1-A current candidate-data contract controls
+        env:
+          P1A_EVENT_REPOSITORY: ${{ github.repository }}
+          P1A_EVENT_NAME: ${{ github.event_name }}
+          P1A_EVENT_BASE_REPOSITORY: ${{ github.event.pull_request.base.repo.full_name || github.repository }}
+          P1A_EVENT_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          P1A_EVENT_BASE_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
+          P1A_EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          P1A_EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          P1A_EVENT_FETCH_TOKEN: ${{ github.token }}
+          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
+          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
+          P1A_DUAL_BASE_AUTHORITY_ROOT: .p1a-dual-base-authority
+          P1A_EVIDENCE_BASE_AUTHORITY_ROOT: .p1a-evidence-base-authority
+          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority
+          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority
+          P1A_PR16_CHAIN_AUTHORITY_ROOT: .p1a-pr16-remediation-chain-authority
+          P1A_PR16_HISTORICAL_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-cleanliness
+          P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: .p1a-pr16-chain-staging-trusted-base
+          P1A_PR16_ACTION_INVENTORY_SOURCE_ROOT: .p1a-pr16-chain-staging-action-inventory
+          P1A_PR16_ORIGINAL_AMENDMENT_SOURCE_ROOT: .p1a-pr16-chain-staging-original-amendment
+          P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-chain
+          P1A_PR16_CURRENT_PREDECESSOR_SOURCE_ROOT: .p1a-pr16-chain-staging-current-predecessor
+          P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT: .p1a-pr16-chain-staging-minimum-depth
+        run: |
+          set -euo pipefail
+          zero_sha=0000000000000000000000000000000000000000
+          authority="$RUNNER_TEMP/p1a-event-authority-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          trap 'rm -rf -- "$authority"' EXIT
+          test "$P1A_EVENT_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          test "$P1A_EVENT_BASE_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          test "$P1A_EVENT_HEAD_REPOSITORY" = "DarksiedCEO/zbestmedia"
+          test "$P1A_EVENT_NAME" = pull_request || test "$P1A_EVENT_NAME" = push
+          [[ "$P1A_EVENT_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$P1A_EVENT_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test -n "$P1A_EVENT_FETCH_TOKEN"
+          auth_header="$(printf 'x-access-token:%s' "$P1A_EVENT_FETCH_TOKEN" | base64 | tr -d '\n')"
+          unset P1A_EVENT_FETCH_TOKEN
+          test ! -e "$authority"
+          git init --bare -q "$authority"
+          git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
+          if test "$P1A_EVENT_NAME" = push && test "$P1A_EVENT_BASE_SHA" = "$zero_sha"; then
+            git -C "$authority" -c protocol.version=2 \
+              -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" \
+              fetch --no-tags --no-write-fetch-head --depth=1 origin "$P1A_EVENT_HEAD_SHA"
+            mapfile -t event_head_parents < <(git -C "$authority" cat-file commit \
+              "$P1A_EVENT_HEAD_SHA" | sed -n 's/^parent //p')
+            test "${#event_head_parents[@]}" -eq 1
+            P1A_EVENT_BASE_SHA="${event_head_parents[0]}"
+            [[ "$P1A_EVENT_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+            git -C "$authority" -c protocol.version=2 \
+              -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" \
+              fetch --no-tags --no-write-fetch-head --depth=1 origin "$P1A_EVENT_BASE_SHA"
+            P1A_EVENT_NAME=push_create
+          else
+            git -C "$authority" -c protocol.version=2 \
+              -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" \
+              fetch --no-tags --no-write-fetch-head --depth=2 origin \
+              "$P1A_EVENT_BASE_SHA" "$P1A_EVENT_HEAD_SHA"
+          fi
+          unset auth_header
+          test -z "$(git -C "$authority" for-each-ref --format='%(refname)')"
+          test ! -e "$authority/objects/info/alternates"
+          test ! -s "$authority/info/grafts"
+          if grep -Eiq 'x-access-token|authorization:|http\..*extraheader' "$authority/config"; then
+            echo "persisted event authority credential material detected" >&2
+            exit 1
+          fi
+          export P1A_EVENT_AUTHORITY_ROOT="$authority"
+          node scripts/test-p1a-dual-base-verifier.mjs
+          rm -rf -- "$authority"
+          test ! -e "$authority"
+          trap - EXIT
+
+      - name: Remove isolated P1-A authority checkouts
+        if: always()
+        run: |
+          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-chain-staging-action-inventory .p1a-pr16-chain-staging-current-predecessor .p1a-pr16-chain-staging-minimum-depth .p1a-pr16-remediation-chain-authority
+          test ! -e .p1a-original-candidate
+          test ! -e .p1a-trusted-baseline
+          test ! -e .p1a-dual-base-authority
+          test ! -e .p1a-evidence-base-authority
+          test ! -e .p1a-ancestry-authority
+          test ! -e .p1a-trusted-reconciliation-authority
+          test ! -e .p1a-trusted-reconciliation-staging
+          test ! -e .p1a-pr16-chain-staging-trusted-base
+          test ! -e .p1a-pr16-chain-staging-current-predecessor
+          test ! -e .p1a-pr16-chain-staging-original-amendment
+          test ! -e .p1a-pr16-chain-staging-rejected-chain
+          test ! -e .p1a-pr16-chain-staging-rejected-cleanliness
+          test ! -e .p1a-pr16-chain-staging-action-inventory
+          test ! -e .p1a-pr16-chain-staging-minimum-depth
+          test ! -e .p1a-pr16-remediation-chain-authority
+
+      - name: P1-A trusted-bootstrap secret-detector tests
+        run: node scripts/test-p1a-ci-secret-detector.mjs
+
+      - name: P1-A trusted-bootstrap secret-exposure scan
+        run: |
+          node scripts/detect-p1a-ordinary-ci-secrets.mjs \
+            --workflow .github/workflows/ci.yml
+
+      - name: P1-A private cross-repository suites are intentionally unavailable
+        run: |
+          {
+            echo "### P1-A bootstrap pre-merge accounting"
+            echo
+            echo "- Trusted verifier controls: executed remotely"
+            echo "- Frozen-candidate integration 21/21: **NOT_RUN pre-merge**"
+            echo "- Nested trusted verification 15/15: **NOT_RUN pre-merge**"
+            echo "- Reason: private cross-repository evidence is intentionally unavailable to unprivileged CI"
+            echo "- Fixtures are not equivalent cross-repository proof"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: P1-A workflow lint
+        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
+        with:
+          version: 1.7.12
+          files: ".github/workflows/*.yml,.github/workflows/*.yaml"
 
       - name: Quality Gates
         run: |
