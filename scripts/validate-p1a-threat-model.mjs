@@ -57,11 +57,39 @@ export const POST_PR19_TRUSTED_BASE_PARENTS = Object.freeze([
   "65880c7ad8086639596939866cbfdc5faefe3509",
 ]);
 export const EVENT_BOUND_TARGET_REPOSITORY = "DarksiedCEO/zbestmedia";
-export const EVENT_BOUND_AMENDMENT_FILES = Object.freeze([
+export const EVENT_BOUND_AMENDMENT_CLASS_A_FILES = Object.freeze([
   ".github/workflows/ci.yml",
   "scripts/test-p1a-dual-base-verifier.mjs",
   "scripts/validate-p1a-threat-model.mjs",
 ]);
+export const EVENT_BOUND_AMENDMENT_CLASS_B_FILES = Object.freeze([
+  ".github/workflows/ci.yml",
+  "scripts/test-p1a-trusted-verifier.mjs",
+  "scripts/test-p1a-dual-base-verifier.mjs",
+  "scripts/validate-p1a-threat-model.mjs",
+]);
+// Backward-compatible name for the original event-topology remediation class.
+export const EVENT_BOUND_AMENDMENT_FILES = EVENT_BOUND_AMENDMENT_CLASS_A_FILES;
+export const EVENT_BOUND_AMENDMENT_CLASSES = Object.freeze([
+  Object.freeze({
+    id: "EVENT_TOPOLOGY_SYNTHETIC_FIXTURE",
+    files: EVENT_BOUND_AMENDMENT_CLASS_A_FILES,
+  }),
+  Object.freeze({
+    id: "FINAL_RECONCILIATION_TRUSTED_WORKFLOW_ACQUISITION",
+    files: EVENT_BOUND_AMENDMENT_CLASS_B_FILES,
+  }),
+]);
+
+function classifyEventBoundAmendmentFiles(files, label) {
+  const actual = [...files].sort();
+  const matches = EVENT_BOUND_AMENDMENT_CLASSES.filter(({ files: authorized }) =>
+    actual.length === authorized.length &&
+    actual.every((file, index) => file === [...authorized].sort()[index]));
+  assert.equal(matches.length, 1,
+    `${label}: scope must match exactly one trusted remediation class`);
+  return matches[0].id;
+}
 export const COMPOSED_CI_BASE =
   "06e6497ac3420998671f255a42a20d8cb8b9ca50";
 export const COMPOSED_CI_BASE_BLOB =
@@ -591,12 +619,14 @@ export function verifyEventBoundAmendmentTopology({
   }
   const changed = gitAt(resolved, "diff", "--name-only", `${eventBaseSha}..${eventHeadSha}`)
     .split("\n").filter(Boolean).sort();
-  assert.deepEqual(changed, [...EVENT_BOUND_AMENDMENT_FILES].sort(),
-    "event authority: amendment changed-file scope mismatch");
+  const amendmentClass = classifyEventBoundAmendmentFiles(
+    changed, "event authority: amendment changed-file scope mismatch");
   const secondParentChanged = gitAt(resolved, "diff", "--name-only",
     `${eventBaseSha}..${secondParentSha}`).split("\n").filter(Boolean).sort();
-  assert.deepEqual(secondParentChanged, [...EVENT_BOUND_AMENDMENT_FILES].sort(),
-    "event authority: second-parent changed-file scope mismatch");
+  const secondParentAmendmentClass = classifyEventBoundAmendmentFiles(
+    secondParentChanged, "event authority: second-parent changed-file scope mismatch");
+  assert.equal(secondParentAmendmentClass, amendmentClass,
+    "event authority: amendment class changed across merge topology");
   const secondParentTree = gitAt(resolved, "show", "-s", "--format=%T", secondParentSha);
   exactSha(secondParentTree, "event authority second-parent tree");
   assert.equal(gitAt(resolved, "cat-file", "-t", secondParentTree), "tree",
@@ -617,6 +647,7 @@ export function verifyEventBoundAmendmentTopology({
     repository: eventRepository,
     eventName,
     subjectClass,
+    amendmentClass,
     targetRef: eventBaseRef,
     baseSha: eventBaseSha,
     headSha: eventHeadSha,
