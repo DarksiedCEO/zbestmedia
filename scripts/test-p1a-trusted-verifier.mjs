@@ -19,7 +19,6 @@ import {
   AUTHORIZED_BASE,
   AUTHORIZED_RUNTIME,
   COMPOSED_CI_BASE,
-  composeTrustedCi,
   ORIGINAL_CANDIDATE,
   parseLineRange,
   runPackage,
@@ -63,6 +62,22 @@ const workflow = readFileSync(
   "utf8",
 );
 const ordinaryCi = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
+const CURRENT_TRUSTED_WORKFLOW_SHA =
+  "bce95a11fb18b2d4539a555ae686c2fe083e5970";
+const CURRENT_TRUSTED_WORKFLOW_BLOB =
+  "c6baddd0f3eb2246315e573ea1e53c7a6ed92dad";
+const currentTrustedCi = execFileSync(
+  "git", ["show", `${CURRENT_TRUSTED_WORKFLOW_SHA}:.github/workflows/ci.yml`],
+  { cwd: root, encoding: "utf8" },
+);
+assert.equal(
+  execFileSync(
+    "git", ["rev-parse", `${CURRENT_TRUSTED_WORKFLOW_SHA}:.github/workflows/ci.yml`],
+    { cwd: root, encoding: "utf8" },
+  ).trim(),
+  CURRENT_TRUSTED_WORKFLOW_BLOB,
+  "current trusted workflow blob identity mismatch",
+);
 const baselineCi = baselineRepositoryRoot
   ? readFileSync(path.join(baselineRepositoryRoot, ".github/workflows/ci.yml"), "utf8")
   : execFileSync(
@@ -130,6 +145,45 @@ const exactOriginal = (file) =>
     cwd: originalRepositoryRoot,
     encoding: "utf8",
   });
+const historicalCandidateCi = exactOriginal(".github/workflows/ci.yml");
+const historicalCandidateCiBlob = execFileSync(
+  "git", ["rev-parse", `${ORIGINAL_CANDIDATE}:.github/workflows/ci.yml`], {
+    cwd: originalRepositoryRoot,
+    encoding: "utf8",
+  },
+).trim();
+
+function validateCurrentTrustedWorkflow(source, {
+  trustedSha = CURRENT_TRUSTED_WORKFLOW_SHA,
+  trustedBlob = CURRENT_TRUSTED_WORKFLOW_BLOB,
+} = {}) {
+  assert.equal(trustedSha, CURRENT_TRUSTED_WORKFLOW_SHA,
+    "current workflow authority SHA is not trusted");
+  assert.equal(trustedBlob, CURRENT_TRUSTED_WORKFLOW_BLOB,
+    "current workflow authority blob is not trusted");
+  assert.equal(source, currentTrustedCi, "current trusted workflow exact-object mismatch");
+  assert.equal(
+    execFileSync(
+      "git", ["hash-object", "--stdin"],
+      { cwd: root, encoding: "utf8", input: source },
+    ).trim(),
+    trustedBlob,
+    "current trusted workflow content/blob mismatch",
+  );
+}
+
+function validateHistoricalWorkflowEvidence() {
+  assert.match(historicalCandidateCiBlob, /^[0-9a-f]{40}$/);
+  assert.notEqual(historicalCandidateCiBlob, CURRENT_TRUSTED_WORKFLOW_BLOB);
+  assert.equal(
+    execFileSync(
+      "git", ["hash-object", "--stdin"],
+      { cwd: originalRepositoryRoot, encoding: "utf8", input: historicalCandidateCi },
+    ).trim(),
+    historicalCandidateCiBlob,
+    "historical workflow content/blob mismatch",
+  );
+}
 const compatibilityModel = JSON.parse(
   exactOriginal("docs/security/p1-a/model.json"),
 );
@@ -154,7 +208,8 @@ const compatible = (overrides = {}) =>
   );
 
 function validateHistoricalObjectWorkflow(source) {
-  assert.equal(source, composeTrustedCi(baselineCi), "historical workflow exact composition mismatch");
+  validateHistoricalWorkflowEvidence();
+  validateCurrentTrustedWorkflow(source);
   const required = [
     "repository: DarksiedCEO/zbestmedia",
     `ref: ${ORIGINAL_CANDIDATE}`,
@@ -221,7 +276,8 @@ const historicalObjectCases = [
 ];
 
 function validateTrustedBaselineWorkflow(source) {
-  assert.equal(source, composeTrustedCi(baselineCi), "trusted baseline workflow composition mismatch");
+  validateHistoricalWorkflowEvidence();
+  validateCurrentTrustedWorkflow(source);
   for (const required of [
     "Acquire exact trusted CI baseline",
     `ref: ${COMPOSED_CI_BASE}`,
@@ -255,6 +311,20 @@ const baselinePositiveCases = [
   ["trusted_verifier_reaches_baseline_input", () => { assert.ok(baselineCi.includes("name: CI")); assert.ok(!baselineCi.includes("Acquire exact trusted CI baseline")); }],
 ];
 const baselineNegativeCases = [
+  ["current_trusted_workflow_altered", () => validateCurrentTrustedWorkflow(`${ordinaryCi}\n`), true],
+  ["historical_workflow_substituted_as_current", () => validateCurrentTrustedWorkflow(historicalCandidateCi), true],
+  ["candidate_provided_workflow_authority", () => validateCurrentTrustedWorkflow(ordinaryCi, { trustedSha: "f".repeat(40) }), true],
+  ["wrong_trusted_workflow_blob", () => validateCurrentTrustedWorkflow(ordinaryCi, { trustedBlob: "f".repeat(40) }), true],
+  ["partial_current_composition", () => validateCurrentTrustedWorkflow(ordinaryCi.slice(0, -1)), true],
+  ["extra_current_workflow_behavior", () => validateCurrentTrustedWorkflow(`${ordinaryCi}\n      - run: echo unexpected\n`), true],
+  ["removed_current_security_control", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    "          ref: 06e6497ac3420998671f255a42a20d8cb8b9ca50\n          fetch-depth: 1\n          persist-credentials: false\n          path: .p1a-trusted-baseline",
+    "          ref: 06e6497ac3420998671f255a42a20d8cb8b9ca50\n          fetch-depth: 1\n          path: .p1a-trusted-baseline",
+  )), true],
+  ["mutated_current_acquisition_logic", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    "      - name: Verify exact trusted CI baseline\n        env:\n          P1A_TRUSTED_BASELINE: 06e6497ac3420998671f255a42a20d8cb8b9ca50",
+    "      - name: Verify exact trusted CI baseline\n        continue-on-error: true\n        env:\n          P1A_TRUSTED_BASELINE: 06e6497ac3420998671f255a42a20d8cb8b9ca50",
+  )), true],
   ["baseline_wrong_sha", () => validateTrustedBaselineWorkflow(mutateBaseline(COMPOSED_CI_BASE, "f".repeat(40))), true],
   ["baseline_malformed_sha", () => validateTrustedBaselineWorkflow(mutateBaseline(`ref: ${COMPOSED_CI_BASE}`, "ref: invalid")), true],
   ["baseline_mutable_branch", () => validateTrustedBaselineWorkflow(mutateBaseline(`ref: ${COMPOSED_CI_BASE}`, "ref: codex/bt-1")), true],
