@@ -20,6 +20,7 @@ import {
   POST_PR19_TRUSTED_BASE, POST_PR19_TRUSTED_BASE_TREE, POST_PR19_TRUSTED_BASE_PARENTS,
   verifyExactCurrentTrustedBaseTopology,
   EVENT_BOUND_TARGET_REPOSITORY, EVENT_BOUND_AMENDMENT_FILES,
+  EVENT_BOUND_AMENDMENT_CLASS_B_FILES, EVENT_BOUND_AMENDMENT_CLASSES,
   verifyEventBoundAmendmentTopology,
 } from "./validate-p1a-threat-model.mjs";
 import { validateCertificationBundle } from "./validate-p1a-certification-accounting.mjs";
@@ -77,6 +78,58 @@ const AUTHORIZED_EPHEMERAL_AUTHORITY_ROOTS = Object.freeze([
   ".p1a-pr16-remediation-chain-authority",
   ...PR16_RETAINED_STAGING_ROOTS,
 ]);
+const BASE_TRUSTED_VERIFIER_CONTROL_STEP = `      - name: P1-A trusted verifier controls
+        env:
+          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
+          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
+        run: node scripts/test-p1a-trusted-verifier.mjs`;
+const CURRENT_TRUSTED_VERIFIER_CONTROL_STEP = `      - name: P1-A trusted verifier controls
+        env:
+          P1A_CURRENT_WORKFLOW_FETCH_TOKEN: \${{ github.token }}
+          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
+          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
+        run: |
+          set -euo pipefail
+          trusted_sha=bce95a11fb18b2d4539a555ae686c2fe083e5970
+          trusted_blob=c6baddd0f3eb2246315e573ea1e53c7a6ed92dad
+          authority="$RUNNER_TEMP/p1a-current-workflow-authority-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          trap 'rm -rf -- "$authority"' EXIT
+          test -n "$P1A_CURRENT_WORKFLOW_FETCH_TOKEN"
+          test ! -e "$authority"
+          auth_header="$(printf 'x-access-token:%s' "$P1A_CURRENT_WORKFLOW_FETCH_TOKEN" | base64 | tr -d '\\n')"
+          unset P1A_CURRENT_WORKFLOW_FETCH_TOKEN
+          git init --bare -q "$authority"
+          git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
+          git -C "$authority" -c protocol.version=2 \\
+            -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" \\
+            fetch --no-tags --no-write-fetch-head --depth=1 origin "$trusted_sha"
+          unset auth_header
+          test -z "$(git -C "$authority" for-each-ref --format='%(refname)')"
+          test ! -e "$authority/objects/info/alternates"
+          test ! -s "$authority/info/grafts"
+          test "$(git -C "$authority" remote get-url origin)" = \\
+            "https://github.com/DarksiedCEO/zbestmedia"
+          test "$(git -C "$authority" cat-file -t "$trusted_sha")" = commit
+          test "$(git -C "$authority" rev-parse "$trusted_sha:.github/workflows/ci.yml")" = \\
+            "$trusted_blob"
+          if grep -Eiq 'x-access-token|authorization:|http\\..*extraheader' "$authority/config"; then
+            echo "persisted current-workflow credential material detected" >&2
+            exit 1
+          fi
+          export P1A_CURRENT_WORKFLOW_AUTHORITY_ROOT="$authority"
+          env -u P1A_CURRENT_WORKFLOW_FETCH_TOKEN -u GITHUB_TOKEN -u GH_TOKEN \\
+            node scripts/test-p1a-trusted-verifier.mjs
+          unset P1A_CURRENT_WORKFLOW_AUTHORITY_ROOT
+          rm -rf -- "$authority"
+          test ! -e "$authority"
+          trap - EXIT`;
+
+function composeCurrentTrustedWorkflow(source) {
+  assert.equal(source.split(BASE_TRUSTED_VERIFIER_CONTROL_STEP).length - 1, 1,
+    "current trusted workflow base step count mismatch");
+  return source.replace(BASE_TRUSTED_VERIFIER_CONTROL_STEP,
+    CURRENT_TRUSTED_VERIFIER_CONTROL_STEP);
+}
 const AMENDMENT_OWNED_FIXTURE_FILES = Object.freeze([
   ".github/workflows/ci.yml",
   "scripts/test-p1a-dual-base-verifier.mjs",
@@ -225,6 +278,7 @@ if (process.env.P1A_EVENT_AUTHORITY_ROOT) {
 function createEventAuthorityFixture(label, {
   includeBase = true, includeHead = true, extraFile, parentShape = "base",
   targetMerge = false, targetMergeMode = "valid", objectSource,
+  amendmentFiles = EVENT_BOUND_AMENDMENT_FILES,
 } = {}) {
   const fixture = mkdtempSync(path.join(tmpdir(), `p1a-event-${label}-`));
   gitAt(fixture, "init", "-q");
@@ -246,9 +300,12 @@ function createEventAuthorityFixture(label, {
   const syntheticSibling = execFileSync("git", ["commit-tree", baseTree, "-p", base], {
     cwd: fixture, input: `local synthetic sibling ${label}\n`, encoding: "utf8",
   }).trim();
-  for (const file of EVENT_BOUND_AMENDMENT_FILES) {
+  for (const file of amendmentFiles) {
     mkdirSync(path.dirname(path.join(fixture, file)), { recursive: true });
-    writeFileSync(path.join(fixture, file), `${readFileSync(path.join(fixture, file), "utf8")}\n// ${label}\n`);
+    const existing = existsSync(path.join(fixture, file))
+      ? readFileSync(path.join(fixture, file), "utf8")
+      : "";
+    writeFileSync(path.join(fixture, file), `${existing}\n// ${label}\n`);
   }
   if (extraFile) writeFileSync(path.join(fixture, extraFile), "unauthorized\n");
   gitAt(fixture, "add", ".");
@@ -319,7 +376,32 @@ const eventArgs = {
   eventHeadSha: eventFixture.head,
 };
 const originalEventBase = process.env.P1A_TEST_EVENT_BASE_SHA;
-assert.doesNotThrow(() => verifyEventBoundAmendmentTopology(eventArgs));
+const classAProof = verifyEventBoundAmendmentTopology(eventArgs);
+assert.equal(classAProof.amendmentClass, "EVENT_TOPOLOGY_SYNTHETIC_FIXTURE");
+const classBFixture = createEventAuthorityFixture("class-b-positive", {
+  amendmentFiles: EVENT_BOUND_AMENDMENT_CLASS_B_FILES,
+});
+const classBProof = verifyEventBoundAmendmentTopology({
+  ...eventArgs,
+  authorityRoot: classBFixture.authority,
+  eventBaseSha: classBFixture.base,
+  eventHeadSha: classBFixture.head,
+});
+assert.equal(classBProof.amendmentClass,
+  "FINAL_RECONCILIATION_TRUSTED_WORKFLOW_ACQUISITION");
+assert.notEqual(classAProof.amendmentClass, classBProof.amendmentClass);
+assert.equal(EVENT_BOUND_AMENDMENT_CLASSES.length, 2,
+  "event authority: remediation classes must remain explicitly bounded");
+assert.ok(EVENT_BOUND_AMENDMENT_CLASSES.every(Object.isFrozen));
+assert.ok(EVENT_BOUND_AMENDMENT_CLASSES.every(({ files }) => Object.isFrozen(files)));
+const candidateSelectedClassProof = verifyEventBoundAmendmentTopology({
+  ...eventArgs,
+  amendmentClass: "FINAL_RECONCILIATION_TRUSTED_WORKFLOW_ACQUISITION",
+  candidateFiles: EVENT_BOUND_AMENDMENT_CLASS_B_FILES,
+});
+assert.equal(candidateSelectedClassProof.amendmentClass,
+  "EVENT_TOPOLOGY_SYNTHETIC_FIXTURE",
+  "candidate-selected remediation class influenced trusted classification");
 const targetMergeFixture = createEventAuthorityFixture("target-merge", { targetMerge: true });
 assert.doesNotThrow(() => verifyEventBoundAmendmentTopology({
   ...eventArgs,
@@ -333,6 +415,25 @@ assert.doesNotThrow(() => verifyEventBoundAmendmentTopology({
   eventName: "push_create",
 }));
 const wrongScopeFixture = createEventAuthorityFixture("wrong-tree", { extraFile: "unauthorized.txt" });
+const partialClassFixture = createEventAuthorityFixture("partial-class", {
+  amendmentFiles: EVENT_BOUND_AMENDMENT_FILES.slice(0, -1),
+});
+const mixedClassFixture = createEventAuthorityFixture("mixed-class", {
+  amendmentFiles: [...EVENT_BOUND_AMENDMENT_FILES.slice(0, -1),
+    "scripts/test-p1a-trusted-verifier.mjs"],
+});
+const classBSupersetFixture = createEventAuthorityFixture("class-b-superset", {
+  amendmentFiles: EVENT_BOUND_AMENDMENT_CLASS_B_FILES,
+  extraFile: "scripts/unapproved-verifier-helper.mjs",
+});
+const renamedClassFixture = createEventAuthorityFixture("renamed-class", {
+  amendmentFiles: [EVENT_BOUND_AMENDMENT_FILES[0], EVENT_BOUND_AMENDMENT_FILES[1],
+    "scripts/validate-p1a-threat-model-renamed.mjs"],
+});
+const genericVerifierFixture = createEventAuthorityFixture("generic-verifier", {
+  amendmentFiles: [EVENT_BOUND_AMENDMENT_FILES[0],
+    "scripts/test-p1a-some-verifier.mjs", EVENT_BOUND_AMENDMENT_FILES[2]],
+});
 const wrongParentFixture = createEventAuthorityFixture("wrong-parent", { parentShape: "sibling" });
 const siblingFixture = createEventAuthorityFixture("sibling", { parentShape: "sibling" });
 const fakePr8Fixture = createEventAuthorityFixture("fake-pr8", { parentShape: "two-parent" });
@@ -357,6 +458,16 @@ const eventHostiles = [
   ["missing_head_object", { authorityRoot: createEventAuthorityFixture("missing-head", { includeHead: false }).authority }],
   ["wrong_parent", { authorityRoot: wrongParentFixture.authority, eventHeadSha: wrongParentFixture.head }],
   ["wrong_tree", { authorityRoot: wrongScopeFixture.authority, eventHeadSha: wrongScopeFixture.head }],
+  ["partial_or_subset_class", { authorityRoot: partialClassFixture.authority,
+    eventHeadSha: partialClassFixture.head }],
+  ["mixed_class", { authorityRoot: mixedClassFixture.authority,
+    eventHeadSha: mixedClassFixture.head }],
+  ["superset_or_extra_file", { authorityRoot: classBSupersetFixture.authority,
+    eventHeadSha: classBSupersetFixture.head }],
+  ["renamed_file", { authorityRoot: renamedClassFixture.authority,
+    eventHeadSha: renamedClassFixture.head }],
+  ["generic_verifier_file_allowance", { authorityRoot: genericVerifierFixture.authority,
+    eventHeadSha: genericVerifierFixture.head }],
   ["unauthorized_sibling_merge", { authorityRoot: siblingFixture.authority, eventHeadSha: siblingFixture.head }],
   ["fake_pr8_reconciliation", { authorityRoot: fakePr8Fixture.authority, eventHeadSha: fakePr8Fixture.head }],
   ["reordered_merge_parents", { authorityRoot: reorderedMergeFixture.authority,
@@ -373,7 +484,7 @@ for (const [name, mutation] of eventHostiles) {
 assert.equal(originalEventBase, undefined, "candidate-selected base override forbidden");
 console.log(JSON.stringify({
   suite: "p1-a-event-bound-authority-hostiles",
-  positiveRequired: 3, positiveExecuted: 3, positivePassed: 3,
+  positiveRequired: 7, positiveExecuted: 7, positivePassed: 7,
   hostileRequired: eventHostiles.length, hostileExecuted: eventHostiles.length,
   hostilePassed: eventHostiles.length,
   fixtureRemoteNetworkFetches: 0,
@@ -3192,9 +3303,10 @@ const trustedCi = `${git("show", `${workflowSha}:.github/workflows/ci.yml`)}\n`;
 const validCi = `${git("show", `${validCandidate}:.github/workflows/ci.yml`)}\n`;
 const positiveCases = [
   ["exact_baseline_recognized", () => assert.equal(git("rev-parse", `${COMPOSED_CI_BASE}:.github/workflows/ci.yml`), "9a3f1a04f99e83d9dad84cf384d86117a7d282f1")],
-  ["baseline_plus_trusted_fragment", () => assert.equal(trustedCi, composeTrustedCi(baselineCi))],
+  ["baseline_plus_trusted_fragment", () => assert.equal(trustedCi,
+    composeCurrentTrustedWorkflow(composeTrustedCi(baselineCi)))],
   ["trusted_then_candidate_fragment", () => {
-    const trustedFirst = composeTrustedCi(baselineCi);
+    const trustedFirst = composeCurrentTrustedWorkflow(composeTrustedCi(baselineCi));
     const trustedThenCandidate = composeCandidateCi(trustedFirst);
     const candidateSummary = candidateDataRun();
     assert.equal(trustedFirst, trustedCi);
