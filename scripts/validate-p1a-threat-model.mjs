@@ -56,6 +56,12 @@ export const POST_PR19_TRUSTED_BASE_PARENTS = Object.freeze([
   POST_PR18_TRUSTED_BASE,
   "65880c7ad8086639596939866cbfdc5faefe3509",
 ]);
+export const EVENT_BOUND_TARGET_REPOSITORY = "DarksiedCEO/zbestmedia";
+export const EVENT_BOUND_AMENDMENT_FILES = Object.freeze([
+  ".github/workflows/ci.yml",
+  "scripts/test-p1a-dual-base-verifier.mjs",
+  "scripts/validate-p1a-threat-model.mjs",
+]);
 export const COMPOSED_CI_BASE =
   "06e6497ac3420998671f255a42a20d8cb8b9ca50";
 export const COMPOSED_CI_BASE_BLOB =
@@ -515,6 +521,111 @@ export function verifyExactCurrentTrustedBaseTopology({ trustedBaseRoot } = {}) 
     sha: CURRENT_TRUSTED_BASE,
     tree: CURRENT_TRUSTED_BASE_TREE,
     parents: CURRENT_TRUSTED_BASE_PARENTS,
+  });
+}
+
+export function verifyEventBoundAmendmentTopology({
+  authorityRoot,
+  eventName,
+  eventRepository,
+  eventBaseRepository,
+  eventHeadRepository,
+  eventBaseRef,
+  eventBaseSha,
+  eventHeadSha,
+} = {}) {
+  assert.ok(authorityRoot, "event authority: isolated object store absent");
+  const resolved = realpathSync(path.resolve(authorityRoot));
+  assert.equal(eventRepository, EVENT_BOUND_TARGET_REPOSITORY,
+    "event authority: workflow repository mismatch");
+  assert.equal(eventBaseRepository, EVENT_BOUND_TARGET_REPOSITORY,
+    "event authority: base repository mismatch");
+  assert.equal(eventHeadRepository, EVENT_BOUND_TARGET_REPOSITORY,
+    "event authority: cross-repository candidate forbidden");
+  assert.ok(["pull_request", "push", "push_create"].includes(eventName),
+    "event authority: unsupported event kind");
+  assert.equal(gitAt(resolved, "check-ref-format", "--branch", eventBaseRef), eventBaseRef,
+    "event authority: invalid target ref identity");
+  assert.ok(!eventBaseRef.startsWith("refs/") && !/^[0-9a-f]{40}$/.test(eventBaseRef),
+    "event authority: target ref must be an event branch name, not a ref or object selector");
+  exactSha(eventBaseSha, "event authority base");
+  exactSha(eventHeadSha, "event authority head");
+  assert.notEqual(eventHeadSha, eventBaseSha,
+    "event authority: amendment must be distinct from base");
+  assert.equal(normalizeRepository(gitAt(resolved, "remote", "get-url", "origin")),
+    `https://github.com/${EVENT_BOUND_TARGET_REPOSITORY}`,
+    "event authority: repository identity mismatch");
+  for (const [label, sha] of [["base", eventBaseSha], ["head", eventHeadSha]]) {
+    assert.equal(gitAt(resolved, "cat-file", "-t", sha), "commit",
+      `event authority: ${label} commit object absent`);
+    assert.equal(gitAt(resolved, "rev-parse", `${sha}^{commit}`), sha,
+      `event authority: ${label} object substitution`);
+  }
+  const headParents = gitAt(resolved, "cat-file", "commit", eventHeadSha)
+    .split("\n").filter((line) => line.startsWith("parent ")).map((line) => line.slice(7));
+  let secondParentSha;
+  let subjectClass;
+  if (eventName === "pull_request" || eventName === "push_create") {
+    assert.deepEqual(headParents, [eventBaseSha],
+      "event authority: amendment must have exactly the event base as parent");
+    secondParentSha = eventHeadSha;
+    subjectClass = eventName === "pull_request"
+      ? "EVENT_BOUND_PR_AMENDMENT"
+      : "EVENT_BOUND_BRANCH_CREATION_AMENDMENT";
+  } else {
+    assert.equal(headParents.length, 2,
+      "event authority: target push must be an exact two-parent merge");
+    assert.equal(headParents[0], eventBaseSha,
+      "event authority: target merge first parent is not the event-bound base");
+    secondParentSha = headParents[1];
+    exactSha(secondParentSha, "event authority second parent");
+    assert.equal(gitAt(resolved, "cat-file", "-t", secondParentSha), "commit",
+      "event authority: second-parent commit object absent");
+    assert.deepEqual(
+      gitAt(resolved, "cat-file", "commit", secondParentSha)
+        .split("\n").filter((line) => line.startsWith("parent ")).map((line) => line.slice(7)),
+      [eventBaseSha],
+      "event authority: second parent is not an exact amendment of the event base",
+    );
+    subjectClass = "EVENT_BOUND_TARGET_MERGE";
+  }
+  const changed = gitAt(resolved, "diff", "--name-only", `${eventBaseSha}..${eventHeadSha}`)
+    .split("\n").filter(Boolean).sort();
+  assert.deepEqual(changed, [...EVENT_BOUND_AMENDMENT_FILES].sort(),
+    "event authority: amendment changed-file scope mismatch");
+  const secondParentChanged = gitAt(resolved, "diff", "--name-only",
+    `${eventBaseSha}..${secondParentSha}`).split("\n").filter(Boolean).sort();
+  assert.deepEqual(secondParentChanged, [...EVENT_BOUND_AMENDMENT_FILES].sort(),
+    "event authority: second-parent changed-file scope mismatch");
+  const secondParentTree = gitAt(resolved, "show", "-s", "--format=%T", secondParentSha);
+  exactSha(secondParentTree, "event authority second-parent tree");
+  assert.equal(gitAt(resolved, "cat-file", "-t", secondParentTree), "tree",
+    "event authority: second-parent tree absent");
+  const resultingTree = gitAt(resolved, "show", "-s", "--format=%T", eventHeadSha);
+  assert.equal(resultingTree, secondParentTree,
+    "event authority: resulting merge tree differs from exact second-parent tree");
+  const refs = gitAt(resolved, "for-each-ref", "--format=%(refname)");
+  assert.equal(refs, "", "event authority: mutable refs forbidden");
+  const gitDirValue = gitAt(resolved, "rev-parse", "--git-dir");
+  const gitDir = path.isAbsolute(gitDirValue) ? gitDirValue : path.resolve(resolved, gitDirValue);
+  assert.ok(!existsSync(path.join(gitDir, "objects/info/alternates")),
+    "event authority: alternates forbidden");
+  assert.ok(!existsSync(path.join(gitDir, "info/grafts")) ||
+    readFileSync(path.join(gitDir, "info/grafts"), "utf8").trim() === "",
+  "event authority: grafts forbidden");
+  return Object.freeze({
+    repository: eventRepository,
+    eventName,
+    subjectClass,
+    targetRef: eventBaseRef,
+    baseSha: eventBaseSha,
+    headSha: eventHeadSha,
+    headParents: Object.freeze(headParents),
+    changedFiles: Object.freeze(changed),
+    secondParentTree,
+    secondParentSha,
+    resultingMergeParents: Object.freeze([eventBaseSha, secondParentSha]),
+    resultingMergeTree: resultingTree,
   });
 }
 
@@ -1530,6 +1641,14 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "",
   "      - name: P1-A current candidate-data contract controls",
   "        env:",
+  "          P1A_EVENT_REPOSITORY: ${{ github.repository }}",
+  "          P1A_EVENT_NAME: ${{ github.event_name }}",
+  "          P1A_EVENT_BASE_REPOSITORY: ${{ github.event.pull_request.base.repo.full_name || github.repository }}",
+  "          P1A_EVENT_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || github.repository }}",
+  "          P1A_EVENT_BASE_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}",
+  "          P1A_EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}",
+  "          P1A_EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}",
+  "          P1A_EVENT_FETCH_TOKEN: ${{ github.token }}",
   "          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate",
   "          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline",
   "          P1A_DUAL_BASE_AUTHORITY_ROOT: .p1a-dual-base-authority",
@@ -1544,7 +1663,55 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-chain",
   "          P1A_PR16_CURRENT_PREDECESSOR_SOURCE_ROOT: .p1a-pr16-chain-staging-current-predecessor",
   "          P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT: .p1a-pr16-chain-staging-minimum-depth",
-  "        run: node scripts/test-p1a-dual-base-verifier.mjs",
+  "        run: |",
+  "          set -euo pipefail",
+  "          zero_sha=0000000000000000000000000000000000000000",
+  "          authority=\"$RUNNER_TEMP/p1a-event-authority-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\"",
+  "          trap 'rm -rf -- \"$authority\"' EXIT",
+  "          test \"$P1A_EVENT_REPOSITORY\" = \"DarksiedCEO/zbestmedia\"",
+  "          test \"$P1A_EVENT_BASE_REPOSITORY\" = \"DarksiedCEO/zbestmedia\"",
+  "          test \"$P1A_EVENT_HEAD_REPOSITORY\" = \"DarksiedCEO/zbestmedia\"",
+  "          test \"$P1A_EVENT_NAME\" = pull_request || test \"$P1A_EVENT_NAME\" = push",
+  "          [[ \"$P1A_EVENT_HEAD_SHA\" =~ ^[0-9a-f]{40}$ ]]",
+  "          [[ \"$P1A_EVENT_BASE_SHA\" =~ ^[0-9a-f]{40}$ ]]",
+  "          test -n \"$P1A_EVENT_FETCH_TOKEN\"",
+  "          auth_header=\"$(printf 'x-access-token:%s' \"$P1A_EVENT_FETCH_TOKEN\" | base64 | tr -d '\\n')\"",
+  "          unset P1A_EVENT_FETCH_TOKEN",
+  "          test ! -e \"$authority\"",
+  "          git init --bare -q \"$authority\"",
+  "          git -C \"$authority\" remote add origin https://github.com/DarksiedCEO/zbestmedia",
+  "          if test \"$P1A_EVENT_NAME\" = push && test \"$P1A_EVENT_BASE_SHA\" = \"$zero_sha\"; then",
+  "            git -C \"$authority\" -c protocol.version=2 \\",
+  "              -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
+  "              fetch --no-tags --no-write-fetch-head --depth=1 origin \"$P1A_EVENT_HEAD_SHA\"",
+  "            mapfile -t event_head_parents < <(git -C \"$authority\" cat-file commit \\",
+  "              \"$P1A_EVENT_HEAD_SHA\" | sed -n 's/^parent //p')",
+  "            test \"${#event_head_parents[@]}\" -eq 1",
+  "            P1A_EVENT_BASE_SHA=\"${event_head_parents[0]}\"",
+  "            [[ \"$P1A_EVENT_BASE_SHA\" =~ ^[0-9a-f]{40}$ ]]",
+  "            git -C \"$authority\" -c protocol.version=2 \\",
+  "              -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
+  "              fetch --no-tags --no-write-fetch-head --depth=1 origin \"$P1A_EVENT_BASE_SHA\"",
+  "            P1A_EVENT_NAME=push_create",
+  "          else",
+  "            git -C \"$authority\" -c protocol.version=2 \\",
+  "              -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
+  "              fetch --no-tags --no-write-fetch-head --depth=2 origin \\",
+  "              \"$P1A_EVENT_BASE_SHA\" \"$P1A_EVENT_HEAD_SHA\"",
+  "          fi",
+  "          unset auth_header",
+  "          test -z \"$(git -C \"$authority\" for-each-ref --format='%(refname)')\"",
+  "          test ! -e \"$authority/objects/info/alternates\"",
+  "          test ! -s \"$authority/info/grafts\"",
+  "          if grep -Eiq 'x-access-token|authorization:|http\\..*extraheader' \"$authority/config\"; then",
+  "            echo \"persisted event authority credential material detected\" >&2",
+  "            exit 1",
+  "          fi",
+  "          export P1A_EVENT_AUTHORITY_ROOT=\"$authority\"",
+  "          node scripts/test-p1a-dual-base-verifier.mjs",
+  "          rm -rf -- \"$authority\"",
+  "          test ! -e \"$authority\"",
+  "          trap - EXIT",
   "",
   "      - name: Remove isolated P1-A authority checkouts",
   "        if: always()",
