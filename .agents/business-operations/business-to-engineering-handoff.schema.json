@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zbestmedia.com/schemas/business-to-engineering-handoff.schema.json",
+  "title": "Z Best Media Business-to-Engineering Handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["handoffId","businessObjective","currentManualBurden","founderHoursConsumedPerWeek","requiredCapability","acceptanceCriteria","permittedScope","prohibitedScope","privacyImpact","securityImpact","expectedFounderHoursSaved","expectedRevenueImpact","requestedBy","submittedAt","approvalClaim","authorizationDecision","verificationStatus","externalVerificationRequired"],
+  "properties": {
+    "handoffId":{"type":"string","minLength":8,"pattern":"^[A-Za-z0-9._:-]+$"},
+    "businessObjective":{"type":"string","minLength":8},
+    "currentManualBurden":{"type":"string","minLength":8},
+    "founderHoursConsumedPerWeek":{"type":"number","minimum":0},
+    "requiredCapability":{"type":"string","minLength":8},
+    "acceptanceCriteria":{"type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","minLength":3}},
+    "permittedScope":{"type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","minLength":3}},
+    "prohibitedScope":{"type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","minLength":3}},
+    "privacyImpact":{"type":"string","minLength":3},
+    "securityImpact":{"type":"string","minLength":3},
+    "expectedFounderHoursSaved":{"type":"number","minimum":0},
+    "expectedRevenueImpact":{"type":"string","minLength":3},
+    "requestedBy":{"type":"string","minLength":3},
+    "submittedAt":{"type":"string","format":"date-time","minLength":20},
+    "approvalClaim":{
+      "type":"object",
+      "additionalProperties":false,
+      "required":["claimedApproverIdentity","claimRef","claimRefVerificationStatus","scopeDigest","subjectDigest","digestBindingStatus","claimStatus"],
+      "properties":{
+        "claimedApproverIdentity":{"type":"string","minLength":3},
+        "claimRef":{"type":"string","minLength":8},
+        "claimRefVerificationStatus":{"const":"UNVERIFIED"},
+        "claimedApprovedAt":{"type":"string","format":"date-time","minLength":20},
+        "scopeDigest":{"type":"string","pattern":"^sha256:[a-f0-9]{64}$"},
+        "subjectDigest":{"type":"string","pattern":"^sha256:[a-f0-9]{64}$"},
+        "digestBindingStatus":{"const":"UNVERIFIED"},
+        "claimStatus":{"const":"UNVERIFIED_CLAIM"}
+      }
+    },
+    "authorizationDecision":{"const":"DO_NOT_EXECUTE"},
+    "verificationStatus":{"const":"PENDING_HUMAN_VERIFICATION"},
+    "externalVerificationRequired":{"const":true},
+    "approvedByAndre":{"type":"boolean","description":"Compatibility signal only. Non-authoritative and never sufficient; approvalClaim also remains non-authorizing pending out-of-band verification."}
+  }
+}

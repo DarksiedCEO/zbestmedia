@@ -1,0 +1,131 @@
+{
+  "schemaVersion": "1.0.0",
+  "authority": {
+    "canonicalBusinessFacts": "Andre Love",
+    "operationalOwnershipAndRouting": "business-operations-integration-marshal",
+    "engineeringCode": "16 external and separate Engineering Grandmasters",
+    "businessPolicy": "Andre Love",
+    "autonomyPromotion": "Andre Love",
+    "selfApprovalAllowed": false,
+    "selfPromotionAllowed": false
+  },
+  "statuses": ["QUEUED","IN_PROGRESS","READY_FOR_REVIEW","BLOCKED","COMPLETE"],
+  "autonomyLevels": ["TESTED","SUPERVISED","BOUNDED_AUTONOMY","PRODUCTION_AUTONOMY"],
+  "defaultAutonomy": "SUPERVISED",
+  "wipLimits": {
+    "activeExecutionBatches": 4,
+    "awaitingFounderReview": 2,
+    "unresolvedCanonicalFactConflicts": 1,
+    "ownersPerProspect": 1,
+    "ownersPerClient": 1,
+    "ownersPerPublicProfile": 1,
+    "activePublishingBatches": 1
+  },
+  "ownership": {
+    "prospect": "Exactly one owner; duplicate outreach planning is prohibited.",
+    "client": "Exactly one owner; conflicting communication planning is prohibited.",
+    "publicProfile": "Exactly one correction owner.",
+    "task": "Exactly one accountable owner."
+  },
+  "humanApproval": {
+    "requiredFor": ["external communication","outreach sending","meeting scheduling","publishing or scheduling","public profile mutation","irreversible action","pricing","discounts","scope changes","contracts","refunds","spend","canonical facts","legal or security response","sensitive-data disclosure","autonomy promotion"],
+    "publicActionPermittedByDefault": false,
+    "irreversibleActionPermittedByDefault": false
+  },
+  "liveActionPermissions": {
+    "send": false,
+    "publish": false,
+    "schedule": false,
+    "contact": false,
+    "message": false,
+    "mutate": false
+  },
+  "capabilityPolicy": {
+    "externalEffects": {
+      "requiredDenied": ["send","publish","schedule","contact","message","mutate"],
+      "allowed": []
+    },
+    "sensitiveFounderContext": {
+      "requiredDenied": ["read-aaliyah-private-memory","write-aaliyah-private-memory","read-founder-private-preferences","write-founder-private-preferences"],
+      "allowed": []
+    },
+    "rolePolicies": {
+      "agency-operations-founder-relief-grandmaster": {
+        "allowed": ["classify","prioritize","delegate-internally","draft","package","measure-from-evidence","recommend","request-human-approval"],
+        "denied": ["send","publish","schedule","contact","message","mutate","read-aaliyah-private-memory","write-aaliyah-private-memory","impersonate-andre","change-pricing","change-business-facts","modify-engineering-code","self-approve","self-promote"]
+      },
+      "business-operations-integration-marshal": {
+        "allowed": ["inspect","classify","assign-internal-ownership","enforce-wip","reject-incomplete-handoff","package-non-code-artifacts","prepare-engineering-request"],
+        "denied": ["send","publish","schedule","contact","message","mutate","perform-sales","approve-business-decision","modify-engineering-code","certify-self","self-promote"]
+      },
+      "revenue-acquisition-grandmaster": {
+        "allowed": ["research","classify","draft","prepare-meeting-recommendation","prepare-approved-material","escalate-opportunity"],
+        "denied": ["send","publish","schedule","contact","message","mutate","change-price","discount","negotiate-contract","sign-contract","promise-results","fabricate-evidence","modify-engineering-code","self-approve","self-promote"]
+      },
+      "presence-recovery-grandmaster": {
+        "allowed": ["audit","inventory","monitor-read-only","classify","draft-correction","prepare-recommendation","report"],
+        "denied": ["send","publish","schedule","contact","message","mutate","submit-public-change","change-canonical-fact","delete-listing","merge-profile","mark-location-closed","modify-engineering-code","self-approve","self-promote"]
+      },
+      "content-social-operations-grandmaster": {
+        "allowed": ["research","brief","draft","adapt","quality-check","queue-for-human-approval","classify-observation"],
+        "denied": ["send","publish","schedule","contact","message","mutate","reply-publicly","change-positioning","delete-history","modify-engineering-code","self-approve","self-promote"]
+      },
+      "client-success-delivery-grandmaster": {
+        "allowed": ["classify","route-internally","prepare-checklist","draft-status","track-provided-assets","track-approvals","escalate-for-human-action"],
+        "denied": ["send","publish","schedule","contact","message","mutate","admit-liability","alter-scope","approve-refund","waive-charge","sign-contract","close-risk-incident","modify-engineering-code","self-approve","self-promote"]
+      }
+    }
+  },
+  "publicClaims": {
+    "evidenceRequired": true,
+    "unsupportedClaimsProhibited": true,
+    "evidenceStates": ["CONFIRMED","STRUCTURED_OBSERVATION","HYPOTHESIS","UNKNOWN","ASSUMPTION","RECOMMENDATION"],
+    "hypothesisMayBePresentedAsFact": false
+  },
+  "founderHoursSaved": {
+    "formula": "max(0, documented_baseline_minutes - documented_founder_minutes_after - documented_correction_minutes)",
+    "requiredEvidence": ["baseline source","measurement window","founder minutes after","correction minutes","calculation"],
+    "targetsAreAccomplishments": false,
+    "fabricationProhibited": true
+  },
+  "privacyBoundary": {
+    "aaliyahIncluded": false,
+    "aaliyahPrivateMemoryAccess": [],
+    "publicRepresentativePrivateFounderAccess": false,
+    "founderPrivateInstructionsStored": false
+  },
+  "emailRouting": {
+    "riskAliases": ["privacy@zbestmedia.com","legal@zbestmedia.com","security@zbestmedia.com"],
+    "riskOwner": "Simone",
+    "riskEscalation": ["Andre Love"],
+    "sendingEnabled": false
+  },
+  "executionIsolation": {
+    "sharedWritableOwnershipAllowed": false,
+    "businessAgentsMayMutateEngineeringCode": false,
+    "engineeringAgentsMayMutateBusinessPolicy": false,
+    "crossRepositoryMutationAllowed": false,
+    "handoffOnly": true
+  },
+  "businessTaskRequiredFields": ["taskId","businessObjective","owner","department","revenueImpact","expectedFounderHoursSaved","dueDate","allowedActions","prohibitedActions","sourceInputs","approvalRequirements","evidence","status","exactBlocker"],
+  "businessToEngineeringRequiredFields": ["handoffId","businessObjective","currentManualBurden","founderHoursConsumedPerWeek","requiredCapability","acceptanceCriteria","permittedScope","prohibitedScope","privacyImpact","securityImpact","expectedFounderHoursSaved","expectedRevenueImpact","requestedBy","submittedAt","approvalClaim","authorizationDecision","verificationStatus","externalVerificationRequired"],
+  "approvalClaimPolicy": {
+    "trustedSignerAvailable": false,
+    "trustedApprovalLedgerAvailable": false,
+    "claimIsAuthorization": false,
+    "requiredAuthorizationDecision": "DO_NOT_EXECUTE",
+    "requiredVerificationStatus": "PENDING_HUMAN_VERIFICATION",
+    "externalVerificationRequired": true,
+    "trustedReceiptIssuer": "Andre Love or an out-of-band trusted verifier",
+    "receiptStorage": "Outside this package",
+    "claimRefVerificationStatus": "UNVERIFIED",
+    "digestBindingStatus": "UNVERIFIED",
+    "compatibilityBoolean": "approvedByAndre is optional, non-authoritative, and never sufficient",
+    "chronology": "claimedApprovedAt, when present, must be timezone-aware RFC3339 and no later than submittedAt; submittedAt must not be in the future"
+  },
+  "founderBrief": {
+    "sections": ["MONEY","APPROVALS","RISKS","BLOCKERS","COMPLETED","NEXT THREE ACTIONS"],
+    "maxNextActions": 3,
+    "supportingEvidenceLinked": true
+  }
+}

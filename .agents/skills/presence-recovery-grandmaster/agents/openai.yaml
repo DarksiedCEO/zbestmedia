@@ -1,0 +1,4 @@
+interface:
+  display_name: "Presence Recovery Grandmaster"
+  short_description: "Prepare evidence-backed presence recovery."
+  default_prompt: "Use $presence-recovery-grandmaster to audit and prepare this Z Best Media presence recovery task."

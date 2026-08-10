@@ -1,0 +1,4 @@
+interface:
+  display_name: "Revenue Acquisition Grandmaster"
+  short_description: "Prepare evidence-based revenue opportunities."
+  default_prompt: "Use $revenue-acquisition-grandmaster to prepare this bounded revenue acquisition work."

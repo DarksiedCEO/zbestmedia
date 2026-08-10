@@ -1,0 +1,4 @@
+interface:
+  display_name: "Business Operations Integration Marshal"
+  short_description: "Coordinate business ownership and handoffs."
+  default_prompt: "Use $business-operations-integration-marshal to coordinate this Z Best Media operations handoff."

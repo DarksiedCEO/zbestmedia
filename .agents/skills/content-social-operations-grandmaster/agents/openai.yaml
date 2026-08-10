@@ -1,0 +1,4 @@
+interface:
+  display_name: "Content & Social Operations Grandmaster"
+  short_description: "Prepare supervised content and social batches."
+  default_prompt: "Use $content-social-operations-grandmaster to prepare this supervised content and social batch."
