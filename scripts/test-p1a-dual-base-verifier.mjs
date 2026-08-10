@@ -19,6 +19,8 @@ import {
   POST_PR18_TRUSTED_BASE, POST_PR18_TRUSTED_BASE_TREE, POST_PR18_TRUSTED_BASE_PARENTS,
   POST_PR19_TRUSTED_BASE, POST_PR19_TRUSTED_BASE_TREE, POST_PR19_TRUSTED_BASE_PARENTS,
   verifyExactCurrentTrustedBaseTopology,
+  EVENT_BOUND_TARGET_REPOSITORY, EVENT_BOUND_AMENDMENT_FILES,
+  verifyEventBoundAmendmentTopology,
 } from "./validate-p1a-threat-model.mjs";
 import { validateCertificationBundle } from "./validate-p1a-certification-accounting.mjs";
 
@@ -107,6 +109,153 @@ const authorityRoots = {
 const workspaceOptions = (expectedRelative) => process.env.GITHUB_WORKSPACE
   ? { workspaceRoot: process.env.GITHUB_WORKSPACE, expectedRelative }
   : {};
+const run = (cwd, args, options = {}) => execFileSync(args[0], args.slice(1), {
+  cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], ...options,
+}).trim();
+const gitAt = (cwd, ...args) => run(cwd, ["git", ...args]);
+
+let verifiedEventProof;
+if (process.env.P1A_EVENT_AUTHORITY_ROOT) {
+  verifiedEventProof = verifyEventBoundAmendmentTopology({
+    authorityRoot: process.env.P1A_EVENT_AUTHORITY_ROOT,
+    eventName: process.env.P1A_EVENT_NAME,
+    eventRepository: process.env.P1A_EVENT_REPOSITORY,
+    eventBaseRepository: process.env.P1A_EVENT_BASE_REPOSITORY,
+    eventHeadRepository: process.env.P1A_EVENT_HEAD_REPOSITORY,
+    eventBaseRef: process.env.P1A_EVENT_BASE_REF,
+    eventBaseSha: process.env.P1A_EVENT_BASE_SHA,
+    eventHeadSha: process.env.P1A_EVENT_HEAD_SHA,
+  });
+  console.log(JSON.stringify({
+    suite: "p1-a-event-bound-amendment-topology",
+    positiveRequired: 8,
+    positiveExecuted: 8,
+    positivePassed: 8,
+    ...verifiedEventProof,
+    genericMergeAcceptance: false,
+    candidateSelectedAuthority: false,
+    mutableRefAuthority: false,
+    failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+  }));
+}
+
+function createEventAuthorityFixture(label, {
+  includeBase = true, includeHead = true, extraFile, headParents, targetMerge = false,
+} = {}) {
+  const fixture = mkdtempSync(path.join(tmpdir(), `p1a-event-${label}-`));
+  gitAt(fixture, "init", "-q");
+  gitAt(fixture, "config", "user.email", "p1a-event@example.invalid");
+  gitAt(fixture, "config", "user.name", "P1A event fixture");
+  gitAt(fixture, "remote", "add", "source", root);
+  const base = gitAt(root, "rev-parse", "HEAD^");
+  gitAt(fixture, "fetch", "-q", "--no-tags", "source", base);
+  for (const parent of headParents ?? []) {
+    if (parent !== base) gitAt(fixture, "fetch", "-q", "--no-tags", "source", parent);
+  }
+  gitAt(fixture, "checkout", "-q", "--detach", base);
+  for (const file of EVENT_BOUND_AMENDMENT_FILES) {
+    mkdirSync(path.dirname(path.join(fixture, file)), { recursive: true });
+    writeFileSync(path.join(fixture, file), `${readFileSync(path.join(fixture, file), "utf8")}\n// ${label}\n`);
+  }
+  if (extraFile) writeFileSync(path.join(fixture, extraFile), "unauthorized\n");
+  gitAt(fixture, "add", ".");
+  const tree = gitAt(fixture, "write-tree");
+  const parents = headParents ?? [base];
+  const commitArgs = ["commit-tree", tree];
+  for (const parent of parents) commitArgs.push("-p", parent);
+  const amendment = execFileSync("git", commitArgs, {
+    cwd: fixture, input: `event fixture ${label}\n`, encoding: "utf8",
+  }).trim();
+  const head = targetMerge
+    ? execFileSync("git", ["commit-tree", tree, "-p", base, "-p", amendment], {
+      cwd: fixture, input: `event merge fixture ${label}\n`, encoding: "utf8",
+    }).trim()
+    : amendment;
+  const authority = mkdtempSync(path.join(tmpdir(), `p1a-event-authority-${label}-`));
+  gitAt(authority, "init", "--bare", "-q");
+  gitAt(authority, "remote", "add", "origin", OFFICIAL_REPOSITORY);
+  const copyObject = (sha) => {
+    const type = gitAt(fixture, "cat-file", "-t", sha);
+    const body = execFileSync("git", ["cat-file", type, sha], {
+      cwd: fixture, maxBuffer: 128 * 1024 * 1024,
+    });
+    const imported = execFileSync("git", ["hash-object", "-w", "-t", type, "--stdin"], {
+      cwd: authority, input: body, encoding: "utf8", maxBuffer: 128 * 1024 * 1024,
+    }).trim();
+    assert.equal(imported, sha);
+  };
+  const importCommit = (sha) => {
+    copyObject(gitAt(fixture, "rev-parse", `${sha}^{tree}`));
+    const objects = gitAt(fixture, "ls-tree", "-r", "-t", "--format=%(objectname) %(objecttype)", sha)
+      .split("\n").filter(Boolean);
+    for (const entry of objects) {
+      const [object, type] = entry.split(" ");
+      if (type === "tree") copyObject(object);
+    }
+    copyObject(sha);
+  };
+  if (includeBase) importCommit(base);
+  if (includeHead) {
+    importCommit(amendment);
+    if (head !== amendment) importCommit(head);
+  }
+  return { fixture, authority, base, head, secondParent: amendment };
+}
+
+const eventFixture = createEventAuthorityFixture("positive");
+const eventArgs = {
+  authorityRoot: eventFixture.authority,
+  eventName: "pull_request",
+  eventRepository: EVENT_BOUND_TARGET_REPOSITORY,
+  eventBaseRepository: EVENT_BOUND_TARGET_REPOSITORY,
+  eventHeadRepository: EVENT_BOUND_TARGET_REPOSITORY,
+  eventBaseRef: "codex/fixture-target",
+  eventBaseSha: eventFixture.base,
+  eventHeadSha: eventFixture.head,
+};
+const originalEventBase = process.env.P1A_TEST_EVENT_BASE_SHA;
+assert.doesNotThrow(() => verifyEventBoundAmendmentTopology(eventArgs));
+const targetMergeFixture = createEventAuthorityFixture("target-merge", { targetMerge: true });
+assert.doesNotThrow(() => verifyEventBoundAmendmentTopology({
+  ...eventArgs,
+  authorityRoot: targetMergeFixture.authority,
+  eventName: "push",
+  eventBaseSha: targetMergeFixture.base,
+  eventHeadSha: targetMergeFixture.head,
+}));
+const wrongScopeFixture = createEventAuthorityFixture("wrong-tree", { extraFile: "unauthorized.txt" });
+const siblingParent = gitAt(root, "rev-parse", "2349ab8abdae13aa30f4f453c699633256f2ab7c");
+const reorderedFixture = createEventAuthorityFixture("reordered", {
+  headParents: [siblingParent, eventFixture.base],
+});
+const siblingFixture = createEventAuthorityFixture("sibling", { headParents: [siblingParent] });
+const fakePr8Fixture = createEventAuthorityFixture("fake-pr8", {
+  headParents: [eventFixture.base, siblingParent],
+});
+const eventHostiles = [
+  ["event_sha_substitution", { eventHeadSha: eventFixture.base }],
+  ["mutable_ref_substitution", { eventHeadSha: "refs/heads/main" }],
+  ["candidate_controlled_authority", { eventHeadRepository: "attacker/fork" }],
+  ["invalid_target_ref", { eventBaseRef: "refs/heads/main" }],
+  ["missing_base_object", { authorityRoot: createEventAuthorityFixture("missing-base", { includeBase: false }).authority }],
+  ["missing_head_object", { authorityRoot: createEventAuthorityFixture("missing-head", { includeHead: false }).authority }],
+  ["wrong_tree", { authorityRoot: wrongScopeFixture.authority, eventHeadSha: wrongScopeFixture.head }],
+  ["reordered_parents", { authorityRoot: reorderedFixture.authority, eventHeadSha: reorderedFixture.head }],
+  ["unauthorized_sibling_merge", { authorityRoot: siblingFixture.authority, eventHeadSha: siblingFixture.head }],
+  ["fake_pr8_reconciliation", { authorityRoot: fakePr8Fixture.authority, eventHeadSha: fakePr8Fixture.head }],
+];
+for (const [name, mutation] of eventHostiles) {
+  assert.ok(rejects(() => verifyEventBoundAmendmentTopology({ ...eventArgs, ...mutation })),
+    `${name}: hostile event authority accepted`);
+}
+assert.equal(originalEventBase, undefined, "candidate-selected base override forbidden");
+console.log(JSON.stringify({
+  suite: "p1-a-event-bound-authority-hostiles",
+  positiveRequired: 2, positiveExecuted: 2, positivePassed: 2,
+  hostileRequired: eventHostiles.length, hostileExecuted: eventHostiles.length,
+  hostilePassed: eventHostiles.length,
+  failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0,
+}));
 if (process.env.P1A_TRUSTED_EXECUTION_ROOT) {
   assert.equal(
     root,
@@ -123,11 +272,6 @@ if (process.env.P1A_TRUSTED_EXECUTION_ROOT) {
 const temporary = mkdtempSync(path.join(tmpdir(), "p1a-dual-base-"));
 const repository = path.join(temporary, "repository");
 const boundedRepository = path.join(temporary, "bounded-ancestry-repository");
-const run = (cwd, args, options = {}) => execFileSync(args[0], args.slice(1), {
-  cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], ...options,
-}).trim();
-const gitAt = (cwd, ...args) => run(cwd, ["git", ...args]);
-
 function importExactCandidateObjectGraph(sourceRoot, destinationRoot, commitSha) {
   assert.match(commitSha, EXACT_SHA, "candidate import: exact lowercase SHA required");
   assert.equal(gitAt(sourceRoot, "cat-file", "-t", commitSha), "commit",
@@ -314,6 +458,15 @@ function verifyExactPostPr19TrustedBase(head, parentLookup, treeLookup) {
 }
 
 function classifyCurrentCiSubject({ head, parents, tree, parentLookup, treeLookup }) {
+  if (verifiedEventProof?.headSha === head) {
+    assert.deepEqual(parents, verifiedEventProof.eventName === "pull_request"
+      ? [verifiedEventProof.baseSha]
+      : [...verifiedEventProof.resultingMergeParents],
+    "subject classification: current parents differ from verified event authority");
+    assert.equal(tree, verifiedEventProof.resultingMergeTree,
+      "subject classification: current tree differs from verified event authority");
+    return verifiedEventProof.subjectClass;
+  }
   if (head === POST_PR19_TRUSTED_BASE) {
     verifyExactPostPr19TrustedBase(head, parentLookup, treeLookup);
     assert.equal(tree, POST_PR19_TRUSTED_BASE_TREE,
@@ -1200,6 +1353,8 @@ function resolveAmendmentSource() {
   if (subjectClass === "POST_PR18_VERIFIER_AMENDMENT") return head;
   if (subjectClass === "POST_PR19_TRUSTED_BASE_MERGE") return head;
   if (subjectClass === "POST_PR19_VERIFIER_AMENDMENT") return head;
+  if (subjectClass === "EVENT_BOUND_PR_AMENDMENT") return head;
+  if (subjectClass === "EVENT_BOUND_TARGET_MERGE") return head;
   if (parents.length === 1) {
     if (parents[0] === CURRENT_TRUSTED_BASE) {
       verifyExactCurrentTrustedBaseTopology({ trustedBaseRoot: authorityRoots.trustedBaseFullSource });
@@ -2434,7 +2589,11 @@ const semanticPositiveControls = [
         ? [...POST_PR18_TRUSTED_BASE_PARENTS]
         : amendmentSourceSha === POST_PR19_TRUSTED_BASE
           ? [...POST_PR19_TRUSTED_BASE_PARENTS]
-          : [POST_PR19_TRUSTED_BASE])],
+          : verifiedEventProof?.headSha === amendmentSourceSha
+            ? (verifiedEventProof.eventName === "pull_request"
+              ? [verifiedEventProof.baseSha]
+              : [...verifiedEventProof.resultingMergeParents])
+            : [POST_PR19_TRUSTED_BASE])],
   ["remote_head_parent_historical_digest", () => assert.deepEqual(
     commitParents(trustedSourceRoot, REJECTED_PR16_SEVEN_SOURCE_CANDIDATE),
     [REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE])],

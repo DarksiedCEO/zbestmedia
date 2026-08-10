@@ -510,6 +510,13 @@ jobs:
 
       - name: P1-A current candidate-data contract controls
         env:
+          P1A_EVENT_REPOSITORY: ${{ github.repository }}
+          P1A_EVENT_NAME: ${{ github.event_name }}
+          P1A_EVENT_BASE_REPOSITORY: ${{ github.event.pull_request.base.repo.full_name || github.repository }}
+          P1A_EVENT_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          P1A_EVENT_BASE_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
+          P1A_EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          P1A_EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
           P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
           P1A_DUAL_BASE_AUTHORITY_ROOT: .p1a-dual-base-authority
@@ -524,7 +531,41 @@ jobs:
           P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-chain
           P1A_PR16_CURRENT_PREDECESSOR_SOURCE_ROOT: .p1a-pr16-chain-staging-current-predecessor
           P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT: .p1a-pr16-chain-staging-minimum-depth
-        run: node scripts/test-p1a-dual-base-verifier.mjs
+        run: |
+          set -euo pipefail
+          zero_sha=0000000000000000000000000000000000000000
+          if test "$P1A_EVENT_NAME" = pull_request || test "$P1A_EVENT_BASE_SHA" != "$zero_sha"; then
+            authority="$RUNNER_TEMP/p1a-event-authority-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+            trap 'rm -rf -- "$authority"' EXIT
+            test "$P1A_EVENT_REPOSITORY" = "DarksiedCEO/zbestmedia"
+            test "$P1A_EVENT_BASE_REPOSITORY" = "DarksiedCEO/zbestmedia"
+            test "$P1A_EVENT_HEAD_REPOSITORY" = "DarksiedCEO/zbestmedia"
+            test "$P1A_EVENT_NAME" = pull_request || test "$P1A_EVENT_NAME" = push
+            [[ "$P1A_EVENT_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+            [[ "$P1A_EVENT_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+            test ! -e "$authority"
+            git init --bare -q "$authority"
+            git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
+            git -C "$authority" -c protocol.version=2 fetch --no-tags --no-write-fetch-head \
+              --depth=2 origin "$P1A_EVENT_BASE_SHA" "$P1A_EVENT_HEAD_SHA"
+            test -z "$(git -C "$authority" for-each-ref --format='%(refname)')"
+            test ! -e "$authority/objects/info/alternates"
+            test ! -s "$authority/info/grafts"
+            if grep -Eiq 'x-access-token|authorization:|http\..*extraheader' "$authority/config"; then
+              echo "persisted event authority credential material detected" >&2
+              exit 1
+            fi
+            export P1A_EVENT_AUTHORITY_ROOT="$authority"
+          else
+            unset P1A_EVENT_REPOSITORY P1A_EVENT_NAME P1A_EVENT_BASE_REPOSITORY
+            unset P1A_EVENT_HEAD_REPOSITORY P1A_EVENT_BASE_REF P1A_EVENT_BASE_SHA P1A_EVENT_HEAD_SHA
+          fi
+          node scripts/test-p1a-dual-base-verifier.mjs
+          if test -n "${P1A_EVENT_AUTHORITY_ROOT:-}"; then
+            rm -rf -- "$authority"
+            test ! -e "$authority"
+            trap - EXIT
+          fi
 
       - name: Remove isolated P1-A authority checkouts
         if: always()
