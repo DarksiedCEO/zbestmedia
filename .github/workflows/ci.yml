@@ -384,6 +384,29 @@ jobs:
           persist-credentials: false
           path: .p1a-pr16-chain-staging-minimum-depth
 
+      - name: Acquire exact P1-A current trusted target authority
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DarksiedCEO/zbestmedia
+          ref: b0c1b2129123b941c6a350c16dae0ae3a8e076ca
+          fetch-depth: 1
+          persist-credentials: false
+          path: .p1a-current-trusted-target-authority
+
+      - name: Verify exact P1-A current trusted target authority
+        run: |
+          set -euo pipefail
+          authority=.p1a-current-trusted-target-authority
+          test "$(git -C "$authority" rev-parse HEAD)" = "b0c1b2129123b941c6a350c16dae0ae3a8e076ca"
+          test "$(git -C "$authority" remote get-url origin)" = "https://github.com/DarksiedCEO/zbestmedia"
+          test -z "$(git -C "$authority" status --porcelain=v1)"
+          test "$(git -C "$authority" cat-file -t HEAD:.github/workflows/ci.yml)" = blob
+          test "$(git -C "$authority" rev-parse HEAD:.github/workflows/ci.yml)" = "e5c469125577b22d9b96ea81502bb67d354a3ab4"
+          if grep -Eiq 'x-access-token|authorization:|http\..*extraheader' "$authority/.git/config"; then
+            echo "persisted current-target credential material detected" >&2
+            exit 1
+          fi
+
       - name: Construct exact PR16 remediation-chain predecessor authority
         run: |
           set -euo pipefail
@@ -496,9 +519,44 @@ jobs:
 
       - name: P1-A trusted verifier controls
         env:
+          P1A_CURRENT_WORKFLOW_FETCH_TOKEN: ${{ github.token }}
           P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
           P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
-        run: node scripts/test-p1a-trusted-verifier.mjs
+        run: |
+          set -euo pipefail
+          trusted_sha=94941bbf6afbd0073f6619b2c63b0e6c5c6ca4e8
+          trusted_blob=a1066580b0b477cf17c53f5c11ebefcedac0a883
+          authority="$RUNNER_TEMP/p1a-current-workflow-authority-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          trap 'rm -rf -- "$authority"' EXIT
+          test -n "$P1A_CURRENT_WORKFLOW_FETCH_TOKEN"
+          test ! -e "$authority"
+          auth_header="$(printf 'x-access-token:%s' "$P1A_CURRENT_WORKFLOW_FETCH_TOKEN" | base64 | tr -d '\n')"
+          unset P1A_CURRENT_WORKFLOW_FETCH_TOKEN
+          git init --bare -q "$authority"
+          git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
+          git -C "$authority" -c protocol.version=2 \
+            -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" \
+            fetch --no-tags --no-write-fetch-head --depth=1 origin "$trusted_sha"
+          unset auth_header
+          test -z "$(git -C "$authority" for-each-ref --format='%(refname)')"
+          test ! -e "$authority/objects/info/alternates"
+          test ! -s "$authority/info/grafts"
+          test "$(git -C "$authority" remote get-url origin)" = \
+            "https://github.com/DarksiedCEO/zbestmedia"
+          test "$(git -C "$authority" cat-file -t "$trusted_sha")" = commit
+          test "$(git -C "$authority" rev-parse "$trusted_sha:.github/workflows/ci.yml")" = \
+            "$trusted_blob"
+          if grep -Eiq 'x-access-token|authorization:|http\..*extraheader' "$authority/config"; then
+            echo "persisted current-workflow credential material detected" >&2
+            exit 1
+          fi
+          export P1A_CURRENT_WORKFLOW_AUTHORITY_ROOT="$authority"
+          env -u P1A_CURRENT_WORKFLOW_FETCH_TOKEN -u GITHUB_TOKEN -u GH_TOKEN \
+            node scripts/test-p1a-trusted-verifier.mjs
+          unset P1A_CURRENT_WORKFLOW_AUTHORITY_ROOT
+          rm -rf -- "$authority"
+          test ! -e "$authority"
+          trap - EXIT
 
       - name: P1-A trusted-bootstrap Node syntax
         run: |
@@ -540,6 +598,7 @@ jobs:
           P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT: .p1a-pr16-chain-staging-rejected-chain
           P1A_PR16_CURRENT_PREDECESSOR_SOURCE_ROOT: .p1a-pr16-chain-staging-current-predecessor
           P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT: .p1a-pr16-chain-staging-minimum-depth
+          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority
         run: |
           set -euo pipefail
           zero_sha=0000000000000000000000000000000000000000
@@ -593,7 +652,7 @@ jobs:
       - name: Remove isolated P1-A authority checkouts
         if: always()
         run: |
-          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-chain-staging-action-inventory .p1a-pr16-chain-staging-current-predecessor .p1a-pr16-chain-staging-minimum-depth .p1a-pr16-remediation-chain-authority
+          rm -rf .p1a-original-candidate .p1a-trusted-baseline .p1a-dual-base-authority .p1a-evidence-base-authority .p1a-ancestry-authority .p1a-trusted-reconciliation-staging .p1a-trusted-reconciliation-authority .p1a-pr16-chain-staging-trusted-base .p1a-pr16-chain-staging-original-amendment .p1a-pr16-chain-staging-rejected-chain .p1a-pr16-chain-staging-rejected-cleanliness .p1a-pr16-chain-staging-action-inventory .p1a-pr16-chain-staging-current-predecessor .p1a-pr16-chain-staging-minimum-depth .p1a-pr16-remediation-chain-authority .p1a-current-trusted-target-authority
           test ! -e .p1a-original-candidate
           test ! -e .p1a-trusted-baseline
           test ! -e .p1a-dual-base-authority
@@ -609,6 +668,7 @@ jobs:
           test ! -e .p1a-pr16-chain-staging-action-inventory
           test ! -e .p1a-pr16-chain-staging-minimum-depth
           test ! -e .p1a-pr16-remediation-chain-authority
+          test ! -e .p1a-current-trusted-target-authority
 
       - name: P1-A trusted-bootstrap secret-detector tests
         run: node scripts/test-p1a-ci-secret-detector.mjs

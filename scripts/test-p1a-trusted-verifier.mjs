@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -19,7 +20,11 @@ import {
   AUTHORIZED_BASE,
   AUTHORIZED_RUNTIME,
   COMPOSED_CI_BASE,
-  composeTrustedCi,
+  composeGeneration2CandidateCi,
+  CURRENT_TRUSTED_TARGET,
+  CURRENT_TRUSTED_TARGET_CI_BLOB,
+  CURRENT_TRUSTED_WORKFLOW_BLOB,
+  CURRENT_TRUSTED_WORKFLOW_SHA,
   ORIGINAL_CANDIDATE,
   parseLineRange,
   runPackage,
@@ -63,6 +68,140 @@ const workflow = readFileSync(
   "utf8",
 );
 const ordinaryCi = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
+const currentWorkflowAuthorityRoot = process.env.P1A_CURRENT_WORKFLOW_AUTHORITY_ROOT
+  ? path.resolve(root, process.env.P1A_CURRENT_WORKFLOW_AUTHORITY_ROOT)
+  : null;
+assert.ok(currentWorkflowAuthorityRoot, "current trusted workflow authority root absent");
+assert.notEqual(currentWorkflowAuthorityRoot, root,
+  "primary checkout cannot be current workflow authority");
+assert.ok(!existsSync(path.join(currentWorkflowAuthorityRoot, "objects/info/alternates")),
+  "current trusted workflow authority contains alternates");
+assert.ok(!existsSync(path.join(currentWorkflowAuthorityRoot, "info/grafts")) ||
+  readFileSync(path.join(currentWorkflowAuthorityRoot, "info/grafts"), "utf8").trim() === "",
+  "current trusted workflow authority contains grafts");
+assert.equal(
+  execFileSync("git", ["-C", currentWorkflowAuthorityRoot, "remote", "get-url", "origin"],
+    { encoding: "utf8" }).trim(),
+  "https://github.com/DarksiedCEO/zbestmedia",
+  "current trusted workflow repository identity mismatch",
+);
+assert.equal(
+  execFileSync("git", ["-C", currentWorkflowAuthorityRoot, "cat-file", "-t",
+    CURRENT_TRUSTED_WORKFLOW_SHA], { encoding: "utf8" }).trim(),
+  "commit",
+  "current trusted workflow commit absent",
+);
+assert.equal(
+  execFileSync("git", ["-C", currentWorkflowAuthorityRoot, "rev-parse",
+    `${CURRENT_TRUSTED_WORKFLOW_SHA}:.github/workflows/ci.yml`],
+  { encoding: "utf8" }).trim(),
+  CURRENT_TRUSTED_WORKFLOW_BLOB,
+  "current trusted workflow blob identity mismatch",
+);
+assert.equal(
+  execFileSync("git", ["-C", currentWorkflowAuthorityRoot, "for-each-ref",
+    "--format=%(refname)"], { encoding: "utf8" }).trim(),
+  "",
+  "current trusted workflow authority contains refs",
+);
+assert.ok(!/x-access-token|authorization:|http\..*extraheader/i.test(
+  readFileSync(path.join(currentWorkflowAuthorityRoot, "config"), "utf8")),
+  "current trusted workflow authority persisted credentials");
+const currentTrustedTargetRoot = process.env.P1A_CURRENT_TRUSTED_TARGET_ROOT
+  ? path.resolve(root, process.env.P1A_CURRENT_TRUSTED_TARGET_ROOT)
+  : null;
+assert.ok(currentTrustedTargetRoot, "current trusted target authority root absent");
+assert.notEqual(currentTrustedTargetRoot, root,
+  "primary checkout cannot be current trusted target authority");
+assert.equal(execFileSync("git", ["-C", currentTrustedTargetRoot, "rev-parse", "HEAD"],
+  { encoding: "utf8" }).trim(), CURRENT_TRUSTED_TARGET,
+"current trusted target HEAD mismatch");
+assert.equal(execFileSync("git", ["-C", currentTrustedTargetRoot, "rev-parse",
+  `${CURRENT_TRUSTED_TARGET}:.github/workflows/ci.yml`], { encoding: "utf8" }).trim(),
+CURRENT_TRUSTED_TARGET_CI_BLOB, "current trusted target workflow blob mismatch");
+assert.equal(execFileSync("git", ["-C", currentTrustedTargetRoot, "remote", "get-url", "origin"],
+  { encoding: "utf8" }).trim(), "https://github.com/DarksiedCEO/zbestmedia",
+"current trusted target repository identity mismatch");
+assert.equal(execFileSync("git", ["-C", currentTrustedTargetRoot, "status", "--porcelain=v1"],
+  { encoding: "utf8" }).trim(), "", "current trusted target authority dirty");
+assert.ok(!/x-access-token|authorization:|http\..*extraheader/i.test(
+  readFileSync(path.join(currentTrustedTargetRoot, ".git/config"), "utf8")),
+"current trusted target authority persisted credentials");
+assert.equal(
+  execFileSync("git", ["-C", currentWorkflowAuthorityRoot, "show",
+    `${CURRENT_TRUSTED_WORKFLOW_SHA}:.github/workflows/ci.yml`],
+  { encoding: "utf8" }),
+  execFileSync("git", ["-C", currentWorkflowAuthorityRoot, "cat-file", "blob",
+    CURRENT_TRUSTED_WORKFLOW_BLOB], { encoding: "utf8" }),
+  "current trusted workflow object/blob mismatch",
+);
+const currentTrustedCi = execFileSync(
+  "git", ["-C", currentWorkflowAuthorityRoot, "show",
+    `${CURRENT_TRUSTED_WORKFLOW_SHA}:.github/workflows/ci.yml`],
+  { encoding: "utf8" },
+);
+for (const tokenName of ["P1A_CURRENT_WORKFLOW_FETCH_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"]) {
+  assert.ok(!process.env[tokenName], `${tokenName} exposed to trusted verifier`);
+}
+const BASE_TRUSTED_VERIFIER_CONTROL_STEP = `      - name: P1-A trusted verifier controls
+        env:
+          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
+          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
+        run: node scripts/test-p1a-trusted-verifier.mjs`;
+const CURRENT_TRUSTED_VERIFIER_CONTROL_STEP = `      - name: P1-A trusted verifier controls
+        env:
+          P1A_CURRENT_WORKFLOW_FETCH_TOKEN: \${{ github.token }}
+          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
+          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
+        run: |
+          set -euo pipefail
+          trusted_sha=94941bbf6afbd0073f6619b2c63b0e6c5c6ca4e8
+          trusted_blob=a1066580b0b477cf17c53f5c11ebefcedac0a883
+          authority="$RUNNER_TEMP/p1a-current-workflow-authority-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          trap 'rm -rf -- "$authority"' EXIT
+          test -n "$P1A_CURRENT_WORKFLOW_FETCH_TOKEN"
+          test ! -e "$authority"
+          auth_header="$(printf 'x-access-token:%s' "$P1A_CURRENT_WORKFLOW_FETCH_TOKEN" | base64 | tr -d '\\n')"
+          unset P1A_CURRENT_WORKFLOW_FETCH_TOKEN
+          git init --bare -q "$authority"
+          git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
+          git -C "$authority" -c protocol.version=2 \\
+            -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" \\
+            fetch --no-tags --no-write-fetch-head --depth=1 origin "$trusted_sha"
+          unset auth_header
+          test -z "$(git -C "$authority" for-each-ref --format='%(refname)')"
+          test ! -e "$authority/objects/info/alternates"
+          test ! -s "$authority/info/grafts"
+          test "$(git -C "$authority" remote get-url origin)" = \\
+            "https://github.com/DarksiedCEO/zbestmedia"
+          test "$(git -C "$authority" cat-file -t "$trusted_sha")" = commit
+          test "$(git -C "$authority" rev-parse "$trusted_sha:.github/workflows/ci.yml")" = \\
+            "$trusted_blob"
+          if grep -Eiq 'x-access-token|authorization:|http\\..*extraheader' "$authority/config"; then
+            echo "persisted current-workflow credential material detected" >&2
+            exit 1
+          fi
+          export P1A_CURRENT_WORKFLOW_AUTHORITY_ROOT="$authority"
+          env -u P1A_CURRENT_WORKFLOW_FETCH_TOKEN -u GITHUB_TOKEN -u GH_TOKEN \\
+            node scripts/test-p1a-trusted-verifier.mjs
+          unset P1A_CURRENT_WORKFLOW_AUTHORITY_ROOT
+          rm -rf -- "$authority"
+          test ! -e "$authority"
+          trap - EXIT`;
+const PREVIOUS_TRUSTED_VERIFIER_CONTROL_STEP = CURRENT_TRUSTED_VERIFIER_CONTROL_STEP
+  .replace(CURRENT_TRUSTED_WORKFLOW_SHA,
+    "bce95a11fb18b2d4539a555ae686c2fe083e5970")
+  .replace(CURRENT_TRUSTED_WORKFLOW_BLOB,
+    "c6baddd0f3eb2246315e573ea1e53c7a6ed92dad");
+
+function composeCurrentTrustedWorkflow(source) {
+  assert.equal(source.split(PREVIOUS_TRUSTED_VERIFIER_CONTROL_STEP).length - 1, 1,
+    "previous trusted workflow step count mismatch");
+  assert.equal(source.split(BASE_TRUSTED_VERIFIER_CONTROL_STEP).length - 1, 0,
+    "obsolete unauthenticated workflow step present");
+  return source.replace(PREVIOUS_TRUSTED_VERIFIER_CONTROL_STEP,
+    CURRENT_TRUSTED_VERIFIER_CONTROL_STEP);
+}
 const baselineCi = baselineRepositoryRoot
   ? readFileSync(path.join(baselineRepositoryRoot, ".github/workflows/ci.yml"), "utf8")
   : execFileSync(
@@ -130,6 +269,44 @@ const exactOriginal = (file) =>
     cwd: originalRepositoryRoot,
     encoding: "utf8",
   });
+const historicalCandidateCi = exactOriginal(".github/workflows/ci.yml");
+const historicalCandidateCiBlob = execFileSync(
+  "git", ["rev-parse", `${ORIGINAL_CANDIDATE}:.github/workflows/ci.yml`], {
+    cwd: originalRepositoryRoot,
+    encoding: "utf8",
+  },
+).trim();
+
+function validateCurrentTrustedWorkflow(source, {
+  trustedSha = CURRENT_TRUSTED_WORKFLOW_SHA,
+  trustedBlob = CURRENT_TRUSTED_WORKFLOW_BLOB,
+  authorityRoot = currentWorkflowAuthorityRoot,
+} = {}) {
+  assert.equal(trustedSha, CURRENT_TRUSTED_WORKFLOW_SHA,
+    "current workflow authority SHA is not trusted");
+  assert.equal(trustedBlob, CURRENT_TRUSTED_WORKFLOW_BLOB,
+    "current workflow authority blob is not trusted");
+  assert.equal(authorityRoot, currentWorkflowAuthorityRoot,
+    "current workflow authority root is candidate-selected");
+  assert.notEqual(authorityRoot, root, "primary checkout fallback forbidden");
+  const currentTargetCi = execFileSync("git", ["-C", currentTrustedTargetRoot, "show",
+    `${CURRENT_TRUSTED_TARGET}:.github/workflows/ci.yml`], { encoding: "utf8" });
+  assert.equal(source, composeGeneration2CandidateCi(currentTargetCi),
+    "current trusted workflow composition mismatch");
+}
+
+function validateHistoricalWorkflowEvidence(source = historicalCandidateCi) {
+  assert.match(historicalCandidateCiBlob, /^[0-9a-f]{40}$/);
+  assert.notEqual(historicalCandidateCiBlob, CURRENT_TRUSTED_WORKFLOW_BLOB);
+  assert.equal(
+    execFileSync(
+      "git", ["hash-object", "--stdin"],
+      { cwd: originalRepositoryRoot, encoding: "utf8", input: source },
+    ).trim(),
+    historicalCandidateCiBlob,
+    "historical workflow content/blob mismatch",
+  );
+}
 const compatibilityModel = JSON.parse(
   exactOriginal("docs/security/p1-a/model.json"),
 );
@@ -154,7 +331,8 @@ const compatible = (overrides = {}) =>
   );
 
 function validateHistoricalObjectWorkflow(source) {
-  assert.equal(source, composeTrustedCi(baselineCi), "historical workflow exact composition mismatch");
+  validateHistoricalWorkflowEvidence();
+  validateCurrentTrustedWorkflow(source);
   const required = [
     "repository: DarksiedCEO/zbestmedia",
     `ref: ${ORIGINAL_CANDIDATE}`,
@@ -221,7 +399,8 @@ const historicalObjectCases = [
 ];
 
 function validateTrustedBaselineWorkflow(source) {
-  assert.equal(source, composeTrustedCi(baselineCi), "trusted baseline workflow composition mismatch");
+  validateHistoricalWorkflowEvidence();
+  validateCurrentTrustedWorkflow(source);
   for (const required of [
     "Acquire exact trusted CI baseline",
     `ref: ${COMPOSED_CI_BASE}`,
@@ -255,6 +434,53 @@ const baselinePositiveCases = [
   ["trusted_verifier_reaches_baseline_input", () => { assert.ok(baselineCi.includes("name: CI")); assert.ok(!baselineCi.includes("Acquire exact trusted CI baseline")); }],
 ];
 const baselineNegativeCases = [
+  ["wrong_current_workflow_sha", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    CURRENT_TRUSTED_WORKFLOW_SHA, "f".repeat(40),
+  )), true],
+  ["wrong_current_workflow_blob", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    CURRENT_TRUSTED_WORKFLOW_BLOB, "f".repeat(40),
+  )), true],
+  ["missing_current_workflow_object", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    "          test \"$(git -C \"$authority\" cat-file -t \"$trusted_sha\")\" = commit\n",
+    "",
+  )), true],
+  ["current_trusted_workflow_altered", () => validateCurrentTrustedWorkflow(`${ordinaryCi}\n`), true],
+  ["historical_workflow_substituted_as_current", () => validateCurrentTrustedWorkflow(historicalCandidateCi), true],
+  ["current_workflow_substituted_as_historical", () => validateHistoricalWorkflowEvidence(currentTrustedCi), true],
+  ["candidate_provided_workflow_sha", () => validateCurrentTrustedWorkflow(ordinaryCi, { trustedSha: "f".repeat(40) }), true],
+  ["candidate_provided_workflow_blob", () => validateCurrentTrustedWorkflow(ordinaryCi, { trustedBlob: "f".repeat(40) }), true],
+  ["candidate_provided_workflow_root", () => validateCurrentTrustedWorkflow(ordinaryCi, { authorityRoot: root }), true],
+  ["primary_checkout_fallback", () => validateCurrentTrustedWorkflow(ordinaryCi, { authorityRoot: root }), true],
+  ["partial_current_composition", () => validateCurrentTrustedWorkflow(ordinaryCi.slice(0, -1)), true],
+  ["extra_current_workflow_behavior", () => validateCurrentTrustedWorkflow(`${ordinaryCi}\n      - run: echo unexpected\n`), true],
+  ["mutable_current_workflow_ref", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    "fetch --no-tags --no-write-fetch-head --depth=1 origin \"$trusted_sha\"",
+    "fetch --no-tags --no-write-fetch-head --depth=1 origin codex/bt-1",
+  )), true],
+  ["mutable_current_workflow_tag", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    "fetch --no-tags --no-write-fetch-head --depth=1 origin \"$trusted_sha\"",
+    "fetch --no-tags --no-write-fetch-head --depth=1 origin v1.0.0",
+  )), true],
+  ["wrong_current_workflow_repository", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    "git -C \"$authority\" remote add origin https://github.com/DarksiedCEO/zbestmedia",
+    "git -C \"$authority\" remote add origin https://github.com/attacker/zbestmedia",
+  )), true],
+  ["credential_persistence", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    "          unset auth_header\n",
+    "          git -C \"$authority\" config http.https://github.com/.extraheader \"AUTHORIZATION: basic $auth_header\"\n          unset auth_header\n",
+  )), true],
+  ["auth_unavailable", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    "          test -n \"$P1A_CURRENT_WORKFLOW_FETCH_TOKEN\"",
+    "          test -z \"$P1A_CURRENT_WORKFLOW_FETCH_TOKEN\"",
+  )), true],
+  ["auth_failure_ignored", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    "            fetch --no-tags --no-write-fetch-head --depth=1 origin \"$trusted_sha\"",
+    "            fetch --no-tags --no-write-fetch-head --depth=1 origin \"$trusted_sha\" || true",
+  )), true],
+  ["token_exposed_to_verifier", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    "          env -u P1A_CURRENT_WORKFLOW_FETCH_TOKEN -u GITHUB_TOKEN -u GH_TOKEN \\\n            node scripts/test-p1a-trusted-verifier.mjs",
+    "          node scripts/test-p1a-trusted-verifier.mjs",
+  )), true],
   ["baseline_wrong_sha", () => validateTrustedBaselineWorkflow(mutateBaseline(COMPOSED_CI_BASE, "f".repeat(40))), true],
   ["baseline_malformed_sha", () => validateTrustedBaselineWorkflow(mutateBaseline(`ref: ${COMPOSED_CI_BASE}`, "ref: invalid")), true],
   ["baseline_mutable_branch", () => validateTrustedBaselineWorkflow(mutateBaseline(`ref: ${COMPOSED_CI_BASE}`, "ref: codex/bt-1")), true],
