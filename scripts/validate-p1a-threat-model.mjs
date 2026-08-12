@@ -1889,6 +1889,10 @@ export function composeGeneration2CandidateCi(baseline) {
     "current trusted target acquisition placement");
   source = composeCandidateCi(source);
   source = replaceExactlyOnce(source,
+    "          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline\n        run: |\n",
+    "          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline\n          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority\n        run: |\n",
+    "current trusted target trusted-verifier authority binding");
+  source = replaceExactlyOnce(source,
     "          P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT: .p1a-pr16-chain-staging-minimum-depth\n",
     "          P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT: .p1a-pr16-chain-staging-minimum-depth\n          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority\n",
     "current trusted target candidate-data authority binding");

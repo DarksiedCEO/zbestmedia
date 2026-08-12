@@ -522,6 +522,7 @@ jobs:
           P1A_CURRENT_WORKFLOW_FETCH_TOKEN: ${{ github.token }}
           P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
           P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
+          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority
         run: |
           set -euo pipefail
           trusted_sha=94941bbf6afbd0073f6619b2c63b0e6c5c6ca4e8

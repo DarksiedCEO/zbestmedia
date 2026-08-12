@@ -95,6 +95,7 @@ const CURRENT_TRUSTED_VERIFIER_CONTROL_STEP = `      - name: P1-A trusted verifi
           P1A_CURRENT_WORKFLOW_FETCH_TOKEN: \${{ github.token }}
           P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
           P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
+          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority
         run: |
           set -euo pipefail
           trusted_sha=${CURRENT_TRUSTED_WORKFLOW_SHA}
@@ -1194,6 +1195,15 @@ function validatePr16WorkflowContract(source) {
     "pr16-workflow: exact staging checkout count required");
   const pr16Section = source.slice(source.indexOf("Acquire exact PR16 trusted-base predecessor object"),
     source.indexOf("P1-A trusted verifier controls"));
+  const trustedVerifierSection = source.slice(source.indexOf("      - name: P1-A trusted verifier controls"),
+    source.indexOf("      - name: P1-A trusted-bootstrap Node syntax"));
+  assert.equal((trustedVerifierSection.match(
+    /P1A_CURRENT_TRUSTED_TARGET_ROOT: \.p1a-current-trusted-target-authority/g) ?? []).length, 1,
+  "pr16-workflow: trusted verifier current-target binding required once");
+  assert.ok(trustedVerifierSection.includes('export P1A_CURRENT_WORKFLOW_AUTHORITY_ROOT="$authority"'),
+    "pr16-workflow: current-workflow authority binding absent");
+  assert.ok(!trustedVerifierSection.includes('P1A_CURRENT_TRUSTED_TARGET_ROOT: "$authority"'),
+    "pr16-workflow: current-workflow and current-target authorities cannot alias");
   const fifthCheckout = `      - name: Acquire exact PR16 action-inventory predecessor object
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -3482,6 +3492,18 @@ const negativeCases = [
   ["modified_candidate_command", (ci) => replaceOnce(ci, "node scripts/validate-p1a-threat-model.mjs --candidate-data-only", "node scripts/validate-p1a-threat-model.mjs --candidate-data-only || true")],
   ["missing_ancestry_root_binding", (ci) => replaceOnce(ci, "          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority\n", "")],
   ["missing_trusted_root_binding", (ci) => replaceOnce(ci, "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority\n", "")],
+  ["missing_current_target_verifier_root_binding", (ci) => replaceOnce(ci,
+    "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority\n        run: |\n",
+    "        run: |\n")],
+  ["wrong_current_target_verifier_root_binding", (ci) => replaceOnce(ci,
+    "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority\n        run: |\n",
+    "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-original-candidate\n        run: |\n")],
+  ["candidate_selected_current_target_verifier_root", (ci) => replaceOnce(ci,
+    "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority\n        run: |\n",
+    "          P1A_CURRENT_TRUSTED_TARGET_ROOT: ${{ github.event.inputs.current_target_root }}\n        run: |\n")],
+  ["current_workflow_authority_substituted_for_current_target", (ci) => replaceOnce(ci,
+    "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority\n        run: |\n",
+    "          P1A_CURRENT_TRUSTED_TARGET_ROOT: $authority\n        run: |\n")],
   ["candidate_selected_ancestry_root", (ci) => replaceOnce(ci, "          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority", "          P1A_ANCESTRY_AUTHORITY_ROOT: ${{ github.event.inputs.ancestry_root }}")],
   ["candidate_selected_trusted_root", (ci) => replaceOnce(ci, "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority", "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: ${{ github.event.inputs.trusted_root }}")],
   ["candidate_before_ancestry_authority", (ci) => replaceOnce(ci, REQUIRED_CI_ADDITION, "").replace("      - name: Acquire exact immutable P1-A ancestry authority", `${REQUIRED_CI_ADDITION}      - name: Acquire exact immutable P1-A ancestry authority`)],
