@@ -140,12 +140,15 @@ export const GENERATION_2_FOURTH_REMEDIATION =
   "16b426a047ef75d06a0df4b62cac76b28ec8e5f8";
 export const GENERATION_2_FIFTH_REMEDIATION =
   "f8b9d3cc9d2e2a92ea41662bca64d61b0f097326";
+export const GENERATION_2_SIXTH_REMEDIATION =
+  "6c95cac5f28ed55cacbd21e512a6745aa7a73b94";
 export const GENERATION_2_REMEDIATION_PREFIX = Object.freeze([
   GENERATION_2_FIRST_REMEDIATION,
   GENERATION_2_SECOND_REMEDIATION,
   GENERATION_2_THIRD_REMEDIATION,
   GENERATION_2_FOURTH_REMEDIATION,
   GENERATION_2_FIFTH_REMEDIATION,
+  GENERATION_2_SIXTH_REMEDIATION,
 ]);
 export const GENERATION_2_CONTROL_FILES = Object.freeze([
   "scripts/test-p1a-dual-base-verifier.mjs",
@@ -1337,6 +1340,7 @@ export const REQUIRED_CI_ADDITION = [
   "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority",
   "          P1A_GENERATION2_ANCHOR_AUTHORITY_ROOT: .p1a-generation2-anchor-authority",
   "          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate",
+  "          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline",
   "        run: |",
   "          set -euo pipefail",
   "          authority=\"$RUNNER_TEMP/p1a-candidate-topology-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\"",
@@ -1348,10 +1352,12 @@ export const REQUIRED_CI_ADDITION = [
   "          git -C \"$authority\" remote add origin https://github.com/DarksiedCEO/zbestmedia",
   "          git -C \"$authority\" -c protocol.version=2 \\",
   "            -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
-  "            fetch --no-tags --no-write-fetch-head --depth=6 origin \"$P1A_CANDIDATE_SHA\"",
+  "            fetch --no-tags --no-write-fetch-head --depth=7 origin \"$P1A_CANDIDATE_SHA\"",
   "          unset auth_header",
   "          test \"$(git -C \"$authority\" cat-file -t \"$P1A_CANDIDATE_SHA\")\" = commit",
   "          test \"$(git -C \"$authority\" cat-file commit \"$P1A_CANDIDATE_SHA\" | sed -n 's/^parent //p')\" = \\",
+  "            \"6c95cac5f28ed55cacbd21e512a6745aa7a73b94\"",
+  "          test \"$(git -C \"$authority\" cat-file commit 6c95cac5f28ed55cacbd21e512a6745aa7a73b94 | sed -n 's/^parent //p')\" = \\",
   "            \"f8b9d3cc9d2e2a92ea41662bca64d61b0f097326\"",
   "          test \"$(git -C \"$authority\" cat-file commit f8b9d3cc9d2e2a92ea41662bca64d61b0f097326 | sed -n 's/^parent //p')\" = \\",
   "            \"16b426a047ef75d06a0df4b62cac76b28ec8e5f8\"",
@@ -1375,6 +1381,7 @@ export const REQUIRED_CI_ADDITION = [
   "            --batch-check='%(objectname) %(objecttype)' | awk '$2 == \"commit\" {print $1}' | sort)",
   "          mapfile -t expected_event_commits < <(printf '%s\\n' \\",
   "            \"$P1A_CANDIDATE_SHA\" \\",
+  "            6c95cac5f28ed55cacbd21e512a6745aa7a73b94 \\",
   "            f8b9d3cc9d2e2a92ea41662bca64d61b0f097326 \\",
   "            16b426a047ef75d06a0df4b62cac76b28ec8e5f8 \\",
   "            172ff1dde7082f0c408ab595f02b08d51e2e57d6 \\",
@@ -2081,8 +2088,8 @@ export function composeGeneration2CandidateCi(baseline) {
     "current trusted target acquisition placement");
   source = composeCandidateCi(source);
   source = replaceExactlyOnce(source,
-    "          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline\n        run: |\n",
-    "          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline\n          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority\n          P1A_GENERATION2_ANCHOR_AUTHORITY_ROOT: .p1a-generation2-anchor-authority\n        run: |\n",
+    "          P1A_CURRENT_WORKFLOW_FETCH_TOKEN: ${{ github.token }}\n          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate\n          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline\n        run: |\n",
+    "          P1A_CURRENT_WORKFLOW_FETCH_TOKEN: ${{ github.token }}\n          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate\n          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline\n          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority\n          P1A_GENERATION2_ANCHOR_AUTHORITY_ROOT: .p1a-generation2-anchor-authority\n        run: |\n",
     "current trusted target trusted-verifier authority binding");
   source = replaceExactlyOnce(source,
     "          P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT: .p1a-pr16-chain-staging-minimum-depth\n",
@@ -2103,11 +2110,11 @@ export function composeFinalCi(baseline) {
 }
 
 export function validateComposedCandidateCi(git, candidateSha, workflowSha, workflowGit = git,
-  { generation2 = false } = {}) {
+  { generation2 = false, baselineGit = git } = {}) {
   const path = ".github/workflows/ci.yml";
   const entry = git("ls-tree", candidateSha, "--", path);
   assert.match(entry, /^100644\s+blob\s+[0-9a-f]{40}\t/, `${path}: unsafe entry`);
-  assert.equal(blobAt(git, COMPOSED_CI_BASE, path), COMPOSED_CI_BASE_BLOB,
+  assert.equal(blobAt(baselineGit, COMPOSED_CI_BASE, path), COMPOSED_CI_BASE_BLOB,
     `${path}: baseline blob mismatch`);
   const trusted = `${workflowGit("show", `${workflowSha}:${path}`)}\n`;
   const candidate = `${git("show", `${candidateSha}:${path}`)}\n`;
@@ -2191,10 +2198,10 @@ export function classifyP1aReconciliationTopology({
     assert.equal(cursorParents.length, 1,
       "generation-2 remediation path must remain linear and single-parent");
     cursor = cursorParents[0];
-    assert.ok(remediationPath.length <= 6,
+    assert.ok(remediationPath.length <= 7,
       "generation-2 remediation path exceeds the bounded authorized chain");
   }
-  assert.ok(remediationPath.length <= 6,
+  assert.ok(remediationPath.length <= 7,
     "generation-2 remediation path exceeds the bounded authorized chain");
   if (candidateSha !== GENERATION_2_RECONCILIATION) {
     const anchorFirstPath = [...remediationPath].reverse();
@@ -2327,6 +2334,46 @@ export function verifyOriginalCandidateArtifactAuthority({ authorityRoot, candid
   return Object.freeze({ root: resolved, gitDir });
 }
 
+export function verifyTrustedBaselineArtifactAuthority({ authorityRoot, candidateRoot } = {}) {
+  assert.ok(authorityRoot, "trusted baseline artifact authority absent");
+  const requested = path.resolve(authorityRoot);
+  assert.ok(!lstatSync(requested).isSymbolicLink(),
+    "trusted baseline artifact authority symlink forbidden");
+  const resolved = realpathSync(requested);
+  if (candidateRoot) {
+    assert.notEqual(resolved, realpathSync(path.resolve(candidateRoot)),
+      "candidate checkout cannot be trusted baseline artifact authority");
+  }
+  assert.equal(normalizeRepository(gitAt(resolved, "remote", "get-url", "origin")),
+    "https://github.com/DarksiedCEO/zbestmedia",
+    "trusted baseline artifact authority repository mismatch");
+  assert.equal(gitAt(resolved, "rev-parse", "HEAD"), COMPOSED_CI_BASE,
+    "trusted baseline artifact authority HEAD mismatch");
+  assert.equal(gitAt(resolved, "cat-file", "-t", COMPOSED_CI_BASE), "commit",
+    "trusted baseline artifact authority commit absent");
+  assert.equal(gitAt(resolved, "rev-parse", `${COMPOSED_CI_BASE}:.github/workflows/ci.yml`),
+    COMPOSED_CI_BASE_BLOB, "trusted baseline workflow blob mismatch");
+  assert.equal(gitAt(resolved, "status", "--porcelain=v1"), "",
+    "trusted baseline artifact authority dirty");
+  const gitDirValue = gitAt(resolved, "rev-parse", "--git-dir");
+  const gitDir = path.isAbsolute(gitDirValue) ? gitDirValue : path.resolve(resolved, gitDirValue);
+  assert.ok(!existsSync(path.join(gitDir, "objects/info/alternates")),
+    "trusted baseline artifact authority alternates forbidden");
+  assert.ok(!existsSync(path.join(gitDir, "info/grafts")) ||
+    readFileSync(path.join(gitDir, "info/grafts"), "utf8").trim() === "",
+  "trusted baseline artifact authority grafts forbidden");
+  assert.equal(gitAt(resolved, "for-each-ref", "--format=%(refname)", "refs/replace"), "",
+    "trusted baseline artifact authority replace refs forbidden");
+  const config = readFileSync(path.join(gitDir, "config"), "utf8");
+  assert.ok(!/x-access-token|authorization:|http\..*extraheader/i.test(config),
+    "trusted baseline artifact authority persisted credentials forbidden");
+  return Object.freeze({
+    authorityClass: "TRUSTED_BASELINE", root: resolved, gitDir,
+    commitSha: COMPOSED_CI_BASE, path: ".github/workflows/ci.yml",
+    blobSha: COMPOSED_CI_BASE_BLOB,
+  });
+}
+
 export function verifyCurrentTrustedTargetArtifactAuthority({
   authorityRoot,
   candidateRoot,
@@ -2380,6 +2427,7 @@ export function validateCandidateDataOnly({
   generation2AnchorAuthorityRoot = process.env.P1A_GENERATION2_ANCHOR_AUTHORITY_ROOT,
   candidateTopologyAuthorityRoot = process.env.P1A_EVENT_AUTHORITY_ROOT,
   originalRepositoryRoot = process.env.P1A_ORIGINAL_REPOSITORY_ROOT,
+  baselineRepositoryRoot = process.env.P1A_BASELINE_REPOSITORY_ROOT,
 } = {}) {
   const checks = [];
   const check = (name, operation) => {
@@ -2407,6 +2455,14 @@ export function validateCandidateDataOnly({
   assert.notEqual(originalAuthority.root, candidateTopology.root,
     "original candidate and event authorities must remain isolated");
   const originalGit = (...args) => gitAt(originalAuthority.root, ...args);
+  const baselineAuthority = verifyTrustedBaselineArtifactAuthority({
+    authorityRoot: baselineRepositoryRoot, candidateRoot: repoRoot,
+  });
+  assert.notEqual(baselineAuthority.root, candidateTopology.root,
+    "trusted baseline and event authorities must remain isolated");
+  assert.notEqual(baselineAuthority.root, originalAuthority.root,
+    "trusted baseline and original candidate authorities must remain isolated");
+  const baselineGit = (...args) => gitAt(baselineAuthority.root, ...args);
   const trustedTargetAuthority = verifyCurrentTrustedTargetArtifactAuthority({
     authorityRoot: currentTrustedTargetRoot, candidateRoot: repoRoot,
   });
@@ -2527,7 +2583,8 @@ export function validateCandidateDataOnly({
       assert.equal(gitAt(currentTrustedTargetRoot, "status", "--porcelain=v1"), "",
         "current trusted target authority is dirty");
       validateComposedCandidateCi(git, candidateSha, trustedParent,
-        (...args) => gitAt(currentTrustedTargetRoot, ...args), { generation2: true });
+        (...args) => gitAt(currentTrustedTargetRoot, ...args),
+        { generation2: true, baselineGit });
       return;
     }
     validateComposedCandidateCi(git, candidateSha, trustedParent);
