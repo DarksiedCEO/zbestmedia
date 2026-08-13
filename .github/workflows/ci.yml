@@ -622,8 +622,33 @@ jobs:
           git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
           git -C "$authority" -c protocol.version=2 \
             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" \
-            fetch --no-tags --no-write-fetch-head --depth=3 origin "$P1A_CANDIDATE_SHA"
+            fetch --no-tags --no-write-fetch-head --depth=4 origin "$P1A_CANDIDATE_SHA"
           unset auth_header
+          test "$(git -C "$authority" cat-file -t "$P1A_CANDIDATE_SHA")" = commit
+          test "$(git -C "$authority" cat-file commit "$P1A_CANDIDATE_SHA" | sed -n 's/^parent //p')" = \
+            "172ff1dde7082f0c408ab595f02b08d51e2e57d6"
+          test "$(git -C "$authority" cat-file commit 172ff1dde7082f0c408ab595f02b08d51e2e57d6 | sed -n 's/^parent //p')" = \
+            "b5f7e14872fb1ceff9664ad3023af86c0eca5eef"
+          test "$(git -C "$authority" cat-file commit b5f7e14872fb1ceff9664ad3023af86c0eca5eef | sed -n 's/^parent //p')" = \
+            "e7bc2cc630d7b49c7333e9431bad54b1193aae14"
+          test "$(git -C "$authority" cat-file commit e7bc2cc630d7b49c7333e9431bad54b1193aae14 | sed -n 's/^parent //p')" = \
+            "9fa0c2ac5b0b42a885330c7d7d54df65afae3736"
+          if git -C "$authority" cat-file -e '9fa0c2ac5b0b42a885330c7d7d54df65afae3736^{commit}' 2>/dev/null; then
+            echo "generation-2 anchor leaked into candidate/event authority" >&2
+            exit 1
+          fi
+          if git -C "$authority" cat-file -e 'b0c1b2129123b941c6a350c16dae0ae3a8e076ca^{commit}' 2>/dev/null; then
+            echo "trusted target leaked into candidate/event authority" >&2
+            exit 1
+          fi
+          mapfile -t event_commits < <(git -C "$authority" cat-file --batch-all-objects \
+            --batch-check='%(objectname) %(objecttype)' | awk '$2 == "commit" {print $1}' | sort)
+          mapfile -t expected_event_commits < <(printf '%s\n' \
+            "$P1A_CANDIDATE_SHA" \
+            172ff1dde7082f0c408ab595f02b08d51e2e57d6 \
+            b5f7e14872fb1ceff9664ad3023af86c0eca5eef \
+            e7bc2cc630d7b49c7333e9431bad54b1193aae14 | sort)
+          test "${event_commits[*]}" = "${expected_event_commits[*]}"
           test -z "$(git -C "$authority" for-each-ref --format='%(refname)')"
           test ! -e "$authority/objects/info/alternates"
           test ! -s "$authority/info/grafts"

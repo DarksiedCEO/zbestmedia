@@ -32,6 +32,8 @@ import {
   EVENT_BOUND_AMENDMENT_CLASS_B_FILES, EVENT_BOUND_AMENDMENT_CLASSES,
   verifyEventBoundAmendmentTopology,
   verifyGeneration2AnchorAuthority,
+  parseTreeManifest, readTreeManifest, compareTreeManifests,
+  GENERATION_2_CONTROL_FILES,
 } from "./validate-p1a-threat-model.mjs";
 import { validateCertificationBundle } from "./validate-p1a-certification-accounting.mjs";
 
@@ -3419,8 +3421,153 @@ assert.match(currentCandidateDataSubject ?? "", EXACT_SHA,
 const candidateTopologyFixture = mkdtempSync(path.join(tmpdir(), "p1a-candidate-topology-"));
 gitAt(candidateTopologyFixture, "init", "--bare", "-q");
 gitAt(candidateTopologyFixture, "remote", "add", "origin", OFFICIAL_REPOSITORY);
-gitAt(candidateTopologyFixture, "fetch", "-q", "--no-tags", "--depth=3", root,
+gitAt(candidateTopologyFixture, "fetch", "-q", "--no-tags", "--depth=4", root,
   currentCandidateDataSubject);
+assert.deepEqual(commitParents(candidateTopologyFixture, currentCandidateDataSubject),
+  ["172ff1dde7082f0c408ab595f02b08d51e2e57d6"]);
+assert.deepEqual(commitParents(candidateTopologyFixture,
+  "172ff1dde7082f0c408ab595f02b08d51e2e57d6"),
+  ["b5f7e14872fb1ceff9664ad3023af86c0eca5eef"]);
+assert.deepEqual(commitParents(candidateTopologyFixture,
+  "b5f7e14872fb1ceff9664ad3023af86c0eca5eef"),
+  ["e7bc2cc630d7b49c7333e9431bad54b1193aae14"]);
+assert.deepEqual(commitParents(candidateTopologyFixture,
+  "e7bc2cc630d7b49c7333e9431bad54b1193aae14"),
+  [GENERATION_2_RECONCILIATION]);
+assert.ok(rejects(() => gitAt(candidateTopologyFixture, "cat-file", "-e",
+  `${GENERATION_2_RECONCILIATION}^{commit}`)));
+assert.ok(rejects(() => gitAt(candidateTopologyFixture, "cat-file", "-e",
+  `${CURRENT_TRUSTED_TARGET}^{commit}`)));
+
+const crossAuthorityPositiveControls = [
+  ["trusted_target_absent_from_event_authority", () => assert.ok(rejects(() =>
+    gitAt(candidateTopologyFixture, "cat-file", "-e", `${CURRENT_TRUSTED_TARGET}^{commit}`)))],
+  ["candidate_absent_from_trusted_target_authority", () => assert.ok(rejects(() =>
+    gitAt(authorityRoots.currentTrustedTarget, "cat-file", "-e", `${currentCandidateDataSubject}^{commit}`)))],
+  ["independent_manifests_match_authorized_scope", () => {
+    const trusted = readTreeManifest({ authorityRoot: authorityRoots.currentTrustedTarget,
+      commitSha: CURRENT_TRUSTED_TARGET, label: "test trusted target manifest" });
+    const candidate = readTreeManifest({ authorityRoot: candidateTopologyFixture,
+      commitSha: currentCandidateDataSubject, label: "test candidate manifest" });
+    const changed = compareTreeManifests(trusted, candidate)
+      .filter(({ status }) => status !== "UNCHANGED").map(({ path: changedPath }) => changedPath).sort();
+    assert.deepEqual(changed,
+      [...new Set([...CANDIDATE_OWNED_FILES, ...GENERATION_2_CONTROL_FILES])].sort());
+  }],
+  ["all_change_classes_deterministic", () => {
+    const trusted = parseTreeManifest(Buffer.from(
+      `100644 blob ${"1".repeat(40)}\tdeleted\0` +
+      `100644 blob ${"2".repeat(40)}\tmodified\0` +
+      `100644 blob ${"3".repeat(40)}\tunchanged\0`), "synthetic trusted");
+    const candidate = parseTreeManifest(Buffer.from(
+      `100644 blob ${"4".repeat(40)}\tadded\0` +
+      `100755 blob ${"2".repeat(40)}\tmodified\0` +
+      `100644 blob ${"3".repeat(40)}\tunchanged\0`), "synthetic candidate");
+    assert.deepEqual(compareTreeManifests(trusted, candidate).map(({ path: p, status }) => [p, status]), [
+      ["added", "ADDED"], ["deleted", "DELETED"], ["modified", "MODIFIED"],
+      ["unchanged", "UNCHANGED"],
+    ]);
+  }],
+];
+const crossAuthorityHostileControls = [
+  ["trusted_root_absent", () => readTreeManifest({ commitSha: CURRENT_TRUSTED_TARGET,
+    label: "missing trusted" })],
+  ["event_root_absent", () => readTreeManifest({ commitSha: currentCandidateDataSubject,
+    label: "missing event" })],
+  ["trusted_commit_missing_from_trusted_root", () => readTreeManifest({
+    authorityRoot: authorityRoots.currentTrustedTarget, commitSha: "0".repeat(40), label: "wrong trusted" })],
+  ["candidate_missing_from_event_root", () => readTreeManifest({
+    authorityRoot: candidateTopologyFixture, commitSha: "0".repeat(40), label: "wrong candidate" })],
+  ["trusted_root_replaced_by_event_root", () => readTreeManifest({
+    authorityRoot: candidateTopologyFixture, commitSha: CURRENT_TRUSTED_TARGET, label: "swapped trusted" })],
+  ["event_root_replaced_by_trusted_root", () => readTreeManifest({
+    authorityRoot: authorityRoots.currentTrustedTarget, commitSha: currentCandidateDataSubject,
+    label: "swapped event" })],
+  ["candidate_checkout_substituted_for_trusted_root", () => readTreeManifest({
+    authorityRoot: root, commitSha: CURRENT_TRUSTED_TARGET, label: "ambient trusted" })],
+  ["malformed_manifest", () => parseTreeManifest(Buffer.from("not-a-tree-record\0"), "malformed")],
+  ["missing_nul_terminator", () => parseTreeManifest(Buffer.from(
+    `100644 blob ${"1".repeat(40)}\tpath`), "unterminated")],
+  ["duplicate_path", () => parseTreeManifest(Buffer.from(
+    `100644 blob ${"1".repeat(40)}\tpath\0` +
+    `100644 blob ${"2".repeat(40)}\tpath\0`), "duplicate")],
+  ["malformed_object_sha", () => parseTreeManifest(Buffer.from(
+    "100644 blob not-a-sha\tpath\0"), "bad object")],
+  ["mutable_trusted_ref", () => readTreeManifest({ authorityRoot: authorityRoots.currentTrustedTarget,
+    commitSha: "HEAD", label: "mutable trusted" })],
+  ["mutable_candidate_ref", () => readTreeManifest({ authorityRoot: candidateTopologyFixture,
+    commitSha: "HEAD", label: "mutable candidate" })],
+  ["wrong_repository", () => {
+    gitAt(candidateTopologyFixture, "remote", "set-url", "origin", "https://github.com/Other/repository");
+    try {
+      readTreeManifest({ authorityRoot: candidateTopologyFixture,
+        commitSha: currentCandidateDataSubject, label: "wrong repository" });
+    } finally {
+      gitAt(candidateTopologyFixture, "remote", "set-url", "origin", OFFICIAL_REPOSITORY);
+    }
+  }],
+  ["alternates_present", () => {
+    const alternates = path.join(candidateTopologyFixture, "objects/info/alternates");
+    writeFileSync(alternates, "/tmp/forbidden-object-store\n");
+    try {
+      readTreeManifest({ authorityRoot: candidateTopologyFixture,
+        commitSha: currentCandidateDataSubject, label: "alternates" });
+    } finally { rmSync(alternates, { force: true }); }
+  }],
+  ["grafts_present", () => {
+    const grafts = path.join(candidateTopologyFixture, "info/grafts");
+    writeFileSync(grafts, `${currentCandidateDataSubject} ${"0".repeat(40)}\n`);
+    try {
+      readTreeManifest({ authorityRoot: candidateTopologyFixture,
+        commitSha: currentCandidateDataSubject, label: "grafts" });
+    } finally { rmSync(grafts, { force: true }); }
+  }],
+  ["replace_refs_present", () => {
+    const replaceDir = path.join(candidateTopologyFixture, "refs/replace");
+    mkdirSync(replaceDir, { recursive: true });
+    const replacement = path.join(replaceDir, currentCandidateDataSubject);
+    writeFileSync(replacement, `${"0".repeat(40)}\n`);
+    try {
+      readTreeManifest({ authorityRoot: candidateTopologyFixture,
+        commitSha: currentCandidateDataSubject, label: "replace refs" });
+    } finally { rmSync(replacement, { force: true }); }
+  }],
+  ["tree_record_forbidden", () => parseTreeManifest(Buffer.from(
+    `040000 tree ${"1".repeat(40)}\tdirectory\0`), "tree record")],
+  ["unsafe_encoded_path", () => parseTreeManifest(Buffer.from(
+    `100644 blob ${"1".repeat(40)}\tunsafe%2fpath\0`), "encoded path")],
+  ["deletion_cannot_be_omitted", () => {
+    const trusted = parseTreeManifest(Buffer.from(
+      `100644 blob ${"1".repeat(40)}\tdeleted\0`), "deletion trusted");
+    const changes = compareTreeManifests(trusted, new Map());
+    assert.notDeepEqual(changes, [{ path: "deleted", status: "DELETED",
+      trusted: trusted.get("deleted"), candidate: undefined }]);
+  }],
+];
+const crossAuthorityPositiveOutcomes = crossAuthorityPositiveControls.map(([name, operation]) => {
+  try { operation(); console.log(`PASS cross_authority_positive:${name}`); return true; }
+  catch (error) { console.error(`FAIL cross_authority_positive:${name}: ${error.message}`); return false; }
+});
+const crossAuthorityHostileOutcomes = crossAuthorityHostileControls.map(([name, operation]) => {
+  const rejected = rejects(operation);
+  if (rejected) console.log(`PASS cross_authority_hostile:${name}`);
+  else console.error(`FAIL cross_authority_hostile:${name}: hostile condition accepted`);
+  return rejected;
+});
+assert.ok(crossAuthorityPositiveOutcomes.every(Boolean), "cross-authority positive control failed");
+assert.ok(crossAuthorityHostileOutcomes.every(Boolean), "cross-authority hostile control survived");
+console.log(JSON.stringify({
+  suite: "p1-a-cross-authority-tree-comparator-controls",
+  positiveRequired: crossAuthorityPositiveControls.length,
+  positiveExecuted: crossAuthorityPositiveControls.length,
+  positivePassed: crossAuthorityPositiveOutcomes.filter(Boolean).length,
+  hostileRequired: crossAuthorityHostileControls.length,
+  hostileExecuted: crossAuthorityHostileControls.length,
+  hostilePassed: crossAuthorityHostileOutcomes.filter(Boolean).length,
+  retainedSources: 9, pinnedAcquisitions: 19, tenthSource: 0, twentiethAction: 0,
+  failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0,
+  notVerified: 0, notRun: 0,
+}));
 const candidateDataRun = (sha = currentCandidateDataSubject, extraEnv = {}) => {
   git("checkout", "--detach", sha);
   const output = run(root, [
@@ -3631,6 +3778,20 @@ const negativeCases = [
   ["duplicate_candidate_fragment", (ci) => `${ci}\n      - name: P1-A candidate-data validation\n`],
   ["modified_trusted_command", (ci) => replaceOnce(ci, "git fetch --no-tags --no-write-fetch-head", "git fetch --no-tags")],
   ["modified_candidate_command", (ci) => replaceOnce(ci, "node scripts/validate-p1a-threat-model.mjs --candidate-data-only", "node scripts/validate-p1a-threat-model.mjs --candidate-data-only || true")],
+  ["event_authority_depth_three", (ci) => replaceOnce(ci,
+    "fetch --no-tags --no-write-fetch-head --depth=4 origin \"$P1A_CANDIDATE_SHA\"",
+    "fetch --no-tags --no-write-fetch-head --depth=3 origin \"$P1A_CANDIDATE_SHA\"")],
+  ["event_authority_depth_five", (ci) => replaceOnce(ci,
+    "fetch --no-tags --no-write-fetch-head --depth=4 origin \"$P1A_CANDIDATE_SHA\"",
+    "fetch --no-tags --no-write-fetch-head --depth=5 origin \"$P1A_CANDIDATE_SHA\"")],
+  ["event_authority_chain_check_removed", (ci) => replaceOnce(ci,
+    "          test \"${event_commits[*]}\" = \"${expected_event_commits[*]}\"\n", "")],
+  ["event_authority_anchor_imported", (ci) => replaceOnce(ci,
+    "          if git -C \"$authority\" cat-file -e '9fa0c2ac5b0b42a885330c7d7d54df65afae3736^{commit}' 2>/dev/null; then\n",
+    "          if false && git -C \"$authority\" cat-file -e '9fa0c2ac5b0b42a885330c7d7d54df65afae3736^{commit}' 2>/dev/null; then\n")],
+  ["event_authority_trusted_target_imported", (ci) => replaceOnce(ci,
+    "          if git -C \"$authority\" cat-file -e 'b0c1b2129123b941c6a350c16dae0ae3a8e076ca^{commit}' 2>/dev/null; then\n",
+    "          if false && git -C \"$authority\" cat-file -e 'b0c1b2129123b941c6a350c16dae0ae3a8e076ca^{commit}' 2>/dev/null; then\n")],
   ["missing_ancestry_root_binding", (ci) => replaceOnce(ci, "          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority\n", "")],
   ["missing_trusted_root_binding", (ci) => replaceOnce(ci, "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority\n", "")],
   ["missing_current_target_verifier_root_binding", (ci) => replaceOnce(ci,
