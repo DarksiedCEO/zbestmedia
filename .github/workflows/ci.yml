@@ -573,6 +573,8 @@ jobs:
           P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority
           P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority
           P1A_PR16_CHAIN_AUTHORITY_ROOT: .p1a-pr16-remediation-chain-authority
+          P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: .p1a-pr16-chain-staging-trusted-base
+          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority
         run: node scripts/validate-p1a-threat-model.mjs --candidate-data-only
 
       - name: P1-A current candidate-data contract controls

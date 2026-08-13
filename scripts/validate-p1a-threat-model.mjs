@@ -118,6 +118,16 @@ export const CURRENT_TRUSTED_TARGET_PARENTS = Object.freeze([
   "94941bbf6afbd0073f6619b2c63b0e6c5c6ca4e8",
   "03eeb8bd04850fc211ca61d1c591b8c6cec905b1",
 ]);
+export const GENERATION_2_RECONCILIATION =
+  "9fa0c2ac5b0b42a885330c7d7d54df65afae3736";
+export const GENERATION_2_RECONCILIATION_TREE =
+  "feb82b29b0c0ee6b6ed8dbf6f58e2349d68fc713";
+export const GENERATION_2_RECONCILIATION_PARENTS = Object.freeze([
+  GENERATION_1_RECONCILIATION,
+  CURRENT_TRUSTED_TARGET,
+]);
+export const GENERATION_2_FIRST_REMEDIATION =
+  "e7bc2cc630d7b49c7333e9431bad54b1193aae14";
 export const GENERATION_2_CONTROL_FILES = Object.freeze([
   "scripts/test-p1a-dual-base-verifier.mjs",
   "scripts/test-p1a-trusted-verifier.mjs",
@@ -1235,6 +1245,8 @@ export const REQUIRED_CI_ADDITION = [
   "          P1A_ANCESTRY_AUTHORITY_ROOT: .p1a-ancestry-authority",
   "          P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: .p1a-trusted-reconciliation-authority",
   "          P1A_PR16_CHAIN_AUTHORITY_ROOT: .p1a-pr16-remediation-chain-authority",
+  "          P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: .p1a-pr16-chain-staging-trusted-base",
+  "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority",
   "        run: node scripts/validate-p1a-threat-model.mjs --candidate-data-only",
   "",
   "",
@@ -1966,10 +1978,8 @@ export function validateComposedCandidateCi(git, candidateSha, workflowSha, work
 export function classifyP1aReconciliationTopology({ git, candidateSha }) {
   exactSha(candidateSha, "reconciliation candidate");
   const parents = git("show", "-s", "--format=%P", candidateSha).split(" ");
-  assert.equal(parents.length, 2,
-    "reconciliation candidate must have exactly two parents");
 
-  if (parents[0] === ORIGINAL_CANDIDATE) {
+  if (parents.length === 2 && parents[0] === ORIGINAL_CANDIDATE) {
     assert.match(parents[1], /^[0-9a-f]{40}$/,
       "generation-1 trusted parent is not immutable");
     return Object.freeze({
@@ -1979,9 +1989,13 @@ export function classifyP1aReconciliationTopology({ git, candidateSha }) {
     });
   }
 
-  assert.deepEqual(parents,
-    [GENERATION_1_RECONCILIATION, CURRENT_TRUSTED_TARGET],
-    "candidate is not the exact authorized generation-2 reconciliation");
+  assert.equal(git("show", "-s", "--format=%T", GENERATION_2_RECONCILIATION),
+    GENERATION_2_RECONCILIATION_TREE,
+    "generation-2 reconciliation anchor tree mismatch");
+  assert.deepEqual(
+    git("show", "-s", "--format=%P", GENERATION_2_RECONCILIATION).split(" "),
+    [...GENERATION_2_RECONCILIATION_PARENTS],
+    "generation-2 reconciliation anchor ordered parentage mismatch");
   assert.equal(git("show", "-s", "--format=%T", GENERATION_1_RECONCILIATION),
     GENERATION_1_RECONCILIATION_TREE,
     "generation-1 reconciliation tree mismatch");
@@ -1995,10 +2009,33 @@ export function classifyP1aReconciliationTopology({ git, candidateSha }) {
     git("show", "-s", "--format=%P", CURRENT_TRUSTED_TARGET).split(" "),
     [...CURRENT_TRUSTED_TARGET_PARENTS],
     "current trusted target ordered parentage mismatch");
+
+  const remediationPath = [];
+  let cursor = candidateSha;
+  while (cursor !== GENERATION_2_RECONCILIATION) {
+    remediationPath.push(cursor);
+    const cursorParents = git("show", "-s", "--format=%P", cursor).split(" ").filter(Boolean);
+    assert.equal(cursorParents.length, 1,
+      "generation-2 remediation path must remain linear and single-parent");
+    cursor = cursorParents[0];
+    assert.ok(remediationPath.length <= 2,
+      "generation-2 remediation path exceeds the bounded authorized chain");
+  }
+  assert.ok(remediationPath.length <= 2,
+    "generation-2 remediation path exceeds the bounded authorized chain");
+  if (candidateSha !== GENERATION_2_RECONCILIATION) {
+    assert.equal(remediationPath.at(-1), GENERATION_2_FIRST_REMEDIATION,
+      "generation-2 remediation path bypasses the exact first remediation");
+  }
   return Object.freeze({
-    generation: "GENERATION_2_RECONCILIATION",
+    generation: candidateSha === GENERATION_2_RECONCILIATION
+      ? "GENERATION_2_RECONCILIATION"
+      : "GENERATION_2_REMEDIATION_DESCENDANT",
     parents: Object.freeze(parents),
     trustedParent: CURRENT_TRUSTED_TARGET,
+    reconciliationAnchor: GENERATION_2_RECONCILIATION,
+    anchorParents: GENERATION_2_RECONCILIATION_PARENTS,
+    remediationPath: Object.freeze(remediationPath),
   });
 }
 
@@ -2034,6 +2071,7 @@ export function validateCandidateDataOnly({
     assert.ok([
       "GENERATION_1_RECONCILIATION",
       "GENERATION_2_RECONCILIATION",
+      "GENERATION_2_REMEDIATION_DESCENDANT",
     ].includes(topology.generation), "unsupported reconciliation generation");
   });
   const trustedParent = topology.trustedParent;
@@ -2048,9 +2086,13 @@ export function validateCandidateDataOnly({
     } else {
       assert.equal(trustedParent, CURRENT_TRUSTED_TARGET,
         "generation-2 trusted target mismatch");
-      assert.deepEqual(parents,
+      assert.deepEqual([...topology.anchorParents],
         [GENERATION_1_RECONCILIATION, CURRENT_TRUSTED_TARGET],
-        "generation-2 ordered parentage mismatch");
+        "generation-2 anchor ordered parentage mismatch");
+      if (topology.generation === "GENERATION_2_REMEDIATION_DESCENDANT") {
+        assert.equal(parents.length, 1,
+          "generation-2 remediation descendant must have one parent");
+      }
     }
     assert.equal(gitAt(trustedBaseFullSourceRoot, "rev-parse", "HEAD"), CURRENT_TRUSTED_BASE,
       "trusted-base full source HEAD mismatch");
@@ -2064,13 +2106,15 @@ export function validateCandidateDataOnly({
         : GENERATION_1_RECONCILIATION_PARENTS[0],
       ORIGINAL_CANDIDATE,
       "candidate does not preserve the exact original candidate authority");
-    assert.equal(parents[1], trustedParent,
-      "candidate is not a direct descendant of the trusted parent");
+    if (topology.generation === "GENERATION_1_RECONCILIATION") {
+      assert.equal(parents[1], trustedParent,
+        "candidate is not a direct descendant of the trusted parent");
+    }
   });
   check("exact_scope", () => {
     const changed = gitAt(repoRoot, "diff", "--name-only", `${trustedParent}..${candidateSha}`)
       .split("\n").filter(Boolean).sort();
-    const expected = topology.generation === "GENERATION_2_RECONCILIATION"
+    const expected = topology.generation !== "GENERATION_1_RECONCILIATION"
       ? [...new Set([...CANDIDATE_OWNED_FILES, ...GENERATION_2_CONTROL_FILES])].sort()
       : [...CANDIDATE_OWNED_FILES].sort();
     assert.deepEqual(changed, expected);
@@ -2084,7 +2128,7 @@ export function validateCandidateDataOnly({
   check("trusted_blob_identity", () => {
     for (const file of TRUSTED_INFRASTRUCTURE_FILES) {
       if (file === ".github/workflows/ci.yml" ||
-          (topology.generation === "GENERATION_2_RECONCILIATION" &&
+          (topology.generation !== "GENERATION_1_RECONCILIATION" &&
            GENERATION_2_CONTROL_FILES.includes(file))) continue;
       assert.equal(gitAt(repoRoot, "rev-parse", `${candidateSha}:${file}`),
         gitAt(repoRoot, "rev-parse", `${trustedParent}:${file}`), file);
@@ -2092,7 +2136,7 @@ export function validateCandidateDataOnly({
   });
   check("ordinary_ci_composition", () => {
     const git = (...args) => gitAt(repoRoot, ...args);
-    if (topology.generation === "GENERATION_2_RECONCILIATION") {
+    if (topology.generation !== "GENERATION_1_RECONCILIATION") {
       assert.ok(currentTrustedTargetRoot, "current trusted target authority absent");
       assert.notEqual(realpathSync(currentTrustedTargetRoot), realpathSync(repoRoot),
         "candidate checkout cannot be current trusted target authority");

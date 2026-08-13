@@ -21,6 +21,8 @@ import {
   GENERATION_1_RECONCILIATION_PARENTS,
   CURRENT_TRUSTED_TARGET, CURRENT_TRUSTED_TARGET_TREE,
   CURRENT_TRUSTED_TARGET_PARENTS, classifyP1aReconciliationTopology,
+  GENERATION_2_RECONCILIATION, GENERATION_2_RECONCILIATION_TREE,
+  GENERATION_2_RECONCILIATION_PARENTS, GENERATION_2_FIRST_REMEDIATION,
   POST_PR17_TRUSTED_BASE, POST_PR17_TRUSTED_BASE_TREE, POST_PR17_TRUSTED_BASE_PARENTS,
   POST_PR18_TRUSTED_BASE, POST_PR18_TRUSTED_BASE_TREE, POST_PR18_TRUSTED_BASE_PARENTS,
   POST_PR19_TRUSTED_BASE, POST_PR19_TRUSTED_BASE_TREE, POST_PR19_TRUSTED_BASE_PARENTS,
@@ -741,9 +743,12 @@ function classifyCurrentCiSubject({ head, parents, tree, parentLookup, treeLooku
     assert.match(head, EXACT_SHA, "subject classification: amendment SHA must be immutable");
     return "POST_PR17_VERIFIER_AMENDMENT";
   }
-  if (parents.length === 2 && parents[0] === GENERATION_1_RECONCILIATION) {
-    assert.deepEqual(parents, [GENERATION_1_RECONCILIATION, CURRENT_TRUSTED_TARGET],
-      "subject classification: generation-2 exact ordered parents required");
+  const verifyGeneration2Anchor = () => {
+    assert.deepEqual(parentLookup(GENERATION_2_RECONCILIATION),
+      [...GENERATION_2_RECONCILIATION_PARENTS],
+      "subject classification: generation-2 anchor parentage mismatch");
+    assert.equal(treeLookup(GENERATION_2_RECONCILIATION), GENERATION_2_RECONCILIATION_TREE,
+      "subject classification: generation-2 anchor tree mismatch");
     assert.deepEqual(parentLookup(GENERATION_1_RECONCILIATION),
       [...GENERATION_1_RECONCILIATION_PARENTS],
       "subject classification: generation-1 reconciliation ancestry mismatch");
@@ -753,7 +758,25 @@ function classifyCurrentCiSubject({ head, parents, tree, parentLookup, treeLooku
       "subject classification: current trusted target ancestry mismatch");
     assert.equal(treeLookup(CURRENT_TRUSTED_TARGET), CURRENT_TRUSTED_TARGET_TREE,
       "subject classification: current trusted target tree mismatch");
+  };
+  if (head === GENERATION_2_RECONCILIATION) {
+    verifyGeneration2Anchor();
+    assert.deepEqual(parents, [...GENERATION_2_RECONCILIATION_PARENTS],
+      "subject classification: generation-2 exact ordered parents required");
     return "PR8_GENERATION_2_RECONCILIATION";
+  }
+  if (parents.length === 1 && head === GENERATION_2_FIRST_REMEDIATION) {
+    verifyGeneration2Anchor();
+    assert.deepEqual(parents, [GENERATION_2_RECONCILIATION],
+      "subject classification: first remediation must descend directly from the exact anchor");
+    return "PR8_GENERATION_2_REMEDIATION_DESCENDANT";
+  }
+  if (parents.length === 1 && parents[0] === GENERATION_2_FIRST_REMEDIATION) {
+    verifyGeneration2Anchor();
+    assert.deepEqual(parentLookup(GENERATION_2_FIRST_REMEDIATION),
+      [GENERATION_2_RECONCILIATION],
+      "subject classification: remediation continuity bypasses the exact first remediation");
+    return "PR8_GENERATION_2_REMEDIATION_DESCENDANT";
   }
   assert.equal(parents.length, 2,
     "subject classification: disposable reconciliation requires exactly two parents");
@@ -1265,6 +1288,16 @@ function validatePr16WorkflowContract(source) {
     "pr16-workflow: minimum-depth historical source binding absent");
   assert.ok(source.includes("P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority"),
     "pr16-workflow: current trusted target source binding absent");
+  const candidateDataSection = source.slice(
+    source.indexOf("      - name: P1-A candidate-data validation"),
+    source.indexOf("      - name: P1-A current candidate-data contract controls"),
+  );
+  assert.equal((candidateDataSection.match(
+    /P1A_CURRENT_TRUSTED_TARGET_ROOT: \.p1a-current-trusted-target-authority/g) ?? []).length, 1,
+  "pr16-workflow: candidate-data current-target binding required once");
+  assert.equal((candidateDataSection.match(
+    /P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: \.p1a-pr16-chain-staging-trusted-base/g) ?? []).length, 1,
+  "pr16-workflow: candidate-data trusted-base source binding required once");
   assert.ok(pr16Section.includes("e5c469125577b22d9b96ea81502bb67d354a3ab4"),
     "pr16-workflow: current trusted workflow blob binding absent");
   assert.ok(pr16Section.includes("historical_path=.github/workflows/ci.yml"),
@@ -1640,6 +1673,7 @@ function resolveAmendmentSource() {
   if (subjectClass === "EVENT_BOUND_BRANCH_CREATION_AMENDMENT") return head;
   if (subjectClass === "EVENT_BOUND_TARGET_MERGE") return head;
   if (subjectClass === "PR8_GENERATION_2_RECONCILIATION") return head;
+  if (subjectClass === "PR8_GENERATION_2_REMEDIATION_DESCENDANT") return head;
   if (parents.length === 1) {
     if (parents[0] === CURRENT_TRUSTED_BASE) {
       verifyExactCurrentTrustedBaseTopology({ trustedBaseRoot: authorityRoots.trustedBaseFullSource });
@@ -2213,7 +2247,8 @@ for (const sha of [CURRENT_TRUSTED_BASE]) {
   run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", trustedSourceRoot, sha]);
   assert.equal(git("cat-file", "-t", sha), "commit", `trusted fixture source import failed: ${sha}`);
 }
-for (const sha of [GENERATION_1_RECONCILIATION, CURRENT_TRUSTED_TARGET]) {
+for (const sha of [GENERATION_1_RECONCILIATION, CURRENT_TRUSTED_TARGET,
+  GENERATION_2_RECONCILIATION, GENERATION_2_FIRST_REMEDIATION]) {
   run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", root, sha]);
   assert.equal(git("cat-file", "-t", sha), "commit",
     `generation-2 authority import failed: ${sha}`);
@@ -2228,16 +2263,31 @@ assert.deepEqual(commitParents(repository, CURRENT_TRUSTED_TARGET),
   [...CURRENT_TRUSTED_TARGET_PARENTS]);
 
 const generation2Tree = git("show", "-s", "--format=%T", GENERATION_1_RECONCILIATION);
-const generation2Fixture = git("commit-tree", generation2Tree,
-  "-p", GENERATION_1_RECONCILIATION, "-p", CURRENT_TRUSTED_TARGET,
-  "-m", "exact generation-2 fixture");
 const generation2Proof = classifyP1aReconciliationTopology({
   git,
-  candidateSha: generation2Fixture,
+  candidateSha: GENERATION_2_RECONCILIATION,
 });
 assert.equal(generation2Proof.generation, "GENERATION_2_RECONCILIATION");
 assert.deepEqual([...generation2Proof.parents],
   [GENERATION_1_RECONCILIATION, CURRENT_TRUSTED_TARGET]);
+assert.equal(GENERATION_2_RECONCILIATION, "9fa0c2ac5b0b42a885330c7d7d54df65afae3736");
+assert.equal(git("show", "-s", "--format=%T", GENERATION_2_RECONCILIATION),
+  GENERATION_2_RECONCILIATION_TREE);
+assert.deepEqual(commitParents(repository, GENERATION_2_RECONCILIATION),
+  [...GENERATION_2_RECONCILIATION_PARENTS]);
+const firstRemediationProof = classifyP1aReconciliationTopology({
+  git, candidateSha: GENERATION_2_FIRST_REMEDIATION,
+});
+assert.equal(firstRemediationProof.generation, "GENERATION_2_REMEDIATION_DESCENDANT");
+assert.deepEqual([...firstRemediationProof.remediationPath], [GENERATION_2_FIRST_REMEDIATION]);
+const nextRemediation = git("commit-tree",
+  git("show", "-s", "--format=%T", GENERATION_2_FIRST_REMEDIATION),
+  "-p", GENERATION_2_FIRST_REMEDIATION, "-m", "bounded remediation descendant");
+const nextRemediationProof = classifyP1aReconciliationTopology({ git, candidateSha: nextRemediation });
+assert.equal(nextRemediationProof.generation, "GENERATION_2_REMEDIATION_DESCENDANT");
+assert.deepEqual([...nextRemediationProof.remediationPath],
+  [nextRemediation, GENERATION_2_FIRST_REMEDIATION]);
+console.log("PASS generation_2_anchor_and_linear_remediation_descendants");
 const generation2Hostiles = [
   ["wrong_parent_1", CURRENT_TRUSTED_TARGET_PARENTS[0], CURRENT_TRUSTED_TARGET],
   ["stale_parent_2", GENERATION_1_RECONCILIATION,
@@ -2263,12 +2313,23 @@ const generation2SingleParent = git("commit-tree", generation2Tree,
 assert.throws(() => classifyP1aReconciliationTopology({
   git, candidateSha: generation2SingleParent,
 }), "single-parent repair accepted as reconciliation");
+const postAnchorMerge = git("commit-tree", generation2Tree,
+  "-p", GENERATION_2_FIRST_REMEDIATION, "-p", CURRENT_TRUSTED_TARGET,
+  "-m", "hostile post-anchor merge");
+assert.throws(() => classifyP1aReconciliationTopology({
+  git, candidateSha: postAnchorMerge,
+}), "merge after exact reconciliation anchor accepted");
+const bypassAnchor = git("commit-tree", generation2Tree,
+  "-p", GENERATION_1_RECONCILIATION, "-m", "hostile anchor bypass");
+assert.throws(() => classifyP1aReconciliationTopology({
+  git, candidateSha: bypassAnchor,
+}), "linear path bypassing exact reconciliation anchor accepted");
 console.log(JSON.stringify({
   suite: "p1-a-generation-2-reconciliation-topology",
-  positiveRequired: 1, positiveExecuted: 1, positivePassed: 1,
-  hostileRequired: generation2Hostiles.length + 2,
-  hostileExecuted: generation2Hostiles.length + 2,
-  hostilePassed: generation2Hostiles.length + 2,
+  positiveRequired: 3, positiveExecuted: 3, positivePassed: 3,
+  hostileRequired: generation2Hostiles.length + 4,
+  hostileExecuted: generation2Hostiles.length + 4,
+  hostilePassed: generation2Hostiles.length + 4,
   genericRecursion: false,
   candidateSelectedAuthority: false,
   failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0,
@@ -2939,7 +3000,7 @@ const semanticPositiveControls = [
   ["topology_through_6867", () => assert.deepEqual(preverifiedPr16ChainAuthority.parents(
     REJECTED_PR16_ACTION_INVENTORY_CANDIDATE), [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE])],
   ["current_subject_parentage_matches_exact_classification", () => assert.deepEqual(
-    commitParents(trustedSourceRoot, amendmentSourceSha),
+    commitParents(repository, amendmentSourceSha),
     amendmentSourceSha === POST_PR17_TRUSTED_BASE
       ? [...POST_PR17_TRUSTED_BASE_PARENTS]
       : amendmentSourceSha === POST_PR18_TRUSTED_BASE
@@ -2950,7 +3011,10 @@ const semanticPositiveControls = [
             ? (["pull_request", "push_create"].includes(verifiedEventProof.eventName)
               ? [verifiedEventProof.baseSha]
               : [...verifiedEventProof.resultingMergeParents])
-            : [GENERATION_1_RECONCILIATION, CURRENT_TRUSTED_TARGET])],
+            : [...classifyP1aReconciliationTopology({
+              git: (...args) => gitAt(repository, ...args),
+              candidateSha: amendmentSourceSha,
+            }).parents])],
   ["remote_head_parent_historical_digest", () => assert.deepEqual(
     commitParents(trustedSourceRoot, REJECTED_PR16_SEVEN_SOURCE_CANDIDATE),
     [REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE])],
@@ -3282,7 +3346,10 @@ const reconciliationFixturePositiveOutcomes = reconciliationFixturePositiveContr
   try { operation(); console.log(`PASS reconciliation_fixture_positive:${name}`); return true; }
   catch (error) { console.error(`FAIL reconciliation_fixture_positive:${name}: ${error.message}`); return false; }
 });
-const candidateDataRun = (sha = validCandidate, extraEnv = {}) => {
+const currentCandidateDataSubject = process.env.P1A_CANDIDATE_SHA;
+assert.match(currentCandidateDataSubject ?? "", EXACT_SHA,
+  "exact current candidate-data subject is required");
+const candidateDataRun = (sha = currentCandidateDataSubject, extraEnv = {}) => {
   git("checkout", "--detach", sha);
   const output = run(root, [
     process.execPath, path.join(root, "scripts/validate-p1a-threat-model.mjs"),
@@ -3364,7 +3431,7 @@ const cases = [
     assert.equal(summary.failed, 0);
     assert.equal(summary.protectedOperations, 0);
   }, false],
-  ["candidate_data_wrong_sha", () => candidateDataRun(validCandidate, {
+  ["candidate_data_wrong_sha", () => candidateDataRun(currentCandidateDataSubject, {
     P1A_CANDIDATE_SHA: "f".repeat(40),
   }), true],
   ["candidate_data_reversed_parents", () => candidateDataRun(candidate({
@@ -3379,16 +3446,16 @@ const cases = [
   ["candidate_data_historical_root_command", () => candidateDataRun(candidate({
     ciAppend: "\n      - name: obsolete historical root\n        run: pnpm test:p1a-threat-model\n",
   })), true],
-  ["candidate_data_workflow_authority_injection", () => candidateDataRun(validCandidate, {
+  ["candidate_data_workflow_authority_injection", () => candidateDataRun(currentCandidateDataSubject, {
     P1A_WORKFLOW_SHA: workflowSha,
   }), true],
-  ["candidate_data_overlapping_trusted_root", () => candidateDataRun(validCandidate, {
+  ["candidate_data_overlapping_trusted_root", () => candidateDataRun(currentCandidateDataSubject, {
     P1A_TRUSTED_EXECUTION_ROOT: repository,
   }), true],
-  ["candidate_data_missing_trusted_base_source", () => candidateDataRun(validCandidate, {
+  ["candidate_data_missing_trusted_base_source", () => candidateDataRun(currentCandidateDataSubject, {
     P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: "",
   }), true],
-  ["candidate_data_wrong_trusted_base_source", () => candidateDataRun(validCandidate, {
+  ["candidate_data_wrong_trusted_base_source", () => candidateDataRun(currentCandidateDataSubject, {
     P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: verifiedAuthorities.original.root,
   }), true],
   ["wrong_evidence_model_base", () => invoke({ evidenceBaseSha: "0".repeat(40) }), true],
