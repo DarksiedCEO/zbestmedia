@@ -23,7 +23,8 @@ import {
   CURRENT_TRUSTED_TARGET_PARENTS, classifyP1aReconciliationTopology,
   GENERATION_2_RECONCILIATION, GENERATION_2_RECONCILIATION_TREE,
   GENERATION_2_RECONCILIATION_PARENTS, GENERATION_2_FIRST_REMEDIATION,
-  GENERATION_2_SECOND_REMEDIATION,
+  GENERATION_2_SECOND_REMEDIATION, GENERATION_2_THIRD_REMEDIATION,
+  GENERATION_2_FOURTH_REMEDIATION,
   POST_PR17_TRUSTED_BASE, POST_PR17_TRUSTED_BASE_TREE, POST_PR17_TRUSTED_BASE_PARENTS,
   POST_PR18_TRUSTED_BASE, POST_PR18_TRUSTED_BASE_TREE, POST_PR18_TRUSTED_BASE_PARENTS,
   POST_PR19_TRUSTED_BASE, POST_PR19_TRUSTED_BASE_TREE, POST_PR19_TRUSTED_BASE_PARENTS,
@@ -2348,13 +2349,20 @@ const firstRemediationProof = classifyP1aReconciliationTopology({
 });
 assert.equal(firstRemediationProof.generation, "GENERATION_2_REMEDIATION_DESCENDANT");
 assert.deepEqual([...firstRemediationProof.remediationPath], [GENERATION_2_FIRST_REMEDIATION]);
+assert.ok(process.env.P1A_EVENT_AUTHORITY_ROOT,
+  "depth-5 fixture requires the isolated event authority");
+run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head",
+  process.env.P1A_EVENT_AUTHORITY_ROOT,
+  GENERATION_2_FOURTH_REMEDIATION]);
 const nextRemediation = git("commit-tree",
-  git("show", "-s", "--format=%T", GENERATION_2_FIRST_REMEDIATION),
-  "-p", GENERATION_2_FIRST_REMEDIATION, "-m", "bounded remediation descendant");
+  git("show", "-s", "--format=%T", GENERATION_2_FOURTH_REMEDIATION),
+  "-p", GENERATION_2_FOURTH_REMEDIATION, "-m", "bounded remediation descendant");
 const nextRemediationProof = classifyP1aReconciliationTopology({ git, candidateSha: nextRemediation });
 assert.equal(nextRemediationProof.generation, "GENERATION_2_REMEDIATION_DESCENDANT");
 assert.deepEqual([...nextRemediationProof.remediationPath],
-  [nextRemediation, GENERATION_2_FIRST_REMEDIATION]);
+  [nextRemediation, GENERATION_2_FOURTH_REMEDIATION,
+    GENERATION_2_THIRD_REMEDIATION, GENERATION_2_SECOND_REMEDIATION,
+    GENERATION_2_FIRST_REMEDIATION]);
 console.log("PASS generation_2_anchor_and_linear_remediation_descendants");
 const generation2Hostiles = [
   ["wrong_parent_1", CURRENT_TRUSTED_TARGET_PARENTS[0], CURRENT_TRUSTED_TARGET],
@@ -3421,9 +3429,12 @@ assert.match(currentCandidateDataSubject ?? "", EXACT_SHA,
 const candidateTopologyFixture = mkdtempSync(path.join(tmpdir(), "p1a-candidate-topology-"));
 gitAt(candidateTopologyFixture, "init", "--bare", "-q");
 gitAt(candidateTopologyFixture, "remote", "add", "origin", OFFICIAL_REPOSITORY);
-gitAt(candidateTopologyFixture, "fetch", "-q", "--no-tags", "--depth=4", root,
+gitAt(candidateTopologyFixture, "fetch", "-q", "--no-tags", "--depth=5", root,
   currentCandidateDataSubject);
 assert.deepEqual(commitParents(candidateTopologyFixture, currentCandidateDataSubject),
+  ["16b426a047ef75d06a0df4b62cac76b28ec8e5f8"]);
+assert.deepEqual(commitParents(candidateTopologyFixture,
+  "16b426a047ef75d06a0df4b62cac76b28ec8e5f8"),
   ["172ff1dde7082f0c408ab595f02b08d51e2e57d6"]);
 assert.deepEqual(commitParents(candidateTopologyFixture,
   "172ff1dde7082f0c408ab595f02b08d51e2e57d6"),
@@ -3484,7 +3495,8 @@ const crossAuthorityHostileControls = [
     authorityRoot: authorityRoots.currentTrustedTarget, commitSha: currentCandidateDataSubject,
     label: "swapped event" })],
   ["candidate_checkout_substituted_for_trusted_root", () => readTreeManifest({
-    authorityRoot: root, commitSha: CURRENT_TRUSTED_TARGET, label: "ambient trusted" })],
+    authorityRoot: shallowPrimary, commitSha: CURRENT_TRUSTED_TARGET,
+    label: "ambient trusted" })],
   ["malformed_manifest", () => parseTreeManifest(Buffer.from("not-a-tree-record\0"), "malformed")],
   ["missing_nul_terminator", () => parseTreeManifest(Buffer.from(
     `100644 blob ${"1".repeat(40)}\tpath`), "unterminated")],
@@ -3582,6 +3594,7 @@ const candidateDataRun = (sha = currentCandidateDataSubject, extraEnv = {}) => {
     P1A_CURRENT_TRUSTED_TARGET_ROOT: authorityRoots.currentTrustedTarget,
     P1A_GENERATION2_ANCHOR_AUTHORITY_ROOT: generation2AnchorFixture,
     P1A_EVENT_AUTHORITY_ROOT: candidateTopologyFixture,
+    P1A_ORIGINAL_REPOSITORY_ROOT: verifiedAuthorities.original.root,
     ...extraEnv,
   } });
   return JSON.parse(output.split("\n").at(-1));
@@ -3675,6 +3688,21 @@ const cases = [
   }), true],
   ["candidate_data_missing_trusted_base_source", () => candidateDataRun(currentCandidateDataSubject, {
     P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: "",
+  }), true],
+  ["candidate_data_missing_original_authority", () => candidateDataRun(currentCandidateDataSubject, {
+    P1A_ORIGINAL_REPOSITORY_ROOT: "",
+  }), true],
+  ["candidate_data_event_authority_as_original", () => candidateDataRun(currentCandidateDataSubject, {
+    P1A_ORIGINAL_REPOSITORY_ROOT: candidateTopologyFixture,
+  }), true],
+  ["candidate_data_trusted_target_as_original", () => candidateDataRun(currentCandidateDataSubject, {
+    P1A_ORIGINAL_REPOSITORY_ROOT: authorityRoots.currentTrustedTarget,
+  }), true],
+  ["candidate_data_anchor_as_original", () => candidateDataRun(currentCandidateDataSubject, {
+    P1A_ORIGINAL_REPOSITORY_ROOT: generation2AnchorFixture,
+  }), true],
+  ["candidate_data_primary_checkout_as_original", () => candidateDataRun(currentCandidateDataSubject, {
+    P1A_ORIGINAL_REPOSITORY_ROOT: repository,
   }), true],
   ["candidate_data_wrong_trusted_base_source", () => candidateDataRun(currentCandidateDataSubject, {
     P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: verifiedAuthorities.original.root,
@@ -3778,12 +3806,12 @@ const negativeCases = [
   ["duplicate_candidate_fragment", (ci) => `${ci}\n      - name: P1-A candidate-data validation\n`],
   ["modified_trusted_command", (ci) => replaceOnce(ci, "git fetch --no-tags --no-write-fetch-head", "git fetch --no-tags")],
   ["modified_candidate_command", (ci) => replaceOnce(ci, "node scripts/validate-p1a-threat-model.mjs --candidate-data-only", "node scripts/validate-p1a-threat-model.mjs --candidate-data-only || true")],
-  ["event_authority_depth_three", (ci) => replaceOnce(ci,
-    "fetch --no-tags --no-write-fetch-head --depth=4 origin \"$P1A_CANDIDATE_SHA\"",
-    "fetch --no-tags --no-write-fetch-head --depth=3 origin \"$P1A_CANDIDATE_SHA\"")],
-  ["event_authority_depth_five", (ci) => replaceOnce(ci,
-    "fetch --no-tags --no-write-fetch-head --depth=4 origin \"$P1A_CANDIDATE_SHA\"",
-    "fetch --no-tags --no-write-fetch-head --depth=5 origin \"$P1A_CANDIDATE_SHA\"")],
+  ["event_authority_depth_four", (ci) => replaceOnce(ci,
+    "fetch --no-tags --no-write-fetch-head --depth=5 origin \"$P1A_CANDIDATE_SHA\"",
+    "fetch --no-tags --no-write-fetch-head --depth=4 origin \"$P1A_CANDIDATE_SHA\"")],
+  ["event_authority_depth_six", (ci) => replaceOnce(ci,
+    "fetch --no-tags --no-write-fetch-head --depth=5 origin \"$P1A_CANDIDATE_SHA\"",
+    "fetch --no-tags --no-write-fetch-head --depth=6 origin \"$P1A_CANDIDATE_SHA\"")],
   ["event_authority_chain_check_removed", (ci) => replaceOnce(ci,
     "          test \"${event_commits[*]}\" = \"${expected_event_commits[*]}\"\n", "")],
   ["event_authority_anchor_imported", (ci) => replaceOnce(ci,
@@ -3797,6 +3825,12 @@ const negativeCases = [
   ["missing_current_target_verifier_root_binding", (ci) => replaceOnce(ci,
     "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority\n        run: |\n",
     "        run: |\n")],
+  ["missing_original_candidate_verifier_root_binding", (ci) => replaceOnce(ci,
+    "          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate\n        run: |\n",
+    "        run: |\n")],
+  ["candidate_selected_original_candidate_root", (ci) => replaceOnce(ci,
+    "          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate\n        run: |\n",
+    "          P1A_ORIGINAL_REPOSITORY_ROOT: ${{ github.event.inputs.original_root }}\n        run: |\n")],
   ["wrong_current_target_verifier_root_binding", (ci) => replaceOnce(ci,
     "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority\n        run: |\n",
     "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-original-candidate\n        run: |\n")],

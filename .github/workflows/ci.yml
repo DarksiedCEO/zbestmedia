@@ -611,6 +611,7 @@ jobs:
           P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: .p1a-pr16-chain-staging-trusted-base
           P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority
           P1A_GENERATION2_ANCHOR_AUTHORITY_ROOT: .p1a-generation2-anchor-authority
+          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
         run: |
           set -euo pipefail
           authority="$RUNNER_TEMP/p1a-candidate-topology-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
@@ -622,10 +623,12 @@ jobs:
           git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
           git -C "$authority" -c protocol.version=2 \
             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" \
-            fetch --no-tags --no-write-fetch-head --depth=4 origin "$P1A_CANDIDATE_SHA"
+            fetch --no-tags --no-write-fetch-head --depth=5 origin "$P1A_CANDIDATE_SHA"
           unset auth_header
           test "$(git -C "$authority" cat-file -t "$P1A_CANDIDATE_SHA")" = commit
           test "$(git -C "$authority" cat-file commit "$P1A_CANDIDATE_SHA" | sed -n 's/^parent //p')" = \
+            "16b426a047ef75d06a0df4b62cac76b28ec8e5f8"
+          test "$(git -C "$authority" cat-file commit 16b426a047ef75d06a0df4b62cac76b28ec8e5f8 | sed -n 's/^parent //p')" = \
             "172ff1dde7082f0c408ab595f02b08d51e2e57d6"
           test "$(git -C "$authority" cat-file commit 172ff1dde7082f0c408ab595f02b08d51e2e57d6 | sed -n 's/^parent //p')" = \
             "b5f7e14872fb1ceff9664ad3023af86c0eca5eef"
@@ -645,6 +648,7 @@ jobs:
             --batch-check='%(objectname) %(objecttype)' | awk '$2 == "commit" {print $1}' | sort)
           mapfile -t expected_event_commits < <(printf '%s\n' \
             "$P1A_CANDIDATE_SHA" \
+            16b426a047ef75d06a0df4b62cac76b28ec8e5f8 \
             172ff1dde7082f0c408ab595f02b08d51e2e57d6 \
             b5f7e14872fb1ceff9664ad3023af86c0eca5eef \
             e7bc2cc630d7b49c7333e9431bad54b1193aae14 | sort)

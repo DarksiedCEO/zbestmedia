@@ -100,6 +100,8 @@ export const COMPOSED_CI_BASE_BLOB =
   "9a3f1a04f99e83d9dad84cf384d86117a7d282f1";
 export const ORIGINAL_CANDIDATE =
   "365c59757756f3f91480d3bfeb841b543010201f";
+export const ORIGINAL_EVIDENCE_REGISTER_BLOB =
+  "205dc5451bfc639bdfcbd58d380e11439e6f9764";
 export const GENERATION_1_RECONCILIATION =
   "2d4884e5d927182209e7d7eb3a93296401576778";
 export const GENERATION_1_RECONCILIATION_TREE =
@@ -132,10 +134,13 @@ export const GENERATION_2_SECOND_REMEDIATION =
   "b5f7e14872fb1ceff9664ad3023af86c0eca5eef";
 export const GENERATION_2_THIRD_REMEDIATION =
   "172ff1dde7082f0c408ab595f02b08d51e2e57d6";
+export const GENERATION_2_FOURTH_REMEDIATION =
+  "16b426a047ef75d06a0df4b62cac76b28ec8e5f8";
 export const GENERATION_2_REMEDIATION_PREFIX = Object.freeze([
   GENERATION_2_FIRST_REMEDIATION,
   GENERATION_2_SECOND_REMEDIATION,
   GENERATION_2_THIRD_REMEDIATION,
+  GENERATION_2_FOURTH_REMEDIATION,
 ]);
 export const GENERATION_2_CONTROL_FILES = Object.freeze([
   "scripts/test-p1a-dual-base-verifier.mjs",
@@ -1326,6 +1331,7 @@ export const REQUIRED_CI_ADDITION = [
   "          P1A_TRUSTED_BASE_FULL_SOURCE_ROOT: .p1a-pr16-chain-staging-trusted-base",
   "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority",
   "          P1A_GENERATION2_ANCHOR_AUTHORITY_ROOT: .p1a-generation2-anchor-authority",
+  "          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate",
   "        run: |",
   "          set -euo pipefail",
   "          authority=\"$RUNNER_TEMP/p1a-candidate-topology-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\"",
@@ -1337,10 +1343,12 @@ export const REQUIRED_CI_ADDITION = [
   "          git -C \"$authority\" remote add origin https://github.com/DarksiedCEO/zbestmedia",
   "          git -C \"$authority\" -c protocol.version=2 \\",
   "            -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
-  "            fetch --no-tags --no-write-fetch-head --depth=4 origin \"$P1A_CANDIDATE_SHA\"",
+  "            fetch --no-tags --no-write-fetch-head --depth=5 origin \"$P1A_CANDIDATE_SHA\"",
   "          unset auth_header",
   "          test \"$(git -C \"$authority\" cat-file -t \"$P1A_CANDIDATE_SHA\")\" = commit",
   "          test \"$(git -C \"$authority\" cat-file commit \"$P1A_CANDIDATE_SHA\" | sed -n 's/^parent //p')\" = \\",
+  "            \"16b426a047ef75d06a0df4b62cac76b28ec8e5f8\"",
+  "          test \"$(git -C \"$authority\" cat-file commit 16b426a047ef75d06a0df4b62cac76b28ec8e5f8 | sed -n 's/^parent //p')\" = \\",
   "            \"172ff1dde7082f0c408ab595f02b08d51e2e57d6\"",
   "          test \"$(git -C \"$authority\" cat-file commit 172ff1dde7082f0c408ab595f02b08d51e2e57d6 | sed -n 's/^parent //p')\" = \\",
   "            \"b5f7e14872fb1ceff9664ad3023af86c0eca5eef\"",
@@ -1360,6 +1368,7 @@ export const REQUIRED_CI_ADDITION = [
   "            --batch-check='%(objectname) %(objecttype)' | awk '$2 == \"commit\" {print $1}' | sort)",
   "          mapfile -t expected_event_commits < <(printf '%s\\n' \\",
   "            \"$P1A_CANDIDATE_SHA\" \\",
+  "            16b426a047ef75d06a0df4b62cac76b28ec8e5f8 \\",
   "            172ff1dde7082f0c408ab595f02b08d51e2e57d6 \\",
   "            b5f7e14872fb1ceff9664ad3023af86c0eca5eef \\",
   "            e7bc2cc630d7b49c7333e9431bad54b1193aae14 | sort)",
@@ -2174,10 +2183,10 @@ export function classifyP1aReconciliationTopology({
     assert.equal(cursorParents.length, 1,
       "generation-2 remediation path must remain linear and single-parent");
     cursor = cursorParents[0];
-    assert.ok(remediationPath.length <= 4,
+    assert.ok(remediationPath.length <= 5,
       "generation-2 remediation path exceeds the bounded authorized chain");
   }
-  assert.ok(remediationPath.length <= 4,
+  assert.ok(remediationPath.length <= 5,
     "generation-2 remediation path exceeds the bounded authorized chain");
   if (candidateSha !== GENERATION_2_RECONCILIATION) {
     const anchorFirstPath = [...remediationPath].reverse();
@@ -2271,6 +2280,45 @@ export function verifyCandidateTopologyAuthority({ authorityRoot, candidateSha }
   return Object.freeze({ root: resolved, candidateSha });
 }
 
+export function verifyOriginalCandidateArtifactAuthority({ authorityRoot, candidateRoot } = {}) {
+  assert.ok(authorityRoot, "original candidate artifact authority absent");
+  const requested = path.resolve(authorityRoot);
+  assert.ok(!lstatSync(requested).isSymbolicLink(),
+    "original candidate artifact authority symlink forbidden");
+  const resolved = realpathSync(requested);
+  if (candidateRoot) {
+    assert.notEqual(resolved, realpathSync(path.resolve(candidateRoot)),
+      "candidate checkout cannot be original candidate artifact authority");
+  }
+  assert.equal(normalizeRepository(gitAt(resolved, "remote", "get-url", "origin")),
+    "https://github.com/DarksiedCEO/zbestmedia",
+    "original candidate artifact authority repository mismatch");
+  assert.equal(gitAt(resolved, "rev-parse", "HEAD"), ORIGINAL_CANDIDATE,
+    "original candidate artifact authority HEAD mismatch");
+  assert.equal(gitAt(resolved, "cat-file", "-t", ORIGINAL_CANDIDATE), "commit",
+    "original candidate artifact authority commit absent");
+  assert.equal(gitAt(resolved, "cat-file", "-t", `${ORIGINAL_CANDIDATE}^{tree}`), "tree",
+    "original candidate artifact authority tree absent");
+  assert.equal(gitAt(resolved, "rev-parse",
+    `${ORIGINAL_CANDIDATE}:docs/security/p1-a/evidence-register.json`),
+  ORIGINAL_EVIDENCE_REGISTER_BLOB, "original evidence-register blob mismatch");
+  assert.equal(gitAt(resolved, "status", "--porcelain=v1"), "",
+    "original candidate artifact authority dirty");
+  const gitDirValue = gitAt(resolved, "rev-parse", "--git-dir");
+  const gitDir = path.isAbsolute(gitDirValue) ? gitDirValue : path.resolve(resolved, gitDirValue);
+  assert.ok(!existsSync(path.join(gitDir, "objects/info/alternates")),
+    "original candidate artifact authority alternates forbidden");
+  assert.ok(!existsSync(path.join(gitDir, "info/grafts")) ||
+    readFileSync(path.join(gitDir, "info/grafts"), "utf8").trim() === "",
+  "original candidate artifact authority grafts forbidden");
+  assert.equal(gitAt(resolved, "for-each-ref", "--format=%(refname)", "refs/replace"), "",
+    "original candidate artifact authority replace refs forbidden");
+  const config = readFileSync(path.join(gitDir, "config"), "utf8");
+  assert.ok(!/x-access-token|authorization:|http\..*extraheader/i.test(config),
+    "original candidate artifact authority persisted credentials forbidden");
+  return Object.freeze({ root: resolved, gitDir });
+}
+
 export function validateCandidateDataOnly({
   repoRoot = candidateRoot,
   candidateSha,
@@ -2280,6 +2328,7 @@ export function validateCandidateDataOnly({
   currentTrustedTargetRoot = process.env.P1A_CURRENT_TRUSTED_TARGET_ROOT,
   generation2AnchorAuthorityRoot = process.env.P1A_GENERATION2_ANCHOR_AUTHORITY_ROOT,
   candidateTopologyAuthorityRoot = process.env.P1A_EVENT_AUTHORITY_ROOT,
+  originalRepositoryRoot = process.env.P1A_ORIGINAL_REPOSITORY_ROOT,
 } = {}) {
   const checks = [];
   const check = (name, operation) => {
@@ -2301,6 +2350,12 @@ export function validateCandidateDataOnly({
   assert.notEqual(candidateTopology.root, realpathSync(repoRoot),
     "primary checkout cannot be candidate topology authority");
   const candidateGit = (...args) => gitAt(candidateTopology.root, ...args);
+  const originalAuthority = verifyOriginalCandidateArtifactAuthority({
+    authorityRoot: originalRepositoryRoot, candidateRoot: repoRoot,
+  });
+  assert.notEqual(originalAuthority.root, candidateTopology.root,
+    "original candidate and event authorities must remain isolated");
+  const originalGit = (...args) => gitAt(originalAuthority.root, ...args);
   verifyGeneration2AnchorAuthority({ authorityRoot: generation2AnchorAuthorityRoot });
   assert.notEqual(realpathSync(generation2AnchorAuthorityRoot), realpathSync(repoRoot),
     "candidate checkout cannot be generation-2 anchor authority");
@@ -2382,8 +2437,8 @@ export function validateCandidateDataOnly({
   });
   check("candidate_blob_identity", () => {
     for (const file of EXACT_CANDIDATE_OWNED_FILES) {
-      assert.equal(gitAt(repoRoot, "rev-parse", `${candidateSha}:${file}`),
-        gitAt(repoRoot, "rev-parse", `${ORIGINAL_CANDIDATE}:${file}`), file);
+      assert.equal(candidateGit("rev-parse", `${candidateSha}:${file}`),
+        originalGit("rev-parse", `${ORIGINAL_CANDIDATE}:${file}`), file);
     }
   });
   check("trusted_blob_identity", () => {
