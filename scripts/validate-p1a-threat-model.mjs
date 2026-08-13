@@ -102,6 +102,8 @@ export const ORIGINAL_CANDIDATE =
   "365c59757756f3f91480d3bfeb841b543010201f";
 export const ORIGINAL_EVIDENCE_REGISTER_BLOB =
   "205dc5451bfc639bdfcbd58d380e11439e6f9764";
+export const CURRENT_TRUSTED_TARGET_CODEOWNERS_BLOB =
+  "894435d1c6e92bd0a678a72f06fcec04815a18a4";
 export const GENERATION_1_RECONCILIATION =
   "2d4884e5d927182209e7d7eb3a93296401576778";
 export const GENERATION_1_RECONCILIATION_TREE =
@@ -136,11 +138,14 @@ export const GENERATION_2_THIRD_REMEDIATION =
   "172ff1dde7082f0c408ab595f02b08d51e2e57d6";
 export const GENERATION_2_FOURTH_REMEDIATION =
   "16b426a047ef75d06a0df4b62cac76b28ec8e5f8";
+export const GENERATION_2_FIFTH_REMEDIATION =
+  "f8b9d3cc9d2e2a92ea41662bca64d61b0f097326";
 export const GENERATION_2_REMEDIATION_PREFIX = Object.freeze([
   GENERATION_2_FIRST_REMEDIATION,
   GENERATION_2_SECOND_REMEDIATION,
   GENERATION_2_THIRD_REMEDIATION,
   GENERATION_2_FOURTH_REMEDIATION,
+  GENERATION_2_FIFTH_REMEDIATION,
 ]);
 export const GENERATION_2_CONTROL_FILES = Object.freeze([
   "scripts/test-p1a-dual-base-verifier.mjs",
@@ -1343,10 +1348,12 @@ export const REQUIRED_CI_ADDITION = [
   "          git -C \"$authority\" remote add origin https://github.com/DarksiedCEO/zbestmedia",
   "          git -C \"$authority\" -c protocol.version=2 \\",
   "            -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
-  "            fetch --no-tags --no-write-fetch-head --depth=5 origin \"$P1A_CANDIDATE_SHA\"",
+  "            fetch --no-tags --no-write-fetch-head --depth=6 origin \"$P1A_CANDIDATE_SHA\"",
   "          unset auth_header",
   "          test \"$(git -C \"$authority\" cat-file -t \"$P1A_CANDIDATE_SHA\")\" = commit",
   "          test \"$(git -C \"$authority\" cat-file commit \"$P1A_CANDIDATE_SHA\" | sed -n 's/^parent //p')\" = \\",
+  "            \"f8b9d3cc9d2e2a92ea41662bca64d61b0f097326\"",
+  "          test \"$(git -C \"$authority\" cat-file commit f8b9d3cc9d2e2a92ea41662bca64d61b0f097326 | sed -n 's/^parent //p')\" = \\",
   "            \"16b426a047ef75d06a0df4b62cac76b28ec8e5f8\"",
   "          test \"$(git -C \"$authority\" cat-file commit 16b426a047ef75d06a0df4b62cac76b28ec8e5f8 | sed -n 's/^parent //p')\" = \\",
   "            \"172ff1dde7082f0c408ab595f02b08d51e2e57d6\"",
@@ -1368,6 +1375,7 @@ export const REQUIRED_CI_ADDITION = [
   "            --batch-check='%(objectname) %(objecttype)' | awk '$2 == \"commit\" {print $1}' | sort)",
   "          mapfile -t expected_event_commits < <(printf '%s\\n' \\",
   "            \"$P1A_CANDIDATE_SHA\" \\",
+  "            f8b9d3cc9d2e2a92ea41662bca64d61b0f097326 \\",
   "            16b426a047ef75d06a0df4b62cac76b28ec8e5f8 \\",
   "            172ff1dde7082f0c408ab595f02b08d51e2e57d6 \\",
   "            b5f7e14872fb1ceff9664ad3023af86c0eca5eef \\",
@@ -2183,10 +2191,10 @@ export function classifyP1aReconciliationTopology({
     assert.equal(cursorParents.length, 1,
       "generation-2 remediation path must remain linear and single-parent");
     cursor = cursorParents[0];
-    assert.ok(remediationPath.length <= 5,
+    assert.ok(remediationPath.length <= 6,
       "generation-2 remediation path exceeds the bounded authorized chain");
   }
-  assert.ok(remediationPath.length <= 5,
+  assert.ok(remediationPath.length <= 6,
     "generation-2 remediation path exceeds the bounded authorized chain");
   if (candidateSha !== GENERATION_2_RECONCILIATION) {
     const anchorFirstPath = [...remediationPath].reverse();
@@ -2319,6 +2327,49 @@ export function verifyOriginalCandidateArtifactAuthority({ authorityRoot, candid
   return Object.freeze({ root: resolved, gitDir });
 }
 
+export function verifyCurrentTrustedTargetArtifactAuthority({
+  authorityRoot,
+  candidateRoot,
+} = {}) {
+  assert.ok(authorityRoot, "current trusted target artifact authority absent");
+  const requested = path.resolve(authorityRoot);
+  assert.ok(!lstatSync(requested).isSymbolicLink(),
+    "current trusted target artifact authority symlink forbidden");
+  const resolved = realpathSync(requested);
+  if (candidateRoot) {
+    assert.notEqual(resolved, realpathSync(path.resolve(candidateRoot)),
+      "candidate checkout cannot be current trusted target artifact authority");
+  }
+  assert.equal(normalizeRepository(gitAt(resolved, "remote", "get-url", "origin")),
+    "https://github.com/DarksiedCEO/zbestmedia",
+    "current trusted target artifact authority repository mismatch");
+  assert.equal(gitAt(resolved, "rev-parse", "HEAD"), CURRENT_TRUSTED_TARGET,
+    "current trusted target artifact authority HEAD mismatch");
+  assert.equal(gitAt(resolved, "cat-file", "-t", CURRENT_TRUSTED_TARGET), "commit",
+    "current trusted target artifact authority commit absent");
+  assert.equal(gitAt(resolved, "cat-file", "-t", `${CURRENT_TRUSTED_TARGET}^{tree}`), "tree",
+    "current trusted target artifact authority tree absent");
+  assert.equal(gitAt(resolved, "rev-parse",
+    `${CURRENT_TRUSTED_TARGET}:.github/CODEOWNERS`),
+  CURRENT_TRUSTED_TARGET_CODEOWNERS_BLOB,
+  "current trusted target CODEOWNERS blob mismatch");
+  assert.equal(gitAt(resolved, "status", "--porcelain=v1"), "",
+    "current trusted target artifact authority dirty");
+  const gitDirValue = gitAt(resolved, "rev-parse", "--git-dir");
+  const gitDir = path.isAbsolute(gitDirValue) ? gitDirValue : path.resolve(resolved, gitDirValue);
+  assert.ok(!existsSync(path.join(gitDir, "objects/info/alternates")),
+    "current trusted target artifact authority alternates forbidden");
+  assert.ok(!existsSync(path.join(gitDir, "info/grafts")) ||
+    readFileSync(path.join(gitDir, "info/grafts"), "utf8").trim() === "",
+  "current trusted target artifact authority grafts forbidden");
+  assert.equal(gitAt(resolved, "for-each-ref", "--format=%(refname)", "refs/replace"), "",
+    "current trusted target artifact authority replace refs forbidden");
+  const config = readFileSync(path.join(gitDir, "config"), "utf8");
+  assert.ok(!/x-access-token|authorization:|http\..*extraheader/i.test(config),
+    "current trusted target artifact authority persisted credentials forbidden");
+  return Object.freeze({ root: resolved, gitDir });
+}
+
 export function validateCandidateDataOnly({
   repoRoot = candidateRoot,
   candidateSha,
@@ -2356,6 +2407,14 @@ export function validateCandidateDataOnly({
   assert.notEqual(originalAuthority.root, candidateTopology.root,
     "original candidate and event authorities must remain isolated");
   const originalGit = (...args) => gitAt(originalAuthority.root, ...args);
+  const trustedTargetAuthority = verifyCurrentTrustedTargetArtifactAuthority({
+    authorityRoot: currentTrustedTargetRoot, candidateRoot: repoRoot,
+  });
+  assert.notEqual(trustedTargetAuthority.root, candidateTopology.root,
+    "trusted target and event authorities must remain isolated");
+  assert.notEqual(trustedTargetAuthority.root, originalAuthority.root,
+    "trusted target and original candidate authorities must remain isolated");
+  const trustedTargetGit = (...args) => gitAt(trustedTargetAuthority.root, ...args);
   verifyGeneration2AnchorAuthority({ authorityRoot: generation2AnchorAuthorityRoot });
   assert.notEqual(realpathSync(generation2AnchorAuthorityRoot), realpathSync(repoRoot),
     "candidate checkout cannot be generation-2 anchor authority");
@@ -2446,8 +2505,8 @@ export function validateCandidateDataOnly({
       if (file === ".github/workflows/ci.yml" ||
           (topology.generation !== "GENERATION_1_RECONCILIATION" &&
            GENERATION_2_CONTROL_FILES.includes(file))) continue;
-      assert.equal(gitAt(repoRoot, "rev-parse", `${candidateSha}:${file}`),
-        gitAt(repoRoot, "rev-parse", `${trustedParent}:${file}`), file);
+      assert.equal(candidateGit("rev-parse", `${candidateSha}:${file}`),
+        trustedTargetGit("rev-parse", `${trustedParent}:${file}`), file);
     }
   });
   check("ordinary_ci_composition", () => {
