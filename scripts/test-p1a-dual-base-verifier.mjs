@@ -23,6 +23,7 @@ import {
   CURRENT_TRUSTED_TARGET_PARENTS, classifyP1aReconciliationTopology,
   GENERATION_2_RECONCILIATION, GENERATION_2_RECONCILIATION_TREE,
   GENERATION_2_RECONCILIATION_PARENTS, GENERATION_2_FIRST_REMEDIATION,
+  GENERATION_2_SECOND_REMEDIATION,
   POST_PR17_TRUSTED_BASE, POST_PR17_TRUSTED_BASE_TREE, POST_PR17_TRUSTED_BASE_PARENTS,
   POST_PR18_TRUSTED_BASE, POST_PR18_TRUSTED_BASE_TREE, POST_PR18_TRUSTED_BASE_PARENTS,
   POST_PR19_TRUSTED_BASE, POST_PR19_TRUSTED_BASE_TREE, POST_PR19_TRUSTED_BASE_PARENTS,
@@ -30,6 +31,7 @@ import {
   EVENT_BOUND_TARGET_REPOSITORY, EVENT_BOUND_AMENDMENT_FILES,
   EVENT_BOUND_AMENDMENT_CLASS_B_FILES, EVENT_BOUND_AMENDMENT_CLASSES,
   verifyEventBoundAmendmentTopology,
+  verifyGeneration2AnchorAuthority,
 } from "./validate-p1a-threat-model.mjs";
 import { validateCertificationBundle } from "./validate-p1a-certification-accounting.mjs";
 
@@ -76,6 +78,7 @@ const PR16_RETAINED_STAGING_ROOTS = Object.freeze([
   ".p1a-pr16-chain-staging-current-predecessor",
   ".p1a-pr16-chain-staging-minimum-depth",
   ".p1a-current-trusted-target-authority",
+  ".p1a-generation2-anchor-authority",
 ]);
 const AUTHORIZED_EPHEMERAL_AUTHORITY_ROOTS = Object.freeze([
   ".p1a-original-candidate",
@@ -238,6 +241,58 @@ function verifyEventAcquisitionWorkflow(source) {
 
 const workflowSource = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
 assert.doesNotThrow(() => verifyEventAcquisitionWorkflow(workflowSource));
+
+const createGeneration2AnchorAuthorityFixture = (label) => {
+  const fixture = mkdtempSync(path.join(tmpdir(), `p1a-generation2-anchor-${label}-`));
+  gitAt(fixture, "init", "-q");
+  gitAt(fixture, "remote", "add", "origin", OFFICIAL_REPOSITORY);
+  gitAt(fixture, "fetch", "-q", "--no-tags", "--depth=2", root, GENERATION_2_RECONCILIATION);
+  gitAt(fixture, "checkout", "-q", "--detach", GENERATION_2_RECONCILIATION);
+  return fixture;
+};
+const generation2AnchorFixture = createGeneration2AnchorAuthorityFixture("valid");
+const generation2AnchorProof = verifyGeneration2AnchorAuthority({
+  authorityRoot: generation2AnchorFixture,
+});
+assert.equal(generation2AnchorProof.anchor, GENERATION_2_RECONCILIATION);
+assert.equal(generation2AnchorProof.tree, GENERATION_2_RECONCILIATION_TREE);
+assert.deepEqual([...generation2AnchorProof.parents], [...GENERATION_2_RECONCILIATION_PARENTS]);
+const anchorAuthorityHostiles = [
+  ["absent", () => verifyGeneration2AnchorAuthority({ authorityRoot: null })],
+  ["candidate_checkout", () => verifyGeneration2AnchorAuthority({ authorityRoot: root })],
+  ["wrong_repository", () => {
+    const fixture = createGeneration2AnchorAuthorityFixture("wrong-repository");
+    gitAt(fixture, "remote", "set-url", "origin", "https://github.com/attacker/zbestmedia");
+    return verifyGeneration2AnchorAuthority({ authorityRoot: fixture });
+  }],
+  ["dirty", () => {
+    const fixture = createGeneration2AnchorAuthorityFixture("dirty");
+    writeFileSync(path.join(fixture, "untrusted.txt"), "dirty\n");
+    return verifyGeneration2AnchorAuthority({ authorityRoot: fixture });
+  }],
+  ["persisted_credential", () => {
+    const fixture = createGeneration2AnchorAuthorityFixture("credential");
+    gitAt(fixture, "config", "http.https://github.com/.extraheader", "AUTHORIZATION: basic forbidden");
+    return verifyGeneration2AnchorAuthority({ authorityRoot: fixture });
+  }],
+  ["alternates", () => {
+    const fixture = createGeneration2AnchorAuthorityFixture("alternates");
+    mkdirSync(path.join(fixture, ".git/objects/info"), { recursive: true });
+    writeFileSync(path.join(fixture, ".git/objects/info/alternates"), `${path.join(root, ".git/objects")}\n`);
+    return verifyGeneration2AnchorAuthority({ authorityRoot: fixture });
+  }],
+];
+for (const [name, operation] of anchorAuthorityHostiles) {
+  assert.throws(operation, `${name}: hostile generation-2 anchor authority accepted`);
+  console.log(`PASS generation2_anchor_authority_hostile:${name}`);
+}
+console.log(JSON.stringify({ suite: "p1-a-generation2-anchor-authority",
+  positiveRequired: 3, positiveExecuted: 3, positivePassed: 3,
+  hostileRequired: anchorAuthorityHostiles.length,
+  hostileExecuted: anchorAuthorityHostiles.length,
+  hostilePassed: anchorAuthorityHostiles.length,
+  failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0,
+  notVerified: 0, notRun: 0 }));
 const acquisitionHostiles = [
   ["auth_unavailable", (source) => source.replace('          test -n "$P1A_EVENT_FETCH_TOKEN"\n', "")],
   ["auth_fetch_failure_swallowed", (source) => source.replace(
@@ -778,6 +833,16 @@ function classifyCurrentCiSubject({ head, parents, tree, parentLookup, treeLooku
       "subject classification: remediation continuity bypasses the exact first remediation");
     return "PR8_GENERATION_2_REMEDIATION_DESCENDANT";
   }
+  if (parents.length === 1 && parents[0] === GENERATION_2_SECOND_REMEDIATION) {
+    verifyGeneration2Anchor();
+    assert.deepEqual(parentLookup(GENERATION_2_SECOND_REMEDIATION),
+      [GENERATION_2_FIRST_REMEDIATION],
+      "subject classification: anchor-authority remediation bypasses its exact predecessor");
+    assert.deepEqual(parentLookup(GENERATION_2_FIRST_REMEDIATION),
+      [GENERATION_2_RECONCILIATION],
+      "subject classification: anchor-authority remediation bypasses the exact anchor");
+    return "PR8_GENERATION_2_REMEDIATION_DESCENDANT";
+  }
   assert.equal(parents.length, 2,
     "subject classification: disposable reconciliation requires exactly two parents");
   assert.equal(parents[0], ORIGINAL_CANDIDATE,
@@ -1257,17 +1322,17 @@ function validatePr16WorkflowContract(source) {
           path: .p1a-current-trusted-target-authority`;
   assert.equal(pr16Section.split(currentTargetCheckout).length - 1, 1,
     "pr16-workflow: exact current trusted target checkout required once");
-  assert.equal((pr16Section.match(/uses: actions\/checkout@11d5960a326750d5838078e36cf38b85af677262/g) ?? []).length, 8,
+  assert.equal((pr16Section.match(/uses: actions\/checkout@11d5960a326750d5838078e36cf38b85af677262/g) ?? []).length, 9,
     "pr16-workflow: pinned checkout provenance mismatch");
   assert.equal((pr16Section.match(/fetch-depth: 1/g) ?? []).length, 5,
     "pr16-workflow: exact depth-one predecessor acquisition count required");
-  assert.equal((pr16Section.match(/fetch-depth: 2/g) ?? []).length, 1,
-    "pr16-workflow: exact depth-two current-predecessor acquisition required");
+  assert.equal((pr16Section.match(/fetch-depth: 2/g) ?? []).length, 2,
+    "pr16-workflow: exact depth-two current-predecessor and anchor acquisitions required");
   assert.equal((pr16Section.match(/fetch-depth: 3/g) ?? []).length, 1,
     "pr16-workflow: exact depth-three seven-source acquisition required");
   assert.equal((pr16Section.match(/fetch-depth: 7/g) ?? []).length, 1,
     "pr16-workflow: exact minimum depth-seven merged trusted-base acquisition required");
-  assert.equal((pr16Section.match(/persist-credentials: false/g) ?? []).length, 8,
+  assert.equal((pr16Section.match(/persist-credentials: false/g) ?? []).length, 9,
     "pr16-workflow: credential persistence forbidden");
   assert.ok(pr16Section.includes("mapfile -t actual"), "pr16-workflow: exact inventory accounting absent");
   assert.ok(pr16Section.includes("test \"${actual[*]}\" = \"${expected[*]}\""),
@@ -1326,7 +1391,7 @@ const TWO_STAGE_START = "      - name: Acquire bounded trusted-reconciliation st
 const TWO_STAGE_END = "      - name: P1-A trusted verifier controls\n";
 const OLD_TWO_STAGE_DIGEST = "eb7e175d744e66c5bddfe440c6be11656f3f243ae70a2eb12215e9920d7079d5";
 const REJECTED_TWO_STAGE_DIGEST = "2bcfff4a10747345a1792eaa79039aabefbd6ec57172f80e8710388a098824c8";
-const NEW_TWO_STAGE_DIGEST = "45203b243f9c0ec35a80a6a05028401297f1d7149fd88b9c358816eb7acd200b";
+const NEW_TWO_STAGE_DIGEST = "9811b6846536a7f465a23eff51f1e6271ac0d1f4ed2330357fed6095080f04b1";
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 const custodyFragment = (source) => {
   assert.equal(source.split(TWO_STAGE_START).length - 1, 1, "custody fragment start must be unique");
@@ -1409,13 +1474,13 @@ const actionInventoryPositiveControls = [
   ["historical_ten", () => assert.equal(historicalActionResult.required, 10)],
   ["predecessor_fourteen", () => assert.equal(predecessorActionResult.required, 14)],
   ["retained_roots_predecessor_fifteen", () => assert.equal(retainedRootsActionResult.required, 15)],
-  ["current_eighteen", () => assert.equal(currentActionResult.required, 18)],
-  ["authorized_delta_eight", () => assert.equal(currentActionInventory.length - historicalActionInventory.length, 8)],
-  ["three_actions_after_retained_roots_predecessor", () => assert.equal(currentActionInventory.length - 15, 3)],
-  ["eight_added_checkouts", () => assert.equal(countRepository(currentActionInventory, "actions/checkout") -
-    countRepository(historicalActionInventory, "actions/checkout"), 8)],
+  ["current_nineteen", () => assert.equal(currentActionResult.required, 19)],
+  ["authorized_delta_nine", () => assert.equal(currentActionInventory.length - historicalActionInventory.length, 9)],
+  ["four_actions_after_retained_roots_predecessor", () => assert.equal(currentActionInventory.length - 15, 4)],
+  ["nine_added_checkouts", () => assert.equal(countRepository(currentActionInventory, "actions/checkout") -
+    countRepository(historicalActionInventory, "actions/checkout"), 9)],
   ["all_added_checkout_pins_exact", () => assert.equal(currentActionInventory.filter(
-    ({ repository, revision }) => repository === "actions/checkout" && revision === checkoutPin).length, 15)],
+    ({ repository, revision }) => repository === "actions/checkout" && revision === checkoutPin).length, 16)],
   ["setup_node_pin_preserved", () => assert.equal(countRepository(currentActionInventory, "actions/setup-node"), 1)],
   ["cache_pin_preserved", () => assert.equal(countRepository(currentActionInventory, "actions/cache"), 1)],
   ["actionlint_pin_preserved", () => assert.equal(countRepository(currentActionInventory, "raven-actions/actionlint"), 1)],
@@ -1425,9 +1490,9 @@ const actionInventoryPositiveControls = [
     incorrectPins: currentActionResult.incorrectPins },
   { unexpected: 0, missing: 0, mutable: 0, incorrectPins: 0 })],
   ["comment_fake_not_counted", () => assert.equal(parseOrdinaryCiActionInventory(
-    `${pr16WorkflowSource}\n# uses: attacker/fake@${"a".repeat(40)}\n`).length, 18)],
+    `${pr16WorkflowSource}\n# uses: attacker/fake@${"a".repeat(40)}\n`).length, 19)],
   ["scalar_uses_text_not_counted", () => assert.equal(parseOrdinaryCiActionInventory(
-    `${pr16WorkflowSource}\nmetadata: |\n  uses: attacker/fake@${"a".repeat(40)}\n`).length, 18)],
+    `${pr16WorkflowSource}\nmetadata: |\n  uses: attacker/fake@${"a".repeat(40)}\n`).length, 19)],
 ];
 const appendStep = (source, uses) => `${source}\n      - uses: ${uses}\n`;
 const removeFirst = (source, needle) => {
@@ -1439,7 +1504,7 @@ const replaceFirst = (source, needle, replacement) => {
   return source.replace(needle, replacement);
 };
 const actionInventoryHostileControls = [
-  ["nineteenth_action", (ci) => appendStep(ci, `actions/checkout@${checkoutPin}`)],
+  ["twentieth_action", (ci) => appendStep(ci, `actions/checkout@${checkoutPin}`)],
   ["fifteen_actions", (ci) => removeFirst(ci, `        uses: actions/cache@${cachePin} # v4\n`)],
   ["required_checkout_omitted", (ci) => removeFirst(ci, `        uses: actions/checkout@${checkoutPin} # v4\n`)],
   ["extra_checkout", (ci) => appendStep(ci, `actions/checkout@${checkoutPin}`)],
@@ -1483,8 +1548,8 @@ console.log(JSON.stringify({
   suite: "p1-a-ordinary-ci-expanded-action-inventory",
   historicalRequired: 10, historicalExecuted: historicalActionInventory.length,
   predecessorRequired: 14, predecessorExecuted: predecessorActionInventory.length,
-  currentRequired: 18, currentExecuted: currentActionInventory.length,
-  authorizedDelta: 8,
+  currentRequired: 19, currentExecuted: currentActionInventory.length,
+  authorizedDelta: 9,
   positiveRequired: actionInventoryPositiveControls.length,
   positiveExecuted: actionInventoryPositiveControls.length,
   positivePassed: actionInventoryPositiveOutcomes.filter(Boolean).length,
@@ -1751,7 +1816,7 @@ const legacyRetainedRoots = Object.freeze([
 const missingRetainedRootsBeforeRepair = PR16_RETAINED_STAGING_ROOTS.filter(
   (rootPath) => !legacyRetainedRoots.includes(rootPath),
 );
-assert.equal(missingRetainedRootsBeforeRepair.length, 7,
+assert.equal(missingRetainedRootsBeforeRepair.length, 8,
   "provenance before-proof: exact missing retained-root count changed");
 for (const rootPath of missingRetainedRootsBeforeRepair) {
   const fixture = createCleanlinessFixture(`before-${path.basename(rootPath)}`);
@@ -1777,11 +1842,12 @@ for (const rootPath of PR16_RETAINED_STAGING_ROOTS) {
   ]));
   retainedRootPositivePassed += 1;
 }
-assert.equal(new Set(PR16_RETAINED_STAGING_ROOTS).size, 8,
-  "provenance: retained staging roots must be exactly eight unique literals");
+assert.equal(new Set(PR16_RETAINED_STAGING_ROOTS).size, 9,
+  "provenance: retained staging roots must be exactly nine unique literals");
 assert.equal(PR16_RETAINED_STAGING_ROOTS.filter((rootPath) =>
   rootPath.startsWith(".p1a-pr16-chain-staging-") ||
-  rootPath === ".p1a-current-trusted-target-authority").length, 8,
+  rootPath === ".p1a-current-trusted-target-authority" ||
+  rootPath === ".p1a-generation2-anchor-authority").length, 9,
 "provenance: retained staging root namespace mismatch");
 
 const retainedRootHostileCases = [
@@ -3000,7 +3066,7 @@ const semanticPositiveControls = [
   ["topology_through_6867", () => assert.deepEqual(preverifiedPr16ChainAuthority.parents(
     REJECTED_PR16_ACTION_INVENTORY_CANDIDATE), [REJECTED_PR16_AUTHORITY_CLEANLINESS_CANDIDATE])],
   ["current_subject_parentage_matches_exact_classification", () => assert.deepEqual(
-    commitParents(repository, amendmentSourceSha),
+    commitParents(candidateTopologyFixture, amendmentSourceSha),
     amendmentSourceSha === POST_PR17_TRUSTED_BASE
       ? [...POST_PR17_TRUSTED_BASE_PARENTS]
       : amendmentSourceSha === POST_PR18_TRUSTED_BASE
@@ -3012,7 +3078,8 @@ const semanticPositiveControls = [
               ? [verifiedEventProof.baseSha]
               : [...verifiedEventProof.resultingMergeParents])
             : [...classifyP1aReconciliationTopology({
-              git: (...args) => gitAt(repository, ...args),
+              git: (...args) => gitAt(candidateTopologyFixture, ...args),
+              anchorGit: (...args) => gitAt(generation2AnchorFixture, ...args),
               candidateSha: amendmentSourceSha,
             }).parents])],
   ["remote_head_parent_historical_digest", () => assert.deepEqual(
@@ -3021,7 +3088,7 @@ const semanticPositiveControls = [
   ["historical_digest_parent_minimum_depth", () => assert.deepEqual(
     commitParents(trustedSourceRoot, REJECTED_PR16_HISTORICAL_DIGEST_CANDIDATE),
     [REJECTED_PR16_MINIMUM_DEPTH_CANDIDATE])],
-  ["action_inventory_exact_18", () => assert.equal(currentActionResult.required, 18)],
+  ["action_inventory_exact_19", () => assert.equal(currentActionResult.required, 19)],
   ["candidate_data_required_9", () => assert.equal(semanticCandidateSummary.required, 9)],
   ["candidate_data_uncertified", () => assert.equal(semanticCandidateSummary.certified, false)],
   ["protected_operations_zero", () => assert.equal(semanticCandidateSummary.protectedOperations, 0)],
@@ -3349,6 +3416,11 @@ const reconciliationFixturePositiveOutcomes = reconciliationFixturePositiveContr
 const currentCandidateDataSubject = process.env.P1A_CANDIDATE_SHA;
 assert.match(currentCandidateDataSubject ?? "", EXACT_SHA,
   "exact current candidate-data subject is required");
+const candidateTopologyFixture = mkdtempSync(path.join(tmpdir(), "p1a-candidate-topology-"));
+gitAt(candidateTopologyFixture, "init", "--bare", "-q");
+gitAt(candidateTopologyFixture, "remote", "add", "origin", OFFICIAL_REPOSITORY);
+gitAt(candidateTopologyFixture, "fetch", "-q", "--no-tags", "--depth=3", root,
+  currentCandidateDataSubject);
 const candidateDataRun = (sha = currentCandidateDataSubject, extraEnv = {}) => {
   git("checkout", "--detach", sha);
   const output = run(root, [
@@ -3361,6 +3433,8 @@ const candidateDataRun = (sha = currentCandidateDataSubject, extraEnv = {}) => {
     P1A_ANCESTRY_AUTHORITY_ROOT: verifiedAuthorities.ancestry.root,
     P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT: verifiedAuthorities.trustedReconciliation.root,
     P1A_CURRENT_TRUSTED_TARGET_ROOT: authorityRoots.currentTrustedTarget,
+    P1A_GENERATION2_ANCHOR_AUTHORITY_ROOT: generation2AnchorFixture,
+    P1A_EVENT_AUTHORITY_ROOT: candidateTopologyFixture,
     ...extraEnv,
   } });
   return JSON.parse(output.split("\n").at(-1));
@@ -3503,7 +3577,7 @@ const positiveCases = [
   ["trusted_then_candidate_fragment", () => {
     const trustedFirst = trustedCi;
     const trustedThenCandidate = composeGeneration2CandidateCi(trustedFirst);
-    const candidateSummary = candidateDataRun();
+    const candidateSummary = semanticCandidateSummary;
     assert.equal(trustedFirst, trustedCi);
     assert.equal(trustedThenCandidate.split(REQUIRED_CI_ADDITION).length - 1, 1);
     assert.ok(trustedThenCandidate.indexOf("Acquire exact immutable P1-A ancestry authority") < trustedThenCandidate.indexOf(REQUIRED_CI_ADDITION));
