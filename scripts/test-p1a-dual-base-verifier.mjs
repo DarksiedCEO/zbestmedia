@@ -28,6 +28,7 @@ import {
   GENERATION_2_FIFTH_REMEDIATION,
   GENERATION_2_SIXTH_REMEDIATION,
   GENERATION_2_SEVENTH_REMEDIATION,
+  GENERATION_2_EIGHTH_REMEDIATION,
   AUTHORIZED_CANDIDATE_CLEANLINESS_ROOTS, assertCandidateSourceClean,
   POST_PR17_TRUSTED_BASE, POST_PR17_TRUSTED_BASE_TREE, POST_PR17_TRUSTED_BASE_PARENTS,
   POST_PR18_TRUSTED_BASE, POST_PR18_TRUSTED_BASE_TREE, POST_PR18_TRUSTED_BASE_PARENTS,
@@ -182,6 +183,7 @@ const authorityRoots = {
   pr16CurrentPredecessorSource: process.env.P1A_PR16_CURRENT_PREDECESSOR_SOURCE_ROOT,
   pr16MinimumDepthSource: process.env.P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT,
   currentTrustedTarget: process.env.P1A_CURRENT_TRUSTED_TARGET_ROOT,
+  generation2Anchor: process.env.P1A_GENERATION2_ANCHOR_AUTHORITY_ROOT,
 };
 const workspaceOptions = (expectedRelative) => process.env.GITHUB_WORKSPACE
   ? { workspaceRoot: process.env.GITHUB_WORKSPACE, expectedRelative }
@@ -230,6 +232,8 @@ function verifyEventAcquisitionWorkflow(source) {
     "event acquisition: wrong repository accepted");
   assert.ok(source.includes("fetch --no-tags --no-write-fetch-head --depth=1 origin \"$P1A_EVENT_HEAD_SHA\""),
     "event acquisition: zero-before exact head fetch missing");
+  assert.ok(source.includes("fetch --no-tags --no-write-fetch-head --depth=9 origin \\\n              \"$P1A_EVENT_BASE_SHA\" \"$P1A_EVENT_HEAD_SHA\""),
+    "event acquisition: exact bounded depth-nine base/head fetch missing");
   assert.ok(source.includes("cat-file commit \\\n              \"$P1A_EVENT_HEAD_SHA\""),
     "event acquisition: immutable parent metadata read missing");
   assert.ok(source.includes('test "${#event_head_parents[@]}" -eq 1'),
@@ -252,11 +256,32 @@ function verifyEventAcquisitionWorkflow(source) {
 const workflowSource = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
 assert.doesNotThrow(() => verifyEventAcquisitionWorkflow(workflowSource));
 
-const createGeneration2AnchorAuthorityFixture = (label) => {
+const importExactObjects = (sourceRoot, destinationRoot) => {
+  const inventory = gitAt(sourceRoot, "cat-file", "--batch-all-objects",
+    "--batch-check=%(objectname) %(objecttype)").split("\n").filter(Boolean);
+  assert.ok(inventory.length > 0, "bounded source object inventory absent");
+  for (const row of inventory) {
+    const [oid, type, ...remainder] = row.split(" ");
+    assert.match(oid, EXACT_SHA, "bounded source object id invalid");
+    assert.ok(["blob", "tree", "commit", "tag"].includes(type) && remainder.length === 0,
+      "bounded source object inventory invalid");
+    const bytes = execFileSync("git", ["-C", sourceRoot, "cat-file", type, oid],
+      { maxBuffer: 64 * 1024 * 1024 });
+    const imported = execFileSync("git", ["-C", destinationRoot, "hash-object", "-w",
+      "-t", type, "--stdin"], { input: bytes, encoding: "utf8" }).trim();
+    assert.equal(imported, oid, "bounded source object identity changed during import");
+  }
+};
+
+const createGeneration2AnchorAuthorityFixture = (label, {
+  sourceRoot = authorityRoots.generation2Anchor,
+} = {}) => {
+  assert.ok(sourceRoot, "generation-2 anchor fixture source absent");
+  const sourceProof = verifyGeneration2AnchorAuthority({ authorityRoot: sourceRoot });
   const fixture = mkdtempSync(path.join(tmpdir(), `p1a-generation2-anchor-${label}-`));
   gitAt(fixture, "init", "-q");
   gitAt(fixture, "remote", "add", "origin", OFFICIAL_REPOSITORY);
-  gitAt(fixture, "fetch", "-q", "--no-tags", "--depth=2", root, GENERATION_2_RECONCILIATION);
+  importExactObjects(sourceProof.root, fixture);
   gitAt(fixture, "checkout", "-q", "--detach", GENERATION_2_RECONCILIATION);
   return fixture;
 };
@@ -270,6 +295,23 @@ assert.deepEqual([...generation2AnchorProof.parents], [...GENERATION_2_RECONCILI
 const anchorAuthorityHostiles = [
   ["absent", () => verifyGeneration2AnchorAuthority({ authorityRoot: null })],
   ["candidate_checkout", () => verifyGeneration2AnchorAuthority({ authorityRoot: root })],
+  ["fixture_missing_source", () => createGeneration2AnchorAuthorityFixture("missing-source",
+    { sourceRoot: null })],
+  ["fixture_primary_substitution", () => createGeneration2AnchorAuthorityFixture(
+    "primary-substitution", { sourceRoot: root })],
+  ["fixture_event_substitution", () => createGeneration2AnchorAuthorityFixture(
+    "event-substitution", { sourceRoot: process.env.P1A_EVENT_AUTHORITY_ROOT })],
+  ["fixture_trusted_target_substitution", () => createGeneration2AnchorAuthorityFixture(
+    "trusted-target-substitution", { sourceRoot: authorityRoots.currentTrustedTarget })],
+  ["fixture_baseline_substitution", () => createGeneration2AnchorAuthorityFixture(
+    "baseline-substitution", { sourceRoot: process.env.P1A_BASELINE_REPOSITORY_ROOT })],
+  ["fixture_original_substitution", () => createGeneration2AnchorAuthorityFixture(
+    "original-substitution", { sourceRoot: process.env.P1A_ORIGINAL_REPOSITORY_ROOT })],
+  ["symlink_source", () => {
+    const link = path.join(mkdtempSync(path.join(tmpdir(), "p1a-anchor-link-")), "authority");
+    symlinkSync(realpathSync(authorityRoots.generation2Anchor), link);
+    return createGeneration2AnchorAuthorityFixture("symlink-source", { sourceRoot: link });
+  }],
   ["wrong_repository", () => {
     const fixture = createGeneration2AnchorAuthorityFixture("wrong-repository");
     gitAt(fixture, "remote", "set-url", "origin", "https://github.com/attacker/zbestmedia");
@@ -289,6 +331,24 @@ const anchorAuthorityHostiles = [
     const fixture = createGeneration2AnchorAuthorityFixture("alternates");
     mkdirSync(path.join(fixture, ".git/objects/info"), { recursive: true });
     writeFileSync(path.join(fixture, ".git/objects/info/alternates"), `${path.join(root, ".git/objects")}\n`);
+    return verifyGeneration2AnchorAuthority({ authorityRoot: fixture });
+  }],
+  ["mutable_ref", () => {
+    const fixture = createGeneration2AnchorAuthorityFixture("mutable-ref");
+    gitAt(fixture, "branch", "mutable-anchor", GENERATION_2_RECONCILIATION);
+    return verifyGeneration2AnchorAuthority({ authorityRoot: fixture });
+  }],
+  ["grafts", () => {
+    const fixture = createGeneration2AnchorAuthorityFixture("grafts");
+    mkdirSync(path.join(fixture, ".git/info"), { recursive: true });
+    writeFileSync(path.join(fixture, ".git/info/grafts"),
+      `${GENERATION_2_RECONCILIATION} ${GENERATION_2_RECONCILIATION_PARENTS[0]}\n`);
+    return verifyGeneration2AnchorAuthority({ authorityRoot: fixture });
+  }],
+  ["replace_ref", () => {
+    const fixture = createGeneration2AnchorAuthorityFixture("replace-ref");
+    gitAt(fixture, "replace", GENERATION_2_RECONCILIATION,
+      GENERATION_2_RECONCILIATION_PARENTS[0]);
     return verifyGeneration2AnchorAuthority({ authorityRoot: fixture });
   }],
 ];
@@ -1339,8 +1399,8 @@ function validatePr16WorkflowContract(source) {
     "pr16-workflow: exact depth-three seven-source acquisition required");
   assert.equal((pr16Section.match(/fetch-depth: 7/g) ?? []).length, 1,
     "pr16-workflow: exact minimum depth-seven merged trusted-base acquisition required");
-  assert.equal((source.match(/fetch --no-tags --no-write-fetch-head --depth=8 origin \"\$P1A_CANDIDATE_SHA\"/g) ?? []).length, 1,
-    "candidate-event workflow: exact depth-eight acquisition required once");
+  assert.equal((source.match(/fetch --no-tags --no-write-fetch-head --depth=9 origin \"\$P1A_CANDIDATE_SHA\"/g) ?? []).length, 1,
+    "candidate-event workflow: exact depth-nine acquisition required once");
   assert.equal((pr16Section.match(/persist-credentials: false/g) ?? []).length, 9,
     "pr16-workflow: credential persistence forbidden");
   assert.ok(pr16Section.includes("mapfile -t actual"), "pr16-workflow: exact inventory accounting absent");
@@ -2356,17 +2416,19 @@ const firstRemediationProof = classifyP1aReconciliationTopology({
 assert.equal(firstRemediationProof.generation, "GENERATION_2_REMEDIATION_DESCENDANT");
 assert.deepEqual([...firstRemediationProof.remediationPath], [GENERATION_2_FIRST_REMEDIATION]);
 assert.ok(process.env.P1A_EVENT_AUTHORITY_ROOT,
-  "depth-8 fixture requires the isolated event authority");
-run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head",
-  process.env.P1A_EVENT_AUTHORITY_ROOT,
-  GENERATION_2_SEVENTH_REMEDIATION]);
-const nextRemediation = git("commit-tree",
-  git("show", "-s", "--format=%T", GENERATION_2_SEVENTH_REMEDIATION),
-  "-p", GENERATION_2_SEVENTH_REMEDIATION, "-m", "bounded remediation descendant");
-const nextRemediationProof = classifyP1aReconciliationTopology({ git, candidateSha: nextRemediation });
+  "depth-9 fixture requires the isolated event authority");
+const eventAuthorityGit = (...args) => gitAt(process.env.P1A_EVENT_AUTHORITY_ROOT, ...args);
+const anchorAuthorityGit = (...args) => gitAt(generation2AnchorFixture, ...args);
+const nextRemediation = eventAuthorityGit("commit-tree",
+  eventAuthorityGit("show", "-s", "--format=%T", GENERATION_2_EIGHTH_REMEDIATION),
+  "-p", GENERATION_2_EIGHTH_REMEDIATION, "-m", "bounded remediation descendant");
+const nextRemediationProof = classifyP1aReconciliationTopology({
+  git: eventAuthorityGit, anchorGit: anchorAuthorityGit, candidateSha: nextRemediation,
+});
 assert.equal(nextRemediationProof.generation, "GENERATION_2_REMEDIATION_DESCENDANT");
 assert.deepEqual([...nextRemediationProof.remediationPath],
-  [nextRemediation, GENERATION_2_SEVENTH_REMEDIATION, GENERATION_2_SIXTH_REMEDIATION,
+  [nextRemediation, GENERATION_2_EIGHTH_REMEDIATION, GENERATION_2_SEVENTH_REMEDIATION,
+    GENERATION_2_SIXTH_REMEDIATION,
     GENERATION_2_FIFTH_REMEDIATION,
     GENERATION_2_FOURTH_REMEDIATION,
     GENERATION_2_THIRD_REMEDIATION, GENERATION_2_SECOND_REMEDIATION,
@@ -3437,9 +3499,12 @@ assert.match(currentCandidateDataSubject ?? "", EXACT_SHA,
 const candidateTopologyFixture = mkdtempSync(path.join(tmpdir(), "p1a-candidate-topology-"));
 gitAt(candidateTopologyFixture, "init", "--bare", "-q");
 gitAt(candidateTopologyFixture, "remote", "add", "origin", OFFICIAL_REPOSITORY);
-gitAt(candidateTopologyFixture, "fetch", "-q", "--no-tags", "--depth=8", root,
+gitAt(candidateTopologyFixture, "fetch", "-q", "--no-tags", "--depth=9", root,
   currentCandidateDataSubject);
 assert.deepEqual(commitParents(candidateTopologyFixture, currentCandidateDataSubject),
+  ["66e5616fbf448e58526d81af5530bc60812c8727"]);
+assert.deepEqual(commitParents(candidateTopologyFixture,
+  "66e5616fbf448e58526d81af5530bc60812c8727"),
   ["586f285df9d770825d9fe6aee893a74fdb99e294"]);
 assert.deepEqual(commitParents(candidateTopologyFixture,
   "586f285df9d770825d9fe6aee893a74fdb99e294"),
@@ -3900,12 +3965,12 @@ const negativeCases = [
   ["duplicate_candidate_fragment", (ci) => `${ci}\n      - name: P1-A candidate-data validation\n`],
   ["modified_trusted_command", (ci) => replaceOnce(ci, "git fetch --no-tags --no-write-fetch-head", "git fetch --no-tags")],
   ["modified_candidate_command", (ci) => replaceOnce(ci, "node scripts/validate-p1a-threat-model.mjs --candidate-data-only", "node scripts/validate-p1a-threat-model.mjs --candidate-data-only || true")],
-  ["event_authority_depth_six", (ci) => replaceOnce(ci,
-    "fetch --no-tags --no-write-fetch-head --depth=7 origin \"$P1A_CANDIDATE_SHA\"",
-    "fetch --no-tags --no-write-fetch-head --depth=6 origin \"$P1A_CANDIDATE_SHA\"")],
   ["event_authority_depth_eight", (ci) => replaceOnce(ci,
-    "fetch --no-tags --no-write-fetch-head --depth=7 origin \"$P1A_CANDIDATE_SHA\"",
+    "fetch --no-tags --no-write-fetch-head --depth=9 origin \"$P1A_CANDIDATE_SHA\"",
     "fetch --no-tags --no-write-fetch-head --depth=8 origin \"$P1A_CANDIDATE_SHA\"")],
+  ["event_authority_depth_ten", (ci) => replaceOnce(ci,
+    "fetch --no-tags --no-write-fetch-head --depth=9 origin \"$P1A_CANDIDATE_SHA\"",
+    "fetch --no-tags --no-write-fetch-head --depth=10 origin \"$P1A_CANDIDATE_SHA\"")],
   ["event_authority_chain_check_removed", (ci) => replaceOnce(ci,
     "          test \"${event_commits[*]}\" = \"${expected_event_commits[*]}\"\n", "")],
   ["event_authority_anchor_imported", (ci) => replaceOnce(ci,

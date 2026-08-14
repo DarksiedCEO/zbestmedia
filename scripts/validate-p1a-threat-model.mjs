@@ -144,6 +144,8 @@ export const GENERATION_2_SIXTH_REMEDIATION =
   "6c95cac5f28ed55cacbd21e512a6745aa7a73b94";
 export const GENERATION_2_SEVENTH_REMEDIATION =
   "586f285df9d770825d9fe6aee893a74fdb99e294";
+export const GENERATION_2_EIGHTH_REMEDIATION =
+  "66e5616fbf448e58526d81af5530bc60812c8727";
 export const GENERATION_2_REMEDIATION_PREFIX = Object.freeze([
   GENERATION_2_FIRST_REMEDIATION,
   GENERATION_2_SECOND_REMEDIATION,
@@ -152,6 +154,7 @@ export const GENERATION_2_REMEDIATION_PREFIX = Object.freeze([
   GENERATION_2_FIFTH_REMEDIATION,
   GENERATION_2_SIXTH_REMEDIATION,
   GENERATION_2_SEVENTH_REMEDIATION,
+  GENERATION_2_EIGHTH_REMEDIATION,
 ]);
 
 export const AUTHORIZED_CANDIDATE_CLEANLINESS_ROOTS = Object.freeze([
@@ -1421,10 +1424,12 @@ export const REQUIRED_CI_ADDITION = [
   "          git -C \"$authority\" remote add origin https://github.com/DarksiedCEO/zbestmedia",
   "          git -C \"$authority\" -c protocol.version=2 \\",
   "            -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
-  "            fetch --no-tags --no-write-fetch-head --depth=8 origin \"$P1A_CANDIDATE_SHA\"",
+  "            fetch --no-tags --no-write-fetch-head --depth=9 origin \"$P1A_CANDIDATE_SHA\"",
   "          unset auth_header",
   "          test \"$(git -C \"$authority\" cat-file -t \"$P1A_CANDIDATE_SHA\")\" = commit",
   "          test \"$(git -C \"$authority\" cat-file commit \"$P1A_CANDIDATE_SHA\" | sed -n 's/^parent //p')\" = \\",
+  "            \"66e5616fbf448e58526d81af5530bc60812c8727\"",
+  "          test \"$(git -C \"$authority\" cat-file commit 66e5616fbf448e58526d81af5530bc60812c8727 | sed -n 's/^parent //p')\" = \\",
   "            \"586f285df9d770825d9fe6aee893a74fdb99e294\"",
   "          test \"$(git -C \"$authority\" cat-file commit 586f285df9d770825d9fe6aee893a74fdb99e294 | sed -n 's/^parent //p')\" = \\",
   "            \"6c95cac5f28ed55cacbd21e512a6745aa7a73b94\"",
@@ -1452,6 +1457,7 @@ export const REQUIRED_CI_ADDITION = [
   "            --batch-check='%(objectname) %(objecttype)' | awk '$2 == \"commit\" {print $1}' | sort)",
   "          mapfile -t expected_event_commits < <(printf '%s\\n' \\",
   "            \"$P1A_CANDIDATE_SHA\" \\",
+  "            66e5616fbf448e58526d81af5530bc60812c8727 \\",
   "            586f285df9d770825d9fe6aee893a74fdb99e294 \\",
   "            6c95cac5f28ed55cacbd21e512a6745aa7a73b94 \\",
   "            f8b9d3cc9d2e2a92ea41662bca64d61b0f097326 \\",
@@ -1999,7 +2005,7 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          else",
   "            git -C \"$authority\" -c protocol.version=2 \\",
   "              -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
-  "              fetch --no-tags --no-write-fetch-head --depth=2 origin \\",
+  "              fetch --no-tags --no-write-fetch-head --depth=9 origin \\",
   "              \"$P1A_EVENT_BASE_SHA\" \"$P1A_EVENT_HEAD_SHA\"",
   "          fi",
   "          unset auth_header",
@@ -2160,6 +2166,10 @@ export function composeGeneration2CandidateCi(baseline) {
     "current trusted target acquisition placement");
   source = composeCandidateCi(source);
   source = replaceExactlyOnce(source,
+    "              fetch --no-tags --no-write-fetch-head --depth=2 origin \\\n",
+    "              fetch --no-tags --no-write-fetch-head --depth=9 origin \\\n",
+    "generation-2 bounded event-authority depth");
+  source = replaceExactlyOnce(source,
     "          P1A_CURRENT_WORKFLOW_FETCH_TOKEN: ${{ github.token }}\n          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate\n          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline\n        run: |\n",
     "          P1A_CURRENT_WORKFLOW_FETCH_TOKEN: ${{ github.token }}\n          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate\n          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline\n          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority\n          P1A_GENERATION2_ANCHOR_AUTHORITY_ROOT: .p1a-generation2-anchor-authority\n        run: |\n",
     "current trusted target trusted-verifier authority binding");
@@ -2270,10 +2280,10 @@ export function classifyP1aReconciliationTopology({
     assert.equal(cursorParents.length, 1,
       "generation-2 remediation path must remain linear and single-parent");
     cursor = cursorParents[0];
-    assert.ok(remediationPath.length <= 8,
+    assert.ok(remediationPath.length <= 9,
       "generation-2 remediation path exceeds the bounded authorized chain");
   }
-  assert.ok(remediationPath.length <= 8,
+  assert.ok(remediationPath.length <= 9,
     "generation-2 remediation path exceeds the bounded authorized chain");
   if (candidateSha !== GENERATION_2_RECONCILIATION) {
     const anchorFirstPath = [...remediationPath].reverse();
@@ -2301,6 +2311,8 @@ export function verifyGeneration2AnchorAuthority({
   authorityRoot = process.env.P1A_GENERATION2_ANCHOR_AUTHORITY_ROOT,
 } = {}) {
   assert.ok(authorityRoot, "generation-2 anchor authority absent");
+  assert.ok(!lstatSync(authorityRoot).isSymbolicLink(),
+    "generation-2 anchor authority symlink forbidden");
   const resolved = realpathSync(authorityRoot);
   assert.notEqual(resolved, realpathSync(candidateRoot),
     "candidate checkout cannot be generation-2 anchor authority");
@@ -2310,6 +2322,8 @@ export function verifyGeneration2AnchorAuthority({
     "generation-2 anchor authority HEAD mismatch");
   assert.equal(gitAt(resolved, "status", "--porcelain=v1"), "",
     "generation-2 anchor authority dirty");
+  assert.equal(gitAt(resolved, "for-each-ref", "--format=%(refname)"), "",
+    "generation-2 anchor authority mutable refs forbidden");
   assert.ok(!existsSync(path.join(resolved, ".git/objects/info/alternates")),
     "generation-2 anchor authority alternates forbidden");
   assert.ok(!existsSync(path.join(resolved, ".git/info/grafts")) ||
