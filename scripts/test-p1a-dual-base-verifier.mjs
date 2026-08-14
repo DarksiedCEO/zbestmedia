@@ -27,6 +27,8 @@ import {
   GENERATION_2_FOURTH_REMEDIATION,
   GENERATION_2_FIFTH_REMEDIATION,
   GENERATION_2_SIXTH_REMEDIATION,
+  GENERATION_2_SEVENTH_REMEDIATION,
+  AUTHORIZED_CANDIDATE_CLEANLINESS_ROOTS, assertCandidateSourceClean,
   POST_PR17_TRUSTED_BASE, POST_PR17_TRUSTED_BASE_TREE, POST_PR17_TRUSTED_BASE_PARENTS,
   POST_PR18_TRUSTED_BASE, POST_PR18_TRUSTED_BASE_TREE, POST_PR18_TRUSTED_BASE_PARENTS,
   POST_PR19_TRUSTED_BASE, POST_PR19_TRUSTED_BASE_TREE, POST_PR19_TRUSTED_BASE_PARENTS,
@@ -1179,10 +1181,7 @@ function assertClassifiedWorktreeEntries(repositoryRoot, entries) {
 }
 
 function assertAmendmentSourceWorktreeClean(repositoryRoot = root) {
-  const status = execFileSync("git", ["status", "--porcelain=v1", "-z", "--untracked-files=all"], {
-    cwd: repositoryRoot, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
-  });
-  assertClassifiedWorktreeEntries(repositoryRoot, parsePorcelainV1Z(status));
+  assertCandidateSourceClean(repositoryRoot);
 }
 
 const PR16_CHAIN = Object.freeze([
@@ -1340,6 +1339,8 @@ function validatePr16WorkflowContract(source) {
     "pr16-workflow: exact depth-three seven-source acquisition required");
   assert.equal((pr16Section.match(/fetch-depth: 7/g) ?? []).length, 1,
     "pr16-workflow: exact minimum depth-seven merged trusted-base acquisition required");
+  assert.equal((source.match(/fetch --no-tags --no-write-fetch-head --depth=8 origin \"\$P1A_CANDIDATE_SHA\"/g) ?? []).length, 1,
+    "candidate-event workflow: exact depth-eight acquisition required once");
   assert.equal((pr16Section.match(/persist-credentials: false/g) ?? []).length, 9,
     "pr16-workflow: credential persistence forbidden");
   assert.ok(pr16Section.includes("mapfile -t actual"), "pr16-workflow: exact inventory accounting absent");
@@ -2355,17 +2356,18 @@ const firstRemediationProof = classifyP1aReconciliationTopology({
 assert.equal(firstRemediationProof.generation, "GENERATION_2_REMEDIATION_DESCENDANT");
 assert.deepEqual([...firstRemediationProof.remediationPath], [GENERATION_2_FIRST_REMEDIATION]);
 assert.ok(process.env.P1A_EVENT_AUTHORITY_ROOT,
-  "depth-7 fixture requires the isolated event authority");
+  "depth-8 fixture requires the isolated event authority");
 run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head",
   process.env.P1A_EVENT_AUTHORITY_ROOT,
-  GENERATION_2_SIXTH_REMEDIATION]);
+  GENERATION_2_SEVENTH_REMEDIATION]);
 const nextRemediation = git("commit-tree",
-  git("show", "-s", "--format=%T", GENERATION_2_SIXTH_REMEDIATION),
-  "-p", GENERATION_2_SIXTH_REMEDIATION, "-m", "bounded remediation descendant");
+  git("show", "-s", "--format=%T", GENERATION_2_SEVENTH_REMEDIATION),
+  "-p", GENERATION_2_SEVENTH_REMEDIATION, "-m", "bounded remediation descendant");
 const nextRemediationProof = classifyP1aReconciliationTopology({ git, candidateSha: nextRemediation });
 assert.equal(nextRemediationProof.generation, "GENERATION_2_REMEDIATION_DESCENDANT");
 assert.deepEqual([...nextRemediationProof.remediationPath],
-  [nextRemediation, GENERATION_2_SIXTH_REMEDIATION, GENERATION_2_FIFTH_REMEDIATION,
+  [nextRemediation, GENERATION_2_SEVENTH_REMEDIATION, GENERATION_2_SIXTH_REMEDIATION,
+    GENERATION_2_FIFTH_REMEDIATION,
     GENERATION_2_FOURTH_REMEDIATION,
     GENERATION_2_THIRD_REMEDIATION, GENERATION_2_SECOND_REMEDIATION,
     GENERATION_2_FIRST_REMEDIATION]);
@@ -3435,9 +3437,12 @@ assert.match(currentCandidateDataSubject ?? "", EXACT_SHA,
 const candidateTopologyFixture = mkdtempSync(path.join(tmpdir(), "p1a-candidate-topology-"));
 gitAt(candidateTopologyFixture, "init", "--bare", "-q");
 gitAt(candidateTopologyFixture, "remote", "add", "origin", OFFICIAL_REPOSITORY);
-gitAt(candidateTopologyFixture, "fetch", "-q", "--no-tags", "--depth=7", root,
+gitAt(candidateTopologyFixture, "fetch", "-q", "--no-tags", "--depth=8", root,
   currentCandidateDataSubject);
 assert.deepEqual(commitParents(candidateTopologyFixture, currentCandidateDataSubject),
+  ["586f285df9d770825d9fe6aee893a74fdb99e294"]);
+assert.deepEqual(commitParents(candidateTopologyFixture,
+  "586f285df9d770825d9fe6aee893a74fdb99e294"),
   ["6c95cac5f28ed55cacbd21e512a6745aa7a73b94"]);
 assert.deepEqual(commitParents(candidateTopologyFixture,
   "6c95cac5f28ed55cacbd21e512a6745aa7a73b94"),

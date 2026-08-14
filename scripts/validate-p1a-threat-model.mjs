@@ -142,6 +142,8 @@ export const GENERATION_2_FIFTH_REMEDIATION =
   "f8b9d3cc9d2e2a92ea41662bca64d61b0f097326";
 export const GENERATION_2_SIXTH_REMEDIATION =
   "6c95cac5f28ed55cacbd21e512a6745aa7a73b94";
+export const GENERATION_2_SEVENTH_REMEDIATION =
+  "586f285df9d770825d9fe6aee893a74fdb99e294";
 export const GENERATION_2_REMEDIATION_PREFIX = Object.freeze([
   GENERATION_2_FIRST_REMEDIATION,
   GENERATION_2_SECOND_REMEDIATION,
@@ -149,6 +151,26 @@ export const GENERATION_2_REMEDIATION_PREFIX = Object.freeze([
   GENERATION_2_FOURTH_REMEDIATION,
   GENERATION_2_FIFTH_REMEDIATION,
   GENERATION_2_SIXTH_REMEDIATION,
+  GENERATION_2_SEVENTH_REMEDIATION,
+]);
+
+export const AUTHORIZED_CANDIDATE_CLEANLINESS_ROOTS = Object.freeze([
+  ".p1a-original-candidate",
+  ".p1a-trusted-baseline",
+  ".p1a-dual-base-authority",
+  ".p1a-evidence-base-authority",
+  ".p1a-ancestry-authority",
+  ".p1a-trusted-reconciliation-authority",
+  ".p1a-pr16-remediation-chain-authority",
+  ".p1a-pr16-chain-staging-action-inventory",
+  ".p1a-pr16-chain-staging-original-amendment",
+  ".p1a-pr16-chain-staging-rejected-chain",
+  ".p1a-pr16-chain-staging-rejected-cleanliness",
+  ".p1a-pr16-chain-staging-trusted-base",
+  ".p1a-pr16-chain-staging-current-predecessor",
+  ".p1a-pr16-chain-staging-minimum-depth",
+  ".p1a-current-trusted-target-authority",
+  ".p1a-generation2-anchor-authority",
 ]);
 export const GENERATION_2_CONTROL_FILES = Object.freeze([
   "scripts/test-p1a-dual-base-verifier.mjs",
@@ -572,6 +594,53 @@ function gitAt(repoRoot, ...args) {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
+}
+
+function parseCandidateStatus(status) {
+  assert.equal(typeof status, "string", "candidate cleanliness status must be text");
+  return status.split("\0").filter(Boolean).map((record) => {
+    assert.ok(record.length >= 4 && record[2] === " ",
+      "candidate cleanliness status entry malformed");
+    return Object.freeze({ code: record.slice(0, 2), path: record.slice(3) });
+  });
+}
+
+function isExactAuthorityPath(candidatePath, authorizedRoot) {
+  assert.equal(path.posix.normalize(candidatePath), candidatePath,
+    "candidate cleanliness path is non-canonical");
+  return candidatePath === authorizedRoot || candidatePath.startsWith(`${authorizedRoot}/`);
+}
+
+export function assertCandidateSourceClean(
+  repoRoot,
+  authorityRoots = AUTHORIZED_CANDIDATE_CLEANLINESS_ROOTS,
+) {
+  assert.equal(new Set(authorityRoots).size, AUTHORIZED_CANDIDATE_CLEANLINESS_ROOTS.length,
+    "candidate cleanliness authority inventory must be exact and unique");
+  assert.deepEqual(authorityRoots, AUTHORIZED_CANDIDATE_CLEANLINESS_ROOTS,
+    "candidate-selected cleanliness authority inventory forbidden");
+  const status = execFileSync(
+    "git", ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    { cwd: repoRoot, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+  );
+  for (const entry of parseCandidateStatus(status)) {
+    assert.equal(entry.code, "??",
+      `tracked, staged, deleted, renamed, copied, or conflicted candidate path: ${entry.path}`);
+    const matches = authorityRoots.filter((rootPath) => isExactAuthorityPath(entry.path, rootPath));
+    assert.equal(matches.length, 1, `unexpected untracked candidate path: ${entry.path}`);
+    const authorityRoot = path.join(repoRoot, matches[0]);
+    assert.ok(existsSync(authorityRoot), `trusted workflow authority root absent: ${matches[0]}`);
+    assert.equal(lstatSync(authorityRoot).isSymbolicLink(), false,
+      `trusted workflow authority root cannot be a symlink: ${matches[0]}`);
+    let current = authorityRoot;
+    for (const segment of path.posix.relative(matches[0], entry.path).split("/").filter(Boolean)) {
+      current = path.join(current, segment);
+      if (existsSync(current)) {
+        assert.equal(lstatSync(current).isSymbolicLink(), false,
+          `trusted workflow authority descendant cannot be a symlink: ${entry.path}`);
+      }
+    }
+  }
 }
 
 function gitBufferAt(repoRoot, ...args) {
@@ -1352,10 +1421,12 @@ export const REQUIRED_CI_ADDITION = [
   "          git -C \"$authority\" remote add origin https://github.com/DarksiedCEO/zbestmedia",
   "          git -C \"$authority\" -c protocol.version=2 \\",
   "            -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
-  "            fetch --no-tags --no-write-fetch-head --depth=7 origin \"$P1A_CANDIDATE_SHA\"",
+  "            fetch --no-tags --no-write-fetch-head --depth=8 origin \"$P1A_CANDIDATE_SHA\"",
   "          unset auth_header",
   "          test \"$(git -C \"$authority\" cat-file -t \"$P1A_CANDIDATE_SHA\")\" = commit",
   "          test \"$(git -C \"$authority\" cat-file commit \"$P1A_CANDIDATE_SHA\" | sed -n 's/^parent //p')\" = \\",
+  "            \"586f285df9d770825d9fe6aee893a74fdb99e294\"",
+  "          test \"$(git -C \"$authority\" cat-file commit 586f285df9d770825d9fe6aee893a74fdb99e294 | sed -n 's/^parent //p')\" = \\",
   "            \"6c95cac5f28ed55cacbd21e512a6745aa7a73b94\"",
   "          test \"$(git -C \"$authority\" cat-file commit 6c95cac5f28ed55cacbd21e512a6745aa7a73b94 | sed -n 's/^parent //p')\" = \\",
   "            \"f8b9d3cc9d2e2a92ea41662bca64d61b0f097326\"",
@@ -1381,6 +1452,7 @@ export const REQUIRED_CI_ADDITION = [
   "            --batch-check='%(objectname) %(objecttype)' | awk '$2 == \"commit\" {print $1}' | sort)",
   "          mapfile -t expected_event_commits < <(printf '%s\\n' \\",
   "            \"$P1A_CANDIDATE_SHA\" \\",
+  "            586f285df9d770825d9fe6aee893a74fdb99e294 \\",
   "            6c95cac5f28ed55cacbd21e512a6745aa7a73b94 \\",
   "            f8b9d3cc9d2e2a92ea41662bca64d61b0f097326 \\",
   "            16b426a047ef75d06a0df4b62cac76b28ec8e5f8 \\",
@@ -2198,10 +2270,10 @@ export function classifyP1aReconciliationTopology({
     assert.equal(cursorParents.length, 1,
       "generation-2 remediation path must remain linear and single-parent");
     cursor = cursorParents[0];
-    assert.ok(remediationPath.length <= 7,
+    assert.ok(remediationPath.length <= 8,
       "generation-2 remediation path exceeds the bounded authorized chain");
   }
-  assert.ok(remediationPath.length <= 7,
+  assert.ok(remediationPath.length <= 8,
     "generation-2 remediation path exceeds the bounded authorized chain");
   if (candidateSha !== GENERATION_2_RECONCILIATION) {
     const anchorFirstPath = [...remediationPath].reverse();
@@ -2609,7 +2681,7 @@ export function validateCandidateDataOnly({
       assert.notEqual(path.resolve(repoRoot), path.resolve(process.env.P1A_TRUSTED_EXECUTION_ROOT));
     }
   });
-  assert.equal(gitAt(repoRoot, "status", "--porcelain"), "", "dirty candidate worktree");
+  assertCandidateSourceClean(repoRoot);
   return Object.freeze({
     scope: "CANDIDATE_DATA_VALIDATED", candidateSha, required: checks.length,
     executed: checks.length, passed: checks.length, failed: 0, skipped: 0,
