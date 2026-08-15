@@ -154,6 +154,9 @@ export const GENERATION_2_ELEVENTH_REMEDIATION =
   "faed8e5cca47d46643e4f3fdfdf4120242495fcf";
 export const GENERATION_2_TWELFTH_REMEDIATION =
   "7b1ea7ee4a6a294eca48ce9e04e39f08fb944c0b";
+export const GENERATION_2_THIRTEENTH_REMEDIATION =
+  "f88fb839487dfebff1c043de870e1ddfaa35b06d";
+export const P1A_GENERATION_2_REMEDIATION_MAX_DEPTH = 14;
 export const GENERATION_2_REMEDIATION_PREFIX = Object.freeze([
   GENERATION_2_FIRST_REMEDIATION,
   GENERATION_2_SECOND_REMEDIATION,
@@ -167,6 +170,7 @@ export const GENERATION_2_REMEDIATION_PREFIX = Object.freeze([
   GENERATION_2_TENTH_REMEDIATION,
   GENERATION_2_ELEVENTH_REMEDIATION,
   GENERATION_2_TWELFTH_REMEDIATION,
+  GENERATION_2_THIRTEENTH_REMEDIATION,
 ]);
 
 export const AUTHORIZED_CANDIDATE_CLEANLINESS_ROOTS = Object.freeze([
@@ -821,7 +825,7 @@ export function verifyEventBoundAmendmentTopology({
   let subjectClass;
   if (headParents.length === 1) {
     const directParent = headParents[0];
-    if (directParent === GENERATION_2_TWELFTH_REMEDIATION) {
+    if (directParent === GENERATION_2_THIRTEENTH_REMEDIATION) {
       const anchorFirst = [...GENERATION_2_REMEDIATION_PREFIX];
       for (let index = anchorFirst.length - 1; index > 0; index -= 1) {
         const child = anchorFirst[index];
@@ -1523,10 +1527,12 @@ export const REQUIRED_CI_ADDITION = [
   "          git -C \"$authority\" remote add origin https://github.com/DarksiedCEO/zbestmedia",
   "          git -C \"$authority\" -c protocol.version=2 \\",
   "            -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
-  "            fetch --no-tags --no-write-fetch-head --depth=13 origin \"$P1A_CANDIDATE_SHA\"",
+  "            fetch --no-tags --no-write-fetch-head --depth=14 origin \"$P1A_CANDIDATE_SHA\"",
   "          unset auth_header",
   "          test \"$(git -C \"$authority\" cat-file -t \"$P1A_CANDIDATE_SHA\")\" = commit",
   "          test \"$(git -C \"$authority\" cat-file commit \"$P1A_CANDIDATE_SHA\" | sed -n 's/^parent //p')\" = \\",
+  "            \"f88fb839487dfebff1c043de870e1ddfaa35b06d\"",
+  "          test \"$(git -C \"$authority\" cat-file commit f88fb839487dfebff1c043de870e1ddfaa35b06d | sed -n 's/^parent //p')\" = \\",
   "            \"7b1ea7ee4a6a294eca48ce9e04e39f08fb944c0b\"",
   "          test \"$(git -C \"$authority\" cat-file commit 7b1ea7ee4a6a294eca48ce9e04e39f08fb944c0b | sed -n 's/^parent //p')\" = \\",
   "            \"faed8e5cca47d46643e4f3fdfdf4120242495fcf\"",
@@ -1564,6 +1570,7 @@ export const REQUIRED_CI_ADDITION = [
   "            --batch-check='%(objectname) %(objecttype)' | awk '$2 == \"commit\" {print $1}' | sort)",
   "          mapfile -t expected_event_commits < <(printf '%s\\n' \\",
   "            \"$P1A_CANDIDATE_SHA\" \\",
+  "            f88fb839487dfebff1c043de870e1ddfaa35b06d \\",
   "            7b1ea7ee4a6a294eca48ce9e04e39f08fb944c0b \\",
   "            faed8e5cca47d46643e4f3fdfdf4120242495fcf \\",
   "            098da9abb3c9add8c9aeeb9255b834e2f75f0b0a \\",
@@ -2120,7 +2127,7 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          else",
   "            git -C \"$authority\" -c protocol.version=2 \\",
   "              -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
-  "              fetch --no-tags --no-write-fetch-head --depth=13 origin \\",
+  "              fetch --no-tags --no-write-fetch-head --depth=14 origin \\",
   "              \"$P1A_EVENT_HEAD_SHA\"",
   "          fi",
   "          unset auth_header",
@@ -2290,7 +2297,7 @@ export function composeGeneration2CandidateCi(baseline) {
     "canonical candidate equality proof");
   source = replaceExactlyOnce(source,
     "              fetch --no-tags --no-write-fetch-head --depth=2 origin \\\n",
-    "              fetch --no-tags --no-write-fetch-head --depth=13 origin \\\n",
+    "              fetch --no-tags --no-write-fetch-head --depth=14 origin \\\n",
     "generation-2 bounded event-authority depth");
   source = replaceExactlyOnce(source,
     "              \"$P1A_EVENT_BASE_SHA\" \"$P1A_EVENT_HEAD_SHA\"\n",
@@ -2407,10 +2414,10 @@ export function classifyP1aReconciliationTopology({
     assert.equal(cursorParents.length, 1,
       "generation-2 remediation path must remain linear and single-parent");
     cursor = cursorParents[0];
-    assert.ok(remediationPath.length <= 13,
+    assert.ok(remediationPath.length <= P1A_GENERATION_2_REMEDIATION_MAX_DEPTH,
       "generation-2 remediation path exceeds the bounded authorized chain");
   }
-  assert.ok(remediationPath.length <= 13,
+  assert.ok(remediationPath.length <= P1A_GENERATION_2_REMEDIATION_MAX_DEPTH,
     "generation-2 remediation path exceeds the bounded authorized chain");
   if (candidateSha !== GENERATION_2_RECONCILIATION) {
     const anchorFirstPath = [...remediationPath].reverse();
