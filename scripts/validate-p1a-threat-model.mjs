@@ -150,6 +150,8 @@ export const GENERATION_2_NINTH_REMEDIATION =
   "bac62f20ebfec8602718023418552f50e8d6616e";
 export const GENERATION_2_TENTH_REMEDIATION =
   "098da9abb3c9add8c9aeeb9255b834e2f75f0b0a";
+export const GENERATION_2_ELEVENTH_REMEDIATION =
+  "faed8e5cca47d46643e4f3fdfdf4120242495fcf";
 export const GENERATION_2_REMEDIATION_PREFIX = Object.freeze([
   GENERATION_2_FIRST_REMEDIATION,
   GENERATION_2_SECOND_REMEDIATION,
@@ -161,6 +163,7 @@ export const GENERATION_2_REMEDIATION_PREFIX = Object.freeze([
   GENERATION_2_EIGHTH_REMEDIATION,
   GENERATION_2_NINTH_REMEDIATION,
   GENERATION_2_TENTH_REMEDIATION,
+  GENERATION_2_ELEVENTH_REMEDIATION,
 ]);
 
 export const AUTHORIZED_CANDIDATE_CLEANLINESS_ROOTS = Object.freeze([
@@ -772,6 +775,7 @@ export function verifyExactCurrentTrustedBaseTopology({ trustedBaseRoot } = {}) 
 
 export function verifyEventBoundAmendmentTopology({
   authorityRoot,
+  candidateSha,
   eventName,
   eventRepository,
   eventBaseRepository,
@@ -796,24 +800,25 @@ export function verifyEventBoundAmendmentTopology({
     "event authority: target ref must be an event branch name, not a ref or object selector");
   exactSha(eventBaseSha, "event authority base");
   exactSha(eventHeadSha, "event authority head");
+  exactSha(candidateSha, "event authority canonical candidate");
+  assert.equal(candidateSha, eventHeadSha,
+    "event authority: canonical candidate must equal the immutable event head");
   assert.notEqual(eventHeadSha, eventBaseSha,
     "event authority: amendment must be distinct from base");
   assert.equal(normalizeRepository(gitAt(resolved, "remote", "get-url", "origin")),
     `https://github.com/${EVENT_BOUND_TARGET_REPOSITORY}`,
     "event authority: repository identity mismatch");
-  for (const [label, sha] of [["base", eventBaseSha], ["head", eventHeadSha]]) {
-    assert.equal(gitAt(resolved, "cat-file", "-t", sha), "commit",
-      `event authority: ${label} commit object absent`);
-    assert.equal(gitAt(resolved, "rev-parse", `${sha}^{commit}`), sha,
-      `event authority: ${label} object substitution`);
-  }
+  assert.equal(gitAt(resolved, "cat-file", "-t", eventHeadSha), "commit",
+    "event authority: head commit object absent");
+  assert.equal(gitAt(resolved, "rev-parse", `${eventHeadSha}^{commit}`), eventHeadSha,
+    "event authority: head object substitution");
   const headParents = gitAt(resolved, "cat-file", "commit", eventHeadSha)
     .split("\n").filter((line) => line.startsWith("parent ")).map((line) => line.slice(7));
   let secondParentSha;
   let subjectClass;
   if (headParents.length === 1) {
     const directParent = headParents[0];
-    if (directParent === GENERATION_2_NINTH_REMEDIATION) {
+    if (directParent === GENERATION_2_ELEVENTH_REMEDIATION) {
       const anchorFirst = [...GENERATION_2_REMEDIATION_PREFIX];
       for (let index = anchorFirst.length - 1; index > 0; index -= 1) {
         const child = anchorFirst[index];
@@ -833,8 +838,19 @@ export function verifyEventBoundAmendmentTopology({
         [GENERATION_2_RECONCILIATION],
         "event authority: terminal remediation edge does not bind the exact anchor",
       );
+      if (eventName === "pull_request") {
+        assert.equal(eventBaseSha, CURRENT_TRUSTED_TARGET,
+          "event authority: PR transport trusted target mismatch");
+      } else {
+        assert.equal(eventBaseSha, directParent,
+          "event authority: push transport predecessor mismatch");
+      }
       subjectClass = "GENERATION2_REMEDIATION_DESCENDANT";
     } else {
+      assert.equal(gitAt(resolved, "cat-file", "-t", eventBaseSha), "commit",
+        "event authority: base commit object absent");
+      assert.equal(gitAt(resolved, "rev-parse", `${eventBaseSha}^{commit}`), eventBaseSha,
+        "event authority: base object substitution");
       assert.equal(directParent, eventBaseSha,
         "event authority: amendment must have exactly the event base as parent");
       subjectClass = eventName === "push_create"
@@ -843,6 +859,10 @@ export function verifyEventBoundAmendmentTopology({
     }
     secondParentSha = eventHeadSha;
   } else {
+    assert.equal(gitAt(resolved, "cat-file", "-t", eventBaseSha), "commit",
+      "event authority: base commit object absent");
+    assert.equal(gitAt(resolved, "rev-parse", `${eventBaseSha}^{commit}`), eventBaseSha,
+      "event authority: base object substitution");
     assert.equal(headParents.length, 2,
       "event authority: target push must be an exact two-parent merge");
     assert.equal(headParents[0], eventBaseSha,
@@ -866,8 +886,11 @@ export function verifyEventBoundAmendmentTopology({
     .split("\n").filter(Boolean).sort();
   const amendmentClass = classifyEventBoundAmendmentFiles(
     changed, "event authority: amendment changed-file scope mismatch");
+  const topologyBaseSha = subjectClass === "GENERATION2_REMEDIATION_DESCENDANT"
+    ? headParents[0]
+    : eventBaseSha;
   const secondParentChanged = gitAt(resolved, "diff", "--name-only",
-    `${eventBaseSha}..${secondParentSha}`).split("\n").filter(Boolean).sort();
+    `${topologyBaseSha}..${secondParentSha}`).split("\n").filter(Boolean).sort();
   const secondParentAmendmentClass = classifyEventBoundAmendmentFiles(
     secondParentChanged, "event authority: second-parent changed-file scope mismatch");
   assert.equal(secondParentAmendmentClass, amendmentClass,
@@ -900,7 +923,7 @@ export function verifyEventBoundAmendmentTopology({
     changedFiles: Object.freeze(changed),
     secondParentTree,
     secondParentSha,
-    resultingMergeParents: Object.freeze([eventBaseSha, secondParentSha]),
+    resultingMergeParents: Object.freeze([topologyBaseSha, secondParentSha]),
     resultingMergeTree: resultingTree,
   });
 }
@@ -1470,10 +1493,12 @@ export const REQUIRED_CI_ADDITION = [
   "          git -C \"$authority\" remote add origin https://github.com/DarksiedCEO/zbestmedia",
   "          git -C \"$authority\" -c protocol.version=2 \\",
   "            -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
-  "            fetch --no-tags --no-write-fetch-head --depth=11 origin \"$P1A_CANDIDATE_SHA\"",
+  "            fetch --no-tags --no-write-fetch-head --depth=12 origin \"$P1A_CANDIDATE_SHA\"",
   "          unset auth_header",
   "          test \"$(git -C \"$authority\" cat-file -t \"$P1A_CANDIDATE_SHA\")\" = commit",
   "          test \"$(git -C \"$authority\" cat-file commit \"$P1A_CANDIDATE_SHA\" | sed -n 's/^parent //p')\" = \\",
+  "            \"faed8e5cca47d46643e4f3fdfdf4120242495fcf\"",
+  "          test \"$(git -C \"$authority\" cat-file commit faed8e5cca47d46643e4f3fdfdf4120242495fcf | sed -n 's/^parent //p')\" = \\",
   "            \"098da9abb3c9add8c9aeeb9255b834e2f75f0b0a\"",
   "          test \"$(git -C \"$authority\" cat-file commit 098da9abb3c9add8c9aeeb9255b834e2f75f0b0a | sed -n 's/^parent //p')\" = \\",
   "            \"bac62f20ebfec8602718023418552f50e8d6616e\"",
@@ -1507,6 +1532,7 @@ export const REQUIRED_CI_ADDITION = [
   "            --batch-check='%(objectname) %(objecttype)' | awk '$2 == \"commit\" {print $1}' | sort)",
   "          mapfile -t expected_event_commits < <(printf '%s\\n' \\",
   "            \"$P1A_CANDIDATE_SHA\" \\",
+  "            faed8e5cca47d46643e4f3fdfdf4120242495fcf \\",
   "            098da9abb3c9add8c9aeeb9255b834e2f75f0b0a \\",
   "            bac62f20ebfec8602718023418552f50e8d6616e \\",
   "            66e5616fbf448e58526d81af5530bc60812c8727 \\",
@@ -2001,6 +2027,7 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "",
   "      - name: P1-A current candidate-data contract controls",
   "        env:",
+  "          P1A_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}",
   "          P1A_EVENT_REPOSITORY: ${{ github.repository }}",
   "          P1A_EVENT_NAME: ${{ github.event_name }}",
   "          P1A_EVENT_BASE_REPOSITORY: ${{ github.event.pull_request.base.repo.full_name || github.repository }}",
@@ -2024,6 +2051,7 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          P1A_PR16_CURRENT_PREDECESSOR_SOURCE_ROOT: .p1a-pr16-chain-staging-current-predecessor",
   "          P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT: .p1a-pr16-chain-staging-minimum-depth",
   "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority",
+  "          P1A_GENERATION2_ANCHOR_AUTHORITY_ROOT: .p1a-generation2-anchor-authority",
   "        run: |",
   "          set -euo pipefail",
   "          zero_sha=0000000000000000000000000000000000000000",
@@ -2035,6 +2063,8 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          test \"$P1A_EVENT_NAME\" = pull_request || test \"$P1A_EVENT_NAME\" = push",
   "          [[ \"$P1A_EVENT_HEAD_SHA\" =~ ^[0-9a-f]{40}$ ]]",
   "          [[ \"$P1A_EVENT_BASE_SHA\" =~ ^[0-9a-f]{40}$ ]]",
+  "          [[ \"$P1A_CANDIDATE_SHA\" =~ ^[0-9a-f]{40}$ ]]",
+  "          test \"$P1A_CANDIDATE_SHA\" = \"$P1A_EVENT_HEAD_SHA\"",
   "          test -n \"$P1A_EVENT_FETCH_TOKEN\"",
   "          auth_header=\"$(printf 'x-access-token:%s' \"$P1A_EVENT_FETCH_TOKEN\" | base64 | tr -d '\\n')\"",
   "          unset P1A_EVENT_FETCH_TOKEN",
@@ -2057,8 +2087,8 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          else",
   "            git -C \"$authority\" -c protocol.version=2 \\",
   "              -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
-  "              fetch --no-tags --no-write-fetch-head --depth=11 origin \\",
-  "              \"$P1A_EVENT_BASE_SHA\" \"$P1A_EVENT_HEAD_SHA\"",
+  "              fetch --no-tags --no-write-fetch-head --depth=12 origin \\",
+  "              \"$P1A_EVENT_HEAD_SHA\"",
   "          fi",
   "          unset auth_header",
   "          test -z \"$(git -C \"$authority\" for-each-ref --format='%(refname)')\"",
@@ -2218,9 +2248,21 @@ export function composeGeneration2CandidateCi(baseline) {
     "current trusted target acquisition placement");
   source = composeCandidateCi(source);
   source = replaceExactlyOnce(source,
+    "      - name: P1-A current candidate-data contract controls\n        env:\n          P1A_EVENT_REPOSITORY:",
+    "      - name: P1-A current candidate-data contract controls\n        env:\n          P1A_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}\n          P1A_EVENT_REPOSITORY:",
+    "canonical candidate identity binding");
+  source = replaceExactlyOnce(source,
+    "          [[ \"$P1A_EVENT_BASE_SHA\" =~ ^[0-9a-f]{40}$ ]]\n          test -n \"$P1A_EVENT_FETCH_TOKEN\"",
+    "          [[ \"$P1A_EVENT_BASE_SHA\" =~ ^[0-9a-f]{40}$ ]]\n          [[ \"$P1A_CANDIDATE_SHA\" =~ ^[0-9a-f]{40}$ ]]\n          test \"$P1A_CANDIDATE_SHA\" = \"$P1A_EVENT_HEAD_SHA\"\n          test -n \"$P1A_EVENT_FETCH_TOKEN\"",
+    "canonical candidate equality proof");
+  source = replaceExactlyOnce(source,
     "              fetch --no-tags --no-write-fetch-head --depth=2 origin \\\n",
-    "              fetch --no-tags --no-write-fetch-head --depth=11 origin \\\n",
+    "              fetch --no-tags --no-write-fetch-head --depth=12 origin \\\n",
     "generation-2 bounded event-authority depth");
+  source = replaceExactlyOnce(source,
+    "              \"$P1A_EVENT_BASE_SHA\" \"$P1A_EVENT_HEAD_SHA\"\n",
+    "              \"$P1A_EVENT_HEAD_SHA\"\n",
+    "generation-2 transport-independent event-head acquisition");
   source = replaceExactlyOnce(source,
     "          P1A_CURRENT_WORKFLOW_FETCH_TOKEN: ${{ github.token }}\n          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate\n          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline\n        run: |\n",
     "          P1A_CURRENT_WORKFLOW_FETCH_TOKEN: ${{ github.token }}\n          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate\n          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline\n          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority\n          P1A_GENERATION2_ANCHOR_AUTHORITY_ROOT: .p1a-generation2-anchor-authority\n        run: |\n",
@@ -2332,10 +2374,10 @@ export function classifyP1aReconciliationTopology({
     assert.equal(cursorParents.length, 1,
       "generation-2 remediation path must remain linear and single-parent");
     cursor = cursorParents[0];
-    assert.ok(remediationPath.length <= 11,
+    assert.ok(remediationPath.length <= 12,
       "generation-2 remediation path exceeds the bounded authorized chain");
   }
-  assert.ok(remediationPath.length <= 11,
+  assert.ok(remediationPath.length <= 12,
     "generation-2 remediation path exceeds the bounded authorized chain");
   if (candidateSha !== GENERATION_2_RECONCILIATION) {
     const anchorFirstPath = [...remediationPath].reverse();

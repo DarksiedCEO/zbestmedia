@@ -624,10 +624,12 @@ jobs:
           git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
           git -C "$authority" -c protocol.version=2 \
             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" \
-            fetch --no-tags --no-write-fetch-head --depth=11 origin "$P1A_CANDIDATE_SHA"
+            fetch --no-tags --no-write-fetch-head --depth=12 origin "$P1A_CANDIDATE_SHA"
           unset auth_header
           test "$(git -C "$authority" cat-file -t "$P1A_CANDIDATE_SHA")" = commit
           test "$(git -C "$authority" cat-file commit "$P1A_CANDIDATE_SHA" | sed -n 's/^parent //p')" = \
+            "faed8e5cca47d46643e4f3fdfdf4120242495fcf"
+          test "$(git -C "$authority" cat-file commit faed8e5cca47d46643e4f3fdfdf4120242495fcf | sed -n 's/^parent //p')" = \
             "098da9abb3c9add8c9aeeb9255b834e2f75f0b0a"
           test "$(git -C "$authority" cat-file commit 098da9abb3c9add8c9aeeb9255b834e2f75f0b0a | sed -n 's/^parent //p')" = \
             "bac62f20ebfec8602718023418552f50e8d6616e"
@@ -661,6 +663,7 @@ jobs:
             --batch-check='%(objectname) %(objecttype)' | awk '$2 == "commit" {print $1}' | sort)
           mapfile -t expected_event_commits < <(printf '%s\n' \
             "$P1A_CANDIDATE_SHA" \
+            faed8e5cca47d46643e4f3fdfdf4120242495fcf \
             098da9abb3c9add8c9aeeb9255b834e2f75f0b0a \
             bac62f20ebfec8602718023418552f50e8d6616e \
             66e5616fbf448e58526d81af5530bc60812c8727 \
@@ -687,6 +690,7 @@ jobs:
 
       - name: P1-A current candidate-data contract controls
         env:
+          P1A_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           P1A_EVENT_REPOSITORY: ${{ github.repository }}
           P1A_EVENT_NAME: ${{ github.event_name }}
           P1A_EVENT_BASE_REPOSITORY: ${{ github.event.pull_request.base.repo.full_name || github.repository }}
@@ -722,6 +726,8 @@ jobs:
           test "$P1A_EVENT_NAME" = pull_request || test "$P1A_EVENT_NAME" = push
           [[ "$P1A_EVENT_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$P1A_EVENT_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$P1A_CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$P1A_CANDIDATE_SHA" = "$P1A_EVENT_HEAD_SHA"
           test -n "$P1A_EVENT_FETCH_TOKEN"
           auth_header="$(printf 'x-access-token:%s' "$P1A_EVENT_FETCH_TOKEN" | base64 | tr -d '\n')"
           unset P1A_EVENT_FETCH_TOKEN
@@ -744,8 +750,8 @@ jobs:
           else
             git -C "$authority" -c protocol.version=2 \
               -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" \
-              fetch --no-tags --no-write-fetch-head --depth=11 origin \
-              "$P1A_EVENT_BASE_SHA" "$P1A_EVENT_HEAD_SHA"
+              fetch --no-tags --no-write-fetch-head --depth=12 origin \
+              "$P1A_EVENT_HEAD_SHA"
           fi
           unset auth_header
           test -z "$(git -C "$authority" for-each-ref --format='%(refname)')"
