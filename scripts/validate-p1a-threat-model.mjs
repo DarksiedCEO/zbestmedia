@@ -20,6 +20,31 @@ const exists = (items, id, label) =>
   assert.ok(items.some((item) => item.id === id), `${label}: ${id}`);
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
+function verifiedCommitProofFingerprint({
+  sha, tree, parents, parentCount, objectType, authorityClass,
+  authorityId, authorityRootClass, subjectClass = null,
+} = {}) {
+  return sha256(JSON.stringify({
+    sha,
+    tree,
+    parents: [...parents],
+    parentCount,
+    objectType,
+    authorityClass,
+    authorityId,
+    authorityRootClass,
+    subjectClass,
+  }));
+}
+
+function assertVerifiedCommitProofIntegrity(proof, label) {
+  assert.ok(proof, `VERIFIED_PROOF_MUTATION: ${label} proof absent`);
+  assert.equal(proof.parentCount, proof.parents.length,
+    `VERIFIED_PROOF_MUTATION: ${label} parent count changed`);
+  assert.equal(proof.proofFingerprint, verifiedCommitProofFingerprint(proof),
+    `VERIFIED_PROOF_MUTATION: ${label} governed fields changed`);
+}
+
 export const AUTHORIZED_BASE =
   "7056ea4ce24379c93549f0ac9b45ddd7a2600dd6";
 export const TRUSTED_RECONCILIATION_BASE =
@@ -156,7 +181,9 @@ export const GENERATION_2_TWELFTH_REMEDIATION =
   "7b1ea7ee4a6a294eca48ce9e04e39f08fb944c0b";
 export const GENERATION_2_THIRTEENTH_REMEDIATION =
   "f88fb839487dfebff1c043de870e1ddfaa35b06d";
-export const P1A_GENERATION_2_REMEDIATION_MAX_DEPTH = 14;
+export const GENERATION_2_FOURTEENTH_REMEDIATION =
+  "f5a1dfc48ae6d86b2acdce3b7d9618436fae3174";
+export const P1A_GENERATION_2_REMEDIATION_MAX_DEPTH = 15;
 export const GENERATION_2_REMEDIATION_PREFIX = Object.freeze([
   GENERATION_2_FIRST_REMEDIATION,
   GENERATION_2_SECOND_REMEDIATION,
@@ -171,6 +198,7 @@ export const GENERATION_2_REMEDIATION_PREFIX = Object.freeze([
   GENERATION_2_ELEVENTH_REMEDIATION,
   GENERATION_2_TWELFTH_REMEDIATION,
   GENERATION_2_THIRTEENTH_REMEDIATION,
+  GENERATION_2_FOURTEENTH_REMEDIATION,
 ]);
 
 export const AUTHORIZED_CANDIDATE_CLEANLINESS_ROOTS = Object.freeze([
@@ -825,7 +853,7 @@ export function verifyEventBoundAmendmentTopology({
   let subjectClass;
   if (headParents.length === 1) {
     const directParent = headParents[0];
-    if (directParent === GENERATION_2_THIRTEENTH_REMEDIATION) {
+    if (directParent === GENERATION_2_FOURTEENTH_REMEDIATION) {
       const anchorFirst = [...GENERATION_2_REMEDIATION_PREFIX];
       for (let index = anchorFirst.length - 1; index > 0; index -= 1) {
         const child = anchorFirst[index];
@@ -918,7 +946,16 @@ export function verifyEventBoundAmendmentTopology({
   assert.ok(!existsSync(path.join(gitDir, "info/grafts")) ||
     readFileSync(path.join(gitDir, "info/grafts"), "utf8").trim() === "",
   "event authority: grafts forbidden");
-  return Object.freeze({
+  const eventProof = {
+    verified: true,
+    objectType: "commit",
+    authorityClass: "EVENT_CANDIDATE",
+    authorityRootClass: "P1A_EVENT_AUTHORITY_ROOT",
+    authorityId: `EVENT_CANDIDATE:${eventHeadSha}`,
+    sha: eventHeadSha,
+    tree: resultingTree,
+    parents: Object.freeze([...headParents]),
+    parentCount: headParents.length,
     repository: eventRepository,
     eventName,
     subjectClass,
@@ -926,12 +963,118 @@ export function verifyEventBoundAmendmentTopology({
     targetRef: eventBaseRef,
     baseSha: eventBaseSha,
     headSha: eventHeadSha,
-    headParents: Object.freeze(headParents),
+    headParents: Object.freeze([...headParents]),
     changedFiles: Object.freeze(changed),
     secondParentTree,
     secondParentSha,
     resultingMergeParents: Object.freeze([topologyBaseSha, secondParentSha]),
     resultingMergeTree: resultingTree,
+  };
+  return Object.freeze({
+    ...eventProof,
+    proofFingerprint: verifiedCommitProofFingerprint(eventProof),
+  });
+}
+
+// Compare already-verified identities across isolated authorities. This
+// function deliberately has no authority-root argument and performs no Git
+// lookup: each governed object must be resolved by its owning verifier first.
+export function compareVerifiedTransportTwin({
+  eventProof,
+  trustedTargetProof,
+  generation2Proof,
+  eventName,
+  eventBaseSha,
+} = {}) {
+  assert.equal(eventProof?.verified, true,
+    "transport twin: verified event proof required");
+  assertVerifiedCommitProofIntegrity(eventProof, "event");
+  assert.deepEqual([...eventProof.headParents], [...eventProof.parents],
+    "VERIFIED_PROOF_MUTATION: event parent aliases diverged");
+  assert.equal(eventProof.headSha, eventProof.sha,
+    "VERIFIED_PROOF_MUTATION: event SHA aliases diverged");
+  assert.equal(eventProof.resultingMergeTree, eventProof.tree,
+    "VERIFIED_PROOF_MUTATION: event tree aliases diverged");
+  assert.equal(eventProof.authorityClass, "EVENT_CANDIDATE",
+    "transport twin: candidate proof authority mismatch");
+  assert.equal(eventProof.objectType, "commit",
+    "transport twin: candidate object type mismatch");
+  assert.equal(eventProof.authorityId, `EVENT_CANDIDATE:${eventProof.headSha}`,
+    "transport twin: candidate identity changed after verification");
+  assert.equal(trustedTargetProof?.verified, true,
+    "transport twin: verified trusted-target proof required");
+  assertVerifiedCommitProofIntegrity(trustedTargetProof, "trusted target");
+  assert.equal(trustedTargetProof.authorityClass, "CURRENT_TRUSTED_TARGET",
+    "transport twin: trusted-target proof authority mismatch");
+  assert.equal(trustedTargetProof.authorityRootClass, "P1A_CURRENT_TRUSTED_TARGET_ROOT",
+    "transport twin: trusted-target root provenance mismatch");
+  assert.equal(trustedTargetProof.evidenceSource, "EXACT_ISOLATED_GIT_AUTHORITY",
+    "transport twin: trusted-target evidence source mismatch");
+  assert.equal(trustedTargetProof.primaryFallback, false,
+    "transport twin: trusted-target primary fallback forbidden");
+  assert.equal(trustedTargetProof.ambientFallback, false,
+    "transport twin: trusted-target ambient fallback forbidden");
+  assert.equal(trustedTargetProof.objectType, "commit",
+    "transport twin: trusted-target object type mismatch");
+  assert.equal(trustedTargetProof.authorityId,
+    `CURRENT_TRUSTED_TARGET:${trustedTargetProof.sha}`,
+    "transport twin: trusted-target identity changed after verification");
+  assert.equal(generation2Proof?.verified, true,
+    "transport twin: verified generation-2 proof required");
+  assertVerifiedCommitProofIntegrity(generation2Proof, "generation-2");
+  assert.equal(generation2Proof.anchor, generation2Proof.sha,
+    "VERIFIED_PROOF_MUTATION: generation-2 SHA aliases diverged");
+  assert.equal(generation2Proof.authorityClass, "GENERATION2_ANCHOR",
+    "transport twin: generation-2 proof authority mismatch");
+  assert.equal(generation2Proof.objectType, "commit",
+    "transport twin: generation-2 object type mismatch");
+  assert.equal(generation2Proof.authorityId,
+    `GENERATION2_ANCHOR:${generation2Proof.anchor}`,
+    "transport twin: generation-2 identity changed after verification");
+  assert.notEqual(eventProof.authorityId, trustedTargetProof.authorityId,
+    "transport twin: event and trusted-target authorities merged");
+  assert.notEqual(eventProof.authorityId, generation2Proof.authorityId,
+    "transport twin: event and generation-2 authorities merged");
+  assert.notEqual(trustedTargetProof.authorityId, generation2Proof.authorityId,
+    "transport twin: trusted-target and generation-2 authorities merged");
+  assert.equal(trustedTargetProof.sha, CURRENT_TRUSTED_TARGET,
+    "transport twin: trusted-target identity mismatch");
+  assert.equal(trustedTargetProof.tree, CURRENT_TRUSTED_TARGET_TREE,
+    "transport twin: trusted-target tree mismatch");
+  assert.deepEqual([...trustedTargetProof.parents], [...CURRENT_TRUSTED_TARGET_PARENTS],
+    "transport twin: trusted-target parentage mismatch");
+  assert.equal(generation2Proof.anchor, GENERATION_2_RECONCILIATION,
+    "transport twin: generation-2 identity mismatch");
+  assert.equal(generation2Proof.tree, GENERATION_2_RECONCILIATION_TREE,
+    "transport twin: generation-2 tree mismatch");
+  assert.deepEqual([...generation2Proof.parents], [...GENERATION_2_RECONCILIATION_PARENTS],
+    "transport twin: generation-2 parentage mismatch");
+  assert.equal(eventProof.subjectClass, "GENERATION2_REMEDIATION_DESCENDANT",
+    "transport twin: unsupported candidate subject class");
+  assert.ok(["push", "pull_request"].includes(eventName),
+    "transport twin: unsupported transport");
+  exactSha(eventBaseSha, "transport twin event base");
+  const expectedBase = eventName === "push"
+    ? eventProof.headParents[0]
+    : trustedTargetProof.sha;
+  assert.equal(eventBaseSha, expectedBase,
+    "transport twin: transport base does not match its owning proof");
+  return Object.freeze({
+    verified: true,
+    eventName,
+    baseSha: eventBaseSha,
+    subjectClass: eventProof.subjectClass,
+    headSha: eventProof.headSha,
+    headParents: eventProof.headParents,
+    changedFiles: eventProof.changedFiles,
+    amendmentClass: eventProof.amendmentClass,
+    secondParentTree: eventProof.secondParentTree,
+    resultingMergeTree: eventProof.resultingMergeTree,
+    authorityProvenance: Object.freeze([
+      eventProof.authorityId,
+      trustedTargetProof.authorityId,
+      generation2Proof.authorityId,
+    ]),
   });
 }
 
@@ -1527,10 +1670,12 @@ export const REQUIRED_CI_ADDITION = [
   "          git -C \"$authority\" remote add origin https://github.com/DarksiedCEO/zbestmedia",
   "          git -C \"$authority\" -c protocol.version=2 \\",
   "            -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
-  "            fetch --no-tags --no-write-fetch-head --depth=14 origin \"$P1A_CANDIDATE_SHA\"",
+  "            fetch --no-tags --no-write-fetch-head --depth=15 origin \"$P1A_CANDIDATE_SHA\"",
   "          unset auth_header",
   "          test \"$(git -C \"$authority\" cat-file -t \"$P1A_CANDIDATE_SHA\")\" = commit",
   "          test \"$(git -C \"$authority\" cat-file commit \"$P1A_CANDIDATE_SHA\" | sed -n 's/^parent //p')\" = \\",
+  "            \"f5a1dfc48ae6d86b2acdce3b7d9618436fae3174\"",
+  "          test \"$(git -C \"$authority\" cat-file commit f5a1dfc48ae6d86b2acdce3b7d9618436fae3174 | sed -n 's/^parent //p')\" = \\",
   "            \"f88fb839487dfebff1c043de870e1ddfaa35b06d\"",
   "          test \"$(git -C \"$authority\" cat-file commit f88fb839487dfebff1c043de870e1ddfaa35b06d | sed -n 's/^parent //p')\" = \\",
   "            \"7b1ea7ee4a6a294eca48ce9e04e39f08fb944c0b\"",
@@ -1570,6 +1715,7 @@ export const REQUIRED_CI_ADDITION = [
   "            --batch-check='%(objectname) %(objecttype)' | awk '$2 == \"commit\" {print $1}' | sort)",
   "          mapfile -t expected_event_commits < <(printf '%s\\n' \\",
   "            \"$P1A_CANDIDATE_SHA\" \\",
+  "            f5a1dfc48ae6d86b2acdce3b7d9618436fae3174 \\",
   "            f88fb839487dfebff1c043de870e1ddfaa35b06d \\",
   "            7b1ea7ee4a6a294eca48ce9e04e39f08fb944c0b \\",
   "            faed8e5cca47d46643e4f3fdfdf4120242495fcf \\",
@@ -2127,7 +2273,7 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          else",
   "            git -C \"$authority\" -c protocol.version=2 \\",
   "              -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
-  "              fetch --no-tags --no-write-fetch-head --depth=14 origin \\",
+  "              fetch --no-tags --no-write-fetch-head --depth=15 origin \\",
   "              \"$P1A_EVENT_HEAD_SHA\"",
   "          fi",
   "          unset auth_header",
@@ -2297,7 +2443,7 @@ export function composeGeneration2CandidateCi(baseline) {
     "canonical candidate equality proof");
   source = replaceExactlyOnce(source,
     "              fetch --no-tags --no-write-fetch-head --depth=2 origin \\\n",
-    "              fetch --no-tags --no-write-fetch-head --depth=14 origin \\\n",
+    "              fetch --no-tags --no-write-fetch-head --depth=15 origin \\\n",
     "generation-2 bounded event-authority depth");
   source = replaceExactlyOnce(source,
     "              \"$P1A_EVENT_BASE_SHA\" \"$P1A_EVENT_HEAD_SHA\"\n",
@@ -2485,8 +2631,16 @@ export function verifyGeneration2AnchorAuthority({
     assert.throws(() => gitAt(resolved, "cat-file", "-e", `${descendant}^{commit}`),
       "generation-2 anchor authority contains remediation descendant");
   }
-  return Object.freeze({ root: resolved, anchor: GENERATION_2_RECONCILIATION,
-    tree, parents: Object.freeze(parents) });
+  const generation2Proof = { verified: true, objectType: "commit",
+    authorityClass: "GENERATION2_ANCHOR",
+    authorityRootClass: "P1A_GENERATION2_ANCHOR_AUTHORITY_ROOT",
+    authorityId: `GENERATION2_ANCHOR:${GENERATION_2_RECONCILIATION}`,
+    sha: GENERATION_2_RECONCILIATION,
+    parentCount: parents.length,
+    root: resolved, anchor: GENERATION_2_RECONCILIATION,
+    tree, parents: Object.freeze([...parents]) };
+  return Object.freeze({ ...generation2Proof,
+    proofFingerprint: verifiedCommitProofFingerprint(generation2Proof) });
 }
 
 export function verifyCandidateTopologyAuthority({ authorityRoot, candidateSha } = {}) {
@@ -2634,7 +2788,34 @@ export function verifyCurrentTrustedTargetArtifactAuthority({
   const config = readFileSync(path.join(gitDir, "config"), "utf8");
   assert.ok(!/x-access-token|authorization:|http\..*extraheader/i.test(config),
     "current trusted target artifact authority persisted credentials forbidden");
-  return Object.freeze({ root: resolved, gitDir });
+  const commit = gitAt(resolved, "cat-file", "commit", CURRENT_TRUSTED_TARGET);
+  const tree = commit.split("\n").find((line) => line.startsWith("tree "))?.slice(5);
+  const parents = commit.split("\n").filter((line) => line.startsWith("parent "))
+    .map((line) => line.slice(7));
+  assert.equal(tree, CURRENT_TRUSTED_TARGET_TREE,
+    "current trusted target artifact authority tree mismatch");
+  assert.deepEqual(parents, [...CURRENT_TRUSTED_TARGET_PARENTS],
+    "current trusted target artifact authority ordered parents mismatch");
+  const trustedTargetProof = {
+    verified: true,
+    objectType: "commit",
+    authorityClass: "CURRENT_TRUSTED_TARGET",
+    authorityRootClass: "P1A_CURRENT_TRUSTED_TARGET_ROOT",
+    authorityId: `CURRENT_TRUSTED_TARGET:${CURRENT_TRUSTED_TARGET}`,
+    evidenceSource: "EXACT_ISOLATED_GIT_AUTHORITY",
+    primaryFallback: false,
+    ambientFallback: false,
+    sha: CURRENT_TRUSTED_TARGET,
+    tree,
+    parents: Object.freeze([...parents]),
+    parentCount: parents.length,
+    root: resolved,
+    gitDir,
+  };
+  return Object.freeze({
+    ...trustedTargetProof,
+    proofFingerprint: verifiedCommitProofFingerprint(trustedTargetProof),
+  });
 }
 
 export function validateCandidateDataOnly({

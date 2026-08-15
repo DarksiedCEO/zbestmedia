@@ -624,10 +624,12 @@ jobs:
           git -C "$authority" remote add origin https://github.com/DarksiedCEO/zbestmedia
           git -C "$authority" -c protocol.version=2 \
             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" \
-            fetch --no-tags --no-write-fetch-head --depth=14 origin "$P1A_CANDIDATE_SHA"
+            fetch --no-tags --no-write-fetch-head --depth=15 origin "$P1A_CANDIDATE_SHA"
           unset auth_header
           test "$(git -C "$authority" cat-file -t "$P1A_CANDIDATE_SHA")" = commit
           test "$(git -C "$authority" cat-file commit "$P1A_CANDIDATE_SHA" | sed -n 's/^parent //p')" = \
+            "f5a1dfc48ae6d86b2acdce3b7d9618436fae3174"
+          test "$(git -C "$authority" cat-file commit f5a1dfc48ae6d86b2acdce3b7d9618436fae3174 | sed -n 's/^parent //p')" = \
             "f88fb839487dfebff1c043de870e1ddfaa35b06d"
           test "$(git -C "$authority" cat-file commit f88fb839487dfebff1c043de870e1ddfaa35b06d | sed -n 's/^parent //p')" = \
             "7b1ea7ee4a6a294eca48ce9e04e39f08fb944c0b"
@@ -667,6 +669,7 @@ jobs:
             --batch-check='%(objectname) %(objecttype)' | awk '$2 == "commit" {print $1}' | sort)
           mapfile -t expected_event_commits < <(printf '%s\n' \
             "$P1A_CANDIDATE_SHA" \
+            f5a1dfc48ae6d86b2acdce3b7d9618436fae3174 \
             f88fb839487dfebff1c043de870e1ddfaa35b06d \
             7b1ea7ee4a6a294eca48ce9e04e39f08fb944c0b \
             faed8e5cca47d46643e4f3fdfdf4120242495fcf \
@@ -756,7 +759,7 @@ jobs:
           else
             git -C "$authority" -c protocol.version=2 \
               -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header" \
-              fetch --no-tags --no-write-fetch-head --depth=14 origin \
+              fetch --no-tags --no-write-fetch-head --depth=15 origin \
               "$P1A_EVENT_HEAD_SHA"
           fi
           unset auth_header

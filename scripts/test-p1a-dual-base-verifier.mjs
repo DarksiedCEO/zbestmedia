@@ -34,6 +34,7 @@ import {
   GENERATION_2_ELEVENTH_REMEDIATION,
   GENERATION_2_TWELFTH_REMEDIATION,
   GENERATION_2_THIRTEENTH_REMEDIATION,
+  GENERATION_2_FOURTEENTH_REMEDIATION,
   P1A_GENERATION_2_REMEDIATION_MAX_DEPTH,
   AUTHORIZED_CANDIDATE_CLEANLINESS_ROOTS, assertCandidateSourceClean,
   POST_PR17_TRUSTED_BASE, POST_PR17_TRUSTED_BASE_TREE, POST_PR17_TRUSTED_BASE_PARENTS,
@@ -43,8 +44,10 @@ import {
   EVENT_BOUND_TARGET_REPOSITORY, EVENT_BOUND_AMENDMENT_FILES,
   EVENT_BOUND_AMENDMENT_CLASS_B_FILES, EVENT_BOUND_AMENDMENT_CLASSES,
   verifyEventBoundAmendmentTopology,
+  compareVerifiedTransportTwin,
   consumeCanonicalEventSubjectClassification,
   verifyGeneration2AnchorAuthority,
+  verifyOriginalCandidateArtifactAuthority,
   verifyCurrentTrustedTargetArtifactAuthority,
   verifyTrustedBaselineArtifactAuthority,
   CURRENT_TRUSTED_TARGET_CODEOWNERS_BLOB,
@@ -195,9 +198,27 @@ const authorityRoots = {
 const workspaceOptions = (expectedRelative) => process.env.GITHUB_WORKSPACE
   ? { workspaceRoot: process.env.GITHUB_WORKSPACE, expectedRelative }
   : {};
-const run = (cwd, args, options = {}) => execFileSync(args[0], args.slice(1), {
-  cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], ...options,
-}).trim();
+const SYNTHETIC_COMMIT_ENVIRONMENT = Object.freeze({
+  GIT_AUTHOR_NAME: "P1A Fixture",
+  GIT_AUTHOR_EMAIL: "p1a-fixture@example.invalid",
+  GIT_COMMITTER_NAME: "P1A Fixture",
+  GIT_COMMITTER_EMAIL: "p1a-fixture@example.invalid",
+  GIT_AUTHOR_DATE: "2000-01-01T00:00:00Z",
+  GIT_COMMITTER_DATE: "2000-01-01T00:00:00Z",
+});
+const hermeticSyntheticCommitEnvironment = (ambient = process.env) => ({
+  ...ambient,
+  ...SYNTHETIC_COMMIT_ENVIRONMENT,
+});
+const run = (cwd, args, options = {}) => {
+  const resolvedOptions = { ...options };
+  if (args[0] === "git" && args[1] === "commit-tree") {
+    resolvedOptions.env = hermeticSyntheticCommitEnvironment(options.env);
+  }
+  return execFileSync(args[0], args.slice(1), {
+    cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], ...resolvedOptions,
+  }).trim();
+};
 const gitAt = (cwd, ...args) => run(cwd, ["git", ...args]);
 
 function exactSingleParentFromCommitObject(commitBody, label = "commit") {
@@ -239,8 +260,8 @@ function verifyEventAcquisitionWorkflow(source) {
     "event acquisition: wrong repository accepted");
   assert.ok(source.includes("fetch --no-tags --no-write-fetch-head --depth=1 origin \"$P1A_EVENT_HEAD_SHA\""),
     "event acquisition: zero-before exact head fetch missing");
-  assert.ok(source.includes("fetch --no-tags --no-write-fetch-head --depth=14 origin \\\n              \"$P1A_EVENT_HEAD_SHA\""),
-    "event acquisition: exact bounded depth-fourteen head fetch missing");
+  assert.ok(source.includes("fetch --no-tags --no-write-fetch-head --depth=15 origin \\\n              \"$P1A_EVENT_HEAD_SHA\""),
+    "event acquisition: exact bounded depth-fifteen head fetch missing");
   assert.ok(!source.includes('"$P1A_EVENT_BASE_SHA" "$P1A_EVENT_HEAD_SHA"'),
     "event acquisition: PR transport base leaked into candidate authority");
   assert.ok(source.includes("P1A_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}"),
@@ -351,6 +372,26 @@ const generation2AnchorFixture = createGeneration2AnchorAuthorityFixture("valid"
 const generation2AnchorProof = verifyGeneration2AnchorAuthority({
   authorityRoot: generation2AnchorFixture,
 });
+const trustedTargetIdentityProof = verifyCurrentTrustedTargetArtifactAuthority({
+  authorityRoot: authorityRoots.currentTrustedTarget,
+  candidateRoot: root,
+});
+const originalCandidateAuthorityProof = verifyOriginalCandidateArtifactAuthority({
+  authorityRoot: authorityRoots.original,
+  candidateRoot: root,
+});
+assert.equal(trustedTargetIdentityProof.verified, true,
+  "trusted-target verifier did not produce a verified proof");
+assert.equal(trustedTargetIdentityProof.authorityClass, "CURRENT_TRUSTED_TARGET");
+assert.equal(trustedTargetIdentityProof.authorityRootClass,
+  "P1A_CURRENT_TRUSTED_TARGET_ROOT");
+assert.equal(trustedTargetIdentityProof.sha, CURRENT_TRUSTED_TARGET);
+assert.equal(trustedTargetIdentityProof.primaryFallback, false);
+assert.equal(trustedTargetIdentityProof.ambientFallback, false);
+assert.equal(originalCandidateAuthorityProof.verified, undefined,
+  "original-candidate verifier was cross-wired as trusted-target proof producer");
+assert.notEqual(originalCandidateAuthorityProof.root, trustedTargetIdentityProof.root,
+  "original and trusted-target proof producers share an authority root");
 assert.equal(generation2AnchorProof.anchor, GENERATION_2_RECONCILIATION);
 assert.equal(generation2AnchorProof.tree, GENERATION_2_RECONCILIATION_TREE);
 assert.deepEqual([...generation2AnchorProof.parents], [...GENERATION_2_RECONCILIATION_PARENTS]);
@@ -461,18 +502,14 @@ if (process.env.P1A_EVENT_AUTHORITY_ROOT) {
     eventBaseSha: process.env.P1A_EVENT_BASE_SHA,
     eventHeadSha: process.env.P1A_EVENT_HEAD_SHA,
   });
-  const transportTwinProof = verifyEventBoundAmendmentTopology({
-    authorityRoot: process.env.P1A_EVENT_AUTHORITY_ROOT,
-    candidateSha: process.env.P1A_CANDIDATE_SHA,
+  const transportTwinProof = compareVerifiedTransportTwin({
+    eventProof: verifiedEventProof,
+    trustedTargetProof: trustedTargetIdentityProof,
+    generation2Proof: generation2AnchorProof,
     eventName: process.env.P1A_EVENT_NAME === "push" ? "pull_request" : "push",
-    eventRepository: process.env.P1A_EVENT_REPOSITORY,
-    eventBaseRepository: process.env.P1A_EVENT_BASE_REPOSITORY,
-    eventHeadRepository: process.env.P1A_EVENT_HEAD_REPOSITORY,
-    eventBaseRef: process.env.P1A_EVENT_BASE_REF,
     eventBaseSha: process.env.P1A_EVENT_NAME === "push"
       ? CURRENT_TRUSTED_TARGET
       : verifiedEventProof.headParents[0],
-    eventHeadSha: process.env.P1A_EVENT_HEAD_SHA,
   });
   assert.equal(transportTwinProof.subjectClass, verifiedEventProof.subjectClass,
     "event authority: transport metadata changed the immutable subject class");
@@ -486,6 +523,158 @@ if (process.env.P1A_EVENT_AUTHORITY_ROOT) {
     "event authority: transport metadata changed candidate scope");
   assert.equal(transportTwinProof.amendmentClass, verifiedEventProof.amendmentClass,
     "event authority: transport metadata changed candidate-data verdict");
+  assert.deepEqual(transportTwinProof.authorityProvenance, [
+    verifiedEventProof.authorityId,
+    trustedTargetIdentityProof.authorityId,
+    generation2AnchorProof.authorityId,
+  ], "transport twin: authority provenance changed");
+  const comparatorSource = compareVerifiedTransportTwin.toString();
+  for (const forbiddenLookup of ["gitAt(", "cat-file", "rev-parse", "git show", "git log"]) {
+    assert.ok(!comparatorSource.includes(forbiddenLookup),
+      `transport twin: cross-root Git lookup remains: ${forbiddenLookup}`);
+  }
+  const freezeProof = (proof, mutation) => Object.freeze({ ...proof, ...mutation });
+  assert.ok(Object.isFrozen(verifiedEventProof),
+    "verified event proof object is mutable");
+  assert.ok(Object.isFrozen(verifiedEventProof.parents),
+    "verified event proof parent array is mutable");
+  assert.ok(Object.isFrozen(verifiedEventProof.headParents),
+    "verified event proof head-parent alias is mutable");
+  assert.throws(() => verifiedEventProof.parents.push("0".repeat(40)), TypeError,
+    "verified event proof parent array accepted alias mutation");
+  const crossAuthorityHostiles = [
+    ["event_unverified", { eventProof: freezeProof(verifiedEventProof, { verified: false }) }],
+    ["event_wrong_authority", { eventProof: freezeProof(verifiedEventProof,
+      { authorityClass: "CURRENT_TRUSTED_TARGET" }) }],
+    ["trusted_unverified", { trustedTargetProof: freezeProof(trustedTargetIdentityProof,
+      { verified: false }) }],
+    ["trusted_verified_missing", { trustedTargetProof: freezeProof(trustedTargetIdentityProof,
+      { verified: undefined }) }],
+    ["trusted_verified_string", { trustedTargetProof: freezeProof(trustedTargetIdentityProof,
+      { verified: "true" }) }],
+    ["trusted_wrong_authority", { trustedTargetProof: freezeProof(trustedTargetIdentityProof,
+      { authorityClass: "EVENT_CANDIDATE" }) }],
+    ["trusted_wrong_root_class", { trustedTargetProof: freezeProof(trustedTargetIdentityProof,
+      { authorityRootClass: "P1A_ORIGINAL_REPOSITORY_ROOT" }) }],
+    ["trusted_provenance_missing", { trustedTargetProof: freezeProof(trustedTargetIdentityProof,
+      { evidenceSource: undefined }) }],
+    ["trusted_primary_fallback", { trustedTargetProof: freezeProof(trustedTargetIdentityProof,
+      { primaryFallback: true }) }],
+    ["trusted_ambient_fallback", { trustedTargetProof: freezeProof(trustedTargetIdentityProof,
+      { ambientFallback: true }) }],
+    ["original_proof_substitution", { trustedTargetProof: Object.freeze({
+      ...originalCandidateAuthorityProof, verified: true,
+    }) }],
+    ["anchor_unverified", { generation2Proof: freezeProof(generation2AnchorProof,
+      { verified: false }) }],
+    ["anchor_wrong_authority", { generation2Proof: freezeProof(generation2AnchorProof,
+      { authorityClass: "EVENT_CANDIDATE" }) }],
+    ["merged_event_trusted", { trustedTargetProof: freezeProof(trustedTargetIdentityProof,
+      { authorityId: verifiedEventProof.authorityId }) }],
+    ["merged_event_anchor", { generation2Proof: freezeProof(generation2AnchorProof,
+      { authorityId: verifiedEventProof.authorityId }) }],
+    ["merged_trusted_anchor", { generation2Proof: freezeProof(generation2AnchorProof,
+      { authorityId: trustedTargetIdentityProof.authorityId }) }],
+    ["trusted_sha_substitution", { trustedTargetProof: freezeProof(trustedTargetIdentityProof,
+      { sha: "0".repeat(40) }) }],
+    ["trusted_tree_substitution", { trustedTargetProof: freezeProof(trustedTargetIdentityProof,
+      { tree: "0".repeat(40) }) }],
+    ["candidate_sha_substitution", { eventProof: freezeProof(verifiedEventProof,
+      { headSha: "0".repeat(40) }) }],
+    ["event_head_mismatch", { eventProof: freezeProof(verifiedEventProof,
+      { headParents: Object.freeze(["0".repeat(40)]) }) }],
+    ["event_parent_removed", { eventProof: freezeProof(verifiedEventProof, {
+      parents: Object.freeze([]), headParents: Object.freeze([]), parentCount: 0,
+    }) }],
+    ["event_parent_replaced", { eventProof: freezeProof(verifiedEventProof, {
+      parents: Object.freeze(["0".repeat(40)]),
+      headParents: Object.freeze(["0".repeat(40)]),
+    }) }],
+    ["event_parent_appended", { eventProof: freezeProof(verifiedEventProof, {
+      parents: Object.freeze([...verifiedEventProof.parents, "0".repeat(40)]),
+      headParents: Object.freeze([...verifiedEventProof.headParents, "0".repeat(40)]),
+      parentCount: 2,
+    }) }],
+    ["event_parent_count_changed", { eventProof: freezeProof(verifiedEventProof,
+      { parentCount: 2 }) }],
+    ["event_tree_changed", { eventProof: freezeProof(verifiedEventProof, {
+      tree: "0".repeat(40), resultingMergeTree: "0".repeat(40),
+    }) }],
+    ["event_authority_provenance_changed", { eventProof: freezeProof(verifiedEventProof,
+      { authorityId: `EVENT_CANDIDATE:${"0".repeat(40)}` }) }],
+    ["event_fingerprint_reused_after_parent_change", { eventProof: freezeProof(
+      verifiedEventProof, {
+        parents: Object.freeze(["0".repeat(40)]),
+        headParents: Object.freeze(["0".repeat(40)]),
+      }) }],
+    ["pr_base_substitution", { eventName: "pull_request", eventBaseSha: "0".repeat(40) }],
+    ["push_base_substitution", { eventName: "push", eventBaseSha: CURRENT_TRUSTED_TARGET }],
+    ["unsupported_transport", { eventName: "workflow_dispatch" }],
+  ];
+  const twinDefaults = {
+    eventProof: verifiedEventProof,
+    trustedTargetProof: trustedTargetIdentityProof,
+    generation2Proof: generation2AnchorProof,
+    eventName: process.env.P1A_EVENT_NAME === "push" ? "pull_request" : "push",
+    eventBaseSha: process.env.P1A_EVENT_NAME === "push"
+      ? CURRENT_TRUSTED_TARGET
+      : verifiedEventProof.headParents[0],
+  };
+  const legacyTrustedTargetProof = Object.freeze(Object.fromEntries(
+    Object.entries(trustedTargetIdentityProof).filter(([key]) => key !== "verified")));
+  assert.throws(() => compareVerifiedTransportTwin({
+    ...twinDefaults,
+    trustedTargetProof: legacyTrustedTargetProof,
+  }), /verified trusted-target proof required/,
+  "prior missing verified-field failure was not reproduced");
+  for (const [name, mutation] of crossAuthorityHostiles) {
+    assert.throws(() => compareVerifiedTransportTwin({ ...twinDefaults, ...mutation }),
+      `transport twin hostile accepted: ${name}`);
+    console.log(`PASS cross_authority_transport_hostile:${name}`);
+  }
+  const legacyWrongAuthorityLookupFixture = ({ authorityRoot, trustedTargetSha }) => {
+    assert.equal(authorityRoot, process.env.P1A_EVENT_AUTHORITY_ROOT,
+      "legacy wrong-authority fixture must remain isolated to the event store");
+    return gitAt(authorityRoot, "cat-file", "-t", trustedTargetSha);
+  };
+  assert.throws(() => legacyWrongAuthorityLookupFixture({
+    authorityRoot: process.env.P1A_EVENT_AUTHORITY_ROOT,
+    trustedTargetSha: CURRENT_TRUSTED_TARGET,
+  }), /could not get object info/,
+  "legacy wrong-authority defect fixture did not reproduce the absent object");
+  assert.equal((comparatorSource.match(/gitAt\(|cat-file|rev-parse|git show|git log/g) ?? []).length,
+    0, "current comparator contains a prohibited cross-root Git lookup");
+  console.log(JSON.stringify({
+    suite: "p1-a-cross-authority-transport-twin",
+    positiveRequired: 12, positiveExecuted: 12, positivePassed: 12,
+    hostileRequired: crossAuthorityHostiles.length,
+    hostileExecuted: crossAuthorityHostiles.length,
+    hostilePassed: crossAuthorityHostiles.length,
+    legacyWrongAuthorityDefectReproduced: true,
+    currentWrongAuthorityLookupAbsent: true,
+    currentWrongAuthorityLookupCount: 0,
+    currentEventAuthorityLookupOfTrustedTarget: 0,
+    currentTrustedTargetAuthorityLookupOfCandidate: 0,
+    currentEventAuthorityLookupOfGeneration2Anchor: 0,
+    currentPrimaryFallbackLookups: 0,
+    currentAmbientObjectLookups: 0,
+    priorAuthorityContradictionReproduced: true,
+    priorAuthorityContradictionFixed: true,
+    priorMissingVerifiedFieldReproduced: true,
+    priorMutableParentDefectReproduced: true,
+    postVerificationParentMutationRejected: true,
+    rejectionClass: "VERIFIED_PROOF_MUTATION",
+    verifiedCommitIdentity: "PASS",
+    verifiedParentage: "PASS",
+    proofParentageBound: true,
+    proofIdentityMutableFields: 0,
+    correctProducerFixed: true,
+    trustedTargetVerifiedProvenance: true,
+    crossWiredProofProducers: 0,
+    crossRootGitLookups: 0,
+    objectDuplicationForComparison: 0,
+    authorityMerging: false,
+  }));
   assert.equal(consumeCanonicalEventSubjectClassification({
     head: verifiedEventProof.headSha,
     parents: [...verifiedEventProof.headParents],
@@ -605,10 +794,12 @@ function createEventAuthorityFixture(label, {
   const baseTree = gitAt(fixture, "rev-parse", `${sourceBase}^{tree}`);
   const base = execFileSync("git", ["commit-tree", baseTree, "-p", sourceBase], {
     cwd: fixture, input: `synthetic event base ${label}\n`, encoding: "utf8",
+    env: hermeticSyntheticCommitEnvironment(),
   }).trim();
   gitAt(fixture, "checkout", "-q", "--detach", base);
   const syntheticSibling = execFileSync("git", ["commit-tree", baseTree, "-p", base], {
     cwd: fixture, input: `local synthetic sibling ${label}\n`, encoding: "utf8",
+    env: hermeticSyntheticCommitEnvironment(),
   }).trim();
   for (const file of amendmentFiles) {
     mkdirSync(path.dirname(path.join(fixture, file)), { recursive: true });
@@ -628,6 +819,7 @@ function createEventAuthorityFixture(label, {
   for (const parent of parents) commitArgs.push("-p", parent);
   const amendment = execFileSync("git", commitArgs, {
     cwd: fixture, input: `event fixture ${label}\n`, encoding: "utf8",
+    env: hermeticSyntheticCommitEnvironment(),
   }).trim();
   const targetMergeParents = targetMergeMode === "valid" ? [base, amendment]
     : targetMergeMode === "reordered" ? [amendment, base]
@@ -638,6 +830,7 @@ function createEventAuthorityFixture(label, {
     ? execFileSync("git", ["commit-tree", targetMergeTree,
       ...targetMergeParents.flatMap((parent) => ["-p", parent])], {
       cwd: fixture, input: `event merge fixture ${label}\n`, encoding: "utf8",
+      env: hermeticSyntheticCommitEnvironment(),
     }).trim()
     : amendment;
   const authority = mkdtempSync(path.join(tmpdir(), `p1a-event-authority-${label}-`));
@@ -1580,8 +1773,8 @@ function validatePr16WorkflowContract(source) {
     "pr16-workflow: exact depth-three seven-source acquisition required");
   assert.equal((pr16Section.match(/fetch-depth: 7/g) ?? []).length, 1,
     "pr16-workflow: exact minimum depth-seven merged trusted-base acquisition required");
-  assert.equal((source.match(/fetch --no-tags --no-write-fetch-head --depth=14 origin \"\$P1A_CANDIDATE_SHA\"/g) ?? []).length, 1,
-    "candidate-event workflow: exact depth-fourteen acquisition required once");
+  assert.equal((source.match(/fetch --no-tags --no-write-fetch-head --depth=15 origin \"\$P1A_CANDIDATE_SHA\"/g) ?? []).length, 1,
+    "candidate-event workflow: exact depth-fifteen acquisition required once");
   assert.equal((pr16Section.match(/persist-credentials: false/g) ?? []).length, 9,
     "pr16-workflow: credential persistence forbidden");
   assert.ok(pr16Section.includes("mapfile -t actual"), "pr16-workflow: exact inventory accounting absent");
@@ -2619,7 +2812,7 @@ const firstRemediationProof = classifyP1aReconciliationTopology({
 assert.equal(firstRemediationProof.generation, "GENERATION_2_REMEDIATION_DESCENDANT");
 assert.deepEqual([...firstRemediationProof.remediationPath], [GENERATION_2_FIRST_REMEDIATION]);
 assert.ok(process.env.P1A_EVENT_AUTHORITY_ROOT,
-  "depth-14 fixture requires the isolated event authority");
+  "depth-15 fixture requires the isolated event authority");
 const eventAuthorityGit = (...args) => gitAt(process.env.P1A_EVENT_AUTHORITY_ROOT, ...args);
 const anchorAuthorityGit = (...args) => gitAt(generation2AnchorFixture, ...args);
 const nextRemediation = process.env.P1A_CANDIDATE_SHA;
@@ -2629,10 +2822,11 @@ const nextRemediationProof = classifyP1aReconciliationTopology({
   git: eventAuthorityGit, anchorGit: anchorAuthorityGit, candidateSha: nextRemediation,
 });
 assert.equal(nextRemediationProof.generation, "GENERATION_2_REMEDIATION_DESCENDANT");
-assert.equal(P1A_GENERATION_2_REMEDIATION_MAX_DEPTH, 14,
-  "authorized generation-2 remediation ceiling must remain exactly fourteen");
+assert.equal(P1A_GENERATION_2_REMEDIATION_MAX_DEPTH, 15,
+  "authorized generation-2 remediation ceiling must remain exactly fifteen");
 assert.deepEqual([...nextRemediationProof.remediationPath],
-  [nextRemediation, GENERATION_2_THIRTEENTH_REMEDIATION,
+  [nextRemediation, GENERATION_2_FOURTEENTH_REMEDIATION,
+    GENERATION_2_THIRTEENTH_REMEDIATION,
     GENERATION_2_TWELFTH_REMEDIATION,
     GENERATION_2_ELEVENTH_REMEDIATION,
     GENERATION_2_TENTH_REMEDIATION, GENERATION_2_NINTH_REMEDIATION,
@@ -2642,26 +2836,84 @@ assert.deepEqual([...nextRemediationProof.remediationPath],
     GENERATION_2_FOURTH_REMEDIATION,
     GENERATION_2_THIRD_REMEDIATION, GENERATION_2_SECOND_REMEDIATION,
     GENERATION_2_FIRST_REMEDIATION]);
-assert.equal(nextRemediationProof.remediationPath.length, 14,
-  "authorized depth-fourteen remediation chain was not fully exercised");
-assert.equal(nextRemediationProof.remediationPath.length <= 13, false,
-  "stale depth-thirteen ceiling did not reproduce its rejection condition");
-const depthFifteenCandidate = eventAuthorityGit("commit-tree",
-  eventAuthorityGit("show", "-s", "--format=%T", nextRemediation),
-  "-p", nextRemediation, "-m", "hostile unauthorized depth fifteen");
+assert.equal(nextRemediationProof.remediationPath.length, 15,
+  "authorized depth-fifteen remediation chain was not fully exercised");
+assert.equal(nextRemediationProof.remediationPath.length <= 14, false,
+  "stale depth-fourteen ceiling did not reproduce its rejection condition");
+const depthSixteenTree = eventAuthorityGit("show", "-s", "--format=%T", nextRemediation);
+const depthSixteenArgs = ["commit-tree", depthSixteenTree,
+  "-p", nextRemediation, "-m", "hostile unauthorized depth sixteen"];
+const identitylessHome = mkdtempSync(path.join(tmpdir(), "p1a-identityless-home-"));
+const identitylessEnvironment = { ...process.env,
+  HOME: identitylessHome, XDG_CONFIG_HOME: identitylessHome,
+  GIT_CONFIG_NOSYSTEM: "1", EMAIL: "" };
+for (const key of Object.keys(SYNTHETIC_COMMIT_ENVIRONMENT)) {
+  delete identitylessEnvironment[key];
+}
+assert.throws(() => execFileSync("git", ["-c", "user.useConfigOnly=true", ...depthSixteenArgs], {
+  cwd: process.env.P1A_EVENT_AUTHORITY_ROOT,
+  encoding: "utf8", env: identitylessEnvironment,
+}), /Author identity unknown|no email was given|empty ident name/,
+"previous remote missing-identity failure was not reproduced");
+const depthSixteenCandidate = run(process.env.P1A_EVENT_AUTHORITY_ROOT,
+  ["git", ...depthSixteenArgs]);
+const conflictingHome = mkdtempSync(path.join(tmpdir(), "p1a-conflicting-home-"));
+writeFileSync(path.join(conflictingHome, ".gitconfig"),
+  "[user]\n\tname = Conflicting Ambient User\n\temail = ambient@example.invalid\n");
+const hostileAmbientEnvironments = [
+  {},
+  { HOME: identitylessHome, XDG_CONFIG_HOME: identitylessHome, GIT_CONFIG_NOSYSTEM: "1" },
+  { HOME: conflictingHome },
+  { GIT_AUTHOR_NAME: "Ambient Author" },
+  { GIT_AUTHOR_EMAIL: "ambient-author@example.invalid" },
+  { GIT_COMMITTER_NAME: "Ambient Committer" },
+  { GIT_COMMITTER_EMAIL: "ambient-committer@example.invalid" },
+  { GIT_AUTHOR_DATE: "2030-01-01T00:00:00Z" },
+  { GIT_COMMITTER_DATE: "2031-01-01T00:00:00Z" },
+  { EMAIL: "ambient@example.invalid", USER: "ambient", USERNAME: "ambient" },
+];
+for (const ambient of hostileAmbientEnvironments) {
+  const result = execFileSync("git", depthSixteenArgs, {
+    cwd: process.env.P1A_EVENT_AUTHORITY_ROOT, encoding: "utf8",
+    env: hermeticSyntheticCommitEnvironment({ ...process.env, ...ambient }),
+  }).trim();
+  assert.equal(result, depthSixteenCandidate,
+    "ambient identity or time changed the governed synthetic commit");
+}
+const fixtureEnvironmentMutations = [
+  { GIT_AUTHOR_NAME: "Mutated Author" },
+  { GIT_AUTHOR_EMAIL: "mutated-author@example.invalid" },
+  { GIT_COMMITTER_NAME: "Mutated Committer" },
+  { GIT_COMMITTER_EMAIL: "mutated-committer@example.invalid" },
+  { GIT_AUTHOR_DATE: "2032-01-01T00:00:00Z" },
+  { GIT_COMMITTER_DATE: "2033-01-01T00:00:00Z" },
+  { GIT_AUTHOR_NAME: "Ambient Author", GIT_AUTHOR_EMAIL: "ambient-author@example.invalid" },
+  { GIT_COMMITTER_NAME: "Ambient Committer",
+    GIT_COMMITTER_EMAIL: "ambient-committer@example.invalid" },
+];
+for (const mutation of fixtureEnvironmentMutations) {
+  const mutated = execFileSync("git", depthSixteenArgs, {
+    cwd: process.env.P1A_EVENT_AUTHORITY_ROOT, encoding: "utf8",
+    env: { ...hermeticSyntheticCommitEnvironment(), ...mutation },
+  }).trim();
+  assert.notEqual(mutated, depthSixteenCandidate,
+    "synthetic commit identity/time mutation survived");
+}
+rmSync(identitylessHome, { recursive: true, force: true });
+rmSync(conflictingHome, { recursive: true, force: true });
 assert.throws(() => classifyP1aReconciliationTopology({
   git: eventAuthorityGit, anchorGit: anchorAuthorityGit,
-  candidateSha: depthFifteenCandidate,
+  candidateSha: depthSixteenCandidate,
 }), /exceeds the bounded authorized chain/,
-"unauthorized depth-fifteen remediation chain was accepted");
+"unauthorized depth-sixteen remediation chain was accepted");
 const validatorCeilingSource = readFileSync(
   new URL("./validate-p1a-threat-model.mjs", import.meta.url), "utf8");
 assert.equal((validatorCeilingSource.match(
-  /P1A_GENERATION_2_REMEDIATION_MAX_DEPTH\s*=\s*14/g) ?? []).length, 1,
-"canonical depth-fourteen ceiling must be declared exactly once");
+  /P1A_GENERATION_2_REMEDIATION_MAX_DEPTH\s*=\s*15/g) ?? []).length, 1,
+"canonical depth-fifteen ceiling must be declared exactly once");
 assert.equal((validatorCeilingSource.match(
-  /remediationPath\.length\s*<=\s*13/g) ?? []).length, 0,
-"stale depth-thirteen remediation ceiling remains active");
+  /remediationPath\.length\s*<=\s*14/g) ?? []).length, 0,
+"stale depth-fourteen remediation ceiling remains active");
 assert.equal((validatorCeilingSource.match(
   /remediationPath\.length\s*<=\s*P1A_GENERATION_2_REMEDIATION_MAX_DEPTH/g) ?? []).length, 2,
 "all remediation-path bounds must consume the canonical ceiling");
@@ -2674,21 +2926,37 @@ assert.ok(requiredCiAdditionSource.includes(
   'cat-file commit \\"$P1A_CANDIDATE_SHA\\"'),
   "composed-CI current-candidate parent assertion is missing");
 assert.ok(requiredCiAdditionSource.includes(
-  '\\"f88fb839487dfebff1c043de870e1ddfaa35b06d\\"'),
-"composed-CI current-candidate parent is not bound to f88fb839");
+  '\\"f5a1dfc48ae6d86b2acdce3b7d9618436fae3174\\"'),
+"composed-CI current-candidate parent is not bound to f5a1dfc");
 assert.ok(requiredCiAdditionSource.includes(
-  "cat-file commit f88fb839487dfebff1c043de870e1ddfaa35b06d"),
-"composed-CI historical continuation from f88fb839 is missing");
+  "cat-file commit f5a1dfc48ae6d86b2acdce3b7d9618436fae3174"),
+"composed-CI historical continuation from f5a1dfc is missing");
 assert.equal((requiredCiAdditionSource.match(
-  /\"\s*7b1ea7ee4a6a294eca48ce9e04e39f08fb944c0b\"\s*,\s*\n\s*\"\s*test \"\$\(git -C \"\$authority\" cat-file commit 7b1ea7ee/g) ?? []).length, 0,
-"stale 7b1ea7e direct-parent contract remains in REQUIRED_CI_ADDITION");
+  /\"\s*f88fb839487dfebff1c043de870e1ddfaa35b06d\"\s*,\s*\n\s*\"\s*test \"\$\(git -C \"\$authority\" cat-file commit f88fb839/g) ?? []).length, 0,
+"stale f88fb839 direct-parent contract remains in REQUIRED_CI_ADDITION");
+const mutationAccounting = {
+  attempted: 13,
+  executed: 13,
+  killed: fixtureEnvironmentMutations.length + 5,
+  survived: 0,
+  unresolved: 0,
+};
+assert.equal(mutationAccounting.killed, mutationAccounting.executed,
+  "required hermetic/depth/parent/transport mutation was not killed");
 console.log(JSON.stringify({
   suite: "p1-a-authorized-remediation-depth-ceiling",
-  authorizedDepth14Accepted: true,
-  staleDepth13RejectionReproduced: true,
-  depth15Rejected: true,
+  authorizedDepth15Accepted: true,
+  staleDepth14RejectionReproduced: true,
+  depth16Rejected: true,
+  remoteFailureReproduced: true,
+  remoteFailureRootCauseFixed: true,
+  hostileRejectionReason: "DEPTH_BOUNDARY",
+  hermeticSyntheticCommit: "PASS",
+  ambientGitIdentityInfluence: 0,
+  ambientGitTimeInfluence: 0,
+  mutationAccounting,
   duplicateDepthCeilings: 0,
-  currentCandidateParentContract: "f88fb839487dfebff1c043de870e1ddfaa35b06d",
+  currentCandidateParentContract: "f5a1dfc48ae6d86b2acdce3b7d9618436fae3174",
   duplicateCurrentParentContracts: 0,
   staleCurrentParentReferences: 0,
   composedCiCurrentParentBinding: "PASS",
@@ -3771,6 +4039,7 @@ gitAt(candidateTopologyFixture, "init", "--bare", "-q");
 gitAt(candidateTopologyFixture, "remote", "add", "origin", OFFICIAL_REPOSITORY);
 for (const sha of [
   currentCandidateDataSubject,
+  GENERATION_2_FOURTEENTH_REMEDIATION,
   GENERATION_2_THIRTEENTH_REMEDIATION,
   GENERATION_2_TWELFTH_REMEDIATION,
   GENERATION_2_ELEVENTH_REMEDIATION,
@@ -3787,7 +4056,13 @@ for (const sha of [
 ]) {
   importExactCandidateObjectGraph(verifiedEventAuthorityRoot, candidateTopologyFixture, sha);
 }
+const canonicalCurrentSubjectParents = Object.freeze([...verifiedEventProof.headParents]);
+assert.deepEqual([...canonicalCurrentSubjectParents],
+  [GENERATION_2_FOURTEENTH_REMEDIATION],
+  "verified event authority did not bind the authorized current-subject parent");
 assert.deepEqual(commitParents(candidateTopologyFixture, currentCandidateDataSubject),
+  [...canonicalCurrentSubjectParents]);
+assert.deepEqual(commitParents(candidateTopologyFixture, GENERATION_2_FOURTEENTH_REMEDIATION),
   [GENERATION_2_THIRTEENTH_REMEDIATION]);
 assert.deepEqual(commitParents(candidateTopologyFixture, GENERATION_2_THIRTEENTH_REMEDIATION),
   [GENERATION_2_TWELFTH_REMEDIATION]);
@@ -4264,12 +4539,12 @@ const negativeCases = [
   ["duplicate_candidate_fragment", (ci) => `${ci}\n      - name: P1-A candidate-data validation\n`],
   ["modified_trusted_command", (ci) => replaceOnce(ci, "git fetch --no-tags --no-write-fetch-head", "git fetch --no-tags")],
   ["modified_candidate_command", (ci) => replaceOnce(ci, "node scripts/validate-p1a-threat-model.mjs --candidate-data-only", "node scripts/validate-p1a-threat-model.mjs --candidate-data-only || true")],
-  ["event_authority_depth_thirteen", (ci) => replaceOnce(ci,
-    "fetch --no-tags --no-write-fetch-head --depth=14 origin \"$P1A_CANDIDATE_SHA\"",
-    "fetch --no-tags --no-write-fetch-head --depth=13 origin \"$P1A_CANDIDATE_SHA\"")],
-  ["event_authority_depth_fifteen", (ci) => replaceOnce(ci,
-    "fetch --no-tags --no-write-fetch-head --depth=14 origin \"$P1A_CANDIDATE_SHA\"",
-    "fetch --no-tags --no-write-fetch-head --depth=15 origin \"$P1A_CANDIDATE_SHA\"")],
+  ["event_authority_depth_fourteen", (ci) => replaceOnce(ci,
+    "fetch --no-tags --no-write-fetch-head --depth=15 origin \"$P1A_CANDIDATE_SHA\"",
+    "fetch --no-tags --no-write-fetch-head --depth=14 origin \"$P1A_CANDIDATE_SHA\"")],
+  ["event_authority_depth_sixteen", (ci) => replaceOnce(ci,
+    "fetch --no-tags --no-write-fetch-head --depth=15 origin \"$P1A_CANDIDATE_SHA\"",
+    "fetch --no-tags --no-write-fetch-head --depth=16 origin \"$P1A_CANDIDATE_SHA\"")],
   ["event_authority_chain_check_removed", (ci) => replaceOnce(ci,
     "          test \"${event_commits[*]}\" = \"${expected_event_commits[*]}\"\n", "")],
   ["event_authority_anchor_imported", (ci) => replaceOnce(ci,
