@@ -148,6 +148,8 @@ export const GENERATION_2_EIGHTH_REMEDIATION =
   "66e5616fbf448e58526d81af5530bc60812c8727";
 export const GENERATION_2_NINTH_REMEDIATION =
   "bac62f20ebfec8602718023418552f50e8d6616e";
+export const GENERATION_2_TENTH_REMEDIATION =
+  "098da9abb3c9add8c9aeeb9255b834e2f75f0b0a";
 export const GENERATION_2_REMEDIATION_PREFIX = Object.freeze([
   GENERATION_2_FIRST_REMEDIATION,
   GENERATION_2_SECOND_REMEDIATION,
@@ -158,6 +160,7 @@ export const GENERATION_2_REMEDIATION_PREFIX = Object.freeze([
   GENERATION_2_SEVENTH_REMEDIATION,
   GENERATION_2_EIGHTH_REMEDIATION,
   GENERATION_2_NINTH_REMEDIATION,
+  GENERATION_2_TENTH_REMEDIATION,
 ]);
 
 export const AUTHORIZED_CANDIDATE_CLEANLINESS_ROOTS = Object.freeze([
@@ -602,6 +605,17 @@ function gitAt(repoRoot, ...args) {
   }).trim();
 }
 
+function exactCommitMetadata(git, sha, label) {
+  exactSha(sha, label);
+  const lines = git("cat-file", "commit", sha).split("\n");
+  const tree = lines.find((line) => line.startsWith("tree "))?.slice(5);
+  exactSha(tree, `${label} tree`);
+  const parents = lines.filter((line) => line.startsWith("parent "))
+    .map((line) => line.slice(7));
+  parents.forEach((parent) => exactSha(parent, `${label} parent`));
+  return Object.freeze({ tree, parents: Object.freeze(parents) });
+}
+
 function parseCandidateStatus(status) {
   assert.equal(typeof status, "string", "candidate cleanliness status must be text");
   return status.split("\0").filter(Boolean).map((record) => {
@@ -732,9 +746,11 @@ export function verifyExactCurrentTrustedBaseTopology({ trustedBaseRoot } = {}) 
     "trusted-base topology: exact merge SHA mismatch");
   assert.equal(gitAt(resolved, "cat-file", "-t", CURRENT_TRUSTED_BASE), "commit",
     "trusted-base topology: commit object absent");
-  assert.equal(gitAt(resolved, "show", "-s", "--format=%T", CURRENT_TRUSTED_BASE),
+  const metadata = exactCommitMetadata((...args) => gitAt(resolved, ...args),
+    CURRENT_TRUSTED_BASE, "trusted-base topology");
+  assert.equal(metadata.tree,
     CURRENT_TRUSTED_BASE_TREE, "trusted-base topology: tree mismatch");
-  assert.deepEqual(gitAt(resolved, "show", "-s", "--format=%P", CURRENT_TRUSTED_BASE).split(" "),
+  assert.deepEqual([...metadata.parents],
     [...CURRENT_TRUSTED_BASE_PARENTS], "trusted-base topology: ordered parents mismatch");
   assert.equal(gitAt(resolved, "status", "--porcelain=v1"), "",
     "trusted-base topology: source is dirty");
@@ -1454,10 +1470,12 @@ export const REQUIRED_CI_ADDITION = [
   "          git -C \"$authority\" remote add origin https://github.com/DarksiedCEO/zbestmedia",
   "          git -C \"$authority\" -c protocol.version=2 \\",
   "            -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
-  "            fetch --no-tags --no-write-fetch-head --depth=10 origin \"$P1A_CANDIDATE_SHA\"",
+  "            fetch --no-tags --no-write-fetch-head --depth=11 origin \"$P1A_CANDIDATE_SHA\"",
   "          unset auth_header",
   "          test \"$(git -C \"$authority\" cat-file -t \"$P1A_CANDIDATE_SHA\")\" = commit",
   "          test \"$(git -C \"$authority\" cat-file commit \"$P1A_CANDIDATE_SHA\" | sed -n 's/^parent //p')\" = \\",
+  "            \"098da9abb3c9add8c9aeeb9255b834e2f75f0b0a\"",
+  "          test \"$(git -C \"$authority\" cat-file commit 098da9abb3c9add8c9aeeb9255b834e2f75f0b0a | sed -n 's/^parent //p')\" = \\",
   "            \"bac62f20ebfec8602718023418552f50e8d6616e\"",
   "          test \"$(git -C \"$authority\" cat-file commit bac62f20ebfec8602718023418552f50e8d6616e | sed -n 's/^parent //p')\" = \\",
   "            \"66e5616fbf448e58526d81af5530bc60812c8727\"",
@@ -1489,6 +1507,7 @@ export const REQUIRED_CI_ADDITION = [
   "            --batch-check='%(objectname) %(objecttype)' | awk '$2 == \"commit\" {print $1}' | sort)",
   "          mapfile -t expected_event_commits < <(printf '%s\\n' \\",
   "            \"$P1A_CANDIDATE_SHA\" \\",
+  "            098da9abb3c9add8c9aeeb9255b834e2f75f0b0a \\",
   "            bac62f20ebfec8602718023418552f50e8d6616e \\",
   "            66e5616fbf448e58526d81af5530bc60812c8727 \\",
   "            586f285df9d770825d9fe6aee893a74fdb99e294 \\",
@@ -2038,7 +2057,7 @@ const TRUSTED_CURRENT_CONTRACT_ADDITION = [
   "          else",
   "            git -C \"$authority\" -c protocol.version=2 \\",
   "              -c \"http.https://github.com/.extraheader=AUTHORIZATION: basic $auth_header\" \\",
-  "              fetch --no-tags --no-write-fetch-head --depth=10 origin \\",
+  "              fetch --no-tags --no-write-fetch-head --depth=11 origin \\",
   "              \"$P1A_EVENT_BASE_SHA\" \"$P1A_EVENT_HEAD_SHA\"",
   "          fi",
   "          unset auth_header",
@@ -2200,7 +2219,7 @@ export function composeGeneration2CandidateCi(baseline) {
   source = composeCandidateCi(source);
   source = replaceExactlyOnce(source,
     "              fetch --no-tags --no-write-fetch-head --depth=2 origin \\\n",
-    "              fetch --no-tags --no-write-fetch-head --depth=10 origin \\\n",
+    "              fetch --no-tags --no-write-fetch-head --depth=11 origin \\\n",
     "generation-2 bounded event-authority depth");
   source = replaceExactlyOnce(source,
     "          P1A_CURRENT_WORKFLOW_FETCH_TOKEN: ${{ github.token }}\n          P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate\n          P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline\n        run: |\n",
@@ -2313,10 +2332,10 @@ export function classifyP1aReconciliationTopology({
     assert.equal(cursorParents.length, 1,
       "generation-2 remediation path must remain linear and single-parent");
     cursor = cursorParents[0];
-    assert.ok(remediationPath.length <= 10,
+    assert.ok(remediationPath.length <= 11,
       "generation-2 remediation path exceeds the bounded authorized chain");
   }
-  assert.ok(remediationPath.length <= 10,
+  assert.ok(remediationPath.length <= 11,
     "generation-2 remediation path exceeds the bounded authorized chain");
   if (candidateSha !== GENERATION_2_RECONCILIATION) {
     const anchorFirstPath = [...remediationPath].reverse();
@@ -2614,7 +2633,8 @@ export function validateCandidateDataOnly({
     assert.ok(trustedBaseFullSourceRoot, "trusted-base full source absent");
     verifyExactCurrentTrustedBaseTopology({ trustedBaseRoot: trustedBaseFullSourceRoot });
     if (topology.generation === "GENERATION_1_RECONCILIATION") {
-      assert.equal(gitAt(repoRoot, "show", "-s", "--format=%P", trustedParent), CURRENT_TRUSTED_BASE,
+      assert.deepEqual([...exactCommitMetadata((...args) => gitAt(repoRoot, ...args),
+        trustedParent, "generation-1 trusted parent").parents], [CURRENT_TRUSTED_BASE],
         "generation-1 trusted parent is not based directly on its authorized trusted base");
     } else {
       assert.equal(trustedParent, CURRENT_TRUSTED_TARGET,
@@ -2775,7 +2795,8 @@ export function validateDualBaseScope({
   });
   assert.ok(trustedBaseFullSourceRoot, "trusted-base full source absent");
   verifyExactCurrentTrustedBaseTopology({ trustedBaseRoot: trustedBaseFullSourceRoot });
-  assert.equal(git("show", "-s", "--format=%P", workflowSha), CURRENT_TRUSTED_BASE,
+  assert.deepEqual([...exactCommitMetadata(git, workflowSha,
+    "workflow amendment").parents], [CURRENT_TRUSTED_BASE],
     "workflow amendment is not based directly on the authorized trusted base");
   assert.equal(gitAt(trustedBaseFullSourceRoot, "rev-parse", "HEAD"), CURRENT_TRUSTED_BASE,
     "trusted-base full source HEAD mismatch");
@@ -2783,7 +2804,8 @@ export function validateDualBaseScope({
     "https://github.com/DarksiedCEO/zbestmedia", "trusted-base full source repository mismatch");
   gitAt(trustedBaseFullSourceRoot, "merge-base", "--is-ancestor",
     reconciliationBaseSha, CURRENT_TRUSTED_BASE);
-  const candidateParents = git("show", "-s", "--format=%P", candidateSha).split(" ");
+  const candidateParents = [...exactCommitMetadata(git, candidateSha,
+    "reconciled candidate").parents];
   const generation2 = candidateParents.length === 2 &&
     candidateParents[0] === GENERATION_1_RECONCILIATION &&
     candidateParents[1] === CURRENT_TRUSTED_TARGET;

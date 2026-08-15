@@ -30,6 +30,7 @@ import {
   GENERATION_2_SEVENTH_REMEDIATION,
   GENERATION_2_EIGHTH_REMEDIATION,
   GENERATION_2_NINTH_REMEDIATION,
+  GENERATION_2_TENTH_REMEDIATION,
   AUTHORIZED_CANDIDATE_CLEANLINESS_ROOTS, assertCandidateSourceClean,
   POST_PR17_TRUSTED_BASE, POST_PR17_TRUSTED_BASE_TREE, POST_PR17_TRUSTED_BASE_PARENTS,
   POST_PR18_TRUSTED_BASE, POST_PR18_TRUSTED_BASE_TREE, POST_PR18_TRUSTED_BASE_PARENTS,
@@ -233,8 +234,8 @@ function verifyEventAcquisitionWorkflow(source) {
     "event acquisition: wrong repository accepted");
   assert.ok(source.includes("fetch --no-tags --no-write-fetch-head --depth=1 origin \"$P1A_EVENT_HEAD_SHA\""),
     "event acquisition: zero-before exact head fetch missing");
-  assert.ok(source.includes("fetch --no-tags --no-write-fetch-head --depth=10 origin \\\n              \"$P1A_EVENT_BASE_SHA\" \"$P1A_EVENT_HEAD_SHA\""),
-    "event acquisition: exact bounded depth-ten base/head fetch missing");
+  assert.ok(source.includes("fetch --no-tags --no-write-fetch-head --depth=11 origin \\\n              \"$P1A_EVENT_BASE_SHA\" \"$P1A_EVENT_HEAD_SHA\""),
+    "event acquisition: exact bounded depth-eleven base/head fetch missing");
   assert.ok(source.includes("cat-file commit \\\n              \"$P1A_EVENT_HEAD_SHA\""),
     "event acquisition: immutable parent metadata read missing");
   assert.ok(source.includes('test "${#event_head_parents[@]}" -eq 1'),
@@ -256,6 +257,25 @@ function verifyEventAcquisitionWorkflow(source) {
 
 const workflowSource = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
 assert.doesNotThrow(() => verifyEventAcquisitionWorkflow(workflowSource));
+const verifierSource = readFileSync(new URL(import.meta.url), "utf8");
+const generation2FixtureSection = verifierSource.slice(
+  verifierSource.indexOf("const shallowPrimary ="),
+  verifierSource.indexOf("const generation2Hostiles ="),
+);
+assert.ok(generation2FixtureSection.length > 0,
+  "generation-2 fixture source-closure audit boundary absent");
+const forbiddenGeneration2PrimaryPatterns = [
+  /fetch[^\n]*root[^\n]*GENERATION_1_RECONCILIATION/,
+  /fetch[^\n]*root[^\n]*GENERATION_2_RECONCILIATION/,
+  /fetch[^\n]*root[^\n]*CURRENT_TRUSTED_TARGET/,
+  /fetch[^\n]*GENERATION_1_RECONCILIATION[^\n]*root/,
+  /fetch[^\n]*GENERATION_2_RECONCILIATION[^\n]*root/,
+  /fetch[^\n]*CURRENT_TRUSTED_TARGET[^\n]*root/,
+];
+assert.equal(forbiddenGeneration2PrimaryPatterns.filter((pattern) =>
+  pattern.test(generation2FixtureSection)).length, 0,
+"generation-2 fixture retains a primary-checkout object fetch path");
+console.log("PASS generation2_source_closure_static_audit");
 
 const importExactObjects = (sourceRoot, destinationRoot) => {
   const inventory = gitAt(sourceRoot, "cat-file", "--batch-all-objects",
@@ -272,6 +292,36 @@ const importExactObjects = (sourceRoot, destinationRoot) => {
       "-t", type, "--stdin"], { input: bytes, encoding: "utf8" }).trim();
     assert.equal(imported, oid, "bounded source object identity changed during import");
   }
+};
+
+const importExactCommitObject = (sourceRoot, destinationRoot, sha) => {
+  assert.match(sha, EXACT_SHA, "generation-2 fixture commit id invalid");
+  assert.equal(gitAt(sourceRoot, "cat-file", "-t", sha), "commit",
+    "generation-2 canonical source commit absent");
+  const bytes = execFileSync("git", ["-C", sourceRoot, "cat-file", "commit", sha]);
+  const imported = execFileSync("git", ["-C", destinationRoot, "hash-object", "-w",
+    "-t", "commit", "--stdin"], { input: bytes, encoding: "utf8" }).trim();
+  assert.equal(imported, sha, "generation-2 fixture commit identity changed during import");
+  const tree = bytes.toString("utf8").split("\n")
+    .find((line) => line.startsWith("tree "))?.slice(5);
+  assert.match(tree ?? "", EXACT_SHA, "generation-2 fixture root tree id invalid");
+  assert.equal(gitAt(sourceRoot, "cat-file", "-t", tree), "tree",
+    "generation-2 canonical source root tree absent");
+  const treeBytes = execFileSync("git", ["-C", sourceRoot, "cat-file", "tree", tree]);
+  const importedTree = execFileSync("git", ["-C", destinationRoot, "hash-object", "-w",
+    "-t", "tree", "--stdin"], { input: treeBytes, encoding: "utf8" }).trim();
+  assert.equal(importedTree, tree,
+    "generation-2 fixture root tree identity changed during import");
+};
+
+const importExactBlobObject = (sourceRoot, destinationRoot, sha) => {
+  assert.match(sha, EXACT_SHA, "fixture blob id invalid");
+  assert.equal(gitAt(sourceRoot, "cat-file", "-t", sha), "blob",
+    "canonical source blob absent");
+  const bytes = execFileSync("git", ["-C", sourceRoot, "cat-file", "blob", sha]);
+  const imported = execFileSync("git", ["-C", destinationRoot, "hash-object", "-w",
+    "-t", "blob", "--stdin"], { input: bytes, encoding: "utf8" }).trim();
+  assert.equal(imported, sha, "fixture blob identity changed during import");
 };
 
 const createGeneration2AnchorAuthorityFixture = (label, {
@@ -1418,8 +1468,8 @@ function validatePr16WorkflowContract(source) {
     "pr16-workflow: exact depth-three seven-source acquisition required");
   assert.equal((pr16Section.match(/fetch-depth: 7/g) ?? []).length, 1,
     "pr16-workflow: exact minimum depth-seven merged trusted-base acquisition required");
-  assert.equal((source.match(/fetch --no-tags --no-write-fetch-head --depth=10 origin \"\$P1A_CANDIDATE_SHA\"/g) ?? []).length, 1,
-    "candidate-event workflow: exact depth-ten acquisition required once");
+  assert.equal((source.match(/fetch --no-tags --no-write-fetch-head --depth=11 origin \"\$P1A_CANDIDATE_SHA\"/g) ?? []).length, 1,
+    "candidate-event workflow: exact depth-eleven acquisition required once");
   assert.equal((pr16Section.match(/persist-credentials: false/g) ?? []).length, 9,
     "pr16-workflow: credential persistence forbidden");
   assert.ok(pr16Section.includes("mapfile -t actual"), "pr16-workflow: exact inventory accounting absent");
@@ -2387,6 +2437,12 @@ console.log("PASS trusted_base_minimum_depth_native_ancestry");
 
 run(temporary, ["git", "init", "-q", repository]);
 const git = (...args) => run(repository, ["git", ...args]);
+const fixtureCommitTree = (sha) => {
+  const tree = git("cat-file", "commit", sha).split("\n")
+    .find((line) => line.startsWith("tree "))?.slice(5);
+  assert.match(tree ?? "", EXACT_SHA, `fixture commit tree absent: ${sha}`);
+  return tree;
+};
 git("config", "user.email", "p1a-dual-base@example.invalid");
 git("config", "user.name", "P1A dual-base fixture");
 git("remote", "add", "origin", `${OFFICIAL_REPOSITORY}.git`);
@@ -2402,22 +2458,32 @@ for (const sha of [CURRENT_TRUSTED_BASE]) {
   run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", trustedSourceRoot, sha]);
   assert.equal(git("cat-file", "-t", sha), "commit", `trusted fixture source import failed: ${sha}`);
 }
+assert.ok(rejects(() => gitAt(shallowPrimary, "cat-file", "-e",
+  `${GENERATION_2_RECONCILIATION}^{commit}`)),
+"generation-2 anchor unexpectedly available in shallow primary checkout");
+assert.ok(rejects(() => gitAt(shallowPrimary, "cat-file", "-e",
+  `${GENERATION_1_RECONCILIATION}^{commit}`)),
+"generation-2 first parent unexpectedly available in shallow primary checkout");
 for (const sha of [GENERATION_1_RECONCILIATION, CURRENT_TRUSTED_TARGET,
-  GENERATION_2_RECONCILIATION, GENERATION_2_FIRST_REMEDIATION]) {
-  run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", root, sha]);
+  GENERATION_2_RECONCILIATION]) {
+  importExactCommitObject(generation2AnchorFixture, repository, sha);
   assert.equal(git("cat-file", "-t", sha), "commit",
-    `generation-2 authority import failed: ${sha}`);
+    `generation-2 canonical authority import failed: ${sha}`);
 }
-assert.equal(git("show", "-s", "--format=%T", GENERATION_1_RECONCILIATION),
+run(repository, ["git", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head",
+  process.env.P1A_EVENT_AUTHORITY_ROOT, GENERATION_2_FIRST_REMEDIATION]);
+assert.equal(git("cat-file", "-t", GENERATION_2_FIRST_REMEDIATION), "commit",
+  `generation-2 event authority import failed: ${GENERATION_2_FIRST_REMEDIATION}`);
+assert.equal(fixtureCommitTree(GENERATION_1_RECONCILIATION),
   GENERATION_1_RECONCILIATION_TREE);
 assert.deepEqual(commitParents(repository, GENERATION_1_RECONCILIATION),
   [...GENERATION_1_RECONCILIATION_PARENTS]);
-assert.equal(git("show", "-s", "--format=%T", CURRENT_TRUSTED_TARGET),
+assert.equal(fixtureCommitTree(CURRENT_TRUSTED_TARGET),
   CURRENT_TRUSTED_TARGET_TREE);
 assert.deepEqual(commitParents(repository, CURRENT_TRUSTED_TARGET),
   [...CURRENT_TRUSTED_TARGET_PARENTS]);
 
-const generation2Tree = git("show", "-s", "--format=%T", GENERATION_1_RECONCILIATION);
+const generation2Tree = fixtureCommitTree(GENERATION_1_RECONCILIATION);
 const generation2Proof = classifyP1aReconciliationTopology({
   git,
   candidateSha: GENERATION_2_RECONCILIATION,
@@ -2426,7 +2492,7 @@ assert.equal(generation2Proof.generation, "GENERATION_2_RECONCILIATION");
 assert.deepEqual([...generation2Proof.parents],
   [GENERATION_1_RECONCILIATION, CURRENT_TRUSTED_TARGET]);
 assert.equal(GENERATION_2_RECONCILIATION, "9fa0c2ac5b0b42a885330c7d7d54df65afae3736");
-assert.equal(git("show", "-s", "--format=%T", GENERATION_2_RECONCILIATION),
+assert.equal(fixtureCommitTree(GENERATION_2_RECONCILIATION),
   GENERATION_2_RECONCILIATION_TREE);
 assert.deepEqual(commitParents(repository, GENERATION_2_RECONCILIATION),
   [...GENERATION_2_RECONCILIATION_PARENTS]);
@@ -2436,18 +2502,18 @@ const firstRemediationProof = classifyP1aReconciliationTopology({
 assert.equal(firstRemediationProof.generation, "GENERATION_2_REMEDIATION_DESCENDANT");
 assert.deepEqual([...firstRemediationProof.remediationPath], [GENERATION_2_FIRST_REMEDIATION]);
 assert.ok(process.env.P1A_EVENT_AUTHORITY_ROOT,
-  "depth-10 fixture requires the isolated event authority");
+  "depth-11 fixture requires the isolated event authority");
 const eventAuthorityGit = (...args) => gitAt(process.env.P1A_EVENT_AUTHORITY_ROOT, ...args);
 const anchorAuthorityGit = (...args) => gitAt(generation2AnchorFixture, ...args);
-const nextRemediation = eventAuthorityGit("commit-tree",
-  eventAuthorityGit("show", "-s", "--format=%T", GENERATION_2_NINTH_REMEDIATION),
-  "-p", GENERATION_2_NINTH_REMEDIATION, "-m", "bounded remediation descendant");
+const nextRemediation = process.env.P1A_CANDIDATE_SHA;
+assert.match(nextRemediation ?? "", EXACT_SHA,
+  "depth-11 fixture requires the exact current candidate");
 const nextRemediationProof = classifyP1aReconciliationTopology({
   git: eventAuthorityGit, anchorGit: anchorAuthorityGit, candidateSha: nextRemediation,
 });
 assert.equal(nextRemediationProof.generation, "GENERATION_2_REMEDIATION_DESCENDANT");
 assert.deepEqual([...nextRemediationProof.remediationPath],
-  [nextRemediation, GENERATION_2_NINTH_REMEDIATION,
+  [nextRemediation, GENERATION_2_TENTH_REMEDIATION, GENERATION_2_NINTH_REMEDIATION,
     GENERATION_2_EIGHTH_REMEDIATION, GENERATION_2_SEVENTH_REMEDIATION,
     GENERATION_2_SIXTH_REMEDIATION,
     GENERATION_2_FIFTH_REMEDIATION,
@@ -2456,12 +2522,12 @@ assert.deepEqual([...nextRemediationProof.remediationPath],
     GENERATION_2_FIRST_REMEDIATION]);
 console.log("PASS generation_2_anchor_and_linear_remediation_descendants");
 const generation2Hostiles = [
-  ["wrong_parent_1", CURRENT_TRUSTED_TARGET_PARENTS[0], CURRENT_TRUSTED_TARGET],
+  ["wrong_parent_1", GENERATION_2_FIRST_REMEDIATION, CURRENT_TRUSTED_TARGET],
   ["stale_parent_2", GENERATION_1_RECONCILIATION,
-    GENERATION_1_RECONCILIATION_PARENTS[1]],
+    GENERATION_2_FIRST_REMEDIATION],
   ["reversed_parent_order", CURRENT_TRUSTED_TARGET, GENERATION_1_RECONCILIATION],
   ["unauthorized_sibling_target", GENERATION_1_RECONCILIATION,
-    CURRENT_TRUSTED_TARGET_PARENTS[1]],
+    GENERATION_2_FIRST_REMEDIATION],
 ];
 for (const [name, first, second] of generation2Hostiles) {
   const hostile = git("commit-tree", generation2Tree, "-p", first, "-p", second,
@@ -3392,6 +3458,7 @@ function trustedWorkflow() {
     const validated = validateFixtureSourceRecord({ file, ...provenance, sourceRoot: provenanceRoot });
     const source = { mode: sourceEntry(provenanceRoot, provenance.sourceSha, file).mode,
       blob: validated.exactSourceBlobSha };
+    importExactBlobObject(provenanceRoot, repository, source.blob);
     run(repository, ["git", "update-index", "--add", "--cacheinfo", source.mode, source.blob, file], { env });
     const installed = run(repository, ["git", "ls-files", "--stage", "--", file], { env }).split(/\s+/)[1];
     assert.equal(installed, source.blob, `${file}: trusted fixture installed blob mismatch`);
@@ -3520,9 +3587,12 @@ assert.match(currentCandidateDataSubject ?? "", EXACT_SHA,
 const candidateTopologyFixture = mkdtempSync(path.join(tmpdir(), "p1a-candidate-topology-"));
 gitAt(candidateTopologyFixture, "init", "--bare", "-q");
 gitAt(candidateTopologyFixture, "remote", "add", "origin", OFFICIAL_REPOSITORY);
-gitAt(candidateTopologyFixture, "fetch", "-q", "--no-tags", "--depth=10", root,
+gitAt(candidateTopologyFixture, "fetch", "-q", "--no-tags", "--depth=11", root,
   currentCandidateDataSubject);
 assert.deepEqual(commitParents(candidateTopologyFixture, currentCandidateDataSubject),
+  ["098da9abb3c9add8c9aeeb9255b834e2f75f0b0a"]);
+assert.deepEqual(commitParents(candidateTopologyFixture,
+  "098da9abb3c9add8c9aeeb9255b834e2f75f0b0a"),
   ["bac62f20ebfec8602718023418552f50e8d6616e"]);
 assert.deepEqual(commitParents(candidateTopologyFixture,
   "bac62f20ebfec8602718023418552f50e8d6616e"),
@@ -3989,12 +4059,12 @@ const negativeCases = [
   ["duplicate_candidate_fragment", (ci) => `${ci}\n      - name: P1-A candidate-data validation\n`],
   ["modified_trusted_command", (ci) => replaceOnce(ci, "git fetch --no-tags --no-write-fetch-head", "git fetch --no-tags")],
   ["modified_candidate_command", (ci) => replaceOnce(ci, "node scripts/validate-p1a-threat-model.mjs --candidate-data-only", "node scripts/validate-p1a-threat-model.mjs --candidate-data-only || true")],
-  ["event_authority_depth_nine", (ci) => replaceOnce(ci,
-    "fetch --no-tags --no-write-fetch-head --depth=10 origin \"$P1A_CANDIDATE_SHA\"",
-    "fetch --no-tags --no-write-fetch-head --depth=9 origin \"$P1A_CANDIDATE_SHA\"")],
-  ["event_authority_depth_eleven", (ci) => replaceOnce(ci,
-    "fetch --no-tags --no-write-fetch-head --depth=10 origin \"$P1A_CANDIDATE_SHA\"",
-    "fetch --no-tags --no-write-fetch-head --depth=11 origin \"$P1A_CANDIDATE_SHA\"")],
+  ["event_authority_depth_ten", (ci) => replaceOnce(ci,
+    "fetch --no-tags --no-write-fetch-head --depth=11 origin \"$P1A_CANDIDATE_SHA\"",
+    "fetch --no-tags --no-write-fetch-head --depth=10 origin \"$P1A_CANDIDATE_SHA\"")],
+  ["event_authority_depth_twelve", (ci) => replaceOnce(ci,
+    "fetch --no-tags --no-write-fetch-head --depth=11 origin \"$P1A_CANDIDATE_SHA\"",
+    "fetch --no-tags --no-write-fetch-head --depth=12 origin \"$P1A_CANDIDATE_SHA\"")],
   ["event_authority_chain_check_removed", (ci) => replaceOnce(ci,
     "          test \"${event_commits[*]}\" = \"${expected_event_commits[*]}\"\n", "")],
   ["event_authority_anchor_imported", (ci) => replaceOnce(ci,
