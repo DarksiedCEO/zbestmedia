@@ -1,0 +1,428 @@
+{
+  "active": false,
+  "authorities": [
+    {
+      "authority_id": "ancestry_authority",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "dual_base_verifier"
+      ],
+      "custody_owner": "trusted_workflow",
+      "environment_binding": "P1A_ANCESTRY_AUTHORITY_ROOT",
+      "expected_tree": "d266dafef452c6a327734eec32013c8718fc9371",
+      "fetch_depth": 11,
+      "immutable_ref": "365c59757756f3f91480d3bfeb841b543010201f",
+      "producer_contract": "produce_ancestry_authority",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "bounded_ancestry"
+    },
+    {
+      "authority_id": "baseline_repository",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "dual_base_verifier"
+      ],
+      "custody_owner": "trusted_workflow",
+      "environment_binding": "P1A_BASELINE_REPOSITORY_ROOT",
+      "expected_tree": "06bed4d9f31aa6bf0d65c9adfa3dc2fbb6839d26",
+      "fetch_depth": 1,
+      "immutable_ref": "06e6497ac3420998671f255a42a20d8cb8b9ca50",
+      "producer_contract": "produce_baseline_repository",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "trusted_baseline"
+    },
+    {
+      "authority_id": "current_workflow_authority",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "real_object_integration",
+        "trusted_checkout"
+      ],
+      "custody_owner": "trusted_workflow",
+      "environment_binding": "P1A_CURRENT_WORKFLOW_AUTHORITY_ROOT",
+      "expected_tree": "7f6c4551f24c3d734d7df12c0252d646ab9351e7",
+      "fetch_depth": 1,
+      "immutable_ref": "94941bbf6afbd0073f6619b2c63b0e6c5c6ca4e8",
+      "producer_contract": "produce_current_workflow_authority",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "trusted_workflow_object"
+    },
+    {
+      "authority_id": "dual_base_authority",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "dual_base_verifier"
+      ],
+      "custody_owner": "trusted_workflow",
+      "environment_binding": "P1A_DUAL_BASE_AUTHORITY_ROOT",
+      "expected_tree": "37345329da7051a818eb2e5b02f1f06f74d667a7",
+      "fetch_depth": 1,
+      "immutable_ref": "5056fb0df6e1ef739231cd2273a453fb1c644273",
+      "producer_contract": "produce_dual_base_authority",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "dual_base"
+    },
+    {
+      "authority_id": "evidence_base_authority",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "dual_base_verifier"
+      ],
+      "custody_owner": "trusted_workflow",
+      "environment_binding": "P1A_EVIDENCE_BASE_AUTHORITY_ROOT",
+      "expected_tree": "a929da05a15a0c37644a224697dddec9762b00a0",
+      "fetch_depth": 1,
+      "immutable_ref": "7056ea4ce24379c93549f0ac9b45ddd7a2600dd6",
+      "producer_contract": "produce_evidence_base_authority",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "evidence_base"
+    },
+    {
+      "authority_id": "frozen_bootstrap",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "dispatch_identity",
+        "identity_ancestry_gate"
+      ],
+      "custody_owner": "founder_authority",
+      "environment_binding": "P1A_FROZEN_BOOTSTRAP_AUTHORITY_ROOT",
+      "expected_tree": "a0b79f1cf59a4acb28a5019d36d274baff55de11",
+      "fetch_depth": 3,
+      "immutable_ref": "7fce7ca8361f505d62f210b890ec13f2431431db",
+      "producer_contract": "produce_frozen_bootstrap",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "bootstrap_verifier"
+    },
+    {
+      "authority_id": "original_repository",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "dual_base_verifier"
+      ],
+      "custody_owner": "trusted_workflow",
+      "environment_binding": "P1A_ORIGINAL_REPOSITORY_ROOT",
+      "expected_tree": "d266dafef452c6a327734eec32013c8718fc9371",
+      "fetch_depth": 1,
+      "immutable_ref": "365c59757756f3f91480d3bfeb841b543010201f",
+      "producer_contract": "produce_original_repository",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "original_candidate"
+    },
+    {
+      "authority_id": "pr16_action_inventory_source",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "dual_base_verifier"
+      ],
+      "custody_owner": "trusted_workflow",
+      "environment_binding": "P1A_PR16_ACTION_INVENTORY_SOURCE_ROOT",
+      "expected_tree": "0c5b346aef43473367b9f9fbcb9a2606b9e07b7e",
+      "fetch_depth": 1,
+      "immutable_ref": "6867d43d17c8b614ab7d0e0c5e338127020bb772",
+      "producer_contract": "produce_pr16_action_inventory_source",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "action_inventory"
+    },
+    {
+      "authority_id": "pr16_chain_authority",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "dual_base_verifier"
+      ],
+      "custody_owner": "trusted_workflow",
+      "environment_binding": "P1A_PR16_CHAIN_AUTHORITY_ROOT",
+      "expected_tree": "588f349716dc51c39b2ababd1dd94be5871761bf",
+      "fetch_depth": 13,
+      "immutable_ref": "1648d21e78088a8e0df4bb2eac7bde797d4ac665",
+      "producer_contract": "produce_pr16_chain_authority",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "remediation_chain"
+    },
+    {
+      "authority_id": "pr16_current_predecessor_source",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "dual_base_verifier"
+      ],
+      "custody_owner": "trusted_workflow",
+      "environment_binding": "P1A_PR16_CURRENT_PREDECESSOR_SOURCE_ROOT",
+      "expected_tree": "6104b520b2f7f6f1017e0c8d649d1d0027e3be88",
+      "fetch_depth": 2,
+      "immutable_ref": "9c2abe8fc0f9cd3ddd872df681ce1a4bf902001c",
+      "producer_contract": "produce_pr16_current_predecessor_source",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "current_predecessor"
+    },
+    {
+      "authority_id": "pr16_minimum_depth_source",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "dual_base_verifier"
+      ],
+      "custody_owner": "trusted_workflow",
+      "environment_binding": "P1A_PR16_MINIMUM_DEPTH_SOURCE_ROOT",
+      "expected_tree": "e0d41b2b11f009a90c35205cfb59175fde6dfcb1",
+      "fetch_depth": 3,
+      "immutable_ref": "184d3961ab7fbf67150b392e09a95408bca6f009",
+      "producer_contract": "produce_pr16_minimum_depth_source",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "minimum_depth_historical"
+    },
+    {
+      "authority_id": "pr16_original_amendment_source",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "dual_base_verifier"
+      ],
+      "custody_owner": "trusted_workflow",
+      "environment_binding": "P1A_PR16_ORIGINAL_AMENDMENT_SOURCE_ROOT",
+      "expected_tree": "c44d3c18aec9f3272a3dd3c1aef5c9b25dfd10a2",
+      "fetch_depth": 1,
+      "immutable_ref": "6e855ba08c69374cb4b25f9777a8ebd190375897",
+      "producer_contract": "produce_pr16_original_amendment_source",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "original_amendment"
+    },
+    {
+      "authority_id": "pr16_rejected_chain_source",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "dual_base_verifier"
+      ],
+      "custody_owner": "trusted_workflow",
+      "environment_binding": "P1A_PR16_REJECTED_CHAIN_SOURCE_ROOT",
+      "expected_tree": "18ba594d61f608a817af1db296d3549fc2300834",
+      "fetch_depth": 1,
+      "immutable_ref": "0164130fc62209c7a71ca4f7e58a2e24117e2fd5",
+      "producer_contract": "produce_pr16_rejected_chain_source",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "rejected_chain"
+    },
+    {
+      "authority_id": "trusted_base_full_source",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "dual_base_verifier"
+      ],
+      "custody_owner": "trusted_workflow",
+      "environment_binding": "P1A_TRUSTED_BASE_FULL_SOURCE_ROOT",
+      "expected_tree": "588f349716dc51c39b2ababd1dd94be5871761bf",
+      "fetch_depth": 7,
+      "immutable_ref": "1648d21e78088a8e0df4bb2eac7bde797d4ac665",
+      "producer_contract": "produce_trusted_base_full_source",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "trusted_base_full"
+    },
+    {
+      "authority_id": "trusted_contract",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "dispatch_identity",
+        "trusted_checkout"
+      ],
+      "custody_owner": "trusted_workflow",
+      "environment_binding": "P1A_TRUSTED_CONTRACT_ROOT",
+      "expected_tree": "c8fe6f31288bffcf1b8c35a825c60c6a5d31703d",
+      "fetch_depth": 1,
+      "immutable_ref": "b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "producer_contract": "produce_trusted_contract",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "certification_contract"
+    },
+    {
+      "authority_id": "trusted_reconciliation_authority",
+      "candidateSelectable": false,
+      "cleanup_owner": "authority_broker",
+      "conditional": false,
+      "consumers": [
+        "dual_base_verifier"
+      ],
+      "custody_owner": "trusted_workflow",
+      "environment_binding": "P1A_TRUSTED_RECONCILIATION_AUTHORITY_ROOT",
+      "expected_tree": "37345329da7051a818eb2e5b02f1f06f74d667a7",
+      "fetch_depth": 10,
+      "immutable_ref": "5056fb0df6e1ef739231cd2273a453fb1c644273",
+      "producer_contract": "produce_trusted_reconciliation_authority",
+      "repository": "DarksiedCEO/zbestmedia",
+      "required": true,
+      "semantic_role": "trusted_reconciliation"
+    }
+  ],
+  "conditionalAuthorities": [
+    {
+      "authority_id": "pr16_historical_source_fallback",
+      "environment_binding": "P1A_PR16_HISTORICAL_SOURCE_ROOT",
+      "required": false,
+      "semantic_role": "controlled_historical_fallback"
+    }
+  ],
+  "consumerAuthorityBindings": [
+    {
+      "authority_ids": [
+        "frozen_bootstrap",
+        "trusted_contract"
+      ],
+      "consumer_id": "dispatch_identity"
+    },
+    {
+      "authority_ids": [
+        "ancestry_authority",
+        "baseline_repository",
+        "dual_base_authority",
+        "evidence_base_authority",
+        "original_repository",
+        "pr16_action_inventory_source",
+        "pr16_chain_authority",
+        "pr16_current_predecessor_source",
+        "pr16_minimum_depth_source",
+        "pr16_original_amendment_source",
+        "pr16_rejected_chain_source",
+        "trusted_base_full_source",
+        "trusted_reconciliation_authority"
+      ],
+      "consumer_id": "dual_base_verifier"
+    },
+    {
+      "authority_ids": [
+        "frozen_bootstrap"
+      ],
+      "consumer_id": "identity_ancestry_gate"
+    },
+    {
+      "authority_ids": [
+        "current_workflow_authority"
+      ],
+      "consumer_id": "real_object_integration"
+    },
+    {
+      "authority_ids": [
+        "current_workflow_authority",
+        "trusted_contract"
+      ],
+      "consumer_id": "trusted_checkout"
+    }
+  ],
+  "contractVersion": "P1A-CONTRACT-2",
+  "futureProducerContracts": [
+    {
+      "authority_id": "ancestry_authority",
+      "producer_contract": "produce_ancestry_authority"
+    },
+    {
+      "authority_id": "baseline_repository",
+      "producer_contract": "produce_baseline_repository"
+    },
+    {
+      "authority_id": "current_workflow_authority",
+      "producer_contract": "produce_current_workflow_authority"
+    },
+    {
+      "authority_id": "dual_base_authority",
+      "producer_contract": "produce_dual_base_authority"
+    },
+    {
+      "authority_id": "evidence_base_authority",
+      "producer_contract": "produce_evidence_base_authority"
+    },
+    {
+      "authority_id": "frozen_bootstrap",
+      "producer_contract": "produce_frozen_bootstrap"
+    },
+    {
+      "authority_id": "original_repository",
+      "producer_contract": "produce_original_repository"
+    },
+    {
+      "authority_id": "pr16_action_inventory_source",
+      "producer_contract": "produce_pr16_action_inventory_source"
+    },
+    {
+      "authority_id": "pr16_chain_authority",
+      "producer_contract": "produce_pr16_chain_authority"
+    },
+    {
+      "authority_id": "pr16_current_predecessor_source",
+      "producer_contract": "produce_pr16_current_predecessor_source"
+    },
+    {
+      "authority_id": "pr16_minimum_depth_source",
+      "producer_contract": "produce_pr16_minimum_depth_source"
+    },
+    {
+      "authority_id": "pr16_original_amendment_source",
+      "producer_contract": "produce_pr16_original_amendment_source"
+    },
+    {
+      "authority_id": "pr16_rejected_chain_source",
+      "producer_contract": "produce_pr16_rejected_chain_source"
+    },
+    {
+      "authority_id": "trusted_base_full_source",
+      "producer_contract": "produce_trusted_base_full_source"
+    },
+    {
+      "authority_id": "trusted_contract",
+      "producer_contract": "produce_trusted_contract"
+    },
+    {
+      "authority_id": "trusted_reconciliation_authority",
+      "producer_contract": "produce_trusted_reconciliation_authority"
+    }
+  ],
+  "lifecycleState": "ACTIVATION_PENDING",
+  "previousContract": {
+    "active": true,
+    "path": ".github/p1a/certification-contract.v1.json",
+    "rollbackTarget": "62cbb8a90099e647ef7d91ecec7898f701babf8a",
+    "version": 1
+  },
+  "remoteAuthorized": false,
+  "remoteProvenance": "PENDING",
+  "selfActivating": false,
+  "version": 2
+}

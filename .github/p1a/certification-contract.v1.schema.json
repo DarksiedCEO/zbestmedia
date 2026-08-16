@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DarksiedCEO/zbestmedia/.github/p1a/certification-contract.v1.schema.json",
+  "title": "P1-A certification contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "repositoryIdentity", "trustedWorkflowIdentity", "subjectTaxonomyVersion", "requiredConsumerCatalog", "authorities", "consumers", "credentialPolicies", "evidencePolicies", "cleanupPolicies", "accountingStates", "bootstrapPolicies"],
+  "properties": {
+    "contractVersion": { "const": "P1A-CONTRACT-1" },
+    "repositoryIdentity": { "type": "object", "additionalProperties": false, "required": ["repository", "selectedBy"], "properties": { "repository": { "const": "DarksiedCEO/zbestmedia" }, "selectedBy": { "const": "trusted_workflow" } } },
+    "trustedWorkflowIdentity": { "type": "object", "additionalProperties": false, "required": ["sha", "blob"], "properties": { "sha": { "$ref": "#/$defs/sha" }, "blob": { "$ref": "#/$defs/sha" } } },
+    "subjectTaxonomyVersion": { "const": "p1a-subject-taxonomy/v1" },
+    "requiredConsumerCatalog": { "$ref": "#/$defs/requiredConsumerCatalog" },
+    "authorities": { "type": "array", "items": { "$ref": "#/$defs/authority" } },
+    "consumers": { "type": "array", "items": { "$ref": "#/$defs/consumer" } },
+    "credentialPolicies": { "$ref": "#/$defs/nonemptyIds" }, "evidencePolicies": { "$ref": "#/$defs/nonemptyIds" }, "cleanupPolicies": { "$ref": "#/$defs/nonemptyIds" }, "accountingStates": { "$ref": "#/$defs/nonemptyStrings" }, "bootstrapPolicies": { "$ref": "#/$defs/nonemptyIds" }
+  },
+  "$defs": {
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+    "nonemptyIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "nonemptyStrings": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "requiredObject": { "type": "object", "additionalProperties": false, "required": ["object_id", "object_type"], "properties": { "object_id": { "$ref": "#/$defs/sha" }, "object_type": { "enum": ["commit", "tree", "blob", "tag"] } } },
+    "requiredPath": { "type": "object", "additionalProperties": false, "required": ["path", "blob_sha"], "properties": { "path": { "type": "string", "minLength": 1 }, "blob_sha": { "$ref": "#/$defs/sha" } } },
+    "requiredConsumerCatalog": { "type": "object", "additionalProperties": false, "required": ["catalogVersion", "catalogSha256", "schemaSha256", "selectionAuthority", "candidateSelectable", "consumerCount"], "properties": { "catalogVersion": { "const": "p1a-required-consumers/v3" }, "catalogSha256": { "const": "d2d4cc7ac837c5b7f8e22818ddf137382c7f1bfb2c484d878fdfe5b3c72524ed" }, "schemaSha256": { "const": "3082fa83a5704ae55ac7fc3612b1c2937a6cc4302a312e3cd83cee3248c2a780" }, "selectionAuthority": { "const": "external_bootstrap_authorization" }, "candidateSelectable": { "const": false }, "consumerCount": { "const": 15 } } },
+    "authority": { "type": "object", "additionalProperties": false, "required": ["authority_id", "role", "owner", "repository", "immutable_ref", "expected_tree", "ordered_parents", "fetch_depth", "required_objects", "required_paths", "materialization_path", "credential_policy", "verification_contract", "consumer_bindings", "cleanup_contract", "evidence_contract"], "properties": {
+      "authority_id": { "$ref": "#/$defs/id" }, "role": { "$ref": "#/$defs/id" }, "owner": { "$ref": "#/$defs/id" }, "repository": { "const": "DarksiedCEO/zbestmedia" }, "immutable_ref": { "$ref": "#/$defs/sha" }, "expected_tree": { "oneOf": [{ "$ref": "#/$defs/sha" }, { "const": "NOT_APPLICABLE" }] }, "ordered_parents": { "type": "array", "items": { "$ref": "#/$defs/sha" } }, "fetch_depth": { "type": "integer", "minimum": 1 }, "required_objects": { "type": "array", "items": { "$ref": "#/$defs/requiredObject" } }, "required_paths": { "type": "array", "items": { "$ref": "#/$defs/requiredPath" } }, "materialization_path": { "$ref": "#/$defs/id" }, "credential_policy": { "$ref": "#/$defs/id" }, "verification_contract": { "$ref": "#/$defs/nonemptyIds" }, "consumer_bindings": { "$ref": "#/$defs/nonemptyIds" }, "cleanup_contract": { "$ref": "#/$defs/id" }, "evidence_contract": { "$ref": "#/$defs/id" }
+    } },
+    "consumer": { "type": "object", "additionalProperties": false, "required": ["consumer_id", "required_roles", "verification_obligations", "cleanup_obligations", "accounting_obligations"], "properties": { "consumer_id": { "$ref": "#/$defs/id" }, "required_roles": { "$ref": "#/$defs/nonemptyIds" }, "verification_obligations": { "$ref": "#/$defs/nonemptyIds" }, "cleanup_obligations": { "$ref": "#/$defs/nonemptyIds" }, "accounting_obligations": { "$ref": "#/$defs/nonemptyIds" } } }
+  }
+}
