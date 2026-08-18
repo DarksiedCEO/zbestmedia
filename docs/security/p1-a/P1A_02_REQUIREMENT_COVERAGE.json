@@ -1,0 +1,32 @@
+{
+  "artifactId": "P1A_02_REQUIREMENT_COVERAGE",
+  "version": 1,
+  "lane": "P1A-02",
+  "baseSha": "b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+  "frozenLedgerSha256": "f1010f1be105d05ea93bf6dc79a84ae09cee7d9470d024bd5d2b3d4948195fcf",
+  "canonicalRequirementDenominator": 124,
+  "laneRequirementDenominator": 17,
+  "requirements": [
+    "P1AF-014", "P1AF-015", "P1AF-022", "P1AF-023", "P1AF-024",
+    "P1AF-025", "P1AF-026", "P1AF-027", "P1AF-028", "P1AF-029",
+    "P1AF-030", "P1AF-031", "P1AF-032", "P1AF-033", "P1AF-034",
+    "P1AF-035", "P1AF-036"
+  ],
+  "implementation": [
+    ".github/workflows/p1a-certify-clean.yml",
+    "scripts/p1a-certification-core.mjs",
+    "scripts/validate-p1a-certification-preflight.mjs",
+    "scripts/validate-p1a-certification-accounting.mjs",
+    "scripts/validate-p1a-candidate-data.mjs"
+  ],
+  "localTestDenominator": 65,
+  "localTestResult": "PASS",
+  "remoteProtectedExecution": "NOT_RUN",
+  "nested15": "NOT_RUN",
+  "realObject21": "NOT_RUN",
+  "externalCertification": "NOT_RUN",
+  "dependencyChanges": "NONE",
+  "push": false,
+  "merge": false,
+  "remoteMutation": "NONE"
+}

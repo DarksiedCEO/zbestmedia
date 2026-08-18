@@ -1,58 +1,44 @@
-import {
-  validateCertificationBundle,
-} from "./validate-p1a-certification-accounting.mjs";
+import { validateCertificationBundle } from "./validate-p1a-certification-accounting.mjs";
+import { CANONICAL_REMOTE, CANONICAL_REPOSITORY, CLEAN_BASE_SHA } from "./p1a-certification-core.mjs";
 
-const candidateSha = "1".repeat(40);
-const workflowSha = "2".repeat(40);
-const baseSha = "3".repeat(40);
-const evidenceBaseSha = "6".repeat(40);
-const reconciliationBaseSha = "7".repeat(40);
-const originalCandidateSha = "8".repeat(40);
-const runtimePin = "4".repeat(40);
-const identity = { candidateSha, workflowSha, baseSha, evidenceBaseSha, reconciliationBaseSha, originalCandidateSha, runtimePin };
+const candidateSha = "1".repeat(40), workflowSha = "2".repeat(40), runtimePin = "4".repeat(40);
+const identity = {
+  repository: CANONICAL_REPOSITORY, remote: CANONICAL_REMOTE,
+  candidateSha, workflowSha, verifierSha: workflowSha,
+  verifierDigest: "a".repeat(64), authorizedBaseSha: CLEAN_BASE_SHA,
+  runtimePin, scopeDigest: "b".repeat(64), evidencePackageDigest: "c".repeat(64),
+};
 const zeros = {
   failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0,
   notVerified: 0, notRun: 0,
 };
-const nested = {
-  suite: "p1-a-trusted-certification",
-  ...identity,
-  required: 15, executed: 15, passed: 15, ...zeros,
-  evidenceDigest: "a".repeat(64),
-  verifierDigest: "b".repeat(64),
-};
+const nested = { suite: "p1-a-trusted-certification", ...identity, required: 15, executed: 15, passed: 15, ...zeros };
 const integration = {
-  suite: "p1-a-trusted-verifier-controls",
-  ...identity,
+  suite: "p1-a-trusted-verifier-controls", ...identity,
   required: 21, executed: 21, passed: 21, ...zeros,
-  crossRepositoryCiAuthentication: "VERIFIED",
-  nestedEvidenceDigest: nested.evidenceDigest,
+  nestedEvidenceDigest: nested.evidencePackageDigest,
   nestedVerifierDigest: nested.verifierDigest,
 };
-const dual = {
-  suite: "p1-a-dual-base-verifier-controls", ...identity,
-  required: 29, executed: 29, passed: 29, ...zeros,
-};
 const cases = [
-  ["complete_bundle", { nested, integration, dual }, identity, false],
-  ["absent_integration", { nested, dual }, identity, true],
-  ["absent_dual", { nested, integration }, identity, true],
-  ["skipped_integration", { nested, dual, integration: { ...integration, skipped: 1, passed: 20 } }, identity, true],
-  ["incomplete_integration", { nested, dual, integration: { ...integration, executed: 20, passed: 20 } }, identity, true],
-  ["wrong_candidate", { nested, integration, dual }, { ...identity, candidateSha: "5".repeat(40) }, true],
-  ["wrong_workflow", { nested, integration, dual }, { ...identity, workflowSha: "6".repeat(40) }, true],
-  ["wrong_runtime", { nested, integration, dual }, { ...identity, runtimePin: "7".repeat(40) }, true],
-  ["wrong_base", { nested, integration, dual }, { ...identity, baseSha: "8".repeat(40) }, true],
-  ["wrong_evidence_base", { nested, integration, dual }, { ...identity, evidenceBaseSha: "9".repeat(40) }, true],
-  ["wrong_reconciliation_base", { nested, integration, dual }, { ...identity, reconciliationBaseSha: "a".repeat(40) }, true],
-  ["wrong_original_candidate", { nested, integration, dual }, { ...identity, originalCandidateSha: "b".repeat(40) }, true],
+  ["complete_bundle", { nested, integration }, identity, false],
+  ["absent_integration", { nested }, identity, true],
+  ["absent_nested", { integration }, identity, true],
+  ["skipped_integration", { nested, integration: { ...integration, skipped: 1, passed: 20 } }, identity, true],
+  ["incomplete_integration", { nested, integration: { ...integration, executed: 20, passed: 20 } }, identity, true],
+  ["wrong_candidate", { nested, integration }, { ...identity, candidateSha: "5".repeat(40) }, true],
+  ["wrong_workflow", { nested, integration }, { ...identity, workflowSha: "6".repeat(40) }, true],
+  ["wrong_runtime", { nested, integration }, { ...identity, runtimePin: "7".repeat(40) }, true],
+  ["wrong_base", { nested, integration }, { ...identity, authorizedBaseSha: "8".repeat(40) }, true],
+  ["wrong_repository", { nested, integration }, { ...identity, repository: "attacker/fork" }, true],
+  ["candidate_as_verifier", { nested, integration }, { ...identity, verifierSha: candidateSha }, true],
+  ["wrong_scope_digest", { nested, integration }, { ...identity, scopeDigest: "d".repeat(64) }, true],
   [
     "digest_mismatch",
     {
-      nested, dual,
+      nested,
       integration: {
         ...integration,
-        nestedEvidenceDigest: "c".repeat(64),
+        nestedEvidenceDigest: "d".repeat(64),
       },
     },
     identity,
