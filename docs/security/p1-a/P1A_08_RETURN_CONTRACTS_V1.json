@@ -1,0 +1,89 @@
+{
+  "artifactId": "P1A_08_RETURN_CONTRACTS_V1",
+  "schemaVersion": "1.0.0",
+  "owner": "P1A-08",
+  "law": "When another lane must change its own code, P1A-08 issues a return contract instead of editing around it. Each entry names producer, consumer, schema, version, failure mode, and evidence path. No return contract marks the receiving lane complete.",
+  "contracts": [
+    {
+      "id": "RC-02-A",
+      "toLane": "P1A-02",
+      "subject": "scripts/p1a-certification-core.mjs (+ scripts/validate-p1a-certification-accounting.mjs wrapper)",
+      "requiredChange": "Enforce schemaVersion === 'P1A_TRUSTED_VERIFIER_SUMMARY_V2'; enforce exact key-set so unknown consequential fields reject; enforce Number.isInteger on all counters; rebind integration.nestedEvidenceDigest to nested.evidenceDigest and integration.nestedVerifierDigest to nested.producerDigest per P1A_02_TO_P1A_08_INTEGRATION_CONTRACT_V2.",
+      "evidence": "At 2f0133d the core validates 21 of the 22 contract fields (schemaVersion unread), has no key-set check, and its nested bindings are vacuous under identity parity (nestedEvidenceDigest === evidencePackageDigest === identity value).",
+      "failureMode": "Until landed, a legacy or field-padded summary with correct field values would be accepted; protected certification remains BLOCKED against contract V2.",
+      "blocking": true
+    },
+    {
+      "id": "RC-02-B",
+      "toLane": "P1A-02",
+      "subject": ".github/workflows/ci.yml (shared, P1A-08-owned) + docs/security/p1-a/P1A_02_REMEDIATION_BUILDER_EVIDENCE_V1.json",
+      "requiredChange": "Revert the +5-line 'P1-A candidate data only validation' ci.yml hunk in the P1A-02 worktree and submit it to P1A-08 for composed registration (it will be added to the declared composition delta with the P1A-02 script once that script merges); correct the builder evidence file whose 'ci.yml not edited' assertion and filesChanged list (21 claimed vs 28 actual) contradict the diff.",
+      "evidence": "git diff b0c1b21..2f0133d shows .github/workflows/ci.yml +5; P1A_02_REMEDIATION_BUILDER_EVIDENCE_V1.json:93 asserts it was not edited. The hunk also breaks the trusted-workflow byte composition control in P1A-02's own tree (composeCurrentTrustedWorkflow equality).",
+      "failureMode": "Unreported shared-surface edit = cross-lane collision; the composition control fails closed on P1A-02's tree.",
+      "blocking": true
+    },
+    {
+      "id": "RC-02-C",
+      "toLane": "P1A-02",
+      "subject": "scripts/validate-p1a-threat-model.mjs summary emission (nested producer)",
+      "requiredChange": "Emit P1A_NESTED_CERTIFICATION_SUMMARY_V2 exactly as specified in contract V2 (adds schemaVersion, authorizedBaseSha, scopeDigest, evidencePackageDigest, producerDigest, evidenceDigest; drops abandoned-lineage identity fields). Certification semantics of the 15 checks remain P1A-02-owned.",
+      "evidence": "At 2f0133d the nested summary carries baseSha=abandoned AUTHORIZED_BASE and runtimePin=abandoned AUTHORIZED_RUNTIME and lacks the V2 fields; the V2 consumer cannot accept it.",
+      "failureMode": "Producer-side validateNestedSummaryV2 fails closed on every nested run until landed (intended).",
+      "blocking": true
+    },
+    {
+      "id": "RC-02-D",
+      "toLane": "P1A-02 (with P1A-07 for test truth)",
+      "subject": "Abandoned-lineage constants and allowlists in scripts/validate-p1a-threat-model.mjs (AUTHORIZED_BASE, TRUSTED_RECONCILIATION_BASE, ORIGINAL_CANDIDATE-as-authority, AUTHORIZED_RUNTIME, AUTHORIZED_CANDIDATE_FILES, TRUSTED_INFRASTRUCTURE_FILES) and the 21-control subjects that assert them",
+      "requiredChange": "Re-anchor certification constants and candidate/infrastructure allowlists to clean lineage (base b0c1b212...). Add to TRUSTED_INFRASTRUCTURE_FILES and the candidate-scope allowlist (with matching validation-manifest edit): scripts/p1a-clean-authority.mjs, scripts/p1a-trusted-verifier-summary-v2.mjs, scripts/test-p1a-summary-v2.mjs, scripts/validate-p1a-evidence.mjs, scripts/test-p1a-evidence.mjs, scripts/test-p1a-evidence-mutation.mjs. 365c5975... and the other legacy roots remain HISTORICAL_EVIDENCE_ONLY and must never become active authority.",
+      "evidence": "The 21 real-object controls cannot execute under clean lineage while their subjects bind abandoned roots; AUTHORIZED_CANDIDATE_FILES uses set-equality and would reject any candidate containing the new lane files.",
+      "failureMode": "Until landed, real-object 21/21 and nested 15/15 are not claimable under clean lineage; integration mode fails closed at control execution (intended; not P1A-08's to re-derive).",
+      "blocking": true
+    },
+    {
+      "id": "RC-02-E",
+      "toLane": "P1A-02",
+      "subject": "scripts/p1a-authority-inventory.mjs REQUIRED_AUTHORITY_CLASSES",
+      "requiredChange": "Resolve the tension between required classes LEGACY_CURRENT_WORKFLOW_AUTHORITY / ORIGINAL_CANDIDATE_AUTHORITY and the abandoned-lineage inadmissibility rule: bind both classes as HISTORICAL_EVIDENCE_ONLY acquisitions (never active trust roots) or version the class set. Also wire the inventory into an execution path (it is currently spec-only, referenced by tests but not by p1a-certify-clean.yml).",
+      "evidence": "P1A_02_PROTECTED_CERTIFICATION_IMPLEMENTATION.md declares abandoned roots inadmissible while the nine-class inventory still mandates them; the module is not invoked by any workflow.",
+      "failureMode": "Ambiguous authority classes invite a legacy-root revival under a compliant-looking inventory.",
+      "blocking": false
+    },
+    {
+      "id": "RC-02-F",
+      "toLane": "P1A-02",
+      "subject": "Dropped controls: dual-base suite (required 29) and crossRepositoryCiAuthentication === 'VERIFIED'",
+      "requiredChange": "Record an explicit disposition for both drops (base consumer enforced them; the V2 core does not). Either restore with clean-lineage semantics or document the founder-visible rationale. Silent narrowing of the protected gate is prohibited.",
+      "evidence": "b0c1b21:scripts/validate-p1a-certification-accounting.mjs required bundle.dual (29) and crossRepositoryCiAuthentication; p1a-certification-core.mjs at 2f0133d validates neither.",
+      "failureMode": "Gate narrowing without disposition = certification-scope drift.",
+      "blocking": true
+    },
+    {
+      "id": "RC-01-A",
+      "toLane": "P1A-01",
+      "subject": ".github/CODEOWNERS (shared, registration routed via P1A-08)",
+      "requiredChange": "Drop the lane-side CODEOWNERS rewrite from the P1A-01 subject or resubmit it as input to P1A-08. The P1A-08 integration-side CODEOWNERS registers all base-existing trusted surfaces plus P1A-03/P1A-08 files (sorted, superset of P1A-01's base-existing entries); P1A-01's three new authority-root scripts will be registered by P1A-08 when its subject merges.",
+      "evidence": "P1A-01 worktree at be7e4c1 carries a divergent CODEOWNERS rewrite; the seam register routes CODEOWNERS registration through P1A-08; two lanes independently editing one authority file violates P1AF-110.",
+      "failureMode": "Divergent rewrites collide at merge; whichever lands second silently reverts the other's registrations.",
+      "blocking": false
+    },
+    {
+      "id": "RC-03-A",
+      "toLane": "P1A-03",
+      "subject": "Certification-scope status of the three evidence files + CANONICAL_AUTHORITY_ANCHORS + laneEvidenceStatus()",
+      "requiredChange": "Acknowledge in the P1A-03 evidence record that (a) CODEOWNERS/CI registration landed via P1A-08 while certification candidate-scope inclusion is deferred to RC-02-D; (b) CANONICAL_AUTHORITY_ANCHORS baseSha/baseTree advance is owned by the certification re-anchoring, not by P1A-08; (c) laneEvidenceStatus() executionStatus 'LOCAL_IMPLEMENTATION_ONLY' becomes stale once the CI steps run and must then be updated by P1A-03.",
+      "evidence": "validate-p1a-evidence.mjs:25-32 pins the clean base anchors; :871-887 hardcodes LOCAL_IMPLEMENTATION_ONLY; neither receipt addresses candidate-scope inclusion.",
+      "failureMode": "Stale self-reports and unstated scope produce understated or contradictory evidence claims.",
+      "blocking": false
+    },
+    {
+      "id": "RC-05-A",
+      "toLane": "P1A-05",
+      "subject": "services/artifact-registry/prisma/schema.prisma + migration 20260818113000_transactional_outbox_relay (uncommitted in the P1A-05 worktree)",
+      "requiredChange": "Declare CROSS_LANE_COLLISION per the seam register: schema.prisma is a 03/05/06 shared authoritative file routed through P1A-08. Submit the outbox schema/migration delta to P1A-08 as a proposed hunk with its producer/consumer/versioning declared; P1A-08 will sequence the single merged schema change across lanes 03/05/06 (one migration order, one writer). Also remove the stray duplicate test file 'services/artifact-registry/test/events.outbox.test 2.ts'.",
+      "evidence": "P1A-05 worktree has uncommitted edits to the routed file; P1A-05 never carried the shared-file routing clause (no lane-start .md receipt) but the routing is documented by the seam register and the 03/06 receipts.",
+      "failureMode": "Independent schema edits across 03/05/06 produce conflicting migrations and resurrect deleted data (05 relay vs 06 retention).",
+      "blocking": true
+    }
+  ]
+}

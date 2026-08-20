@@ -1,0 +1,163 @@
+{
+  "artifactId": "P1A_02_TO_P1A_08_INTEGRATION_CONTRACT_V2",
+  "schemaVersion": "2.0.0",
+  "owner": "P1A-08",
+  "supersedes": {
+    "artifactId": "P1A_02_TO_P1A_08_INTEGRATION_CONTRACT_V1",
+    "location": "P1A-02 lane worktree docs/security/p1-a/P1A_02_TO_P1A_08_INTEGRATION_CONTRACT_V1.json at 2f0133d",
+    "sha256": "77d65cc861f65fe34c8f6cbeb89100a9ba2059b7a37b33bf06ff8785a1eb61ae",
+    "disposition": "PRESERVED_HISTORICAL"
+  },
+  "producer": "scripts/test-p1a-trusted-verifier.mjs --integration",
+  "consumer": "scripts/validate-p1a-certification-accounting.mjs via scripts/p1a-certification-core.mjs (P1A-02 lane)",
+  "sharedPaths": [
+    ".github/workflows/ci.yml",
+    ".github/CODEOWNERS",
+    "scripts/test-p1a-trusted-verifier.mjs"
+  ],
+  "p1a08OwnedModules": {
+    "schemaModuleOfRecord": "scripts/p1a-trusted-verifier-summary-v2.mjs",
+    "authorityModuleOfRecord": "scripts/p1a-clean-authority.mjs",
+    "testBattery": "scripts/test-p1a-summary-v2.mjs"
+  },
+  "authorityAcquisition": {
+    "law": "Every consequential summary value derives from executed trusted code and acquired authority. Caller-default echo, missing-authority fallback, and legacy-root acceptance are prohibited and fail closed.",
+    "requiredEnvironment": [
+      "P1A_CANDIDATE_SHA",
+      "P1A_WORKFLOW_SHA",
+      "P1A_VERIFIER_SHA",
+      "P1A_AUTHORIZED_BASE_SHA",
+      "P1A_TRUST_RUNTIME_PIN",
+      "P1A_SCOPE_DIGEST",
+      "P1A_EVIDENCE_PACKAGE_DIGEST",
+      "P1A_RUNTIME_GIT_DIR"
+    ],
+    "removedLegacyEnvironment": [
+      "P1A_TRUST_BASE_SHA",
+      "P1A_EVIDENCE_BASE_SHA",
+      "P1A_RECONCILIATION_BASE_SHA",
+      "P1A_ORIGINAL_CANDIDATE_SHA",
+      "P1A_SPEC_GIT_DIR"
+    ],
+    "cleanBaseSha": "b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+    "forbiddenLegacyRoots": [
+      "7056ea4ce24379c93549f0ac9b45ddd7a2600dd6",
+      "5056fb0df6e1ef739231cd2273a453fb1c644273",
+      "365c59757756f3f91480d3bfeb841b543010201f",
+      "94376718e07df2e9d44864ed0394d58219224e61",
+      "94941bbf6afbd0073f6619b2c63b0e6c5c6ca4e8"
+    ],
+    "derivedValues": {
+      "verifierDigest": "sha256 of scripts/validate-p1a-certification-accounting.mjs bytes in the trusted execution root, computed by the producer (never echoed)",
+      "runtimeAuthority": "P1A_TRUST_RUNTIME_PIN must resolve to a commit object inside P1A_RUNTIME_GIT_DIR via hermetic --git-dir query"
+    }
+  },
+  "integrationSummarySchema": {
+    "name": "P1A_TRUSTED_VERIFIER_SUMMARY_V2",
+    "suite": "p1-a-trusted-verifier-controls",
+    "required": 21,
+    "fields": [
+      "suite",
+      "schemaVersion",
+      "candidateSha",
+      "workflowSha",
+      "verifierSha",
+      "authorizedBaseSha",
+      "runtimePin",
+      "verifierDigest",
+      "scopeDigest",
+      "evidencePackageDigest",
+      "required",
+      "executed",
+      "passed",
+      "failed",
+      "skipped",
+      "cancelled",
+      "neutral",
+      "stale",
+      "notVerified",
+      "notRun",
+      "nestedEvidenceDigest",
+      "nestedVerifierDigest"
+    ],
+    "exactKeySet": true,
+    "unknownConsequentialFieldRejects": true,
+    "legacyUnversionedSummaryRejects": true,
+    "emission": "single JSON line as final stdout line; additionally written with exclusive-create (wx, 0600) to P1A_SUMMARY_OUT when set",
+    "removedLegacyFields": [
+      "baseSha",
+      "evidenceBaseSha",
+      "reconciliationBaseSha",
+      "originalCandidateSha",
+      "crossRepositoryCiAuthentication"
+    ]
+  },
+  "nestedSummarySchema": {
+    "name": "P1A_NESTED_CERTIFICATION_SUMMARY_V2",
+    "suite": "p1-a-trusted-certification",
+    "required": 15,
+    "producerOfRecord": "scripts/validate-p1a-threat-model.mjs (implementation returned to P1A-02 via RC-02-C)",
+    "fields": [
+      "suite",
+      "schemaVersion",
+      "candidateSha",
+      "workflowSha",
+      "verifierSha",
+      "authorizedBaseSha",
+      "runtimePin",
+      "verifierDigest",
+      "producerDigest",
+      "scopeDigest",
+      "evidencePackageDigest",
+      "evidenceDigest",
+      "required",
+      "executed",
+      "passed",
+      "failed",
+      "skipped",
+      "cancelled",
+      "neutral",
+      "stale",
+      "notVerified",
+      "notRun"
+    ],
+    "digestSemantics": {
+      "verifierDigest": "sha256 of the accounting consumer bytes (identity parity with the integration summary)",
+      "producerDigest": "sha256 of the nested producer's own bytes",
+      "evidenceDigest": "digest over the nested run's produced evidence content",
+      "evidencePackageDigest": "acquired evidence-package identity shared across the certification run",
+      "antiTautology": "evidenceDigest MUST differ from evidencePackageDigest and producerDigest MUST differ from verifierDigest; equal values are rejected as vacuous bindings"
+    }
+  },
+  "bindings": {
+    "integration.nestedEvidenceDigest": "MUST equal nested.evidenceDigest",
+    "integration.nestedVerifierDigest": "MUST equal nested.producerDigest",
+    "consumerNote": "p1a-certification-core.mjs at 2f0133d binds nestedEvidenceDigest to nested.evidencePackageDigest, which is vacuous under identity parity; corrected binding is a P1A-02 consumer obligation (RC-02-A). Until both sides land, end-to-end protected certification fails closed by design."
+  },
+  "consumerObligations": [
+    "RC-02-A: enforce schemaVersion === P1A_TRUSTED_VERIFIER_SUMMARY_V2, exact key-set (unknown consequential field rejects), Number.isInteger on counters, and the corrected nested bindings (nestedEvidenceDigest -> nested.evidenceDigest, nestedVerifierDigest -> nested.producerDigest)"
+  ],
+  "sharedCiRegistration": {
+    "ordinaryCi": ".github/workflows/ci.yml gains: six node --check lines in the trusted-bootstrap syntax step, and three unprivileged steps (summary-v2 controls, evidence contract controls, evidence mutation denominator).",
+    "compositionControl": "composeCurrentTrustedWorkflow in scripts/test-p1a-trusted-verifier.mjs asserts the ordinary workflow equals the pinned trusted workflow plus exactly this declared byte-level delta; any other deviation fails closed.",
+    "privilegeLaw": "Ordinary CI remains unprivileged: no protected secrets, no OIDC token permission, no credential-shaped environment names in the producer authority surface.",
+    "mergeOrderConstraint": "The evidence-controls steps bind P1A-03 files (scripts/validate-p1a-evidence.mjs, scripts/test-p1a-evidence.mjs, scripts/test-p1a-evidence-mutation.mjs) that exist at ddd729a, not at the clean base. The composed integration candidate MUST include the P1A-03 file set or ordinary CI fails closed. This failure is intended and is not a skip."
+  },
+  "requiredTests": {
+    "implementedIn": "scripts/test-p1a-summary-v2.mjs",
+    "mapping": {
+      "authentic producer output passes unchanged": "authentic_build_and_validate",
+      "missing each consequential field rejects": "missing_field_<field>_rejects (22 cases)",
+      "unknown consequential field rejects": "unknown_field_rejects, nested_unknown_field_rejects",
+      "legacy schema rejects": "legacy_unversioned_summary_rejects, legacy_v1_schema_version_rejects, nested_legacy_schema_rejects, nested_wrong_schema_version_rejects",
+      "identity mismatch rejects": "stale_replayed_candidate_rejects, stale_replayed_evidence_package_rejects, wrong_base_rejects, verifier_not_workflow_rejects",
+      "ordinary/protected authority parity assertion": "authority_env_surface_carries_no_credentials",
+      "wrong producer / cross-lane substitution": "wrong_producer_suite_rejects, cross_lane_p1a03_summary_rejects, cross_lane_nested_for_integration_rejects",
+      "missing authority fails closed": "authority_missing_<env>_fails_closed (8 cases), authority_no_legacy_env_fallback",
+      "legacy root substitution rejects": "authority_legacy_candidate_*_rejects (5 cases), authority_legacy_runtime_rejects"
+    },
+    "mutation": "20 targeted mutants over the pure schema module; 0 survivors required (suite p1a-summary-v2-mutation)"
+  },
+  "failureBehavior": "BLOCK protected certification; do not reinterpret as infrastructure instability. The producer refuses to emit any V2 summary when authority acquisition, the nested contract, or any control fails.",
+  "p1a02Disposition": "REMAINS_BLOCKED_PENDING_P1A_02_CONSUMER_AND_NESTED_OBLIGATIONS. P1A-08 has satisfied the delegated shared-integration side; P1A-02 is NOT marked complete by this contract."
+}

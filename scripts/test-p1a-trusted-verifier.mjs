@@ -33,6 +33,11 @@ import {
   validateCurrentWorkflowShaCustody,
   validateOrdinaryCiActionPins,
 } from "./validate-p1a-threat-model.mjs";
+import { acquireCleanAuthority } from "./p1a-clean-authority.mjs";
+import {
+  buildIntegrationSummaryV2,
+  validateNestedSummaryV2,
+} from "./p1a-trusted-verifier-summary-v2.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 if (process.env.P1A_TRUSTED_EXECUTION_ROOT) {
@@ -171,13 +176,66 @@ const PREVIOUS_TRUSTED_VERIFIER_CONTROL_STEP = CURRENT_TRUSTED_VERIFIER_CONTROL_
   .replace(CURRENT_TRUSTED_WORKFLOW_BLOB,
     "c6baddd0f3eb2246315e573ea1e53c7a6ed92dad");
 
+// P1A-08 authorized integration delta. The ordinary workflow must equal the
+// pinned trusted workflow plus EXACTLY these declared byte-level insertions
+// (P1A_02_TO_P1A_08_INTEGRATION_CONTRACT_V2 shared-CI registration). Any other
+// deviation from the trusted composition still fails closed.
+const P1A08_SYNTAX_REGISTRATION_BASE = `      - name: P1-A trusted-bootstrap Node syntax
+        run: |
+          node --check scripts/detect-p1a-ordinary-ci-secrets.mjs
+          node --check scripts/test-p1a-ci-secret-detector.mjs
+          node --check scripts/test-p1a-trusted-verifier.mjs
+          node --check scripts/test-p1a-dual-base-verifier.mjs
+          node --check scripts/validate-p1a-threat-model.mjs`;
+const P1A08_SYNTAX_REGISTRATION_CURRENT = `${P1A08_SYNTAX_REGISTRATION_BASE}
+          node --check scripts/p1a-clean-authority.mjs
+          node --check scripts/p1a-trusted-verifier-summary-v2.mjs
+          node --check scripts/test-p1a-summary-v2.mjs
+          node --check scripts/validate-p1a-evidence.mjs
+          node --check scripts/test-p1a-evidence.mjs
+          node --check scripts/test-p1a-evidence-mutation.mjs`;
+const P1A08_SECRET_DETECTOR_STEP = `      - name: P1-A trusted-bootstrap secret-detector tests
+        run: node scripts/test-p1a-ci-secret-detector.mjs`;
+const P1A08_INTEGRATION_CONTROL_STEPS = `${P1A08_SECRET_DETECTOR_STEP}
+
+      # P1A-08 integration registration. These steps bind files owned by
+      # lanes P1A-08 (summary/authority modules) and P1A-03 (evidence engine).
+      # A missing script fails the step — absence is an integration defect,
+      # never a skip.
+      - name: P1-A summary schema and clean-authority controls
+        run: |
+          node scripts/test-p1a-summary-v2.mjs > "$RUNNER_TEMP/p1a-summary-v2.log"
+          cat "$RUNNER_TEMP/p1a-summary-v2.log"
+          tail -n 2 "$RUNNER_TEMP/p1a-summary-v2.log" > "$RUNNER_TEMP/p1a-summary-v2-accounting.json"
+
+      - name: P1-A evidence contract controls
+        run: |
+          node scripts/test-p1a-evidence.mjs > "$RUNNER_TEMP/p1a-evidence.log"
+          cat "$RUNNER_TEMP/p1a-evidence.log"
+          tail -n 1 "$RUNNER_TEMP/p1a-evidence.log" > "$RUNNER_TEMP/p1a-evidence-summary.json"
+
+      - name: P1-A evidence mutation denominator
+        run: |
+          node scripts/test-p1a-evidence-mutation.mjs > "$RUNNER_TEMP/p1a-evidence-mutation.log"
+          cat "$RUNNER_TEMP/p1a-evidence-mutation.log"
+          tail -n 1 "$RUNNER_TEMP/p1a-evidence-mutation.log" > "$RUNNER_TEMP/p1a-evidence-mutation-summary.json"`;
+
 function composeCurrentTrustedWorkflow(source) {
   assert.equal(source.split(PREVIOUS_TRUSTED_VERIFIER_CONTROL_STEP).length - 1, 1,
     "previous trusted workflow step count mismatch");
   assert.equal(source.split(BASE_TRUSTED_VERIFIER_CONTROL_STEP).length - 1, 0,
     "obsolete unauthenticated workflow step present");
-  return source.replace(PREVIOUS_TRUSTED_VERIFIER_CONTROL_STEP,
+  let composed = source.replace(PREVIOUS_TRUSTED_VERIFIER_CONTROL_STEP,
     CURRENT_TRUSTED_VERIFIER_CONTROL_STEP);
+  assert.equal(composed.split(P1A08_SYNTAX_REGISTRATION_BASE).length - 1, 1,
+    "trusted syntax registration step count mismatch");
+  composed = composed.replace(P1A08_SYNTAX_REGISTRATION_BASE,
+    P1A08_SYNTAX_REGISTRATION_CURRENT);
+  assert.equal(composed.split(P1A08_SECRET_DETECTOR_STEP).length - 1, 1,
+    "trusted secret-detector step count mismatch");
+  composed = composed.replace(P1A08_SECRET_DETECTOR_STEP,
+    P1A08_INTEGRATION_CONTROL_STEPS);
+  return composed;
 }
 const baselineCi = baselineRepositoryRoot
   ? readFileSync(path.join(baselineRepositoryRoot, ".github/workflows/ci.yml"), "utf8")
@@ -196,6 +254,7 @@ const governance = readFileSync(
 const temporary = mkdtempSync(path.join(tmpdir(), "p1a-trusted-verifier-"));
 const integrationMode = process.argv.includes("--integration");
 let integrationEvidence;
+let cleanAuthority;
 let historicalWorktree;
 
 const historicalHead = execFileSync(
@@ -1317,55 +1376,27 @@ const cases = [
 ];
 
 if (integrationMode) {
+  // P1A-08 integration seam (P1A_02_TO_P1A_08_INTEGRATION_CONTRACT_V2): all
+  // identity values are acquired and verified from clean-lineage authority —
+  // never echoed from caller defaults — and the nested producer's summary must
+  // satisfy the V2 nested contract. Any missing or legacy authority fails
+  // closed here; there is no fallback path.
   cases.push([
-    "real_frozen_candidate_integration",
+    "clean_lineage_real_candidate_integration",
     () => {
-      for (const name of [
-        "P1A_PACKAGE_ROOT",
-        "P1A_CANDIDATE_SHA",
-        "P1A_WORKFLOW_SHA",
-        "P1A_VERIFIER_SHA",
-        "P1A_TRUST_BASE_SHA",
-        "P1A_EVIDENCE_BASE_SHA",
-        "P1A_RECONCILIATION_BASE_SHA",
-        "P1A_ORIGINAL_CANDIDATE_SHA",
-        "P1A_TRUST_RUNTIME_PIN",
-        "P1A_SPEC_GIT_DIR",
-        "P1A_RUNTIME_GIT_DIR",
-      ]) {
-        assert.ok(process.env[name], `${name} is required for integration mode`);
-      }
+      cleanAuthority = acquireCleanAuthority(process.env, root);
       const output = execFileSync(
         process.execPath,
         [
           path.join(root, "scripts/validate-p1a-threat-model.mjs"),
           "--candidate-sha",
-          process.env.P1A_CANDIDATE_SHA,
+          cleanAuthority.candidateSha,
         ],
         { cwd: root, env: process.env, encoding: "utf8" },
       );
-      const summary = JSON.parse(output.trim().split("\n").at(-1));
-      assert.equal(summary.candidateSha, process.env.P1A_CANDIDATE_SHA);
-      assert.equal(summary.workflowSha, process.env.P1A_WORKFLOW_SHA);
-      assert.equal(summary.verifierSha, process.env.P1A_VERIFIER_SHA);
-      assert.equal(summary.evidenceBaseSha, process.env.P1A_EVIDENCE_BASE_SHA);
-      assert.equal(summary.reconciliationBaseSha, process.env.P1A_RECONCILIATION_BASE_SHA);
-      assert.equal(summary.originalCandidateSha, process.env.P1A_ORIGINAL_CANDIDATE_SHA);
-      assert.equal(summary.required, 15);
-      assert.equal(summary.executed, 15);
-      assert.equal(summary.passed, 15);
-      for (const field of [
-        "failed",
-        "skipped",
-        "cancelled",
-        "neutral",
-        "stale",
-        "notVerified",
-      ]) {
-        assert.equal(summary[field], 0, `${field} must be zero`);
-      }
-      assert.equal(summary.crossRepositoryCiAuthentication, "VERIFIED");
-      integrationEvidence = summary;
+      const nested = JSON.parse(output.trim().split("\n").at(-1));
+      validateNestedSummaryV2(nested, { ...cleanAuthority, required: 15 });
+      integrationEvidence = nested;
     },
     false,
   ]);
@@ -1422,28 +1453,45 @@ try {
   rmSync(temporary, { recursive: true, force: true });
 }
 
-const summary = {
-  suite: "p1-a-trusted-verifier-controls",
-  candidateSha: integrationMode ? process.env.P1A_CANDIDATE_SHA : null,
-  workflowSha: integrationMode ? process.env.P1A_WORKFLOW_SHA : null,
-  baseSha: integrationMode ? process.env.P1A_TRUST_BASE_SHA : null,
-  evidenceBaseSha: integrationMode ? process.env.P1A_EVIDENCE_BASE_SHA : null,
-  reconciliationBaseSha: integrationMode ? process.env.P1A_RECONCILIATION_BASE_SHA : null,
-  originalCandidateSha: integrationMode ? process.env.P1A_ORIGINAL_CANDIDATE_SHA : null,
-  runtimePin: integrationMode ? process.env.P1A_TRUST_RUNTIME_PIN : null,
-  required: cases.length,
-  executed: cases.length,
-  passed,
-  failed,
-  skipped: 0,
-  cancelled: 0,
-  neutral: 0,
-  stale: 0,
-  notVerified: 0,
-  notRun: 0,
-  crossRepositoryCiAuthentication: integrationMode ? "VERIFIED" : "NOT_RUN",
-  nestedEvidenceDigest: integrationEvidence?.evidenceDigest ?? null,
-  nestedVerifierDigest: integrationEvidence?.verifierDigest ?? null,
-};
+let summary;
+if (integrationMode) {
+  // Fail closed: never emit a consumable V2 summary unless authority was
+  // acquired, the nested contract held, and every control actually passed.
+  if (!cleanAuthority || !integrationEvidence || failed > 0 || passed !== cases.length) {
+    console.error(
+      "clean-lineage authority or controls incomplete; refusing to emit P1A_TRUSTED_VERIFIER_SUMMARY_V2",
+    );
+    process.exit(1);
+  }
+  summary = buildIntegrationSummaryV2({
+    authority: cleanAuthority,
+    counts: { required: cases.length, executed: cases.length, passed, failed },
+    nested: integrationEvidence,
+  });
+  if (process.env.P1A_SUMMARY_OUT) {
+    // Exclusive create: a pre-planted summary file is an attack, not a retry.
+    writeFileSync(process.env.P1A_SUMMARY_OUT, `${JSON.stringify(summary)}\n`, {
+      mode: 0o600,
+      flag: "wx",
+    });
+  }
+} else {
+  // Ordinary unprivileged CI: accounting only. This shape is not consumable
+  // by the protected accounting consumer (by design — no identity fields).
+  summary = {
+    suite: "p1-a-trusted-verifier-controls",
+    mode: "ORDINARY_UNPRIVILEGED",
+    required: cases.length,
+    executed: cases.length,
+    passed,
+    failed,
+    skipped: 0,
+    cancelled: 0,
+    neutral: 0,
+    stale: 0,
+    notVerified: 0,
+    notRun: 0,
+  };
+}
 console.log(JSON.stringify(summary));
 if (failed || passed !== cases.length) process.exitCode = 1;

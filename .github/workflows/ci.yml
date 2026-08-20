@@ -542,6 +542,12 @@ jobs:
           node --check scripts/test-p1a-trusted-verifier.mjs
           node --check scripts/test-p1a-dual-base-verifier.mjs
           node --check scripts/validate-p1a-threat-model.mjs
+          node --check scripts/p1a-clean-authority.mjs
+          node --check scripts/p1a-trusted-verifier-summary-v2.mjs
+          node --check scripts/test-p1a-summary-v2.mjs
+          node --check scripts/validate-p1a-evidence.mjs
+          node --check scripts/test-p1a-evidence.mjs
+          node --check scripts/test-p1a-evidence-mutation.mjs
 
       - name: P1-A current candidate-data contract controls
         env:
@@ -639,6 +645,28 @@ jobs:
 
       - name: P1-A trusted-bootstrap secret-detector tests
         run: node scripts/test-p1a-ci-secret-detector.mjs
+
+      # P1A-08 integration registration. These steps bind files owned by
+      # lanes P1A-08 (summary/authority modules) and P1A-03 (evidence engine).
+      # A missing script fails the step — absence is an integration defect,
+      # never a skip.
+      - name: P1-A summary schema and clean-authority controls
+        run: |
+          node scripts/test-p1a-summary-v2.mjs > "$RUNNER_TEMP/p1a-summary-v2.log"
+          cat "$RUNNER_TEMP/p1a-summary-v2.log"
+          tail -n 2 "$RUNNER_TEMP/p1a-summary-v2.log" > "$RUNNER_TEMP/p1a-summary-v2-accounting.json"
+
+      - name: P1-A evidence contract controls
+        run: |
+          node scripts/test-p1a-evidence.mjs > "$RUNNER_TEMP/p1a-evidence.log"
+          cat "$RUNNER_TEMP/p1a-evidence.log"
+          tail -n 1 "$RUNNER_TEMP/p1a-evidence.log" > "$RUNNER_TEMP/p1a-evidence-summary.json"
+
+      - name: P1-A evidence mutation denominator
+        run: |
+          node scripts/test-p1a-evidence-mutation.mjs > "$RUNNER_TEMP/p1a-evidence-mutation.log"
+          cat "$RUNNER_TEMP/p1a-evidence-mutation.log"
+          tail -n 1 "$RUNNER_TEMP/p1a-evidence-mutation.log" > "$RUNNER_TEMP/p1a-evidence-mutation-summary.json"
 
       - name: P1-A trusted-bootstrap secret-exposure scan
         run: |
