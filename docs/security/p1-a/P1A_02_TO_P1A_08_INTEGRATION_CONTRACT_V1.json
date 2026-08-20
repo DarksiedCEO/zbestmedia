@@ -1,0 +1,36 @@
+{
+  "artifactId": "P1A_02_TO_P1A_08_INTEGRATION_CONTRACT_V1",
+  "schemaVersion": "1.0.0",
+  "owner": "P1A-08",
+  "producer": "scripts/test-p1a-trusted-verifier.mjs",
+  "consumer": "scripts/validate-p1a-certification-accounting.mjs via scripts/p1a-certification-core.mjs",
+  "sharedPaths": [
+    ".github/workflows/ci.yml",
+    "scripts/test-p1a-trusted-verifier.mjs"
+  ],
+  "requiredSummarySchema": "P1A_TRUSTED_VERIFIER_SUMMARY_V2",
+  "requiredFields": [
+    "suite", "schemaVersion", "candidateSha", "workflowSha", "verifierSha",
+    "authorizedBaseSha", "runtimePin", "verifierDigest", "scopeDigest",
+    "evidencePackageDigest", "required", "executed", "passed", "failed",
+    "skipped", "cancelled", "neutral", "stale", "notVerified", "notRun",
+    "nestedEvidenceDigest", "nestedVerifierDigest"
+  ],
+  "securityInvariants": [
+    "Producer values derive from executed trusted code and acquired authority, never caller defaults.",
+    "Unknown, missing, duplicate, stale, or contradictory consequential fields fail closed.",
+    "Producer and consumer bind the same candidate, workflow, verifier, base, runtime, scope, evidence package, and nested evidence identities.",
+    "Ordinary CI remains unprivileged and receives no protected secrets or OIDC token permission."
+  ],
+  "compatibility": "Legacy unversioned summaries are rejected by the V2 consumer. No implicit field-name translation is authorized.",
+  "requiredTests": [
+    "authentic producer output passes unchanged",
+    "missing each consequential field rejects",
+    "unknown consequential field rejects",
+    "legacy schema rejects",
+    "identity mismatch rejects",
+    "ordinary/protected authority parity assertion"
+  ],
+  "failureBehavior": "BLOCK protected certification; do not reinterpret as infrastructure instability.",
+  "p1a02Disposition": "BLOCKED_EXTERNALLY_PENDING_P1A_08_SHARED_INTEGRATION"
+}

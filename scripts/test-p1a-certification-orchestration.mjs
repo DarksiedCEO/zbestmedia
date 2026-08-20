@@ -8,6 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workflow = readFileSync(path.join(root, ".github/workflows/p1a-certify-clean.yml"), "utf8");
 const preflight = readFileSync(path.join(root, "scripts/validate-p1a-certification-preflight.mjs"), "utf8");
 const accounting = readFileSync(path.join(root, "scripts/validate-p1a-certification-accounting.mjs"), "utf8");
+const hermeticGit = readFileSync(path.join(root, "scripts/p1a-hermetic-git.mjs"), "utf8");
 const scope = ".github/workflows/ci.yml\nscripts/example.mjs\n";
 const identity = { repository: CANONICAL_REPOSITORY, remote: CANONICAL_REMOTE, authorizedBaseSha: CLEAN_BASE_SHA, workflowSha: "1".repeat(40), verifierSha: "1".repeat(40), candidateSha: "2".repeat(40), runtimePin: "3".repeat(40), verifierDigest: "4".repeat(64), scopeDigest: "5".repeat(64), evidencePackageDigest: "6".repeat(64) };
 
@@ -53,11 +54,17 @@ const workflowControls = [
   ["scope_digest_bound", /candidate_scope_sha256/],
   ["immutable_action_pins", /actions\/checkout@[0-9a-f]{40}[\s\S]*actions\/checkout@[0-9a-f]{40}[\s\S]*actions\/upload-artifact@[0-9a-f]{40}/],
   ["cleanup_unconditional", /if: always\(\)/],
+  ["oidc_permission", /id-token: write/],
+  ["oidc_crypto_verifier", /node trusted\/scripts\/verify-p1a-oidc\.mjs/],
+  ["trusted_evidence_acquisition", /node trusted\/scripts\/acquire-p1a-evidence-package\.mjs/],
+  ["workflow_path_blob_binding", /node trusted\/scripts\/bind-p1a-workflow-identity\.mjs/],
+  ["candidate_root_contract", /P1A_CANDIDATE_DATA_ROOT: \$\{\{ github\.workspace \}\}\/candidate/],
 ];
 for (const [name, pattern] of workflowControls) { assert.match(workflow, pattern, name); passed += 1; console.log(`PASS ${name}`); }
 assert.doesNotMatch(workflow, /365c5975|7056ea4c|5056fb0d/, "abandoned lineage must not be active authority");
-assert.match(preflight, /GIT_CONFIG_GLOBAL: "\/dev\/null"/);
+assert.match(preflight, /hermeticGit/);
+assert.match(hermeticGit, /HERMETIC_GIT_EXECUTABLE = "\/usr\/bin\/git"/);
 assert.match(accounting, /flag: "wx"/);
-passed += 3;
+passed += 4;
 
-console.log(JSON.stringify({ suite: "p1-a-protected-certification-orchestration", required: cases.length + workflowControls.length + 3, executed: cases.length + workflowControls.length + 3, passed, failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0 }));
+console.log(JSON.stringify({ suite: "p1-a-protected-certification-orchestration", required: cases.length + workflowControls.length + 4, executed: cases.length + workflowControls.length + 4, passed, failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0 }));

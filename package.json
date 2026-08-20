@@ -28,7 +28,7 @@
     "test:brandgraph": "pnpm -C services/brandgraph run test",
     "test:agent-lifecycle": "pnpm -C packages/agent-lifecycle run test",
     "test:p0-reconciliation": "node scripts/validate-p0-reconciliation.mjs",
-    "test:p1a-certification": "node scripts/test-p1a-certification-orchestration.mjs && node scripts/test-p1a-certification-accounting.mjs && node scripts/test-p1a-certification-preflight-integration.mjs",
+    "test:p1a-certification": "node scripts/test-p1a-certification-orchestration.mjs && node scripts/test-p1a-certification-accounting.mjs && node scripts/test-p1a-certification-preflight-integration.mjs && node scripts/test-p1a-remediation-security.mjs && node scripts/test-p1a-remediation-mutation.mjs",
     "schemas:gen": "tsx scripts/generate-json-schemas.ts",
     "schemas:check": "tsx scripts/generate-json-schemas.ts --check && git diff --exit-code -- packages/brand-trinity-schemas/schemas packages/eval-gates-schemas/schemas packages/brand-events-contracts/schemas",
     "schemas:compat": "tsx scripts/check-schema-compat.ts"

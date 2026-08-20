@@ -7,13 +7,17 @@ import {
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { bindCandidateDataRoot, readCandidateArtifact } from "./p1a-candidate-data-root.mjs";
+import { hermeticGit } from "./p1a-hermetic-git.mjs";
 
 const moduleRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const candidateRoot = process.env.P1A_PACKAGE_ROOT
-  ? path.resolve(process.env.P1A_PACKAGE_ROOT)
-  : moduleRoot;
+const protectedCandidateBinding = process.env.P1A_TRUSTED_EXECUTION_ROOT
+  ? bindCandidateDataRoot(process.env.P1A_CANDIDATE_DATA_ROOT, process.env.P1A_CANDIDATE_SHA, process.env.P1A_CANONICAL_REMOTE)
+  : null;
+const candidateRoot = protectedCandidateBinding?.root ?? (process.env.P1A_PACKAGE_ROOT ? path.resolve(process.env.P1A_PACKAGE_ROOT) : moduleRoot);
+const candidateBytes = (file) => protectedCandidateBinding ? readCandidateArtifact(protectedCandidateBinding, file).bytes : readFileSync(path.join(candidateRoot, file));
 const load = (file) =>
-  JSON.parse(readFileSync(path.join(candidateRoot, file), "utf8"));
+  JSON.parse(candidateBytes(file).toString("utf8"));
 const unique = (items, label) =>
   assert.equal(new Set(items).size, items.length, `${label}: duplicate`);
 const exists = (items, id, label) =>
@@ -2075,11 +2079,7 @@ export function validateDualBaseScope({
 }
 
 function validateGitScope(manifest, candidateSha) {
-  const git = (...args) =>
-    execFileSync("git", args, {
-      cwd: candidateRoot,
-      encoding: "utf8",
-    }).trim();
+  const git = (...args) => hermeticGit(candidateRoot, args);
   assert.equal(git("rev-parse", "HEAD"), candidateSha);
   validateDualBaseScope({
     git,
@@ -2091,8 +2091,11 @@ function validateGitScope(manifest, candidateSha) {
     ancestryAuthorityRoot: process.env.P1A_ANCESTRY_AUTHORITY_ROOT,
   });
   for (const file of CANDIDATE_OWNED_FILES) {
-    const stat = lstatSync(path.join(candidateRoot, file));
-    assert.ok(stat.isFile() && !stat.isSymbolicLink(), `${file}: unsafe`);
+    if (protectedCandidateBinding) readCandidateArtifact(protectedCandidateBinding, file);
+    else {
+      const stat = lstatSync(path.join(candidateRoot, file));
+      assert.ok(stat.isFile() && !stat.isSymbolicLink(), `${file}: unsafe`);
+    }
   }
   assert.equal(git("status", "--porcelain"), "", "candidate worktree dirty");
 }
@@ -2108,7 +2111,7 @@ function evidenceDigest() {
   for (const file of files) {
     hash.update(file);
     hash.update("\0");
-    hash.update(readFileSync(path.join(candidateRoot, file)));
+    hash.update(candidateBytes(file));
     hash.update("\0");
   }
   return hash.digest("hex");
@@ -2262,10 +2265,7 @@ function main() {
   const model = load("docs/security/p1-a/model.json");
   const evidence = load("docs/security/p1-a/evidence-register.json");
   const manifest = load("docs/security/p1-a/validation-manifest.json");
-  const markdown = readFileSync(
-    path.join(candidateRoot, "docs/security/p1-a/threat-model.md"),
-    "utf8",
-  );
+  const markdown = candidateBytes("docs/security/p1-a/threat-model.md").toString("utf8");
   const context = {
     model,
     evidence,

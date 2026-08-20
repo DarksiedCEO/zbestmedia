@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { CANONICAL_REPOSITORY, CLEAN_BASE_SHA, sha256 } from "./p1a-certification-core.mjs";
@@ -49,7 +49,19 @@ try {
   process.env.HOME = originalHome;
   passed += 1;
   console.log("PASS ambient_git_config_ignored");
-  console.log(JSON.stringify({ suite: "p1-a-certification-real-git-preflight", required: 6, executed: 6, passed, failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0 }));
+  const wrapperDirectory = path.join(temporary, "lying-wrapper");
+  const wrapperMarker = path.join(temporary, "lying-wrapper-invoked");
+  mkdirSync(wrapperDirectory);
+  writeFileSync(path.join(wrapperDirectory, "git"), `#!/bin/sh\necho invoked >> '${wrapperMarker}'\nexec /usr/bin/git "$@"\n`);
+  chmodSync(path.join(wrapperDirectory, "git"), 0o700);
+  const originalPath = process.env.PATH;
+  process.env.PATH = `${wrapperDirectory}:${originalPath}`;
+  assert.equal(runPreflight(valid).hermeticGit, "ENFORCED");
+  process.env.PATH = originalPath;
+  assert.equal(existsSync(wrapperMarker), false, "ambient Git wrapper received trusted calls");
+  passed += 1;
+  console.log("PASS lying_git_wrapper_not_invoked");
+  console.log(JSON.stringify({ suite: "p1-a-certification-real-git-preflight", required: 7, executed: 7, passed, failed: 0, skipped: 0, cancelled: 0, neutral: 0, stale: 0, notVerified: 0, notRun: 0 }));
 } finally {
   rmSync(temporary, { recursive: true, force: true });
 }

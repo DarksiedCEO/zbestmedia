@@ -16,12 +16,30 @@ on:
         required: true
         type: string
       evidence_package_sha256:
-        description: SHA-256 of the sealed evidence package
+        description: Expected SHA-256 of the immutable GitHub artifact ZIP (comparison only)
+        required: true
+        type: string
+      evidence_run_id:
+        description: Exact GitHub Actions run ID that produced the evidence artifact
+        required: true
+        type: string
+      evidence_artifact_name:
+        description: Exact immutable evidence artifact name
         required: true
         type: string
 
 permissions:
   contents: read
+  actions: read
+  id-token: write
+
+env:
+  GIT_CONFIG_NOSYSTEM: "1"
+  GIT_CONFIG_GLOBAL: /dev/null
+  GIT_CONFIG_SYSTEM: /dev/null
+  GIT_NO_REPLACE_OBJECTS: "1"
+  GIT_OPTIONAL_LOCKS: "0"
+  GIT_TERMINAL_PROMPT: "0"
 
 concurrency:
   group: p1a-clean-certification-${{ inputs.candidate_sha }}-${{ inputs.candidate_scope_sha256 }}
@@ -63,6 +81,41 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Bind exact protected workflow identity
+        env:
+          P1A_TRUSTED_ROOT: ${{ github.workspace }}/trusted
+          P1A_REPOSITORY: ${{ github.repository }}
+          P1A_WORKFLOW_REF: ${{ github.workflow_ref }}
+          P1A_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          P1A_EVENT_NAME: ${{ github.event_name }}
+          P1A_PROTECTED_REF: ${{ github.ref }}
+          P1A_PROTECTED_ENVIRONMENT: p1a-certification
+          P1A_WORKFLOW_IDENTITY_OUTPUT: ${{ runner.temp }}/p1a-workflow-identity.json
+        run: node trusted/scripts/bind-p1a-workflow-identity.mjs
+
+      - name: Cryptographically verify GitHub OIDC identity
+        env:
+          P1A_OIDC_AUDIENCE: zbestmedia-p1a-certification
+          P1A_OIDC_SUBJECT: repo:DarksiedCEO/zbestmedia:environment:p1a-certification
+          P1A_REPOSITORY: ${{ github.repository }}
+          P1A_REPOSITORY_OWNER_ID: ${{ github.repository_owner_id }}
+          P1A_PROTECTED_REF: ${{ github.ref }}
+          P1A_WORKFLOW_REF: ${{ github.workflow_ref }}
+          P1A_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          P1A_PROTECTED_ENVIRONMENT: p1a-certification
+          P1A_OIDC_OUTPUT: ${{ runner.temp }}/p1a-oidc-identity.json
+        run: node trusted/scripts/verify-p1a-oidc.mjs
+
+      - name: Acquire and trusted-side hash immutable evidence package
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          P1A_EVIDENCE_RUN_ID: ${{ inputs.evidence_run_id }}
+          P1A_EVIDENCE_ARTIFACT_NAME: ${{ inputs.evidence_artifact_name }}
+          P1A_EVIDENCE_DECLARED_DIGEST: ${{ inputs.evidence_package_sha256 }}
+          P1A_EVIDENCE_OUTPUT: ${{ runner.temp }}/p1a-evidence-package.zip
+          P1A_EVIDENCE_RECEIPT: ${{ runner.temp }}/p1a-evidence-package-receipt.json
+        run: node trusted/scripts/acquire-p1a-evidence-package.mjs
+
       - name: Validate clean authority roots and exact candidate scope
         env:
           DECLARED_SCOPE: ${{ inputs.candidate_scope }}
@@ -99,27 +152,27 @@ jobs:
           [[ "$RUNTIME_PIN" =~ ^[0-9a-f]{40}$ ]]
           RUNTIME_GIT_DIR="$RUNNER_TEMP/zbestmedia-ui.git"
           ASKPASS="$RUNNER_TEMP/p1a-askpass.sh"
-          git init --bare -q "$RUNTIME_GIT_DIR"
+          /usr/bin/git init --bare -q "$RUNTIME_GIT_DIR"
           # shellcheck disable=SC2016
           printf '#!/usr/bin/env bash\ncase "$1" in Username*) echo x-access-token;; Password*) echo "$RUNTIME_TOKEN";; esac\n' > "$ASKPASS"
           chmod 700 "$ASKPASS"
           GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0 \
-            git -C "$RUNTIME_GIT_DIR" fetch --depth=1 --no-tags \
+            /usr/bin/git -C "$RUNTIME_GIT_DIR" fetch --depth=1 --no-tags \
               "https://github.com/DarksiedCEO/zbestmedia-ui.git" "$RUNTIME_PIN"
-          test "$(git -C "$RUNTIME_GIT_DIR" cat-file -t "$RUNTIME_PIN")" = commit
+          test "$(/usr/bin/git -C "$RUNTIME_GIT_DIR" cat-file -t "$RUNTIME_PIN")" = commit
           echo "P1A_RUNTIME_GIT_DIR=$RUNTIME_GIT_DIR" >> "$GITHUB_ENV"
 
       - name: Execute 15-check nested verifier from trusted checkout
         env:
           P1A_TRUSTED_EXECUTION_ROOT: ${{ github.workspace }}/trusted
           P1A_CANDIDATE_DATA_ROOT: ${{ github.workspace }}/candidate
+          P1A_CANONICAL_REMOTE: https://github.com/DarksiedCEO/zbestmedia
           P1A_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           P1A_WORKFLOW_SHA: ${{ github.workflow_sha }}
           P1A_VERIFIER_SHA: ${{ github.workflow_sha }}
           P1A_AUTHORIZED_BASE_SHA: b0c1b2129123b941c6a350c16dae0ae3a8e076ca
           P1A_TRUST_RUNTIME_PIN: ${{ vars.P1A_TRUST_RUNTIME_PIN }}
           P1A_SCOPE_DIGEST: ${{ inputs.candidate_scope_sha256 }}
-          P1A_EVIDENCE_PACKAGE_DIGEST: ${{ inputs.evidence_package_sha256 }}
         run: |
           set -euo pipefail
           node trusted/scripts/validate-p1a-threat-model.mjs --candidate-sha "$P1A_CANDIDATE_SHA" \
@@ -130,13 +183,14 @@ jobs:
         env:
           P1A_TRUSTED_EXECUTION_ROOT: ${{ github.workspace }}/trusted
           P1A_CANDIDATE_DATA_ROOT: ${{ github.workspace }}/candidate
+          P1A_CANONICAL_REMOTE: https://github.com/DarksiedCEO/zbestmedia
+          P1A_PACKAGE_ROOT: ${{ github.workspace }}/candidate
           P1A_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           P1A_WORKFLOW_SHA: ${{ github.workflow_sha }}
           P1A_VERIFIER_SHA: ${{ github.workflow_sha }}
           P1A_AUTHORIZED_BASE_SHA: b0c1b2129123b941c6a350c16dae0ae3a8e076ca
           P1A_TRUST_RUNTIME_PIN: ${{ vars.P1A_TRUST_RUNTIME_PIN }}
           P1A_SCOPE_DIGEST: ${{ inputs.candidate_scope_sha256 }}
-          P1A_EVIDENCE_PACKAGE_DIGEST: ${{ inputs.evidence_package_sha256 }}
         run: |
           set -euo pipefail
           node trusted/scripts/test-p1a-trusted-verifier.mjs --integration \
@@ -159,7 +213,7 @@ jobs:
             --base "b0c1b2129123b941c6a350c16dae0ae3a8e076ca" \
             --runtime "${{ vars.P1A_TRUST_RUNTIME_PIN }}" \
             --scope-digest "${{ inputs.candidate_scope_sha256 }}" \
-            --evidence-package-digest "${{ inputs.evidence_package_sha256 }}" \
+            --evidence-package-digest "$P1A_EVIDENCE_PACKAGE_DIGEST" \
             --output "$RUNNER_TEMP/p1a-protected-summary.json"
 
       - name: Digest sanitized evidence
@@ -168,6 +222,8 @@ jobs:
           cd "$RUNNER_TEMP"
           sha256sum p1a-preflight-summary.json p1a-nested-summary.json \
             p1a-integration-summary.json p1a-protected-summary.json \
+            p1a-workflow-identity.json p1a-oidc-identity.json \
+            p1a-evidence-package-receipt.json \
             > p1a-certification-summary.sha256
 
       - name: Upload allowlisted certification evidence
@@ -179,6 +235,9 @@ jobs:
             ${{ runner.temp }}/p1a-nested-summary.json
             ${{ runner.temp }}/p1a-integration-summary.json
             ${{ runner.temp }}/p1a-protected-summary.json
+            ${{ runner.temp }}/p1a-workflow-identity.json
+            ${{ runner.temp }}/p1a-oidc-identity.json
+            ${{ runner.temp }}/p1a-evidence-package-receipt.json
             ${{ runner.temp }}/p1a-certification-summary.sha256
           if-no-files-found: error
           retention-days: 30
@@ -189,3 +248,4 @@ jobs:
           rm -rf "$RUNNER_TEMP/zbestmedia-ui.git"
           rm -f "$RUNNER_TEMP/p1a-askpass.sh" "$RUNNER_TEMP/p1a-candidate-scope.txt"
           rm -f "$RUNNER_TEMP/p1a-nested.log" "$RUNNER_TEMP/p1a-integration.log"
+          rm -f "$RUNNER_TEMP/p1a-evidence-package.zip"
