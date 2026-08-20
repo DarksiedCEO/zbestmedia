@@ -223,43 +223,103 @@ export function verifyPolicyRoot(claimed) {
 // ---------------------------------------------------------------------------
 // P1AF-010 / P1AF-011 — trusted surface and coordinated-rewrite resistance.
 // ---------------------------------------------------------------------------
+// The frozen base trusted surface was 11 files (P1AF-010 accounting). After the
+// independent Codex review (finding 3), the ENFORCEMENT surface also includes the
+// authority-root validator and its two test harnesses: local authority code that
+// guards the surface must itself be on the surface it guards.
+export const FROZEN_BASE_TRUSTED_SURFACE_DENOMINATOR = 11;
 export const TRUSTED_SURFACE_FILES = Object.freeze([
   ".github/CODEOWNERS",
   ".github/workflows/ci.yml",
   ".github/workflows/p1a-certify.yml",
   "docs/security/p1-a/trusted-certification-bootstrap.md",
   "scripts/detect-p1a-ordinary-ci-secrets.mjs",
+  "scripts/test-p1a-authority-root-mutation.mjs",
+  "scripts/test-p1a-authority-root.mjs",
   "scripts/test-p1a-certification-accounting.mjs",
   "scripts/test-p1a-ci-secret-detector.mjs",
   "scripts/test-p1a-dual-base-verifier.mjs",
   "scripts/test-p1a-trusted-verifier.mjs",
+  "scripts/validate-p1a-authority-root.mjs",
   "scripts/validate-p1a-certification-accounting.mjs",
   "scripts/validate-p1a-threat-model.mjs",
 ]);
-export const TRUSTED_SURFACE_DENOMINATOR = 11;
+export const TRUSTED_SURFACE_DENOMINATOR = 14;
 
-export function parseCodeowners(content) {
-  const entries = new Map();
-  for (const line of String(content).split("\n")) {
-    const trimmed = line.trim();
+// --- GitHub-faithful CODEOWNERS evaluation (finding 4) ----------------------
+// Semantics modeled: gitignore-style patterns, LAST match wins, an empty owner
+// list on the winning rule leaves the file unowned. Unsupported CODEOWNERS
+// constructs (negation "!", character classes "[...]", escaped "#") fail
+// CLOSED as parse findings rather than being silently mis-modeled.
+export function parseCodeownersRules(content) {
+  const rules = [];
+  const findings = [];
+  const lines = String(content).split("\n");
+  for (let i = 0; i < lines.length; i += 1) {
+    const raw = lines[i];
+    const trimmed = raw.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
     const [pattern, ...owners] = trimmed.split(/\s+/u);
-    entries.set(pattern.replace(/^\//u, ""), owners);
+    if (pattern.startsWith("!") || pattern.startsWith("\\#") || /[[\]]/u.test(pattern)) {
+      findings.push(`CODEOWNERS_UNSUPPORTED_PATTERN_LINE_${i + 1}`);
+      continue;
+    }
+    if (owners.some((o) => !o.startsWith("@"))) {
+      findings.push(`CODEOWNERS_MALFORMED_OWNER_LINE_${i + 1}`);
+      continue;
+    }
+    rules.push({ pattern, owners, line: i + 1 });
   }
-  return entries;
+  return { rules, findings };
+}
+
+function codeownersPatternToRegex(pattern) {
+  let p = pattern;
+  const dirOnly = p.endsWith("/");
+  if (dirOnly) p = p.slice(0, -1);
+  // A pattern containing a slash (after trailing-slash strip) is anchored to the
+  // repository root; a bare name matches at any depth.
+  const anchored = p.includes("/");
+  if (p.startsWith("/")) p = p.slice(1);
+  let out = "";
+  for (let i = 0; i < p.length; i += 1) {
+    if (p.startsWith("**/", i)) { out += "(?:[^/]+/)*"; i += 2; continue; }
+    if (p.startsWith("**", i) && i + 2 === p.length) { out += ".*"; i += 1; continue; }
+    const ch = p[i];
+    if (ch === "*") out += "[^/]*";
+    else if (ch === "?") out += "[^/]";
+    else out += ch.replace(/[.*+?^${}()|\\]/gu, "\\$&");
+  }
+  const prefix = anchored ? "^" : "^(?:.*/)?";
+  // A non-dir pattern matches the file itself or, when it names a directory,
+  // everything beneath it; a dir-only pattern matches only contents beneath it.
+  const suffix = dirOnly ? "/.*$" : "(?:/.*)?$";
+  return new RegExp(`${prefix}${out}${suffix}`, "u");
+}
+
+export function codeownersOwnersFor(codeownersContent, filePath) {
+  const { rules, findings } = parseCodeownersRules(codeownersContent);
+  if (findings.length) return { owners: null, findings };
+  let winner = null;
+  for (const rule of rules) {
+    if (codeownersPatternToRegex(rule.pattern).test(filePath)) winner = rule;
+  }
+  return { owners: winner ? winner.owners : [], findings: [] };
 }
 
 export function verifyTrustedSurfaceCoverage(codeownersContent) {
   const findings = [];
-  const entries = parseCodeowners(codeownersContent);
+  const parsed = parseCodeownersRules(codeownersContent);
+  findings.push(...parsed.findings);
   if (TRUSTED_SURFACE_FILES.length !== TRUSTED_SURFACE_DENOMINATOR) findings.push("TRUSTED_SURFACE_DENOMINATOR_DRIFT");
   for (const file of TRUSTED_SURFACE_FILES) {
-    const owners = entries.get(file);
-    if (!owners || owners.length === 0) findings.push(`TRUSTED_FILE_UNCOVERED_${file}`);
-    else if (!owners.includes(`@${CANONICAL_AUTHORITY_ANCHORS.founderIdentity}`)) findings.push(`TRUSTED_FILE_WRONG_OWNER_${file}`);
+    const resolution = codeownersOwnersFor(codeownersContent, file);
+    if (resolution.owners === null) continue; // parse findings already recorded
+    if (resolution.owners.length === 0) findings.push(`TRUSTED_FILE_UNCOVERED_${file}`);
+    else if (!resolution.owners.includes(`@${CANONICAL_AUTHORITY_ANCHORS.founderIdentity}`)) findings.push(`TRUSTED_FILE_WRONG_OWNER_${file}`);
   }
   return findings.length
-    ? { verdict: "SURFACE_OPEN", findings, denominator: TRUSTED_SURFACE_DENOMINATOR }
+    ? { verdict: "SURFACE_OPEN", findings: [...new Set(findings)], denominator: TRUSTED_SURFACE_DENOMINATOR }
     : { verdict: "SURFACE_CLOSED", findings: [], denominator: TRUSTED_SURFACE_DENOMINATOR, covered: TRUSTED_SURFACE_FILES.length };
 }
 
@@ -273,12 +333,13 @@ export function assessTrustedSurfaceChange(change) {
   }
   const touched = change.files.filter((f) => TRUSTED_SURFACE_FILES.includes(f));
   if (touched.length === 0) return { verdict: "CHANGE_OUT_OF_AUTHORITY_SCOPE", findings: [] };
-  const priorOwners = parseCodeowners(change.priorCodeowners ?? "");
   const approvers = Array.isArray(change.approvals) ? change.approvals : [];
   const author = typeof change.author === "string" ? change.author : null;
   if (!author) findings.push("CHANGE_AUTHOR_MISSING");
   for (const file of touched) {
-    const owners = (priorOwners.get(file) ?? []).map((o) => o.replace(/^@/u, ""));
+    const resolution = codeownersOwnersFor(change.priorCodeowners ?? "", file);
+    if (resolution.owners === null) { findings.push(`PRIOR_OWNERSHIP_UNPARSEABLE_${file}`); continue; }
+    const owners = resolution.owners.map((o) => o.replace(/^@/u, ""));
     if (owners.length === 0) { findings.push(`PRIOR_OWNERSHIP_ABSENT_${file}`); continue; }
     const independent = approvers.filter((a) => owners.includes(a) && a !== author);
     if (independent.length === 0) findings.push(`INDEPENDENT_CODE_OWNER_APPROVAL_MISSING_${file}`);
@@ -287,6 +348,7 @@ export function assessTrustedSurfaceChange(change) {
   if (author && approvers.length > 0 && approvers.every((a) => a === author)) findings.push("SELF_APPROVAL_REJECTED");
   const blocking = findings.some((f) => f.startsWith("INDEPENDENT_CODE_OWNER_APPROVAL_MISSING_")
     || f.startsWith("PRIOR_OWNERSHIP_ABSENT_")
+    || f.startsWith("PRIOR_OWNERSHIP_UNPARSEABLE_")
     || f === "SELF_APPROVAL_REJECTED"
     || f === "CHANGE_AUTHOR_MISSING");
   if (blocking) return { verdict: "AUTHORITY_ROOT_COORDINATED_REWRITE_BLOCK", findings };
@@ -297,9 +359,26 @@ export function assessTrustedSurfaceChange(change) {
 // ---------------------------------------------------------------------------
 // §X — declared vs observed execution.
 // ---------------------------------------------------------------------------
-export function classifyExecutionEvidence(claim, artifactReader) {
-  if (!claim || typeof claim !== "object") {
+// Canonical producers whose identity may appear on observation/execution
+// receipts. Independence class is derived HERE, never from the receipt.
+export const CANONICAL_OBSERVATION_PRODUCERS = Object.freeze({
+  GITHUB_ACTIONS_PROTECTED_RUN: Object.freeze({ independenceClass: "EXTERNAL_PLATFORM" }),
+  FOUNDER_DARKSIEDCEO: Object.freeze({ independenceClass: "HUMAN_AUTHORITY" }),
+  CODEX: Object.freeze({ independenceClass: "INDEPENDENT_MODEL" }),
+});
+
+// Post-review contract (finding 2): there is NO caller-suppliable reader. All
+// evidence bytes come through readAuthorityArtifact — the fixed trusted reader
+// that binds path containment, symlink-free identity, single-fd bytes, and
+// digest. Each artifact must additionally bind the execution SUBJECT and a
+// canonical PRODUCER; a receipt for another subject or from an unknown
+// principal is not evidence.
+export function classifyExecutionEvidence(evidenceRoot, claim) {
+  if (typeof evidenceRoot !== "string" || evidenceRoot.length === 0 || !claim || typeof claim !== "object" || Array.isArray(claim)) {
     return { verdict: "EXECUTION_UNPROVEN", findings: ["EXECUTION_CLAIM_MISSING"] };
+  }
+  if (!HEX40.test(claim.subjectSha ?? "") && !HEX64.test(claim.subjectSha ?? "")) {
+    return { verdict: "EXECUTION_UNPROVEN", findings: ["EXECUTION_SUBJECT_UNBOUND"] };
   }
   const artifacts = Array.isArray(claim.artifacts) ? claim.artifacts : [];
   if (artifacts.length === 0) {
@@ -310,11 +389,11 @@ export function classifyExecutionEvidence(claim, artifactReader) {
   const findings = [];
   for (const artifact of artifacts) {
     if (!artifact?.path || !HEX64.test(artifact?.sha256 ?? "")) { findings.push("ARTIFACT_NOT_DIGEST_BOUND"); continue; }
-    try {
-      const bytes = artifactReader(artifact.path);
-      if (sha256(bytes) !== artifact.sha256) findings.push("FABRICATED_EXECUTION_ARTIFACT");
-    } catch {
-      findings.push("EXECUTION_ARTIFACT_UNREADABLE");
+    if (!(artifact.producer in CANONICAL_OBSERVATION_PRODUCERS)) { findings.push("ARTIFACT_PRODUCER_UNKNOWN"); continue; }
+    if (artifact.subjectSha !== claim.subjectSha) { findings.push("ARTIFACT_WRONG_SUBJECT"); continue; }
+    const read = readAuthorityArtifact(evidenceRoot, artifact.path, artifact.sha256);
+    if (read.verdict !== "ARTIFACT_VERIFIED") {
+      findings.push(read.findings.includes("ARTIFACT_DIGEST_MISMATCH") ? "FABRICATED_EXECUTION_ARTIFACT" : "EXECUTION_ARTIFACT_UNREADABLE");
     }
   }
   return findings.length
@@ -399,26 +478,60 @@ export const NAMED_HUMAN_GATES = Object.freeze([
   "FOUNDER_DECISION",
 ]);
 
-export function assessExternalCustody(observationReceipts) {
+// Post-review contract (finding 1): custody evidence is never an in-memory
+// object. Each receipt is an on-disk artifact loaded through the fixed trusted
+// reader and must bind: a known control, source GITHUB_OBSERVATION, a canonical
+// non-builder producer, the exact authorized base as subject, and a canonical
+// authority digest. Even a fully valid local receipt set can NEVER authorize
+// trusted certification from local code: the strongest locally reachable
+// verdict is CUSTODY_EVIDENCE_RECORDED_LOCALLY, and trustedCertificationAuthorized
+// is structurally false here. EXTERNAL_CUSTODY_OBSERVED may only be rendered by
+// the external evaluation named in EXTERNAL_CUSTODY_CONTRACT — never by this
+// module. AEGIS cannot be the root of its own authority; neither can we.
+export const LOCAL_CUSTODY_AUTHORIZATION_CEILING = Object.freeze({
+  trustedCertificationAuthorized: false,
+  strongestLocalVerdict: "CUSTODY_EVIDENCE_RECORDED_LOCALLY",
+  externalVerdictAuthority: "EXTERNAL_EVALUATION_PER_EXTERNAL_CUSTODY_CONTRACT_ONLY",
+});
+
+const CUSTODY_AUTHORITY_DIGESTS = Object.freeze([
+  CANONICAL_AUTHORITY_ANCHORS.founderFreezeSha256,
+  CANONICAL_AUTHORITY_ANCHORS.releaseAuthoritySha256,
+]);
+
+export function assessExternalCustody(evidenceRoot, receiptRefs) {
   const findings = [];
-  const receipts = Array.isArray(observationReceipts) ? observationReceipts : [];
   const byControl = new Map();
-  for (const receipt of receipts) {
-    if (!receipt || typeof receipt !== "object") { findings.push("CUSTODY_RECEIPT_MALFORMED"); continue; }
-    if (receipt.source !== "GITHUB_OBSERVATION") { findings.push("SIMULATED_INDEPENDENCE_REJECTED"); continue; }
-    const binding = validateReceiptBinding(receipt);
-    if (binding.verdict !== "RECEIPT_BOUND") { findings.push(`CUSTODY_RECEIPT_UNBOUND_${receipt.controlId ?? "UNKNOWN"}`); continue; }
-    byControl.set(receipt.controlId, receipt);
+  if (typeof evidenceRoot !== "string" || evidenceRoot.length === 0) {
+    findings.push("CUSTODY_EVIDENCE_ROOT_MISSING");
+  } else {
+    const refs = Array.isArray(receiptRefs) ? receiptRefs : [];
+    for (const ref of refs) {
+      if (!ref || typeof ref !== "object" || !ref.path || !HEX64.test(ref.sha256 ?? "")) { findings.push("CUSTODY_RECEIPT_REF_MALFORMED"); continue; }
+      const read = readAuthorityArtifact(evidenceRoot, ref.path, ref.sha256);
+      if (read.verdict !== "ARTIFACT_VERIFIED") { findings.push(`CUSTODY_RECEIPT_UNREADABLE_${ref.controlId ?? "UNKNOWN"}`); continue; }
+      let receipt;
+      try { receipt = JSON.parse(read.bytes.toString("utf8")); } catch { findings.push("CUSTODY_RECEIPT_NOT_JSON"); continue; }
+      if (!receipt || typeof receipt !== "object" || receipt.controlId !== ref.controlId) { findings.push("CUSTODY_RECEIPT_CONTROL_MISMATCH"); continue; }
+      if (!CUSTODY_CONTROLS.some((c) => c.id === receipt.controlId)) { findings.push("CUSTODY_RECEIPT_UNKNOWN_CONTROL"); continue; }
+      if (receipt.source !== "GITHUB_OBSERVATION") { findings.push("SIMULATED_INDEPENDENCE_REJECTED"); continue; }
+      const producer = CANONICAL_OBSERVATION_PRODUCERS[receipt.producer];
+      if (!producer) { findings.push(`CUSTODY_PRODUCER_UNKNOWN_${receipt.controlId}`); continue; }
+      if (receipt.subjectBaseSha !== AUTHORIZED_REBUILD_BASE.sha) { findings.push(`CUSTODY_WRONG_SUBJECT_${receipt.controlId}`); continue; }
+      if (!CUSTODY_AUTHORITY_DIGESTS.includes(receipt.authoritySha256)) { findings.push(`CUSTODY_AUTHORITY_UNBOUND_${receipt.controlId}`); continue; }
+      byControl.set(receipt.controlId, receipt);
+    }
   }
   const unproven = CUSTODY_CONTROLS.filter((control) => !byControl.has(control.id));
   for (const control of unproven) findings.push(`CUSTODY_NOT_PROVEN_${control.id}`);
-  const custodyProven = unproven.length === 0 && !findings.includes("SIMULATED_INDEPENDENCE_REJECTED");
+  const allRecorded = unproven.length === 0 && !findings.length;
   return {
-    verdict: custodyProven ? "EXTERNAL_CUSTODY_OBSERVED" : "NOT_PROVEN",
-    trustedCertificationAuthorized: custodyProven,
+    verdict: allRecorded ? "CUSTODY_EVIDENCE_RECORDED_LOCALLY" : "NOT_PROVEN",
+    trustedCertificationAuthorized: false,
     findings,
     controlDenominator: CUSTODY_CONTROLS.length,
-    controlsProven: CUSTODY_CONTROLS.length - unproven.length,
+    controlsRecorded: CUSTODY_CONTROLS.length - unproven.length,
+    ceiling: LOCAL_CUSTODY_AUTHORIZATION_CEILING,
   };
 }
 
@@ -466,15 +579,17 @@ export function assessRollbackAction(action) {
 // P1AF-019 / P1AF-008 — honest claim ceiling.
 // ---------------------------------------------------------------------------
 export function computeClaimCeiling(custodyAssessment, localImplementationGreen) {
-  if (custodyAssessment?.verdict === "EXTERNAL_CUSTODY_OBSERVED" && custodyAssessment?.trustedCertificationAuthorized === true) {
-    return { claim: "EXTERNAL_CUSTODY_OBSERVED", trustedCertificationAuthorized: true };
-  }
-  // Absent observed custody the maximum honest claim is bounded, regardless of
-  // what the caller asserts. Trusted certification must not run. P1AF-008.
+  // Post-review contract (finding 1): local code can NEVER return
+  // trustedCertificationAuthorized=true, no matter what verdict string a caller
+  // places in custodyAssessment. The maximum honest local claim is bounded.
+  // External custody may only be declared by the external evaluation named in
+  // EXTERNAL_CUSTODY_CONTRACT; this function is total and fail-closed. P1AF-008/019.
+  const evidenceRecorded = custodyAssessment?.verdict === "CUSTODY_EVIDENCE_RECORDED_LOCALLY";
   return {
     claim: localImplementationGreen === true
       ? "LOCAL_IMPLEMENTATION_GREEN/EXTERNAL_ASSURANCE_AUTHORITY_PENDING"
       : "EXTERNAL_ASSURANCE_AUTHORITY_PENDING",
+    custodyEvidenceRecorded: evidenceRecorded === true,
     trustedCertificationAuthorized: false,
   };
 }
@@ -630,4 +745,17 @@ export const PROPERTY_REGISTER = Object.freeze([
   "PATH_ESCAPE_REJECTED",                    // §XI
   "SYMLINK_SUBSTITUTION_REJECTED",           // §XI
   "SAME_FD_DIGEST_BINDING",                  // §XI: no stat-then-reopen trust
+  // Post-Codex-review properties (INDEPENDENT_REVIEW_BLOCK remediation):
+  "CUSTODY_RECEIPTS_ARE_ARTIFACTS_NOT_OBJECTS",   // F1: no in-memory custody input
+  "LOCAL_CUSTODY_CANNOT_AUTHORIZE_CERTIFICATION", // F1: structural false ceiling
+  "CUSTODY_PRODUCER_IDENTITY_REQUIRED",           // F1: canonical producer table
+  "CUSTODY_SUBJECT_BINDING_REQUIRED",             // F1: receipt binds authorized base
+  "CUSTODY_AUTHORITY_BINDING_REQUIRED",           // F1: receipt binds canonical authority
+  "EXECUTION_READER_FIXED_TRUSTED",               // F2: no caller-suppliable reader
+  "EXECUTION_SUBJECT_BINDING_REQUIRED",           // F2: receipts bind execution subject
+  "EXECUTION_PRODUCER_IDENTITY_REQUIRED",         // F2: canonical producer table
+  "AUTHORITY_MODULE_IN_TRUSTED_SURFACE",          // F3: validator+tests on the surface (14)
+  "CODEOWNERS_LAST_MATCH_WINS_MODELED",           // F4: GitHub precedence semantics
+  "CODEOWNERS_GLOB_SEMANTICS_MODELED",            // F4: * / ** / ? / dir patterns
+  "CODEOWNERS_UNSUPPORTED_SYNTAX_FAIL_CLOSED",    // F4: ! [ ] \# rejected, not mis-modeled
 ]);

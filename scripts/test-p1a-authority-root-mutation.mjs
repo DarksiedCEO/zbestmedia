@@ -2,6 +2,9 @@
 // PROPERTY_REGISTER (§XIII): every property has at least one mutant that weakens
 // its guard. A mutant is KILLED when at least one invariant probe fails against
 // it (or it fails to load). Survivors required: 0.
+// Post-Codex-review: probes and mutants cover the four INDEPENDENT_REVIEW_BLOCK
+// finding classes (custody fabrication, execution reader boundary, authority
+// module on the trusted surface, CODEOWNERS GitHub semantics).
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync, mkdtempSync, writeFileSync, symlinkSync, mkdirSync, rmSync } from "node:fs";
@@ -43,6 +46,27 @@ function goodPolicyRoot(m) {
     requirementDenominator: 124,
   };
 }
+function withCustodyFixture(m, mutate, probe) {
+  const dir = mkdtempSync(join(tmpdir(), "p1a01-mut-cust-"));
+  try {
+    const refs = [];
+    for (const control of m.CUSTODY_CONTROLS) {
+      const receipt = {
+        artifactId: `RECEIPT_${control.id}`,
+        controlId: control.id,
+        source: "GITHUB_OBSERVATION",
+        producer: "GITHUB_ACTIONS_PROTECTED_RUN",
+        subjectBaseSha: m.AUTHORIZED_REBUILD_BASE.sha,
+        authoritySha256: m.CANONICAL_AUTHORITY_ANCHORS.releaseAuthoritySha256,
+      };
+      if (mutate) mutate(receipt);
+      const body = JSON.stringify(receipt);
+      writeFileSync(join(dir, `${control.id}.json`), body);
+      refs.push({ controlId: receipt.controlId, path: `${control.id}.json`, sha256: sha256(body) });
+    }
+    return probe(dir, refs);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
 
 // Invariant probes: each throws when its invariant is violated by module m.
 const PROBES = {
@@ -50,7 +74,6 @@ const PROBES = {
   base_wrong_tree_rejected: (m) => assert.equal(m.verifyRebuildBase({ ...goodObserved(m), tree: "2".repeat(40) }).verdict, "BASE_REJECTED"),
   base_wrong_parents_rejected: (m) => {
     assert.equal(m.verifyRebuildBase({ ...goodObserved(m), parents: [] }).verdict, "BASE_REJECTED");
-    // Same-length wrong order must also fail — length checks alone are not identity.
     assert.equal(m.verifyRebuildBase({ ...goodObserved(m), parents: [...m.AUTHORIZED_REBUILD_BASE.parents].reverse() }).verdict, "BASE_REJECTED");
   },
   base_wrong_remote_rejected: (m) => assert.equal(m.verifyRebuildBase({ ...goodObserved(m), remote: "https://github.com/x/y.git" }).verdict, "BASE_REJECTED"),
@@ -108,24 +131,54 @@ const PROBES = {
     assert.equal(m.verifyPolicyRoot(goodPolicyRoot(m)).verdict, "POLICY_ROOT_VERIFIED");
   },
   surface_denominator_stable: (m) => {
-    assert.equal(m.TRUSTED_SURFACE_FILES.length, 11);
-    assert.equal(m.TRUSTED_SURFACE_DENOMINATOR, 11);
+    assert.equal(m.TRUSTED_SURFACE_FILES.length, 14);
+    assert.equal(m.TRUSTED_SURFACE_DENOMINATOR, 14);
+    assert.equal(m.FROZEN_BASE_TRUSTED_SURFACE_DENOMINATOR, 11);
+    for (const f of ["scripts/validate-p1a-authority-root.mjs", "scripts/test-p1a-authority-root.mjs", "scripts/test-p1a-authority-root-mutation.mjs", "scripts/test-p1a-dual-base-verifier.mjs"]) {
+      assert.ok(m.TRUSTED_SURFACE_FILES.includes(f), f);
+    }
   },
   surface_uncovered_detected: (m) => {
     const partial = "/.github/CODEOWNERS @DarksiedCEO\n";
     const out = m.verifyTrustedSurfaceCoverage(partial);
     assert.equal(out.verdict, "SURFACE_OPEN");
-    assert.ok(out.findings.length >= 10);
+    assert.ok(out.findings.length >= 13);
+    // The finding code must be UNCOVERED (no rule at all), not merely wrong-owner.
+    assert.ok(out.findings.includes("TRUSTED_FILE_UNCOVERED_scripts/validate-p1a-threat-model.mjs"));
   },
   surface_wrong_owner_detected: (m) => {
     const wrong = m.TRUSTED_SURFACE_FILES.map((f) => `/${f} @attacker`).join("\n");
     assert.equal(m.verifyTrustedSurfaceCoverage(wrong).verdict, "SURFACE_OPEN");
   },
+  surface_closed_positive: (m) => {
+    const good = m.TRUSTED_SURFACE_FILES.map((f) => `/${f} @DarksiedCEO`).join("\n");
+    assert.equal(m.verifyTrustedSurfaceCoverage(good).verdict, "SURFACE_CLOSED");
+  },
+  codeowners_last_match_wins: (m) => {
+    assert.deepEqual(m.codeownersOwnersFor("/a.txt @x\n/a.txt @y\n", "a.txt").owners, ["@y"]);
+    assert.deepEqual(m.codeownersOwnersFor("/a.txt @x\n/a.txt\n", "a.txt").owners, []);
+  },
+  codeowners_glob_semantics: (m) => {
+    assert.deepEqual(m.codeownersOwnersFor("/scripts/*.mjs @x\n", "scripts/f.mjs").owners, ["@x"]);
+    assert.deepEqual(m.codeownersOwnersFor("/scripts/*.mjs @x\n", "scripts/sub/f.mjs").owners, []);
+    assert.deepEqual(m.codeownersOwnersFor("/scripts/**/f.mjs @x\n", "scripts/a/b/f.mjs").owners, ["@x"]);
+    assert.deepEqual(m.codeownersOwnersFor("CODEOWNERS @x\n", ".github/CODEOWNERS").owners, ["@x"]);
+    assert.deepEqual(m.codeownersOwnersFor("/scripts/ @x\n", "scripts/deep/f.mjs").owners, ["@x"]);
+    assert.deepEqual(m.codeownersOwnersFor("/scripts/ @x\n", "scripts").owners, []);
+  },
+  codeowners_unsupported_fail_closed: (m) => {
+    for (const bad of ["!x @a\n", "/a[b].txt @a\n"]) {
+      const out = m.codeownersOwnersFor(bad, "x");
+      assert.equal(out.owners, null, bad);
+      assert.ok(out.findings.length >= 1, bad);
+    }
+    const surface = m.verifyTrustedSurfaceCoverage(`${m.TRUSTED_SURFACE_FILES.map((f) => `/${f} @DarksiedCEO`).join("\n")}\n!evil @x\n`);
+    assert.equal(surface.verdict, "SURFACE_OPEN");
+  },
   coordinated_rewrite_blocked: (m) => {
     const prior = m.TRUSTED_SURFACE_FILES.map((f) => `/${f} @DarksiedCEO`).join("\n");
     const out = m.assessTrustedSurfaceChange({ files: [...m.TRUSTED_SURFACE_FILES], author: "attacker", approvals: ["attacker"], priorCodeowners: prior });
     assert.equal(out.verdict, "AUTHORITY_ROOT_COORDINATED_REWRITE_BLOCK");
-    // The self-approval finding is contract, not decoration.
     assert.ok(out.findings.includes("SELF_APPROVAL_REJECTED"));
   },
   independent_approval_required: (m) => {
@@ -134,26 +187,57 @@ const PROBES = {
     assert.equal(out.verdict, "AUTHORITY_ROOT_COORDINATED_REWRITE_BLOCK");
   },
   non_owner_approval_rejected: (m) => {
-    // An accomplice approver who is not a prior code owner mints no authority.
     const prior = m.TRUSTED_SURFACE_FILES.map((f) => `/${f} @DarksiedCEO`).join("\n");
     const out = m.assessTrustedSurfaceChange({ files: [".github/CODEOWNERS"], author: "attacker", approvals: ["accomplice"], priorCodeowners: prior });
     assert.equal(out.verdict, "AUTHORITY_ROOT_COORDINATED_REWRITE_BLOCK");
   },
+  unparseable_prior_ownership_blocks: (m) => {
+    const out = m.assessTrustedSurfaceChange({ files: [".github/CODEOWNERS"], author: "attacker", approvals: [], priorCodeowners: "![broken\n" });
+    assert.equal(out.verdict, "AUTHORITY_ROOT_COORDINATED_REWRITE_BLOCK");
+  },
+  cleared_prior_ownership_blocks: (m) => {
+    const out = m.assessTrustedSurfaceChange({
+      files: [".github/CODEOWNERS"], author: "attacker", approvals: ["DarksiedCEO"],
+      priorCodeowners: "/.github/CODEOWNERS @DarksiedCEO\n/.github/CODEOWNERS\n",
+    });
+    assert.equal(out.verdict, "AUTHORITY_ROOT_COORDINATED_REWRITE_BLOCK");
+  },
   declared_execution_unproven: (m) => {
-    const out = m.classifyExecutionEvidence({ session_id: "s", context_id: "c", fresh: true, independent: true }, () => Buffer.alloc(0));
-    assert.equal(out.verdict, "EXECUTION_UNPROVEN");
+    const dir = mkdtempSync(join(tmpdir(), "p1a01-mut-exd-"));
+    try {
+      const out = m.classifyExecutionEvidence(dir, { subjectSha: m.AUTHORIZED_REBUILD_BASE.sha, session_id: "s", context_id: "c", fresh: true, independent: true });
+      assert.equal(out.verdict, "EXECUTION_UNPROVEN");
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   },
-  fabricated_execution_detected: (m) => {
-    const out = m.classifyExecutionEvidence({ artifacts: [{ path: "r.json", sha256: D("a") }] }, () => Buffer.from("other"));
-    assert.equal(out.verdict, "EXECUTION_UNPROVEN");
+  execution_reader_is_fixed: (m) => {
+    assert.equal(m.classifyExecutionEvidence.length, 2);
   },
-  unreadable_artifact_unproven: (m) => {
-    const out = m.classifyExecutionEvidence({ artifacts: [{ path: "r.json", sha256: D("a") }] }, () => { throw new Error("x"); });
-    assert.equal(out.verdict, "EXECUTION_UNPROVEN");
-  },
-  undigested_artifact_unproven: (m) => {
-    const out = m.classifyExecutionEvidence({ artifacts: [{ path: "r.json" }] }, () => Buffer.alloc(0));
-    assert.equal(out.verdict, "EXECUTION_UNPROVEN");
+  execution_bindings_enforced: (m) => {
+    const dir = mkdtempSync(join(tmpdir(), "p1a01-mut-exb-"));
+    try {
+      const body = JSON.stringify({ run: "real" });
+      writeFileSync(join(dir, "r.json"), body);
+      const good = { path: "r.json", sha256: sha256(body), producer: "GITHUB_ACTIONS_PROTECTED_RUN", subjectSha: m.AUTHORIZED_REBUILD_BASE.sha };
+      const claim = { subjectSha: m.AUTHORIZED_REBUILD_BASE.sha };
+      assert.equal(m.classifyExecutionEvidence(dir, { ...claim, artifacts: [good] }).verdict, "OBSERVED_EXECUTION");
+      assert.equal(m.classifyExecutionEvidence(dir, { artifacts: [good] }).verdict, "EXECUTION_UNPROVEN");
+      const wrongSubject = m.classifyExecutionEvidence(dir, { ...claim, artifacts: [{ ...good, subjectSha: "5".repeat(40) }] });
+      assert.equal(wrongSubject.verdict, "EXECUTION_UNPROVEN");
+      assert.ok(wrongSubject.findings.includes("ARTIFACT_WRONG_SUBJECT"));
+      const badProducer = m.classifyExecutionEvidence(dir, { ...claim, artifacts: [{ ...good, producer: "MY_READER" }] });
+      assert.ok(badProducer.findings.includes("ARTIFACT_PRODUCER_UNKNOWN"));
+      const forged = m.classifyExecutionEvidence(dir, { ...claim, artifacts: [{ ...good, sha256: D("2") }] });
+      assert.ok(forged.findings.includes("FABRICATED_EXECUTION_ARTIFACT"));
+      const missing = m.classifyExecutionEvidence(dir, { ...claim, artifacts: [{ ...good, path: "absent.json" }] });
+      assert.ok(missing.findings.includes("EXECUTION_ARTIFACT_UNREADABLE"));
+      const undigested = m.classifyExecutionEvidence(dir, { ...claim, artifacts: [{ path: "r.json", producer: "CODEX", subjectSha: claim.subjectSha }] });
+      assert.ok(undigested.findings.includes("ARTIFACT_NOT_DIGEST_BOUND"));
+      // Both claim and artifact lacking subjectSha must NOT pair up as
+      // undefined === undefined and slip through as observed execution.
+      const bothUnbound = m.classifyExecutionEvidence(dir, { artifacts: [{ path: "r.json", sha256: sha256(body), producer: "CODEX" }] });
+      assert.equal(bothUnbound.verdict, "EXECUTION_UNPROVEN");
+      assert.ok(bothUnbound.findings.includes("EXECUTION_SUBJECT_UNBOUND"));
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   },
   receipt_binding_required: (m) => {
     assert.equal(m.validateReceiptBinding({ subjectPath: "v.json" }).verdict, "RECEIPT_REJECTED");
@@ -167,25 +251,71 @@ const PROBES = {
     assert.equal(m.acceptSupersession({ supersedesSha256: D("c"), founderDecisionSha256: D("b") }, { sha256: D("c"), preserved: true }).verdict, "SUPERSESSION_ACCEPTED");
   },
   custody_not_proven_default: (m) => {
-    const out = m.assessExternalCustody([]);
-    assert.equal(out.verdict, "NOT_PROVEN");
-    assert.equal(out.trustedCertificationAuthorized, false);
+    const dir = mkdtempSync(join(tmpdir(), "p1a01-mut-cd-"));
+    try {
+      const out = m.assessExternalCustody(dir, []);
+      assert.equal(out.verdict, "NOT_PROVEN");
+      assert.equal(out.trustedCertificationAuthorized, false);
+      assert.equal(m.assessExternalCustody("", []).verdict, "NOT_PROVEN");
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  },
+  custody_objects_are_not_receipts: (m) => {
+    const dir = mkdtempSync(join(tmpdir(), "p1a01-mut-co-"));
+    try {
+      const objects = m.CUSTODY_CONTROLS.map((c) => ({ controlId: c.id, source: "GITHUB_OBSERVATION", subjectSha256: D("a") }));
+      const out = m.assessExternalCustody(dir, objects);
+      assert.equal(out.verdict, "NOT_PROVEN");
+      assert.ok(out.findings.includes("CUSTODY_RECEIPT_REF_MALFORMED"));
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  },
+  custody_valid_local_never_authorizes: (m) => {
+    withCustodyFixture(m, null, (dir, refs) => {
+      const out = m.assessExternalCustody(dir, refs);
+      assert.equal(out.verdict, "CUSTODY_EVIDENCE_RECORDED_LOCALLY");
+      assert.notEqual(out.verdict, "EXTERNAL_CUSTODY_OBSERVED");
+      assert.equal(out.trustedCertificationAuthorized, false);
+    });
+  },
+  custody_producer_required: (m) => {
+    withCustodyFixture(m, (r) => { r.producer = "SELF_DECLARED"; }, (dir, refs) => {
+      const out = m.assessExternalCustody(dir, refs);
+      assert.equal(out.verdict, "NOT_PROVEN");
+      assert.ok(out.findings.some((f) => f.startsWith("CUSTODY_PRODUCER_UNKNOWN_")));
+    });
+  },
+  custody_subject_required: (m) => {
+    withCustodyFixture(m, (r) => { r.subjectBaseSha = "9".repeat(40); }, (dir, refs) => {
+      const out = m.assessExternalCustody(dir, refs);
+      assert.equal(out.verdict, "NOT_PROVEN");
+      assert.ok(out.findings.some((f) => f.startsWith("CUSTODY_WRONG_SUBJECT_")));
+    });
+  },
+  custody_authority_required: (m) => {
+    withCustodyFixture(m, (r) => { r.authoritySha256 = D("7"); }, (dir, refs) => {
+      const out = m.assessExternalCustody(dir, refs);
+      assert.equal(out.verdict, "NOT_PROVEN");
+      assert.ok(out.findings.some((f) => f.startsWith("CUSTODY_AUTHORITY_UNBOUND_")));
+    });
   },
   simulated_custody_rejected: (m) => {
-    const receipts = m.CUSTODY_CONTROLS.map((c) => ({ controlId: c.id, source: "LOCAL_SELF_DECLARATION", subjectSha256: D("a") }));
-    const out = m.assessExternalCustody(receipts);
-    assert.equal(out.verdict, "NOT_PROVEN");
-  },
-  unbound_custody_receipt_rejected: (m) => {
-    const receipts = m.CUSTODY_CONTROLS.map((c) => ({ controlId: c.id, source: "GITHUB_OBSERVATION" }));
-    assert.equal(m.assessExternalCustody(receipts).verdict, "NOT_PROVEN");
+    withCustodyFixture(m, (r) => { r.source = "LOCAL_SELF_DECLARATION"; }, (dir, refs) => {
+      const out = m.assessExternalCustody(dir, refs);
+      assert.equal(out.verdict, "NOT_PROVEN");
+      assert.ok(out.findings.includes("SIMULATED_INDEPENDENCE_REJECTED"));
+    });
   },
   claim_ceiling_enforced: (m) => {
     const ceiling = m.computeClaimCeiling({ verdict: "NOT_PROVEN", trustedCertificationAuthorized: false }, true);
     assert.equal(ceiling.claim, "LOCAL_IMPLEMENTATION_GREEN/EXTERNAL_ASSURANCE_AUTHORITY_PENDING");
     assert.equal(ceiling.trustedCertificationAuthorized, false);
-    const forged = m.computeClaimCeiling({ verdict: "EXTERNAL_CUSTODY_OBSERVED", trustedCertificationAuthorized: false }, true);
+    const forged = m.computeClaimCeiling({ verdict: "EXTERNAL_CUSTODY_OBSERVED", trustedCertificationAuthorized: true }, true);
     assert.equal(forged.trustedCertificationAuthorized, false);
+    // Locally recorded custody evidence is the strongest local state and must
+    // STILL not authorize — the core of Codex finding F1.
+    const recorded = m.computeClaimCeiling({ verdict: "CUSTODY_EVIDENCE_RECORDED_LOCALLY", trustedCertificationAuthorized: false }, true);
+    assert.equal(recorded.trustedCertificationAuthorized, false);
+    assert.equal(recorded.custodyEvidenceRecorded, true);
+    assert.equal(m.LOCAL_CUSTODY_AUTHORIZATION_CEILING.trustedCertificationAuthorized, false);
   },
   simulated_independence_rejected: (m) => {
     assert.equal(m.rejectSimulatedIndependence({ claim: "EXTERNAL_ASSURED", evidence: [{ source: "LOCAL_FILE" }] }).verdict, "ASSERTION_REJECTED");
@@ -221,7 +351,6 @@ const PROBES = {
       writeFileSync(join(dir, "root", "a.json"), "inside");
       assert.equal(m.readAuthorityArtifact(join(dir, "root"), "../secret", sha256("s")).verdict, "ARTIFACT_REJECTED");
       assert.equal(m.readAuthorityArtifact(join(dir, "root"), join(dir, "secret"), sha256("s")).verdict, "ARTIFACT_REJECTED");
-      // Dot-dot segments are prohibited even when they resolve back inside root.
       const internal = m.readAuthorityArtifact(join(dir, "root"), "sub/../a.json", sha256("inside"));
       assert.equal(internal.verdict, "ARTIFACT_REJECTED");
       assert.ok(internal.findings.includes("PATH_ESCAPE_REJECTED"));
@@ -236,8 +365,6 @@ const PROBES = {
       const finalComponent = m.readAuthorityArtifact(join(dir, "root"), "alias", sha256("x"));
       assert.equal(finalComponent.verdict, "ARTIFACT_REJECTED");
       assert.ok(finalComponent.findings.includes("SYMLINK_SUBSTITUTION_REJECTED"));
-      // Intermediate directory symlink: O_NOFOLLOW does not cover this; the
-      // per-segment lstat walk must.
       mkdirSync(join(dir, "outside-dir"));
       writeFileSync(join(dir, "outside-dir", "a.json"), "y");
       symlinkSync(join(dir, "outside-dir"), join(dir, "root", "dirlink"));
@@ -254,8 +381,6 @@ const PROBES = {
       assert.equal(m.readAuthorityArtifact(dir, "a.json", sha256("real")).verdict, "ARTIFACT_VERIFIED");
       const malformed = m.readAuthorityArtifact(dir, "a.json", "nothex");
       assert.equal(malformed.verdict, "ARTIFACT_REJECTED");
-      // A malformed expectation is a caller contract violation, not a content
-      // mismatch; the distinction is part of the interface.
       assert.ok(malformed.findings.includes("EXPECTED_DIGEST_MISSING"));
     } finally { rmSync(dir, { recursive: true, force: true }); }
   },
@@ -305,36 +430,55 @@ const MUTANTS = [
   { property: "POLICY_ROOT_SUBSTITUTION_REJECTED", find: `if (claimed.founderFreezeSha256 !== anchors.founderFreezeSha256) findings.push("POLICY_ROOT_SUBSTITUTION_FREEZE");`, replace: `` },
   { property: "POLICY_ROOT_SUBSTITUTION_REJECTED", find: `if (claimed.releaseAuthoritySha256 !== anchors.releaseAuthoritySha256) findings.push("POLICY_ROOT_SUBSTITUTION_RELEASE");`, replace: `` },
   { property: "POLICY_ROOT_SUBSTITUTION_REJECTED", find: `if (claimed.requirementDenominator !== anchors.requirementDenominator) findings.push("POLICY_ROOT_SUBSTITUTION_DENOMINATOR");`, replace: `` },
-  { property: "TRUSTED_SURFACE_FULL_COVERAGE", find: `    if (!owners || owners.length === 0) findings.push(\`TRUSTED_FILE_UNCOVERED_\${file}\`);`, replace: `    if (false) findings.push(\`TRUSTED_FILE_UNCOVERED_\${file}\`);` },
-  { property: "TRUSTED_SURFACE_FULL_COVERAGE", find: `    else if (!owners.includes(\`@\${CANONICAL_AUTHORITY_ANCHORS.founderIdentity}\`)) findings.push(\`TRUSTED_FILE_WRONG_OWNER_\${file}\`);`, replace: `` },
+  { property: "AUTHORITY_MODULE_IN_TRUSTED_SURFACE", find: `  "scripts/validate-p1a-authority-root.mjs",
+  "scripts/validate-p1a-certification-accounting.mjs",`, replace: `  "scripts/validate-p1a-certification-accounting.mjs",` },
+  { property: "AUTHORITY_MODULE_IN_TRUSTED_SURFACE", find: `  "scripts/test-p1a-authority-root-mutation.mjs",
+  "scripts/test-p1a-authority-root.mjs",`, replace: `  "scripts/test-p1a-authority-root.mjs",` },
   { property: "TRUSTED_SURFACE_FULL_COVERAGE", find: `  "scripts/test-p1a-dual-base-verifier.mjs",
   "scripts/test-p1a-trusted-verifier.mjs",`, replace: `  "scripts/test-p1a-trusted-verifier.mjs",` },
+  { property: "TRUSTED_SURFACE_FULL_COVERAGE", find: `    if (resolution.owners.length === 0) findings.push(\`TRUSTED_FILE_UNCOVERED_\${file}\`);`, replace: `    if (false) findings.push(\`TRUSTED_FILE_UNCOVERED_\${file}\`);` },
+  { property: "TRUSTED_SURFACE_FULL_COVERAGE", find: `    else if (!resolution.owners.includes(\`@\${CANONICAL_AUTHORITY_ANCHORS.founderIdentity}\`)) findings.push(\`TRUSTED_FILE_WRONG_OWNER_\${file}\`);`, replace: `` },
+  { property: "CODEOWNERS_LAST_MATCH_WINS_MODELED", find: `    if (codeownersPatternToRegex(rule.pattern).test(filePath)) winner = rule;`, replace: `    if (!winner && codeownersPatternToRegex(rule.pattern).test(filePath)) winner = rule;` },
+  { property: "CODEOWNERS_LAST_MATCH_WINS_MODELED", find: `    if (codeownersPatternToRegex(rule.pattern).test(filePath)) winner = rule;`, replace: `    if (rule.owners.length && codeownersPatternToRegex(rule.pattern).test(filePath)) winner = rule;` },
+  { property: "CODEOWNERS_GLOB_SEMANTICS_MODELED", find: `    if (ch === "*") out += "[^/]*";`, replace: `    if (ch === "*") out += ".*";` },
+  { property: "CODEOWNERS_GLOB_SEMANTICS_MODELED", find: `  const prefix = anchored ? "^" : "^(?:.*/)?";`, replace: `  const prefix = "^";` },
+  { property: "CODEOWNERS_GLOB_SEMANTICS_MODELED", find: `  const suffix = dirOnly ? "/.*$" : "(?:/.*)?$";`, replace: `  const suffix = "(?:/.*)?$";` },
+  { property: "CODEOWNERS_UNSUPPORTED_SYNTAX_FAIL_CLOSED", find: `      findings.push(\`CODEOWNERS_UNSUPPORTED_PATTERN_LINE_\${i + 1}\`);
+      continue;`, replace: `` },
   { property: "COORDINATED_REWRITE_BLOCKED", find: `    const independent = approvers.filter((a) => owners.includes(a) && a !== author);`, replace: `    const independent = approvers;` },
   { property: "COORDINATED_REWRITE_BLOCKED", find: `  if (blocking) return { verdict: "AUTHORITY_ROOT_COORDINATED_REWRITE_BLOCK", findings };`, replace: `` },
+  { property: "COORDINATED_REWRITE_BLOCKED", find: `    if (resolution.owners === null) { findings.push(\`PRIOR_OWNERSHIP_UNPARSEABLE_\${file}\`); continue; }`, replace: `    if (resolution.owners === null) { continue; }` },
   { property: "SELF_APPROVAL_REJECTED", find: `if (author && approvers.length > 0 && approvers.every((a) => a === author)) findings.push("SELF_APPROVAL_REJECTED");`, replace: `` },
   { property: "DECLARED_EXECUTION_UNPROVEN", find: `    return { verdict: "EXECUTION_UNPROVEN", findings: ["DECLARED_EXECUTION_ONLY"] };`, replace: `    return { verdict: "OBSERVED_EXECUTION", findings: [] };` },
-  { property: "FABRICATED_EXECUTION_DETECTED", find: `      if (sha256(bytes) !== artifact.sha256) findings.push("FABRICATED_EXECUTION_ARTIFACT");`, replace: `` },
+  { property: "EXECUTION_SUBJECT_BINDING_REQUIRED", find: `  if (!HEX40.test(claim.subjectSha ?? "") && !HEX64.test(claim.subjectSha ?? "")) {
+    return { verdict: "EXECUTION_UNPROVEN", findings: ["EXECUTION_SUBJECT_UNBOUND"] };
+  }`, replace: `` },
+  { property: "EXECUTION_SUBJECT_BINDING_REQUIRED", find: `    if (artifact.subjectSha !== claim.subjectSha) { findings.push("ARTIFACT_WRONG_SUBJECT"); continue; }`, replace: `` },
+  { property: "EXECUTION_PRODUCER_IDENTITY_REQUIRED", find: `    if (!(artifact.producer in CANONICAL_OBSERVATION_PRODUCERS)) { findings.push("ARTIFACT_PRODUCER_UNKNOWN"); continue; }`, replace: `` },
+  { property: "EXECUTION_READER_FIXED_TRUSTED", find: `    const read = readAuthorityArtifact(evidenceRoot, artifact.path, artifact.sha256);
+    if (read.verdict !== "ARTIFACT_VERIFIED") {
+      findings.push(read.findings.includes("ARTIFACT_DIGEST_MISMATCH") ? "FABRICATED_EXECUTION_ARTIFACT" : "EXECUTION_ARTIFACT_UNREADABLE");
+    }`, replace: `` },
   { property: "EXECUTION_ARTIFACT_DIGEST_REQUIRED", find: `    if (!artifact?.path || !HEX64.test(artifact?.sha256 ?? "")) { findings.push("ARTIFACT_NOT_DIGEST_BOUND"); continue; }`, replace: `    if (!artifact?.path) { findings.push("ARTIFACT_NOT_DIGEST_BOUND"); continue; }
     if (!HEX64.test(artifact?.sha256 ?? "")) { continue; }` },
-  { property: "EXECUTION_ARTIFACT_READ_FAILURE_UNPROVEN", find: `      findings.push("EXECUTION_ARTIFACT_UNREADABLE");`, replace: `` },
   { property: "RECEIPT_DIGEST_BINDING_REQUIRED", find: `if (!HEX64.test(receipt.subjectSha256 ?? "")) findings.push("RECEIPT_UNDER_BINDING_NO_SUBJECT_DIGEST");`, replace: `` },
   { property: "SUPERSESSION_CHAIN_ENFORCED", find: `if (prior && HEX64.test(next.supersedesSha256 ?? "") && next.supersedesSha256 !== prior.sha256) findings.push("SUPERSESSION_CHAIN_MISMATCH");`, replace: `` },
   { property: "SUPERSESSION_CHAIN_ENFORCED", find: `if (!prior || prior.preserved !== true) findings.push("PREDECESSOR_NOT_PRESERVED");`, replace: `` },
   { property: "SUPERSESSION_CHAIN_ENFORCED", find: `if (!HEX64.test(next.founderDecisionSha256 ?? "")) findings.push("SUPERSESSION_WITHOUT_FOUNDER_DECISION");`, replace: `` },
-  { property: "CUSTODY_NOT_PROVEN_DEFAULT", find: `    verdict: custodyProven ? "EXTERNAL_CUSTODY_OBSERVED" : "NOT_PROVEN",`, replace: `    verdict: "EXTERNAL_CUSTODY_OBSERVED",` },
-  { property: "CUSTODY_NOT_PROVEN_DEFAULT", find: `    trustedCertificationAuthorized: custodyProven,`, replace: `    trustedCertificationAuthorized: true,` },
-  { property: "SIMULATED_INDEPENDENCE_REJECTED", find: `    if (receipt.source !== "GITHUB_OBSERVATION") { findings.push("SIMULATED_INDEPENDENCE_REJECTED"); continue; }`, replace: `` },
-  { property: "CUSTODY_RECEIPT_BINDING_REQUIRED", find: `    if (binding.verdict !== "RECEIPT_BOUND") { findings.push(\`CUSTODY_RECEIPT_UNBOUND_\${receipt.controlId ?? "UNKNOWN"}\`); continue; }`, replace: `` },
-  { property: "CLAIM_CEILING_ENFORCED", find: `  if (custodyAssessment?.verdict === "EXTERNAL_CUSTODY_OBSERVED" && custodyAssessment?.trustedCertificationAuthorized === true) {`, replace: `  if (custodyAssessment?.verdict === "EXTERNAL_CUSTODY_OBSERVED") {` },
-  { property: "CLAIM_CEILING_ENFORCED", find: `    trustedCertificationAuthorized: false,
-  };
-}
-
-export function rejectSimulatedIndependence`, replace: `    trustedCertificationAuthorized: true,
-  };
-}
-
-export function rejectSimulatedIndependence` },
+  { property: "CUSTODY_RECEIPTS_ARE_ARTIFACTS_NOT_OBJECTS", find: `      if (!ref || typeof ref !== "object" || !ref.path || !HEX64.test(ref.sha256 ?? "")) { findings.push("CUSTODY_RECEIPT_REF_MALFORMED"); continue; }`, replace: `` },
+  { property: "CUSTODY_PRODUCER_IDENTITY_REQUIRED", find: `      if (!producer) { findings.push(\`CUSTODY_PRODUCER_UNKNOWN_\${receipt.controlId}\`); continue; }`, replace: `` },
+  { property: "CUSTODY_SUBJECT_BINDING_REQUIRED", find: `      if (receipt.subjectBaseSha !== AUTHORIZED_REBUILD_BASE.sha) { findings.push(\`CUSTODY_WRONG_SUBJECT_\${receipt.controlId}\`); continue; }`, replace: `` },
+  { property: "CUSTODY_AUTHORITY_BINDING_REQUIRED", find: `      if (!CUSTODY_AUTHORITY_DIGESTS.includes(receipt.authoritySha256)) { findings.push(\`CUSTODY_AUTHORITY_UNBOUND_\${receipt.controlId}\`); continue; }`, replace: `` },
+  { property: "SIMULATED_INDEPENDENCE_REJECTED", find: `      if (receipt.source !== "GITHUB_OBSERVATION") { findings.push("SIMULATED_INDEPENDENCE_REJECTED"); continue; }`, replace: `` },
+  { property: "CUSTODY_NOT_PROVEN_DEFAULT", find: `    verdict: allRecorded ? "CUSTODY_EVIDENCE_RECORDED_LOCALLY" : "NOT_PROVEN",`, replace: `    verdict: "CUSTODY_EVIDENCE_RECORDED_LOCALLY",` },
+  { property: "LOCAL_CUSTODY_CANNOT_AUTHORIZE_CERTIFICATION", find: `    trustedCertificationAuthorized: false,
+    findings,
+    controlDenominator: CUSTODY_CONTROLS.length,`, replace: `    trustedCertificationAuthorized: true,
+    findings,
+    controlDenominator: CUSTODY_CONTROLS.length,` },
+  { property: "CLAIM_CEILING_ENFORCED", find: `    custodyEvidenceRecorded: evidenceRecorded === true,
+    trustedCertificationAuthorized: false,`, replace: `    custodyEvidenceRecorded: evidenceRecorded === true,
+    trustedCertificationAuthorized: evidenceRecorded === true,` },
   { property: "SIMULATED_INDEPENDENCE_ASSERTION_REJECTED", find: `  if (claimsExternal && !hasExternalEvidence) {
     return { verdict: "ASSERTION_REJECTED", findings: ["SIMULATED_INDEPENDENCE_REJECTED"] };
   }`, replace: `` },
@@ -371,8 +515,6 @@ for (const [name, probe] of Object.entries(PROBES)) {
   console.log(`PROBE-GREEN ${name}`);
 }
 
-// Property coverage accounting: every PROPERTY_REGISTER entry must be exercised
-// by at least one mutant (by prefix family) — no silent register shrinkage.
 const registerSize = original.PROPERTY_REGISTER.length;
 
 let killed = 0;

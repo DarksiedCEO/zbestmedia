@@ -1,5 +1,7 @@
 // P1A-01 authority-root test battery: unit, property/invariant, integration,
-// and the §XIII hostile attack set. Every hostile case must FAIL CLOSED.
+// and the §XIII hostile attack set — including reproductions of all four
+// INDEPENDENT_REVIEW_BLOCK findings (CODEX-F1..F4). Every hostile case must
+// FAIL CLOSED.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtempSync, writeFileSync, symlinkSync, mkdirSync, rmSync, readFileSync } from "node:fs";
@@ -11,7 +13,8 @@ import {
   rejectProhibitedBase, CANONICAL_REVIEW_STAGES, CANONICAL_AUTHORITY_ANCHORS,
   validateAuthorityManifest, CANONICAL_REVIEWER_REGISTRY, loadReviewerRegistry,
   validateReviewClaim, validateStageAssignments, verifyPolicyRoot,
-  TRUSTED_SURFACE_FILES, TRUSTED_SURFACE_DENOMINATOR, parseCodeowners,
+  TRUSTED_SURFACE_FILES, TRUSTED_SURFACE_DENOMINATOR, FROZEN_BASE_TRUSTED_SURFACE_DENOMINATOR,
+  parseCodeownersRules, codeownersOwnersFor,
   verifyTrustedSurfaceCoverage, assessTrustedSurfaceChange, classifyExecutionEvidence,
   validateReceiptBinding, acceptSupersession, CUSTODY_CONTRACT_REQUIRED_FIELDS,
   EXTERNAL_CUSTODY_CONTRACT, CUSTODY_CONTROLS, NAMED_HUMAN_GATES, assessExternalCustody,
@@ -19,6 +22,7 @@ import {
   rejectSimulatedIndependence, OUT_OF_BOUNDARY_CAPABILITIES, REPOSITORY_AUTHORITY_ROLES,
   assertCapabilityPlacement, assertAuthoritySeparation, readAuthorityArtifact,
   laneAuthorityStatus, PROPERTY_REGISTER, POLICY_VERSION,
+  CANONICAL_OBSERVATION_PRODUCERS, LOCAL_CUSTODY_AUTHORIZATION_CEILING,
 } from "./validate-p1a-authority-root.mjs";
 
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
@@ -52,10 +56,36 @@ const goodPolicyRoot = () => ({
 });
 const CODEOWNERS_CONTENT = readFileSync(join(REPO_ROOT, ".github/CODEOWNERS"), "utf8");
 
+// Writes a full, well-formed on-disk custody receipt set. `mutate` lets hostile
+// cases corrupt one binding at a time.
+function writeCustodyFixture(dir, mutate = () => {}) {
+  const refs = [];
+  for (const control of CUSTODY_CONTROLS) {
+    const receipt = {
+      artifactId: `RECEIPT_${control.id}`,
+      controlId: control.id,
+      source: "GITHUB_OBSERVATION",
+      producer: "GITHUB_ACTIONS_PROTECTED_RUN",
+      subjectBaseSha: AUTHORIZED_REBUILD_BASE.sha,
+      authoritySha256: CANONICAL_AUTHORITY_ANCHORS.releaseAuthoritySha256,
+    };
+    mutate(receipt);
+    const body = JSON.stringify(receipt);
+    const path = `${control.id}.json`;
+    writeFileSync(join(dir, path), body);
+    refs.push({ controlId: receipt.controlId, path, sha256: sha256(body) });
+  }
+  return refs;
+}
+
 // ------------------------------- STATIC ------------------------------------
-run("static:property_register_nonempty_and_unique", () => {
-  assert.ok(PROPERTY_REGISTER.length >= 30);
+run("static:property_register_covers_review_findings", () => {
+  assert.ok(PROPERTY_REGISTER.length >= 45);
   assert.equal(new Set(PROPERTY_REGISTER).size, PROPERTY_REGISTER.length);
+  for (const p of ["LOCAL_CUSTODY_CANNOT_AUTHORIZE_CERTIFICATION", "EXECUTION_READER_FIXED_TRUSTED",
+    "AUTHORITY_MODULE_IN_TRUSTED_SURFACE", "CODEOWNERS_LAST_MATCH_WINS_MODELED"]) {
+    assert.ok(PROPERTY_REGISTER.includes(p), p);
+  }
 });
 run("static:custody_contract_fully_bound", () => {
   for (const field of CUSTODY_CONTRACT_REQUIRED_FIELDS) {
@@ -63,13 +93,23 @@ run("static:custody_contract_fully_bound", () => {
     assert.ok(EXTERNAL_CUSTODY_CONTRACT[field].length > 0, field);
   }
   assert.equal(EXTERNAL_CUSTODY_CONTRACT.status, "CONTRACT_DEFINED_PROVISIONING_NOT_PROVEN");
+  assert.equal(LOCAL_CUSTODY_AUTHORIZATION_CEILING.trustedCertificationAuthorized, false);
 });
-run("static:trusted_surface_denominator_11", () => {
-  assert.equal(TRUSTED_SURFACE_FILES.length, 11);
-  assert.equal(TRUSTED_SURFACE_DENOMINATOR, 11);
-  assert.ok(TRUSTED_SURFACE_FILES.includes("scripts/test-p1a-dual-base-verifier.mjs"));
+run("static:trusted_surface_denominator_14_with_frozen_base_11", () => {
+  assert.equal(TRUSTED_SURFACE_FILES.length, 14);
+  assert.equal(TRUSTED_SURFACE_DENOMINATOR, 14);
+  assert.equal(FROZEN_BASE_TRUSTED_SURFACE_DENOMINATOR, 11);
+  for (const f of ["scripts/test-p1a-dual-base-verifier.mjs", "scripts/validate-p1a-authority-root.mjs",
+    "scripts/test-p1a-authority-root.mjs", "scripts/test-p1a-authority-root-mutation.mjs"]) {
+    assert.ok(TRUSTED_SURFACE_FILES.includes(f), f);
+  }
 });
 run("static:gate_denominator_11", () => assert.equal(NAMED_HUMAN_GATES.length, 11));
+run("static:producer_registry_fixed", () => {
+  assert.deepEqual(Object.keys(CANONICAL_OBSERVATION_PRODUCERS).sort(),
+    ["CODEX", "FOUNDER_DARKSIEDCEO", "GITHUB_ACTIONS_PROTECTED_RUN"]);
+  assert.throws(() => { CANONICAL_OBSERVATION_PRODUCERS.ATTACKER = {}; }, TypeError);
+});
 run("static:frozen_constants_immutable", () => {
   assert.throws(() => { AUTHORIZED_REBUILD_BASE.sha = "x"; }, TypeError);
   assert.throws(() => { CANONICAL_REVIEWER_REGISTRY.reviewers.push({}); }, TypeError);
@@ -94,10 +134,23 @@ run("unit:review_claim_accepts_canonical_reviewer", () => {
 run("unit:policy_root_verified_on_exact_anchors", () => {
   assert.equal(verifyPolicyRoot(goodPolicyRoot()).verdict, "POLICY_ROOT_VERIFIED");
 });
-run("unit:codeowners_parser_ignores_comments_and_blanks", () => {
-  const entries = parseCodeowners("# c\n\n/a.txt @x @y\nb.txt @z\n");
-  assert.deepEqual(entries.get("a.txt"), ["@x", "@y"]);
-  assert.deepEqual(entries.get("b.txt"), ["@z"]);
+run("unit:codeowners_github_semantics", () => {
+  // Anchored exact path.
+  assert.deepEqual(codeownersOwnersFor("/a/b.txt @x\n", "a/b.txt").owners, ["@x"]);
+  // Directory pattern owns contents.
+  assert.deepEqual(codeownersOwnersFor("/scripts/ @x\n", "scripts/deep/f.mjs").owners, ["@x"]);
+  // Bare (unanchored) name matches at any depth.
+  assert.deepEqual(codeownersOwnersFor("CODEOWNERS @x\n", ".github/CODEOWNERS").owners, ["@x"]);
+  // Star does not cross slash.
+  assert.deepEqual(codeownersOwnersFor("/scripts/*.mjs @x\n", "scripts/f.mjs").owners, ["@x"]);
+  assert.deepEqual(codeownersOwnersFor("/scripts/*.mjs @x\n", "scripts/sub/f.mjs").owners, []);
+  // Double star crosses directories.
+  assert.deepEqual(codeownersOwnersFor("/scripts/**/f.mjs @x\n", "scripts/a/b/f.mjs").owners, ["@x"]);
+  // LAST match wins; empty owners on winner clears ownership.
+  assert.deepEqual(codeownersOwnersFor("/a.txt @x\n/a.txt @y\n", "a.txt").owners, ["@y"]);
+  assert.deepEqual(codeownersOwnersFor("/a.txt @x\n/a.txt\n", "a.txt").owners, []);
+  // Comments and blanks ignored.
+  assert.equal(parseCodeownersRules("# c\n\n/a @x\n").rules.length, 1);
 });
 run("unit:rollback_contract_shape", () => {
   assert.equal(ROLLBACK_CONTRACT.historyRewrite, "PROHIBITED");
@@ -110,9 +163,17 @@ run("unit:boundary_roles_fixed", () => {
   assert.equal(REPOSITORY_AUTHORITY_ROLES["DarksiedCEO/zbestmedia-ui"], "RUNTIME_AUTHORITY");
   assert.equal(assertCapabilityPlacement("SEARCH_INTELLIGENCE", "DarksiedCEO/separate-not-yet-authorized").verdict, "PLACEMENT_ALLOWED");
 });
-run("unit:claim_ceiling_grants_only_on_observed_custody", () => {
-  const proven = { verdict: "EXTERNAL_CUSTODY_OBSERVED", trustedCertificationAuthorized: true };
-  assert.equal(computeClaimCeiling(proven, true).trustedCertificationAuthorized, true);
+run("unit:observed_execution_positive_control", () => {
+  const dir = mkdtempSync(join(tmpdir(), "p1a01-exec-pos-"));
+  try {
+    const body = JSON.stringify({ run: "real" });
+    writeFileSync(join(dir, "receipt.json"), body);
+    const out = classifyExecutionEvidence(dir, {
+      subjectSha: AUTHORIZED_REBUILD_BASE.sha,
+      artifacts: [{ path: "receipt.json", sha256: sha256(body), producer: "GITHUB_ACTIONS_PROTECTED_RUN", subjectSha: AUTHORIZED_REBUILD_BASE.sha }],
+    });
+    assert.equal(out.verdict, "OBSERVED_EXECUTION");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 // ---------------------------- PROPERTY / INVARIANT -------------------------
@@ -163,13 +224,35 @@ run("property:every_policy_anchor_binding_enforced", () => {
   }
 });
 run("property:every_custody_control_defaults_not_proven", () => {
-  const out = assessExternalCustody([]);
-  assert.equal(out.verdict, "NOT_PROVEN");
-  assert.equal(out.trustedCertificationAuthorized, false);
-  assert.equal(out.controlsProven, 0);
-  assert.equal(out.controlDenominator, CUSTODY_CONTROLS.length);
-  for (const control of CUSTODY_CONTROLS) {
-    assert.ok(out.findings.includes(`CUSTODY_NOT_PROVEN_${control.id}`), control.id);
+  const dir = mkdtempSync(join(tmpdir(), "p1a01-cust-def-"));
+  try {
+    const out = assessExternalCustody(dir, []);
+    assert.equal(out.verdict, "NOT_PROVEN");
+    assert.equal(out.trustedCertificationAuthorized, false);
+    assert.equal(out.controlsRecorded, 0);
+    assert.equal(out.controlDenominator, CUSTODY_CONTROLS.length);
+    for (const control of CUSTODY_CONTROLS) {
+      assert.ok(out.findings.includes(`CUSTODY_NOT_PROVEN_${control.id}`), control.id);
+    }
+    assert.equal(assessExternalCustody("", []).verdict, "NOT_PROVEN");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+run("property:every_custody_binding_enforced", () => {
+  const mutations = [
+    ["producer", (r) => { r.producer = "SELF_DECLARED_LOCAL"; }, "CUSTODY_PRODUCER_UNKNOWN_"],
+    ["subject", (r) => { r.subjectBaseSha = D("9").slice(0, 40); }, "CUSTODY_WRONG_SUBJECT_"],
+    ["authority", (r) => { r.authoritySha256 = D("8"); }, "CUSTODY_AUTHORITY_UNBOUND_"],
+    ["source", (r) => { r.source = "LOCAL_SELF_DECLARATION"; }, "SIMULATED_INDEPENDENCE_REJECTED"],
+  ];
+  for (const [label, mutate, prefix] of mutations) {
+    const dir = mkdtempSync(join(tmpdir(), "p1a01-cust-bind-"));
+    try {
+      const refs = writeCustodyFixture(dir, mutate);
+      const out = assessExternalCustody(dir, refs);
+      assert.equal(out.verdict, "NOT_PROVEN", label);
+      assert.equal(out.trustedCertificationAuthorized, false, label);
+      assert.ok(out.findings.some((f) => f.startsWith(prefix)), label);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   }
 });
 run("property:every_named_gate_required", () => {
@@ -186,14 +269,14 @@ run("property:every_named_gate_required", () => {
 run("property:codeowners_coverage_detects_each_removal", () => {
   assert.equal(verifyTrustedSurfaceCoverage(CODEOWNERS_CONTENT).verdict, "SURFACE_CLOSED");
   for (const file of TRUSTED_SURFACE_FILES) {
-    const reduced = CODEOWNERS_CONTENT.split("\n").filter((line) => !line.includes(file) || line.trim() === "").join("\n");
+    const reduced = CODEOWNERS_CONTENT.split("\n").filter((line) => line.trim() !== `/${file} @DarksiedCEO`).join("\n");
+    assert.notEqual(reduced, CODEOWNERS_CONTENT, `no-op removal for ${file}`);
     const out = verifyTrustedSurfaceCoverage(reduced);
     assert.equal(out.verdict, "SURFACE_OPEN", file);
     assert.ok(out.findings.includes(`TRUSTED_FILE_UNCOVERED_${file}`), file);
   }
 });
 run("property:accept_implies_no_findings_everywhere", () => {
-  // Structural totality: an accepting verdict never carries findings.
   const accepting = [
     verifyRebuildBase(GOOD_OBSERVED),
     validateAuthorityManifest({ reviewStages: [...CANONICAL_REVIEW_STAGES], requirementDenominator: 124 }),
@@ -207,9 +290,6 @@ run("property:accept_implies_no_findings_everywhere", () => {
 // ----------------------------- INTEGRATION ---------------------------------
 run("integration:live_worktree_base_observation_verifies", () => {
   const observed = observeGitBase(REPO_ROOT);
-  // The lane worktree may legitimately carry lane commits; base identity checks
-  // target the frozen base object, not HEAD. Dirty state here is the lane's own
-  // in-progress work, so restrict to object-identity fields.
   assert.equal(observed.remote, AUTHORIZED_REBUILD_BASE.repositoryRemote);
   assert.equal(observed.sha, AUTHORIZED_REBUILD_BASE.sha);
   assert.equal(observed.objectType, "commit");
@@ -219,14 +299,18 @@ run("integration:live_worktree_base_observation_verifies", () => {
 run("integration:repo_codeowners_closes_trusted_surface", () => {
   const out = verifyTrustedSurfaceCoverage(CODEOWNERS_CONTENT);
   assert.equal(out.verdict, "SURFACE_CLOSED");
-  assert.equal(out.covered, 11);
+  assert.equal(out.covered, 14);
 });
 run("integration:threat_model_trusted_list_amended", async () => {
   const threatModel = await import("./validate-p1a-threat-model.mjs");
   for (const file of threatModel.AMENDMENT_CONTROLLED_FILES) {
     assert.ok(threatModel.TRUSTED_INFRASTRUCTURE_FILES.includes(file), `${file} missing from TRUSTED_INFRASTRUCTURE_FILES`);
   }
-  assert.deepEqual([...threatModel.TRUSTED_INFRASTRUCTURE_FILES].concat("scripts/test-p1a-authority-root.mjs", "scripts/validate-p1a-authority-root.mjs").sort().filter((f) => TRUSTED_SURFACE_FILES.includes(f)), [...TRUSTED_SURFACE_FILES].sort());
+  // The enforcement surface (14) is a superset of the frozen base list (11).
+  for (const file of threatModel.TRUSTED_INFRASTRUCTURE_FILES) {
+    assert.ok(TRUSTED_SURFACE_FILES.includes(file), `${file} missing from enforcement surface`);
+  }
+  assert.equal(threatModel.TRUSTED_INFRASTRUCTURE_FILES.length, FROZEN_BASE_TRUSTED_SURFACE_DENOMINATOR);
 });
 run("integration:hardened_read_verifies_real_artifact", () => {
   const content = readFileSync(join(REPO_ROOT, ".github/CODEOWNERS"));
@@ -236,19 +320,127 @@ run("integration:hardened_read_verifies_real_artifact", () => {
   assert.ok(out.identity.ino > 0);
 });
 run("integration:lane_authority_status_composes_fail_closed", () => {
-  const good = laneAuthorityStatus({
-    baseVerification: verifyRebuildBase(GOOD_OBSERVED),
-    policyRootVerification: verifyPolicyRoot(goodPolicyRoot()),
-    custodyAssessment: assessExternalCustody([]),
-    localImplementationGreen: true,
-  });
-  assert.equal(good.verdict, "LANE_AUTHORITY_MODEL_VERIFIED");
-  assert.equal(good.claim, "LOCAL_IMPLEMENTATION_GREEN/EXTERNAL_ASSURANCE_AUTHORITY_PENDING");
-  assert.equal(good.trustedCertificationAuthorized, false);
+  const dir = mkdtempSync(join(tmpdir(), "p1a01-lane-"));
+  try {
+    const good = laneAuthorityStatus({
+      baseVerification: verifyRebuildBase(GOOD_OBSERVED),
+      policyRootVerification: verifyPolicyRoot(goodPolicyRoot()),
+      custodyAssessment: assessExternalCustody(dir, []),
+      localImplementationGreen: true,
+    });
+    assert.equal(good.verdict, "LANE_AUTHORITY_MODEL_VERIFIED");
+    assert.equal(good.claim, "LOCAL_IMPLEMENTATION_GREEN/EXTERNAL_ASSURANCE_AUTHORITY_PENDING");
+    assert.equal(good.trustedCertificationAuthorized, false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 // ------------------------------- HOSTILE -----------------------------------
-// §XIII required attacks. Each must fail closed.
+hostile("codex_f1_fabricated_custody_cannot_authorize", () => {
+  // In-memory receipt objects (the original attack shape) are no longer inputs:
+  // refs without on-disk digest-bound artifacts are malformed.
+  const dirA = mkdtempSync(join(tmpdir(), "p1a01-f1a-"));
+  try {
+    const inMemory = CUSTODY_CONTROLS.map((c) => ({ controlId: c.id, source: "GITHUB_OBSERVATION", subjectSha256: D("a") }));
+    const out = assessExternalCustody(dirA, inMemory);
+    assert.equal(out.verdict, "NOT_PROVEN");
+    assert.ok(out.findings.includes("CUSTODY_RECEIPT_REF_MALFORMED"));
+  } finally { rmSync(dirA, { recursive: true, force: true }); }
+  // Even a FULLY well-formed local receipt set cannot authorize certification:
+  // the strongest local verdict is evidence-recorded, authorization stays false.
+  const dirB = mkdtempSync(join(tmpdir(), "p1a01-f1b-"));
+  try {
+    const refs = writeCustodyFixture(dirB);
+    const out = assessExternalCustody(dirB, refs);
+    assert.equal(out.verdict, "CUSTODY_EVIDENCE_RECORDED_LOCALLY");
+    assert.equal(out.trustedCertificationAuthorized, false);
+    const ceiling = computeClaimCeiling(out, true);
+    assert.equal(ceiling.trustedCertificationAuthorized, false);
+    assert.equal(ceiling.custodyEvidenceRecorded, true);
+    // A forged assessment object cannot re-open the ceiling either.
+    const forged = computeClaimCeiling({ verdict: "EXTERNAL_CUSTODY_OBSERVED", trustedCertificationAuthorized: true }, true);
+    assert.equal(forged.trustedCertificationAuthorized, false);
+  } finally { rmSync(dirB, { recursive: true, force: true }); }
+});
+hostile("codex_f2_execution_reader_injection_removed", () => {
+  assert.equal(classifyExecutionEvidence.length, 2); // (evidenceRoot, claim) — no reader parameter
+  const dir = mkdtempSync(join(tmpdir(), "p1a01-f2-"));
+  try {
+    const body = JSON.stringify({ run: "real" });
+    writeFileSync(join(dir, "r.json"), body);
+    const base = { subjectSha: AUTHORIZED_REBUILD_BASE.sha };
+    const goodArtifact = { path: "r.json", sha256: sha256(body), producer: "GITHUB_ACTIONS_PROTECTED_RUN", subjectSha: AUTHORIZED_REBUILD_BASE.sha };
+    // Wrong-subject receipt rejected.
+    const wrongSubject = classifyExecutionEvidence(dir, { ...base, artifacts: [{ ...goodArtifact, subjectSha: D("1").slice(0, 40) }] });
+    assert.equal(wrongSubject.verdict, "EXECUTION_UNPROVEN");
+    assert.ok(wrongSubject.findings.includes("ARTIFACT_WRONG_SUBJECT"));
+    // Unknown producer rejected.
+    const unknownProducer = classifyExecutionEvidence(dir, { ...base, artifacts: [{ ...goodArtifact, producer: "MY_OWN_READER" }] });
+    assert.ok(unknownProducer.findings.includes("ARTIFACT_PRODUCER_UNKNOWN"));
+    // Digest mismatch = fabricated.
+    const forged = classifyExecutionEvidence(dir, { ...base, artifacts: [{ ...goodArtifact, sha256: D("2") }] });
+    assert.ok(forged.findings.includes("FABRICATED_EXECUTION_ARTIFACT"));
+    // Symlinked artifact rejected by the fixed reader.
+    writeFileSync(join(dir, "outside"), body);
+    symlinkSync(join(dir, "outside"), join(dir, "alias.json"));
+    const viaSymlink = classifyExecutionEvidence(dir, { ...base, artifacts: [{ ...goodArtifact, path: "alias.json" }] });
+    assert.equal(viaSymlink.verdict, "EXECUTION_UNPROVEN");
+    // Unbound execution subject rejected outright.
+    const unbound = classifyExecutionEvidence(dir, { artifacts: [goodArtifact] });
+    assert.ok(unbound.findings.includes("EXECUTION_SUBJECT_UNBOUND"));
+    // Claim and artifact BOTH lacking subjectSha must not pair as undefined===undefined.
+    const bothUnbound = classifyExecutionEvidence(dir, { artifacts: [{ path: "r.json", sha256: sha256(body), producer: "CODEX" }] });
+    assert.equal(bothUnbound.verdict, "EXECUTION_UNPROVEN");
+    assert.ok(bothUnbound.findings.includes("EXECUTION_SUBJECT_UNBOUND"));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+hostile("codex_f3_authority_module_on_trusted_surface", () => {
+  for (const file of ["scripts/validate-p1a-authority-root.mjs", "scripts/test-p1a-authority-root.mjs", "scripts/test-p1a-authority-root-mutation.mjs"]) {
+    const reduced = CODEOWNERS_CONTENT.split("\n").filter((line) => line.trim() !== `/${file} @DarksiedCEO`).join("\n");
+    const out = verifyTrustedSurfaceCoverage(reduced);
+    assert.equal(out.verdict, "SURFACE_OPEN", file);
+    assert.ok(out.findings.includes(`TRUSTED_FILE_UNCOVERED_${file}`), file);
+  }
+  const change = assessTrustedSurfaceChange({
+    files: ["scripts/validate-p1a-authority-root.mjs"],
+    author: "attacker",
+    approvals: ["attacker"],
+    priorCodeowners: CODEOWNERS_CONTENT,
+  });
+  assert.equal(change.verdict, "AUTHORITY_ROOT_COORDINATED_REWRITE_BLOCK");
+});
+hostile("codex_f4_codeowners_github_semantics_attacks", () => {
+  // Last-match-wins: a later rule clearing owners un-protects the file.
+  const cleared = `${CODEOWNERS_CONTENT}\n/scripts/validate-p1a-authority-root.mjs\n`;
+  const outCleared = verifyTrustedSurfaceCoverage(cleared);
+  assert.equal(outCleared.verdict, "SURFACE_OPEN");
+  assert.ok(outCleared.findings.includes("TRUSTED_FILE_UNCOVERED_scripts/validate-p1a-authority-root.mjs"));
+  // Last-match-wins: a later rule hijacking ownership to an attacker.
+  const hijacked = `${CODEOWNERS_CONTENT}\n/scripts/validate-p1a-authority-root.mjs @attacker\n`;
+  const outHijacked = verifyTrustedSurfaceCoverage(hijacked);
+  assert.equal(outHijacked.verdict, "SURFACE_OPEN");
+  assert.ok(outHijacked.findings.includes("TRUSTED_FILE_WRONG_OWNER_scripts/validate-p1a-authority-root.mjs"));
+  // Unanchored glob override hits every .mjs trusted file.
+  const globbed = `${CODEOWNERS_CONTENT}\n*.mjs @attacker\n`;
+  const outGlobbed = verifyTrustedSurfaceCoverage(globbed);
+  assert.equal(outGlobbed.verdict, "SURFACE_OPEN");
+  assert.ok(outGlobbed.findings.some((f) => f.startsWith("TRUSTED_FILE_WRONG_OWNER_scripts/")));
+  // Unsupported syntax fails CLOSED rather than being mis-modeled.
+  for (const bad of ["!scripts/secret.mjs @x\n", "/scripts/[ab].mjs @x\n", "\\#literal @x\n"]) {
+    const out = verifyTrustedSurfaceCoverage(`${CODEOWNERS_CONTENT}\n${bad}`);
+    assert.equal(out.verdict, "SURFACE_OPEN", bad);
+    assert.ok(out.findings.some((f) => f.startsWith("CODEOWNERS_UNSUPPORTED_PATTERN_LINE_") || f.startsWith("CODEOWNERS_MALFORMED_OWNER_LINE_")), bad);
+  }
+  // Change assessment derives prior ownership under the same semantics: a prior
+  // file whose last matching rule cleared owners gives NO approval authority.
+  const change = assessTrustedSurfaceChange({
+    files: [".github/CODEOWNERS"],
+    author: "attacker",
+    approvals: ["DarksiedCEO"],
+    priorCodeowners: "/.github/CODEOWNERS @DarksiedCEO\n/.github/CODEOWNERS\n",
+  });
+  assert.equal(change.verdict, "AUTHORITY_ROOT_COORDINATED_REWRITE_BLOCK");
+  assert.ok(change.findings.includes("PRIOR_OWNERSHIP_ABSENT_.github/CODEOWNERS"));
+});
 hostile("coordinated_authority_root_rewrite", () => {
   const out = assessTrustedSurfaceChange({
     files: [...TRUSTED_SURFACE_FILES],
@@ -261,12 +453,19 @@ hostile("coordinated_authority_root_rewrite", () => {
   assert.ok(out.findings.includes("SELF_APPROVAL_REJECTED"));
 });
 hostile("codeowners_rewrite_cannot_mint_approval_authority", () => {
-  // Attacker rewrites CODEOWNERS in the same change to name themselves owner;
-  // authority derives from the PRIOR CODEOWNERS, so this fails closed.
   const out = assessTrustedSurfaceChange({
     files: [".github/CODEOWNERS"],
     author: "attacker",
     approvals: ["attacker"],
+    priorCodeowners: CODEOWNERS_CONTENT,
+  });
+  assert.equal(out.verdict, "AUTHORITY_ROOT_COORDINATED_REWRITE_BLOCK");
+});
+hostile("non_owner_accomplice_approval", () => {
+  const out = assessTrustedSurfaceChange({
+    files: [".github/CODEOWNERS"],
+    author: "attacker",
+    approvals: ["accomplice"],
     priorCodeowners: CODEOWNERS_CONTENT,
   });
   assert.equal(out.verdict, "AUTHORITY_ROOT_COORDINATED_REWRITE_BLOCK");
@@ -286,17 +485,23 @@ hostile("reviewer_registry_replacement", () => {
   assert.ok(manifest.findings.includes("REVIEWER_REGISTRY_REPLACEMENT"));
 });
 hostile("fabricated_execution", () => {
-  const declaredOnly = classifyExecutionEvidence({
-    session_id: "s-1", context_id: "c-1", timestamp: "2026-08-18T00:00:00Z",
-    fresh: true, independent: true,
-  }, () => Buffer.alloc(0));
-  assert.equal(declaredOnly.verdict, "EXECUTION_UNPROVEN");
-  const forged = classifyExecutionEvidence(
-    { artifacts: [{ path: "receipt.json", sha256: D("a") }] },
-    () => Buffer.from("different bytes"),
-  );
-  assert.equal(forged.verdict, "EXECUTION_UNPROVEN");
-  assert.ok(forged.findings.includes("FABRICATED_EXECUTION_ARTIFACT"));
+  const dir = mkdtempSync(join(tmpdir(), "p1a01-fab-"));
+  try {
+    const declaredOnly = classifyExecutionEvidence(dir, {
+      subjectSha: AUTHORIZED_REBUILD_BASE.sha,
+      session_id: "s-1", context_id: "c-1", timestamp: "2026-08-18T00:00:00Z",
+      fresh: true, independent: true,
+    });
+    assert.equal(declaredOnly.verdict, "EXECUTION_UNPROVEN");
+    assert.ok(declaredOnly.findings.includes("DECLARED_EXECUTION_ONLY"));
+    writeFileSync(join(dir, "receipt.json"), "different bytes");
+    const forged = classifyExecutionEvidence(dir, {
+      subjectSha: AUTHORIZED_REBUILD_BASE.sha,
+      artifacts: [{ path: "receipt.json", sha256: D("a"), producer: "CODEX", subjectSha: AUTHORIZED_REBUILD_BASE.sha }],
+    });
+    assert.equal(forged.verdict, "EXECUTION_UNPROVEN");
+    assert.ok(forged.findings.includes("FABRICATED_EXECUTION_ARTIFACT"));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 hostile("founder_authority_substitution", () => {
   const out = verifyPolicyRoot({ ...goodPolicyRoot(), founderFreezeSha256: D("b") });
@@ -354,14 +559,12 @@ hostile("symlink_alias_attack", () => {
     assert.ok(escape.findings.includes("PATH_ESCAPE_REJECTED"));
     const absolute = readAuthorityArtifact(join(dir, "safe"), join(dir, "outside-secret"), sha256("secret"));
     assert.equal(absolute.verdict, "ARTIFACT_REJECTED");
-    // Intermediate-directory symlink (O_NOFOLLOW does not cover this).
     mkdirSync(join(dir, "outside-dir"));
     writeFileSync(join(dir, "outside-dir", "a.json"), "y");
     symlinkSync(join(dir, "outside-dir"), join(dir, "safe", "dirlink"));
     const intermediate = readAuthorityArtifact(join(dir, "safe"), "dirlink/a.json", sha256("y"));
     assert.equal(intermediate.verdict, "ARTIFACT_REJECTED");
     assert.ok(intermediate.findings.includes("SYMLINK_SUBSTITUTION_REJECTED"));
-    // Dot-dot prohibited even when it resolves back inside the root.
     mkdirSync(join(dir, "safe", "sub"));
     const internal = readAuthorityArtifact(join(dir, "safe"), "sub/../real.json", sha256("{}"));
     assert.equal(internal.verdict, "ARTIFACT_REJECTED");
@@ -370,19 +573,7 @@ hostile("symlink_alias_attack", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
-hostile("non_owner_accomplice_approval", () => {
-  const out = assessTrustedSurfaceChange({
-    files: [".github/CODEOWNERS"],
-    author: "attacker",
-    approvals: ["accomplice"],
-    priorCodeowners: CODEOWNERS_CONTENT,
-  });
-  assert.equal(out.verdict, "AUTHORITY_ROOT_COORDINATED_REWRITE_BLOCK");
-});
 hostile("toctou_reopen_substitution", () => {
-  // The verifier digests the SAME bytes it returns from the single open; a
-  // wrong-content file therefore cannot pass, and there is no second open for
-  // an attacker to race. We prove digest binding on the one fd.
   const dir = mkdtempSync(join(tmpdir(), "p1a01-toctou-"));
   try {
     writeFileSync(join(dir, "artifact.json"), "attacker-swapped-content");
@@ -394,18 +585,16 @@ hostile("toctou_reopen_substitution", () => {
   }
 });
 hostile("missing_external_authority", () => {
-  const custody = assessExternalCustody([]);
-  assert.equal(custody.verdict, "NOT_PROVEN");
-  const ceiling = computeClaimCeiling(custody, true);
-  assert.equal(ceiling.claim, "LOCAL_IMPLEMENTATION_GREEN/EXTERNAL_ASSURANCE_AUTHORITY_PENDING");
-  assert.equal(ceiling.trustedCertificationAuthorized, false);
+  const dir = mkdtempSync(join(tmpdir(), "p1a01-noext-"));
+  try {
+    const custody = assessExternalCustody(dir, []);
+    assert.equal(custody.verdict, "NOT_PROVEN");
+    const ceiling = computeClaimCeiling(custody, true);
+    assert.equal(ceiling.claim, "LOCAL_IMPLEMENTATION_GREEN/EXTERNAL_ASSURANCE_AUTHORITY_PENDING");
+    assert.equal(ceiling.trustedCertificationAuthorized, false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 hostile("simulated_independence", () => {
-  const local = assessExternalCustody(CUSTODY_CONTROLS.map((control) => ({
-    controlId: control.id, source: "LOCAL_SELF_DECLARATION", subjectSha256: D("a"),
-  })));
-  assert.equal(local.verdict, "NOT_PROVEN");
-  assert.ok(local.findings.includes("SIMULATED_INDEPENDENCE_REJECTED"));
   const assertion = rejectSimulatedIndependence({ claim: "EXTERNAL_ASSURED", evidence: [{ source: "LOCAL_FILE" }] });
   assert.equal(assertion.verdict, "ASSERTION_REJECTED");
 });
@@ -447,12 +636,15 @@ hostile("supersession_weakness", () => {
   assert.ok(unauthorized.findings.includes("SUPERSESSION_WITHOUT_FOUNDER_DECISION"));
 });
 hostile("historical_evidence_fabrication", () => {
-  const forged = classifyExecutionEvidence(
-    { artifacts: [{ path: "historical-receipt.json", sha256: D("f") }] },
-    () => { throw new Error("ENOENT"); },
-  );
-  assert.equal(forged.verdict, "EXECUTION_UNPROVEN");
-  assert.ok(forged.findings.includes("EXECUTION_ARTIFACT_UNREADABLE"));
+  const dir = mkdtempSync(join(tmpdir(), "p1a01-hist-"));
+  try {
+    const forged = classifyExecutionEvidence(dir, {
+      subjectSha: AUTHORIZED_REBUILD_BASE.sha,
+      artifacts: [{ path: "historical-receipt.json", sha256: D("f"), producer: "CODEX", subjectSha: AUTHORIZED_REBUILD_BASE.sha }],
+    });
+    assert.equal(forged.verdict, "EXECUTION_UNPROVEN");
+    assert.ok(forged.findings.includes("EXECUTION_ARTIFACT_UNREADABLE"));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 hostile("denominator_substitution", () => {
   const out = validateAuthorityManifest({ reviewStages: [...CANONICAL_REVIEW_STAGES], requirementDenominator: 20 });
@@ -482,6 +674,8 @@ hostile("null_and_malformed_inputs_fail_closed", () => {
     assert.notEqual(assessRollbackAction(bad).verdict, "ROLLBACK_AUTHORIZED");
     assert.notEqual(rejectSimulatedIndependence(bad).verdict, "ASSERTION_ACCEPTED");
     assert.notEqual(assertAuthoritySeparation(bad).verdict, "CLAIM_ACCEPTED");
+    assert.notEqual(assessExternalCustody(bad, bad).verdict, "CUSTODY_EVIDENCE_RECORDED_LOCALLY");
+    assert.notEqual(classifyExecutionEvidence(bad, bad).verdict, "OBSERVED_EXECUTION");
   }
 });
 
