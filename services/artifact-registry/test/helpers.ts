@@ -27,6 +27,7 @@ type EdgeRecord = {
 export function createMemoryPrisma(): PrismaClient {
   const artifacts = new Map<string, ArtifactRecord>();
   const edges: EdgeRecord[] = [];
+  const outbox = new Map<string, any>();
 
   const prismaLike = {
     artifact: {
@@ -71,9 +72,20 @@ export function createMemoryPrisma(): PrismaClient {
       }
     },
     eventOutbox: {
-      upsert: async () => ({}),
-      findUnique: async () => ({ id: "any", publishedAt: new Date() }), // prevent real publishing attempt in domain tests
-      update: async () => ({})
+      findUnique: async ({ where }: any) => outbox.get(where.id) ?? null,
+      create: async ({ data }: any) => {
+        const row = { ...data, createdAt: new Date(), publishedAt: null, attemptCount: 0,
+          nextAttemptAt: new Date(), leaseOwner: null, leaseExpiresAt: null, terminalAt: null };
+        outbox.set(row.id, row);
+        return row;
+      },
+      findMany: async () => Array.from(outbox.values()),
+      updateMany: async ({ where, data }: any) => {
+        const row = outbox.get(where.id);
+        if (!row) return { count: 0 };
+        outbox.set(where.id, { ...row, ...data });
+        return { count: 1 };
+      }
     },
     artifactLineageEdge: {
       upsert: async ({ where, create }: { where: { fromArtifactId_toArtifactId_edgeType: { fromArtifactId: string; toArtifactId: string; edgeType: string } }; create: EdgeRecord }) => {
@@ -99,7 +111,19 @@ export function createMemoryPrisma(): PrismaClient {
       }
     },
     $transaction: async (fn: (tx: any) => Promise<any>) => {
-      return fn(prismaLike);
+      const artifactSnapshot = new Map(artifacts);
+      const edgeSnapshot = edges.map((edge) => ({ ...edge }));
+      const outboxSnapshot = new Map(outbox);
+      try {
+        return await fn(prismaLike);
+      } catch (error) {
+        artifacts.clear();
+        for (const [key, value] of artifactSnapshot) artifacts.set(key, value);
+        edges.splice(0, edges.length, ...edgeSnapshot);
+        outbox.clear();
+        for (const [key, value] of outboxSnapshot) outbox.set(key, value);
+        throw error;
+      }
     }
   };
 

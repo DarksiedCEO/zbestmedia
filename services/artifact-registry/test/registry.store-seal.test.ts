@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryPrisma } from "./helpers";
 import { deterministicArtifactId } from "@zbest/id-core";
-import { storeArtifact, sealArtifact } from "../src/domain/registry";
+import { storeArtifact, sealArtifact, getArtifact } from "../src/domain/registry";
 
 function buildMeta(args: { artifactId: string; artifactType: string; requestId: string; attempt: number }) {
   return {
@@ -69,6 +69,9 @@ describe("artifact registry store/seal", () => {
     });
 
     expect(stored.artifactId).toBe(id1);
+    // Domain writes enqueue only; publishing outside the transaction would
+    // reopen the create-success/event-loss window.
+    expect(mockNc.publish).not.toHaveBeenCalled();
   });
 
   it("seals idempotently", async () => {
@@ -120,5 +123,22 @@ describe("artifact registry store/seal", () => {
     });
 
     expect(firstSeal.immutableAt?.toISOString()).toBe(secondSeal.immutableAt?.toISOString());
+  });
+
+  it("rolls the business write back when the atomic outbox write fails", async () => {
+    const prisma = createMemoryPrisma() as any;
+    prisma.eventOutbox.create = vi.fn(async () => { throw new Error("injected outbox failure"); });
+    const input = { prompt: "rollback" };
+    const artifactId = deterministicArtifactId({ workspaceId: "workspace-1", requestId: "req-rollback", artifactType: "BrandBible", input, attempt: 1 });
+    const meta = buildMeta({ artifactId, artifactType: "BrandBible", requestId: "req-rollback", attempt: 1 });
+
+    await expect(storeArtifact(prisma, mockNc, {
+      requestId: "req-rollback", workspaceId: "workspace-1", brandId: "brand-1",
+      artifactType: "BrandBible", artifactVersion: "1.0.0", attempt: 1, input,
+      payload: { meta, brandId: "brand-1", title: "Brand Bible", summary: "summary", voice: "direct", tone: "clear", pillars: ["clarity"], dos: ["be direct"], donts: ["ramble"] },
+      meta
+    })).rejects.toThrow("injected outbox failure");
+    await expect(getArtifact(prisma, "workspace-1", artifactId)).rejects.toThrow("artifact not found");
+    expect(mockNc.publish).not.toHaveBeenCalled();
   });
 });

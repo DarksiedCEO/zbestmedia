@@ -42,12 +42,20 @@ model ArtifactLineageEdge {
 }
 
 model EventOutbox {
-  id          String    @id // eventId (deterministic)
-  subject     String
-  payload     Json
-  createdAt   DateTime  @default(now()) @map("created_at")
-  publishedAt DateTime? @map("published_at")
+  id             String    @id // deterministic event id and broker de-duplication key
+  subject        String
+  payload        Json
+  createdAt      DateTime  @default(now()) @map("created_at")
+  publishedAt    DateTime? @map("published_at")
+  attemptCount   Int       @default(0) @map("attempt_count")
+  nextAttemptAt  DateTime  @default(now()) @map("next_attempt_at")
+  leaseOwner     String?   @map("lease_owner")
+  leaseExpiresAt DateTime? @map("lease_expires_at")
+  terminalAt     DateTime? @map("terminal_at")
+  lastRetryClass String?   @map("last_retry_class")
+  lastError      String?   @map("last_error")
 
-  @@index([publishedAt])
+  @@index([publishedAt, terminalAt, nextAttemptAt], map: "idx_event_outbox_due")
+  @@index([leaseExpiresAt], map: "idx_event_outbox_lease")
   @@map("event_outbox")
 }

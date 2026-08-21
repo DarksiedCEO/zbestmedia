@@ -1,0 +1,68 @@
+{
+  "artifactId": "P1A_05_IMPLEMENTATION_EVIDENCE",
+  "version": 1,
+  "lane": "P1A-05",
+  "repository": "/Users/andrelove/Documents/zbestmedia-p1a-05-outbox",
+  "branch": "codex/p1a-05-outbox",
+  "baseSha": "b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+  "baseTree": "c8fe6f31288bffcf1b8c35a825c60c6a5d31703d",
+  "topologyStateSha256": "b739fca778841d94f7a9885656907536b6b095df31f1a2bf18c1b3844be6397b",
+  "outcome": "PARTIAL_IMPLEMENTATION_WITH_EXPLICIT_PROVIDER_BLOCK",
+  "implementedRequirements": {
+    "P1AF-067": "artifact mutations and durable event creation share one database transaction",
+    "P1AF-068": "leased due-row relay recovers unpublished and expired-lease rows",
+    "P1AF-069": "deterministic event id plus JetStream msgID de-duplication and compare-and-set leasing",
+    "P1AF-075": "exact ordered retry classes PERMANENT, TRANSIENT, THROTTLED, UNKNOWN",
+    "P1AF-076": "bounded attempts, exponential capped backoff, terminal permanent/exhausted state, non-overlapping relay runs"
+  },
+  "blockedRequirements": {
+    "P1AF-070": "provider-specific payment webhook signature and replay verification requires founder provider selection",
+    "P1AF-071": "billing provider/state-machine integration requires founder provider selection",
+    "P1AF-072": "generic source-to-runtime rule exists, but no payment return surface exists in this repository",
+    "P1AF-073": "provider evidence and reconciliation cannot be finalized without the payment provider",
+    "P1AF-074": "transactional email/receipt delivery evidence cannot be finalized without provider selection"
+  },
+  "blockingAuthority": {
+    "requirementId": "P1AF-089",
+    "sourceStatus": "FOUNDER_DECISION_PENDING",
+    "text": "Provider selection for e-signature, payment, transactional email, and document storage is a founder prerequisite."
+  },
+  "tests": [
+    { "command": "pnpm -C services/artifact-registry typecheck", "result": "PASS" },
+    { "command": "pnpm -C services/artifact-registry lint", "result": "PASS" },
+    { "command": "pnpm -C services/artifact-registry test", "result": "PASS", "testFiles": 6, "tests": 29 },
+    { "command": "DATABASE_URL=postgresql://local:local@127.0.0.1:5432/local pnpm -C services/artifact-registry exec prisma validate", "result": "PASS", "note": "schema validation only; no database connection or mutation" },
+    { "command": "git diff --check", "result": "PASS" }
+  ],
+  "hostileCoverage": [
+    "same deterministic id with changed subject/payload rejects",
+    "stranded unpublished row is relayed",
+    "concurrent workers publish one leased row once",
+    "permanent failures terminate without retry",
+    "transient retries become terminal at the configured bound",
+    "domain mutation never directly publishes"
+  ],
+  "candidateBinding": {
+    "kind": "UNCOMMITTED_WORKTREE_FILE_DIGEST_SET",
+    "note": "No commit was authorized or created; each changed product file is content-addressed below.",
+    "files": {
+      "services/artifact-registry/prisma/schema.prisma": "df4ce8c34df273a78dcec49906c1afaa1f84a6d191f60c54230bf9d4338d341e",
+      "services/artifact-registry/prisma/migrations/20260818113000_transactional_outbox_relay/migration.sql": "52cce1f2d66c3bb355c3a242cfd75d30d0f3e981e0f13bb899690f8547881118",
+      "services/artifact-registry/src/domain/registry.ts": "b1106a37296818eb3c292a95f8c2c2bba8ad59ef3245419a3eb44c221da880ff",
+      "services/artifact-registry/src/env.ts": "7f215cf8258aa76fb758cb11b2219cff6db5c72875aab35bc921b7e6ebb2bb9d",
+      "services/artifact-registry/src/events/outbox.ts": "b4581d1c526409276e2ffd2e0317b00c6e1affd7e3b52b776c847a8c3daa7694",
+      "services/artifact-registry/src/events/publisher.ts": "9bc8b3d43477742ef30505aa306b8d8fb5cf505f0edaff8fa5616d84c8e3fb9a",
+      "services/artifact-registry/src/server.ts": "47c81f22c967d6a224a039014ee8637f8eb7b0872321602db1e2c97f9df1c942",
+      "services/artifact-registry/test/events.outbox.test.ts": "2e6ff21725655ef40b9b32155cbf9002ead0095761d88671e8bfee1b912089fd",
+      "services/artifact-registry/test/helpers.ts": "5ed868b5b44bd6deec5b9b019733dc5da03a43a75b6235d61c777d65769ed942",
+      "services/artifact-registry/test/registry.store-seal.test.ts": "4430e1e73207b30c49a46be485752f19f86ca3a4cf5244d7b3520b6ab82ac26d"
+    }
+  },
+  "dependencyChange": "NONE",
+  "productionDatabaseMutation": "NONE",
+  "remoteMutation": "NONE",
+  "push": false,
+  "merge": false,
+  "certificationClaim": false,
+  "nextRequiredAction": "Founder selects payment and transactional-email providers; then implement and independently verify P1AF-070 through P1AF-074."
+}
