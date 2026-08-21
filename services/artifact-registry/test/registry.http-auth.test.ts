@@ -11,8 +11,8 @@ import { createMemoryPrisma } from "./helpers";
 // never reaches it.
 
 const AUTH_ENV = JSON.stringify([
-  { keyId: "workspace-a-service", token: "tok-workspace-a", tenants: ["workspace-a"] },
-  { keyId: "workspace-b-service", token: "tok-workspace-b", tenants: ["workspace-b"] }
+  { keyId: "workspace-a-service", token: "tok-workspace-a", principalId: "workspace-a-service", subject: "service:workspace-a", audiences: ["artifact-registry"], scopes: ["artifact:*"], tenants: ["workspace-a"], issuedAt: "2026-01-01T00:00:00.000Z", notBefore: "2026-01-01T00:00:00.000Z", expiresAt: "2099-01-01T00:00:00.000Z", status: "ACTIVE", generation: 1 },
+  { keyId: "workspace-b-service", token: "tok-workspace-b", principalId: "workspace-b-service", subject: "service:workspace-b", audiences: ["artifact-registry"], scopes: ["artifact:*"], tenants: ["workspace-b"], issuedAt: "2026-01-01T00:00:00.000Z", notBefore: "2026-01-01T00:00:00.000Z", expiresAt: "2099-01-01T00:00:00.000Z", status: "ACTIVE", generation: 1 }
 ]);
 
 function buildMeta(args: { artifactId: string; artifactType: string; requestId: string; attempt: number }) {

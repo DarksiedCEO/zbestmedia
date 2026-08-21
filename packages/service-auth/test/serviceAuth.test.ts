@@ -2,17 +2,27 @@ import { describe, expect, it } from "vitest";
 import {
   HeaderRequiredError,
   ServiceAuthError,
+  authenticateAndAuthorizeServiceRequest,
   authenticateBearerToken,
   authorizeTenant,
   extractHeaderValue,
   readTenantHeader,
+  revokeServiceCredential,
+  rotateServiceCredential,
   resolveServiceAuthConfig,
   tenantIdSchema
 } from "../src/index";
 
+const ACTIVE_WINDOW = {
+  issuedAt: "2026-01-01T00:00:00.000Z",
+  notBefore: "2026-01-01T00:00:00.000Z",
+  expiresAt: "2027-01-01T00:00:00.000Z",
+  status: "ACTIVE" as const,
+  generation: 1
+};
 const VALID_ENV = JSON.stringify([
-  { keyId: "brandgraph-service", token: "tok-brandgraph", tenants: ["acme", "beta-corp"] },
-  { keyId: "internal-admin", token: "tok-admin", tenants: ["*"] }
+  { keyId: "brandgraph-service", token: "tok-brandgraph", principalId: "brandgraph", subject: "service:brandgraph", audiences: ["artifact-registry"], scopes: ["artifact:read"], tenants: ["acme", "beta-corp"], ...ACTIVE_WINDOW },
+  { keyId: "internal-admin", token: "tok-admin", principalId: "admin", subject: "service:admin", audiences: ["artifact-registry"], scopes: ["*"], tenants: ["*"], ...ACTIVE_WINDOW }
 ]);
 
 describe("resolveServiceAuthConfig — fail-closed config parsing", () => {
@@ -34,8 +44,8 @@ describe("resolveServiceAuthConfig — fail-closed config parsing", () => {
 
   it("throws on duplicate tokens (ambiguous identity resolution)", () => {
     const dup = JSON.stringify([
-      { keyId: "a", token: "tok-duplicate", tenants: ["acme"] },
-      { keyId: "b", token: "tok-duplicate", tenants: ["beta-corp"] }
+      { keyId: "a", token: "tok-duplicate", principalId: "a", subject: "a", audiences: ["svc"], scopes: ["read"], tenants: ["acme"], ...ACTIVE_WINDOW },
+      { keyId: "b", token: "tok-duplicate", principalId: "b", subject: "b", audiences: ["svc"], scopes: ["read"], tenants: ["beta-corp"], ...ACTIVE_WINDOW }
     ]);
     expect(() => resolveServiceAuthConfig(dup)).toThrow(/duplicate/i);
   });
@@ -67,6 +77,155 @@ describe("authenticateBearerToken — the 401 boundary", () => {
     const identity = authenticateBearerToken("tok-brandgraph", config);
     expect(identity.keyId).toBe("brandgraph-service");
     expect(identity.tenants).toEqual(["acme", "beta-corp"]);
+  });
+});
+
+describe("credential lifetime, revocation, and audited rotation", () => {
+  it("rejects a credential at the exact expiry boundary and under clock skew", () => {
+    const config = resolveServiceAuthConfig(VALID_ENV);
+    expect(() => authenticateBearerToken("tok-brandgraph", config, new Date(ACTIVE_WINDOW.expiresAt)))
+      .toThrowError(expect.objectContaining({ code: "CREDENTIAL_EXPIRED" }));
+    expect(() => authenticateBearerToken("tok-brandgraph", config, new Date("2027-01-01T00:00:00.001Z")))
+      .toThrowError(expect.objectContaining({ code: "CREDENTIAL_EXPIRED" }));
+  });
+
+  it("accepts exactly at not-before and rejects one millisecond before", () => {
+    const config = resolveServiceAuthConfig(VALID_ENV);
+    expect(() => authenticateBearerToken("tok-brandgraph", config, new Date("2025-12-31T23:59:59.999Z")))
+      .toThrowError(expect.objectContaining({ code: "CREDENTIAL_NOT_YET_VALID" }));
+    expect(authenticateBearerToken("tok-brandgraph", config, new Date(ACTIVE_WINDOW.notBefore)).keyId)
+      .toBe("brandgraph-service");
+  });
+
+  it.each(["ISSUED", "ROTATING", "SUPERSEDED", "EXPIRED"] as const)("fails closed for %s lifecycle state", (status) => {
+    const raw = JSON.stringify([{ ...JSON.parse(VALID_ENV)[0], status }]);
+    expect(() => authenticateBearerToken("tok-brandgraph", resolveServiceAuthConfig(raw), new Date("2026-06-01T00:00:00.000Z")))
+      .toThrowError(expect.objectContaining({ code: "CREDENTIAL_NOT_ACTIVE" }));
+  });
+
+  it("rejects configs with a missing lifetime instead of creating an unbounded credential", () => {
+    expect(() => resolveServiceAuthConfig(JSON.stringify([
+      { keyId: "legacy", token: "legacy-token", tenants: ["acme"], status: "ACTIVE", generation: 1 }
+    ]))).toThrow();
+  });
+
+  it("revokes immediately, audits without token material, and keeps cross-tenant denial", () => {
+    const config = resolveServiceAuthConfig(VALID_ENV);
+    const events: unknown[] = [];
+    revokeServiceCredential(config, "tok-brandgraph", {
+      actorId: "credential-custodian",
+      reason: "incident",
+      now: new Date("2026-06-01T00:00:00.000Z")
+    }, { append: (event) => events.push(event) });
+
+    expect(() => authenticateBearerToken("tok-brandgraph", config, new Date("2026-06-01T00:00:00.001Z")))
+      .toThrowError(expect.objectContaining({ code: "CREDENTIAL_REVOKED" }));
+    expect(JSON.stringify(events)).not.toContain("tok-brandgraph");
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ previousStatus: "ACTIVE", status: "REVOKED", generation: 1 });
+  });
+
+  it("does not revoke when audit persistence fails", () => {
+    const config = resolveServiceAuthConfig(VALID_ENV);
+    expect(() => revokeServiceCredential(config, "tok-brandgraph", {
+      actorId: "credential-custodian", reason: "test"
+    }, { append: () => { throw new Error("audit unavailable"); } })).toThrow(/audit unavailable/);
+    expect(authenticateBearerToken("tok-brandgraph", config, new Date("2026-06-01T00:00:00.000Z")).status)
+      .toBe("ACTIVE");
+  });
+
+  it("rotates to generation + 1, audits, and invalidates the predecessor immediately", () => {
+    const config = resolveServiceAuthConfig(VALID_ENV);
+    const events: unknown[] = [];
+    const next = rotateServiceCredential(config, "tok-brandgraph", {
+      keyId: "brandgraph-service-v2",
+      token: "tok-brandgraph-v2",
+      tenants: ["acme"],
+      issuedAt: "2026-06-01T00:00:00.000Z",
+      notBefore: "2026-06-01T00:00:00.000Z",
+      expiresAt: "2026-07-01T00:00:00.000Z"
+    }, { actorId: "credential-custodian", reason: "scheduled", now: new Date("2026-06-01T00:00:00.000Z") },
+    { append: (event) => events.push(event) });
+
+    expect(next.generation).toBe(2);
+    expect(next.replacesKeyId).toBe("brandgraph-service");
+    expect(() => authenticateBearerToken("tok-brandgraph", config, new Date("2026-06-01T00:00:00.001Z")))
+      .toThrowError(expect.objectContaining({ code: "CREDENTIAL_NOT_ACTIVE" }));
+    expect(authenticateBearerToken("tok-brandgraph-v2", config, new Date("2026-06-01T00:00:00.001Z")).keyId)
+      .toBe("brandgraph-service-v2");
+    expect(JSON.stringify(events)).not.toContain("tok-brandgraph");
+    expect(events[0]).toMatchObject({ previousStatus: "ACTIVE", status: "SUPERSEDED", generation: 2 });
+  });
+
+  it("rolls rotation back completely when audit persistence fails", () => {
+    const config = resolveServiceAuthConfig(VALID_ENV);
+    expect(() => rotateServiceCredential(config, "tok-brandgraph", {
+      keyId: "brandgraph-service-v2", token: "tok-brandgraph-v2", tenants: ["acme"],
+      issuedAt: "2026-06-01T00:00:00.000Z", notBefore: "2026-06-01T00:00:00.000Z",
+      expiresAt: "2026-07-01T00:00:00.000Z"
+    }, { actorId: "custodian", reason: "test", now: new Date("2026-06-01T00:00:00.000Z") },
+    { append: () => { throw new Error("audit unavailable"); } })).toThrow(/audit unavailable/);
+    expect(config.principalsByToken.has("tok-brandgraph-v2")).toBe(false);
+    expect(authenticateBearerToken("tok-brandgraph", config, new Date("2026-06-01T00:00:00.000Z")).status).toBe("ACTIVE");
+  });
+
+  it("rejects stale generations and scope escalation during rotation", () => {
+    const stale = JSON.parse(VALID_ENV)[0];
+    const newer = { ...stale, keyId: "brandgraph-service-v2", token: "tok-brandgraph-v2", generation: 2 };
+    const config = resolveServiceAuthConfig(JSON.stringify([stale, newer]));
+    expect(() => authenticateBearerToken("tok-brandgraph", config, new Date("2026-06-01T00:00:00.000Z")))
+      .toThrowError(expect.objectContaining({ code: "CREDENTIAL_ROLLBACK" }));
+
+    const active = resolveServiceAuthConfig(VALID_ENV);
+    expect(() => rotateServiceCredential(active, "tok-brandgraph", {
+      keyId: "brandgraph-service-v2", token: "tok-brandgraph-v2", tenants: ["acme"], scopes: ["artifact:write"],
+      issuedAt: "2026-06-01T00:00:00.000Z", expiresAt: "2026-07-01T00:00:00.000Z"
+    }, { actorId: "custodian", reason: "test", now: new Date("2026-06-01T00:00:00.000Z") }, { append: () => undefined }))
+      .toThrow(/escalate/);
+  });
+});
+
+describe("service identity claim binding — hostile authorization", () => {
+  const requirement = { principalId: "brandgraph", subject: "service:brandgraph", audience: "artifact-registry", tenantId: "acme", requiredScopes: ["artifact:read"] };
+
+  it("accepts server-required claims carried by verified credential evidence", () => {
+    expect(authenticateAndAuthorizeServiceRequest("tok-brandgraph", requirement, resolveServiceAuthConfig(VALID_ENV), new Date("2026-06-01T00:00:00.000Z")).keyId)
+      .toBe("brandgraph-service");
+  });
+
+  it.each([
+    ["principalId", "caller-declared", "PRINCIPAL_FORBIDDEN"],
+    ["subject", "caller-declared", "SUBJECT_FORBIDDEN"],
+    ["audience", "wrong-service", "AUDIENCE_FORBIDDEN"],
+    ["tenantId", "other-tenant", "TENANT_FORBIDDEN"]
+  ] as const)("rejects wrong %s", (field, value, code) => {
+    expect(() => authenticateAndAuthorizeServiceRequest("tok-brandgraph", { ...requirement, [field]: value }, resolveServiceAuthConfig(VALID_ENV), new Date("2026-06-01T00:00:00.000Z")))
+      .toThrowError(expect.objectContaining({ code }));
+  });
+
+  it("rejects caller-declared scope escalation and forged credential evidence without leaking secrets", () => {
+    const config = resolveServiceAuthConfig(VALID_ENV);
+    expect(() => authenticateAndAuthorizeServiceRequest("tok-brandgraph", { ...requirement, requiredScopes: ["artifact:write"] }, config, new Date("2026-06-01T00:00:00.000Z")))
+      .toThrowError(expect.objectContaining({ code: "SCOPE_FORBIDDEN" }));
+    expect(() => authenticateAndAuthorizeServiceRequest("tok-brandgraph", { ...requirement, requiredScopes: ["artifact:read", "artifact:write"] }, config, new Date("2026-06-01T00:00:00.000Z")))
+      .toThrowError(expect.objectContaining({ code: "SCOPE_FORBIDDEN" }));
+    try {
+      authenticateAndAuthorizeServiceRequest("forged-secret-token", requirement, config);
+    } catch (error) {
+      expect(String(error)).not.toContain("forged-secret-token");
+      expect(error).toMatchObject({ code: "UNAUTHENTICATED" });
+    }
+  });
+
+  it("preserves authorization invariants across representative tenant and scope combinations", () => {
+    const config = resolveServiceAuthConfig(VALID_ENV);
+    for (const tenantId of ["acme", "beta-corp", "other-tenant"]) {
+      for (const scope of ["artifact:read", "artifact:write", "admin"]) {
+        const shouldAllow = tenantId !== "other-tenant" && scope === "artifact:read";
+        const operation = () => authenticateAndAuthorizeServiceRequest("tok-brandgraph", { ...requirement, tenantId, requiredScopes: [scope] }, config, new Date("2026-06-01T00:00:00.000Z"));
+        if (shouldAllow) expect(operation).not.toThrow(); else expect(operation).toThrow(ServiceAuthError);
+      }
+    }
   });
 });
 

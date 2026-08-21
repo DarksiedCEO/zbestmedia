@@ -12,8 +12,8 @@ import { generateBrandId } from '../src/domain/ids.js';
 // dedicated "authentication and authorization" describe block below proves
 // the 401/403 boundaries with tenant-scoped identities instead.
 const TEST_AUTH_ENV = JSON.stringify([
-  { keyId: 'test-suite-caller', token: 'test-token', tenants: ['*'] },
-  { keyId: 'scoped-caller', token: 'scoped-token', tenants: ['only-allowed-tenant'] }
+  { keyId: 'test-suite-caller', token: 'test-token', principalId: 'test-suite', subject: 'service:test-suite', audiences: ['brandgraph'], scopes: ['*'], tenants: ['*'], issuedAt: '2026-01-01T00:00:00.000Z', notBefore: '2026-01-01T00:00:00.000Z', expiresAt: '2099-01-01T00:00:00.000Z', status: 'ACTIVE', generation: 1 },
+  { keyId: 'scoped-caller', token: 'scoped-token', principalId: 'scoped', subject: 'service:scoped', audiences: ['brandgraph'], scopes: ['brand:read'], tenants: ['only-allowed-tenant'], issuedAt: '2026-01-01T00:00:00.000Z', notBefore: '2026-01-01T00:00:00.000Z', expiresAt: '2099-01-01T00:00:00.000Z', status: 'ACTIVE', generation: 1 }
 ]);
 const testAuthConfig = resolveServiceAuthConfig(TEST_AUTH_ENV);
 

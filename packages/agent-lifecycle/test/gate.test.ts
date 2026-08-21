@@ -22,4 +22,10 @@ describe("agent lifecycle gate", () => {
     const expired = { ...base, expiresAt: new Date("2026-02-01T00:00:00.000Z").toISOString() };
     expect(() => assertAgentActive(expired, new Date("2026-02-05T00:00:00.000Z"))).toThrow();
   });
+
+  it("blocks an ACTIVE agent at the exact expiry instant", () => {
+    expect(() => assertAgentActive(base, new Date(base.expiresAt))).toThrowError(
+      expect.objectContaining({ code: "AGENT_EXPIRED" })
+    );
+  });
 });
