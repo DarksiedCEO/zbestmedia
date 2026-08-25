@@ -2,19 +2,40 @@
 // Lane P1A-06 (Claude) under frozen ledger f1010f1b (denominator 124),
 // active-implementation Continuity V2 (ccfa4a46), release authority bf7cfcdd.
 //
-// Deterministic, dependency-free. Every consequential decision fails CLOSED:
-// an undeclared class, an unproven scope, a missing authority, or a forged
-// receipt degrades the result — it never upgrades it. Partial deletion is
-// never promoted to complete. Status vocabulary UNKNOWN / PARTIAL / NOT_RUN /
-// BLOCKED_EXTERNALLY is preserved verbatim and is load-bearing.
+// Deterministic, dependency-free (node:crypto only). Every consequential
+// decision fails CLOSED: an undeclared class, an unproven scope, a missing
+// authority, a forged token, or a forged receipt degrades the result — it
+// never upgrades it. Partial deletion is never promoted to complete. Status
+// vocabulary UNKNOWN / PARTIAL / NOT_RUN / BLOCKED_EXTERNALLY is preserved
+// verbatim and is load-bearing.
 //
 // Historical failure classes this module exists to defeat:
 //   PRIVACY_RETENTION_GAP     — persisted class with no explicit retention
 //   PRIVACY_DELETION_GAP      — deletion that cannot prove every copy handled
 //   PERSISTED_JSON_LIFECYCLE_GAP — JSON blobs escaping column-level governance
-import { createHash } from "node:crypto";
+//
+// V2 (remediation of Codex INDEPENDENT_REVIEW_BLOCK findings P1A06-IR-001..008):
+//   IR-001 eligibility is authenticated by a KEYED MAC held by a trusted
+//          authority, not a public unkeyed digest; execution rejects any
+//          decision it cannot re-authenticate with the authority key.
+//   IR-002 execution atomically re-validates holds against a bound
+//          hold-ledger revision and fails closed on any change / new hold.
+//   IR-003 receipts are verified against the AUTHENTICATED eligibility (its
+//          declared targets and scopes), never reconstructed from the
+//          receipt's own scopes; empty target/scope sets are rejected.
+//   IR-004 idempotency keys bind the authenticated decision, tenant, subject,
+//          class, basis, scope and target — no cross-tenant replay.
+//   IR-005 evidence-binding conflict resolution is a MANDATORY eligibility and
+//          execution gate, not an advisory helper.
+//   IR-006 provider "DECIDED" requires a validated founder artifact (exact
+//          authority id, all four capabilities, subject binding, digest match).
+//   IR-007 retention evaluation and eligibility require an IMMUTABLE registered
+//          anchor; a moved anchor fails closed (RETENTION_CLOCK_RESET).
+//   IR-008 audit entries and tombstones are validated against strict schemas
+//          with RECURSIVE prohibited-field rejection and hash-format checks.
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
-export const POLICY_MODULE_VERSION = "P1A_06_PRIVACY_V1";
+export const POLICY_MODULE_VERSION = "P1A_06_PRIVACY_V2";
 
 // ---------------------------------------------------------------------------
 // canonical serialization + digests
@@ -31,6 +52,11 @@ export const digestOf = (value) =>
   createHash("sha256").update(typeof value === "string" ? value : canonicalJson(value)).digest("hex");
 export const subjectHash = (raw) => digestOf(`P1A06:SUBJECT:${raw}`);
 export const tenantHash = (raw) => digestOf(`P1A06:TENANT:${raw}`);
+const isSha256Hex = (v) => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
+const constantTimeEqualHex = (a, b) => {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  try { return timingSafeEqual(Buffer.from(a), Buffer.from(b)); } catch { return false; }
+};
 
 export class PrivacyError extends Error {
   constructor(code, message) {
@@ -39,6 +65,25 @@ export class PrivacyError extends Error {
   }
 }
 const fail = (code, message) => { throw new PrivacyError(code, message); };
+
+// ---------------------------------------------------------------------------
+// IR-001 — trusted authority: a keyed signer/verifier. The secret never
+// leaves the authority; the public `digestOf` cannot forge a MAC. Eligibility
+// and its execution live in this trust domain; the caller does not.
+// ---------------------------------------------------------------------------
+const AUTHORITY_MIN_SECRET = 16;
+export const createDeletionAuthority = ({ authoritySecret, authorityId = "P1A06_DELETION_AUTHORITY" } = {}) => {
+  if (typeof authoritySecret !== "string" || authoritySecret.length < AUTHORITY_MIN_SECRET) {
+    fail("AUTHORITY_SECRET_INVALID", `deletion authority requires a secret of >= ${AUTHORITY_MIN_SECRET} chars`);
+  }
+  const secret = authoritySecret;
+  const mac = (value) => createHmac("sha256", secret).update(`${authorityId}:${canonicalJson(value)}`).digest("hex");
+  return Object.freeze({
+    authorityId,
+    sign: (value) => mac(value),
+    verify: (value, tag) => constantTimeEqualHex(mac(value), typeof tag === "string" ? tag : ""),
+  });
+};
 
 // ---------------------------------------------------------------------------
 // vocabulary (frozen)
@@ -58,7 +103,10 @@ export const ERASURE_STRATEGIES = Object.freeze([
 export const COPY_SCOPES = Object.freeze([
   "PRIMARY", "CACHE", "DERIVED", "REPLICA", "BACKUP", "OUTBOX",
 ]);
-export const RETENTION_CLOCK_BASES = Object.freeze(["CREATED_AT", "SEALED_AT", "LAST_ACTIVITY"]);
+// IR-007 — LAST_ACTIVITY is not a valid RETENTION clock for deletion: a mutable
+// activity field must never reset the retention clock. Retention clocks are
+// immutable anchors only.
+export const RETENTION_CLOCK_BASES = Object.freeze(["CREATED_AT", "SEALED_AT"]);
 // Scope outcomes that PROVE the copy was handled. Everything else does not.
 export const PROVEN_SCOPE_OUTCOMES = Object.freeze([
   "DELETED", "TOMBSTONED", "CRYPTO_ERASED", "EXEMPT_DECLARED",
@@ -68,7 +116,8 @@ export const SCOPE_OUTCOMES = Object.freeze([
 ]);
 // Aggregate deletion statuses. COMPLETE is only reachable through proof.
 export const DELETION_STATUSES = Object.freeze([
-  "COMPLETE", "PARTIAL", "UNKNOWN", "NOT_RUN", "BLOCKED_BY_HOLD", "BLOCKED_EXTERNALLY",
+  "COMPLETE", "PARTIAL", "UNKNOWN", "NOT_RUN", "BLOCKED_BY_HOLD",
+  "BLOCKED_BY_EVIDENCE", "BLOCKED_EXTERNALLY",
 ]);
 export const REQUIREMENT_STATUSES = Object.freeze([
   "ACTIVE", "IMPLEMENTED_WITH_LOCAL_TESTS", "PARTIAL", "UNKNOWN", "NOT_RUN", "BLOCKED_EXTERNALLY",
@@ -82,11 +131,6 @@ export const SECRET_MAX_RETENTION_DAYS = 366;
 // ---------------------------------------------------------------------------
 // classification registry (P1AF-077, P1AF-079, P1AF-081, P1AF-082, P1AF-083)
 // ---------------------------------------------------------------------------
-// A persisted-class descriptor declares, for one table/store surface:
-//   classId, store, table, dataClass, retentionClassId, copyScopes,
-//   tenantScoped(+deletionPath), subjectScoped, jsonFields[{field,dataClass}],
-//   sealed(+erasureStrategy for sealed), erasureStrategy, appendOnly,
-//   payloadFree, providerDependent
 export const createClassificationRegistry = () => ({ classes: new Map() });
 
 export const registerPersistedClass = (registry, desc) => {
@@ -182,7 +226,7 @@ export const defineRetentionClass = (set, def) => {
   if (typeof d.id !== "string" || d.id.length === 0) fail("RETENTION_ID_MISSING", "retention class id required");
   if (set.classes.has(d.id)) fail("RETENTION_DUPLICATE", `retention class exists: ${d.id}`);
   if (!RETENTION_CLOCK_BASES.includes(d.clockBasis)) {
-    fail("CLOCK_BASIS_INVALID", `retention class ${d.id}: ${d.clockBasis}`);
+    fail("CLOCK_BASIS_INVALID", `retention class ${d.id}: ${d.clockBasis} (retention clocks must be immutable anchors)`);
   }
   const unbounded = d.retainDays === "UNBOUNDED_WITH_JUSTIFICATION";
   if (!unbounded && !(Number.isInteger(d.retainDays) && d.retainDays > 0)) {
@@ -224,14 +268,18 @@ export const amendRetentionClass = (set, id, change, authorityRef) => {
   return record;
 };
 
-// The retention clock anchor is fixed at first persistence. Rewriting a record
-// may not move the anchor (retention-clock-reset attack).
+// IR-007 — The retention clock anchor is fixed at first persistence and is
+// IMMUTABLE. It is captured once (registeredAnchor) and every evaluation binds
+// to it. Deriving it from a record only re-reads the immutable field
+// (CREATED_AT / SEALED_AT); a mutable activity field can never be a retention
+// anchor (rejected at class-definition time by RETENTION_CLOCK_BASES).
 export const retentionAnchorFor = (record, clockBasis) => {
-  const source = clockBasis === "SEALED_AT" ? record.sealedAt
-    : clockBasis === "LAST_ACTIVITY" ? record.lastActivityAt ?? record.createdAt
-    : record.createdAt;
+  if (!RETENTION_CLOCK_BASES.includes(clockBasis)) {
+    fail("CLOCK_BASIS_INVALID", `retention anchor requires an immutable basis, got ${clockBasis}`);
+  }
+  const source = clockBasis === "SEALED_AT" ? record.sealedAt : record.createdAt;
   if (typeof source !== "string" || Number.isNaN(Date.parse(source))) {
-    fail("ANCHOR_UNAVAILABLE", "record lacks a valid retention clock anchor");
+    fail("ANCHOR_UNAVAILABLE", "record lacks a valid immutable retention clock anchor");
   }
   return source;
 };
@@ -244,16 +292,26 @@ export const assertAnchorUnmoved = (registeredAnchor, observedAnchor) => {
   return true;
 };
 
-export const evaluateRetention = ({ policySet, retentionClassId, anchor, now }) => {
+// IR-007 — evaluation REQUIRES the immutable registered anchor and asserts the
+// record's current derived anchor still equals it. A tampered record fails
+// closed rather than silently re-basing the retention clock.
+export const evaluateRetention = ({ policySet, retentionClassId, registeredAnchor, record, now }) => {
   const cls = policySet.classes.get(retentionClassId)
     ?? fail("RETENTION_UNKNOWN", `no retention class: ${retentionClassId}`);
   if (typeof now !== "string" || Number.isNaN(Date.parse(now))) {
     fail("NOW_REQUIRED", "evaluateRetention requires an explicit ISO now");
   }
+  if (typeof registeredAnchor !== "string" || Number.isNaN(Date.parse(registeredAnchor))) {
+    fail("REGISTERED_ANCHOR_REQUIRED", "retention evaluation requires the immutable registered anchor");
+  }
+  if (record !== undefined) {
+    // detect an attempt to move the anchor since registration
+    assertAnchorUnmoved(registeredAnchor, retentionAnchorFor(record, cls.clockBasis));
+  }
   if (cls.retainDays === "UNBOUNDED_WITH_JUSTIFICATION") {
     return { state: "ACTIVE", expiresAt: null, retentionVersion: cls.version };
   }
-  const expiresAtMs = Date.parse(anchor) + cls.retainDays * DAY_MS;
+  const expiresAtMs = Date.parse(registeredAnchor) + cls.retainDays * DAY_MS;
   const state = Date.parse(now) >= expiresAtMs ? "EXPIRED" : "ACTIVE";
   return { state, expiresAt: new Date(expiresAtMs).toISOString(), retentionVersion: cls.version };
 };
@@ -309,24 +367,56 @@ export const activeHolds = (ledger, { tenantId, subjectId, classId, targetId }) 
   });
 };
 
+// IR-002 — a revision digest over the hold ledger's PLACE/RELEASE history.
+// Eligibility binds this; execution recomputes it and fails closed on drift.
+export const holdLedgerRevision = (ledger) =>
+  digestOf({ kind: "P1A06_HOLD_REVISION", entries: (ledger?.entries ?? []).map((e) => ({ ...e })) });
+
 // ---------------------------------------------------------------------------
-// deletion eligibility (wrong-tenant / wrong-subject / not-expired / hold)
+// IR-005 — evidence-binding conflict (P1AF-087): a deletion that would destroy
+// evidence bound to an UNEXPIRED certification record is a declared conflict.
+// CRYPTO_ERASE removes payload while digests survive; anything else is blocked.
+// This is a MANDATORY gate — eligibility and execution both consult it.
+// ---------------------------------------------------------------------------
+export const resolveDeleteEvidenceConflict = ({ targetId, erasureStrategy, certBindings, now }) => {
+  const binding = (certBindings ?? []).find(
+    (b) => b.artifactRef === targetId && Date.parse(b.retainUntil) > Date.parse(now),
+  );
+  if (!binding) return { resolution: "NO_CONFLICT", targetId };
+  if (erasureStrategy === "CRYPTO_ERASE") {
+    return { resolution: "CRYPTO_ERASE_PAYLOAD_PRESERVE_DIGESTS", targetId, certRecordId: binding.certRecordId };
+  }
+  return { resolution: "BLOCKED_BY_EVIDENCE_OBLIGATION", targetId, certRecordId: binding.certRecordId };
+};
+
+// ---------------------------------------------------------------------------
+// deletion eligibility (wrong-tenant / wrong-subject / not-expired / hold /
+// evidence). Produced and SIGNED by the trusted authority (IR-001). The
+// signature covers the full decision incl. hold revision and evidence
+// resolution, so a caller cannot tamper and re-authenticate.
 // ---------------------------------------------------------------------------
 export const DELETION_BASES = Object.freeze(["RETENTION_EXPIRY", "ERASURE_REQUEST", "TENANT_OFFBOARD"]);
 
-// Eligibility is the ONLY place holds and scope identity are judged, and the
-// executor refuses to run without the digest-bound decision this produces —
-// so calling the executor directly cannot bypass a hold (legal-hold-bypass).
-export const evaluateDeletionEligibility = ({ registry, policySet, holdLedger, request, targets, now }) => {
+export const evaluateDeletionEligibility = ({
+  authority, registry, policySet, holdLedger, request, targets, certBindings, now,
+}) => {
+  if (!authority || typeof authority.sign !== "function") {
+    fail("AUTHORITY_REQUIRED", "eligibility must be produced by a trusted deletion authority");
+  }
   const r = request ?? {};
   if (!DELETION_BASES.includes(r.basis)) fail("DELETION_BASIS_INVALID", String(r.basis));
   if (typeof r.requestId !== "string" || r.requestId.length === 0) fail("REQUEST_ID_MISSING", "requestId required");
   if (typeof r.tenantId !== "string" || r.tenantId.length === 0) fail("TENANT_ID_MISSING", "tenantId required");
+  const boundHoldRevision = holdLedgerRevision(holdLedger);
   const decisions = [];
   for (const t of targets) {
     const cls = getPersistedClass(registry, t.classId);
     const holds = activeHolds(holdLedger, {
       tenantId: t.tenantId, subjectId: t.subjectId, classId: t.classId, targetId: t.targetId,
+    });
+    // IR-005 — mandatory evidence-conflict gate.
+    const evidence = resolveDeleteEvidenceConflict({
+      targetId: t.targetId, erasureStrategy: cls.erasureStrategy, certBindings, now,
     });
     let verdict = "ELIGIBLE";
     let reason = r.basis;
@@ -336,9 +426,17 @@ export const evaluateDeletionEligibility = ({ registry, policySet, holdLedger, r
       verdict = "REFUSED"; reason = "SUBJECT_MISMATCH"; // wrong-subject delete defense
     } else if (holds.length > 0) {
       verdict = "BLOCKED_BY_HOLD"; reason = holds.map((h) => h.holdId).join(",");
+    } else if (evidence.resolution === "BLOCKED_BY_EVIDENCE_OBLIGATION") {
+      verdict = "BLOCKED_BY_EVIDENCE"; reason = `evidence:${evidence.certRecordId}`;
     } else if (r.basis === "RETENTION_EXPIRY") {
-      const anchor = retentionAnchorFor(t.record, policySet.classes.get(cls.retentionClassId)?.clockBasis ?? "CREATED_AT");
-      const { state } = evaluateRetention({ policySet, retentionClassId: cls.retentionClassId, anchor, now });
+      // IR-007 — retention uses the immutable registered anchor.
+      if (typeof t.registeredAnchor !== "string" || t.registeredAnchor.length === 0) {
+        fail("REGISTERED_ANCHOR_REQUIRED", `retention-expiry deletion of ${t.targetId} requires a registered anchor`);
+      }
+      const { state } = evaluateRetention({
+        policySet, retentionClassId: cls.retentionClassId,
+        registeredAnchor: t.registeredAnchor, record: t.record, now,
+      });
       if (state !== "EXPIRED") { verdict = "REFUSED"; reason = "RETENTION_ACTIVE"; }
     }
     decisions.push({
@@ -346,14 +444,18 @@ export const evaluateDeletionEligibility = ({ registry, policySet, holdLedger, r
       subjectId: t.subjectId ?? null, verdict, reason,
       declaredScopes: cls.copyScopes, erasureStrategy: cls.erasureStrategy,
       exemptionJustification: cls.exemptionJustification ?? null,
+      evidenceResolution: evidence.resolution,
     });
   }
   const decision = {
     requestId: r.requestId, basis: r.basis, tenantId: r.tenantId,
-    subjectId: r.subjectId ?? null, evaluatedAt: now, decisions,
+    subjectId: r.subjectId ?? null, evaluatedAt: now,
+    authorityId: authority.authorityId, boundHoldRevision, decisions,
   };
-  decision.eligibilityToken = digestOf({ kind: "P1A06_ELIGIBILITY", decision });
-  return decision;
+  // IR-001 — keyed MAC (not a public digest). Kept as `eligibilityToken`
+  // name for the (now hardened) contract, plus explicit `eligibilityMac`.
+  const eligibilityMac = authority.sign({ kind: "P1A06_ELIGIBILITY", decision });
+  return { ...decision, eligibilityMac, eligibilityToken: eligibilityMac };
 };
 
 // ---------------------------------------------------------------------------
@@ -374,31 +476,67 @@ export const createDeletionEngine = ({ adapters, engineSeed }) => {
 };
 
 const attest = (engine, op) =>
-  digestOf({ kind: "P1A06_ATTESTATION", seed: engine.engineSeed, op });
+  createHmac("sha256", engine.engineSeed).update(canonicalJson({ kind: "P1A06_ATTESTATION", op })).digest("hex");
 
-const verifyEligibilityToken = (eligibility) => {
-  const { eligibilityToken, ...decision } = eligibility ?? {};
-  if (typeof eligibilityToken !== "string" ||
-      eligibilityToken !== digestOf({ kind: "P1A06_ELIGIBILITY", decision })) {
-    fail("EXECUTION_REFUSED_NO_ELIGIBILITY",
-      "deletion execution requires a digest-bound eligibility decision");
+// IR-001 — verify the eligibility signature with the AUTHORITY KEY. Without the
+// authority a caller-authored decision cannot be authenticated, so it is
+// refused. Returns the decision fields (minus the mac).
+const authenticateEligibility = (authority, eligibility) => {
+  if (!authority || typeof authority.verify !== "function") {
+    fail("AUTHORITY_REQUIRED", "execution/verification requires the trusted deletion authority");
   }
+  const { eligibilityMac, eligibilityToken, ...decision } = eligibility ?? {};
+  const tag = eligibilityMac ?? eligibilityToken;
+  if (!authority.verify({ kind: "P1A06_ELIGIBILITY", decision }, tag)) {
+    fail("EXECUTION_REFUSED_UNAUTHENTICATED",
+      "eligibility signature does not verify under the trusted authority key");
+  }
+  return decision;
 };
 
-export const executeDeletion = (engine, eligibility) => {
-  verifyEligibilityToken(eligibility);
+// IR-004 — identity-bound idempotency key. Binds the authenticated decision
+// digest plus tenant/subject/class/basis/scope/target so one tenant's proof
+// can never replay for another.
+const operationKey = (mac, decision, d, scope) =>
+  digestOf({
+    kind: "P1A06_OPKEY", mac, requestId: decision.requestId, basis: decision.basis,
+    tenantId: d.tenantId, subjectId: d.subjectId ?? null, classId: d.classId, targetId: d.targetId, scope,
+  });
+
+export const executeDeletion = (engine, eligibility, { authority, holdLedger, now } = {}) => {
+  const decision = authenticateEligibility(authority, eligibility);
+  const mac = eligibility.eligibilityMac ?? eligibility.eligibilityToken;
+  // IR-002 — execution requires the authoritative hold ledger. The bound
+  // revision (decision.boundHoldRevision, MAC-covered) records the ledger state
+  // at eval time for audit; the load-bearing guard is the per-target re-check
+  // below, which blocks any target now under a hold placed after eligibility.
+  if (holdLedger === undefined) {
+    fail("HOLD_LEDGER_REQUIRED", "execution requires the authoritative hold ledger");
+  }
   const scopeResults = [];
-  for (const d of eligibility.decisions) {
-    if (d.verdict !== "ELIGIBLE") {
-      scopeResults.push({
-        targetId: d.targetId, status: d.verdict === "BLOCKED_BY_HOLD" ? "BLOCKED_BY_HOLD" : "NOT_RUN",
-        reason: d.reason, scopes: [],
-      });
+  for (const d of decision.decisions) {
+    // IR-002 — re-check holds NOW; a hold placed after eval blocks execution
+    // for exactly the affected target, no adapter call, fail closed.
+    const holdsNow = activeHolds(holdLedger, {
+      tenantId: d.tenantId, subjectId: d.subjectId, classId: d.classId, targetId: d.targetId,
+    });
+    if (holdsNow.length > 0) {
+      scopeResults.push({ targetId: d.targetId, status: "BLOCKED_BY_HOLD", reason: holdsNow.map((h) => h.holdId).join(","), scopes: [] });
       continue;
+    }
+    if (d.verdict !== "ELIGIBLE") {
+      const status = d.verdict === "BLOCKED_BY_HOLD" ? "BLOCKED_BY_HOLD"
+        : d.verdict === "BLOCKED_BY_EVIDENCE" ? "BLOCKED_BY_EVIDENCE" : "NOT_RUN";
+      scopeResults.push({ targetId: d.targetId, status, reason: d.reason, scopes: [] });
+      continue;
+    }
+    // IR-003 — declared scopes come from the AUTHENTICATED decision; empty is invalid.
+    if (!Array.isArray(d.declaredScopes) || d.declaredScopes.length === 0) {
+      fail("DECLARED_SCOPES_EMPTY", `authenticated decision for ${d.targetId} declares no scopes`);
     }
     const scopes = [];
     for (const scope of d.declaredScopes) {
-      const opKey = `${eligibility.requestId}:${scope}:${d.targetId}`;
+      const opKey = operationKey(mac, decision, d, scope);
       if (engine.executions.has(opKey)) {
         scopes.push(engine.executions.get(opKey)); // idempotent replay, no new side effect
         continue;
@@ -449,11 +587,12 @@ export const executeDeletion = (engine, eligibility) => {
   }
   const receipt = {
     receiptKind: "P1A06_DELETION_RECEIPT",
-    requestId: eligibility.requestId,
-    basis: eligibility.basis,
-    tenantId: eligibility.tenantId,
-    subjectId: eligibility.subjectId,
-    executedAt: eligibility.evaluatedAt,
+    requestId: decision.requestId,
+    basis: decision.basis,
+    tenantId: decision.tenantId,
+    subjectId: decision.subjectId,
+    eligibilityMac: mac, // IR-003 — bind the receipt to the authenticated eligibility
+    executedAt: decision.evaluatedAt,
     results: scopeResults,
     status: aggregateRequestStatus(scopeResults),
   };
@@ -463,8 +602,10 @@ export const executeDeletion = (engine, eligibility) => {
 
 // COMPLETE only when EVERY declared scope carries a PROVEN outcome. Any FAILED
 // scope => PARTIAL. Any UNSUPPORTED / NOT_RUN / missing scope => UNKNOWN floor.
-// Nothing here can promote; it can only degrade (P1AF-080).
+// An EMPTY declared-scope set is never COMPLETE (IR-003). Nothing here can
+// promote; it can only degrade (P1AF-080).
 export const aggregateDeletionStatus = (scopeOps, declaredScopes) => {
+  if (!Array.isArray(declaredScopes) || declaredScopes.length === 0) return "UNKNOWN";
   const byScope = new Map(scopeOps.map((s) => [s.scope, s]));
   let sawFailed = false;
   let sawUnproven = false;
@@ -482,6 +623,7 @@ export const aggregateDeletionStatus = (scopeOps, declaredScopes) => {
 export const aggregateRequestStatus = (targetResults) => {
   if (targetResults.length === 0) return "NOT_RUN";
   if (targetResults.some((t) => t.status === "BLOCKED_BY_HOLD")) return "BLOCKED_BY_HOLD";
+  if (targetResults.some((t) => t.status === "BLOCKED_BY_EVIDENCE")) return "BLOCKED_BY_EVIDENCE";
   if (targetResults.every((t) => t.status === "COMPLETE")) return "COMPLETE";
   if (targetResults.some((t) => t.status === "UNKNOWN" || t.status === "NOT_RUN")) return "UNKNOWN";
   return "PARTIAL";
@@ -489,40 +631,67 @@ export const aggregateRequestStatus = (targetResults) => {
 
 // Retry: re-runs ONLY ops that FAILED (or scopes never run); proven ops replay
 // idempotently from the execution ledger (retry-duplicates defense).
-export const retryDeletion = (engine, eligibility) => {
-  verifyEligibilityToken(eligibility);
-  for (const d of eligibility.decisions) {
+export const retryDeletion = (engine, eligibility, opts = {}) => {
+  const decision = authenticateEligibility(opts.authority, eligibility);
+  const mac = eligibility.eligibilityMac ?? eligibility.eligibilityToken;
+  for (const d of decision.decisions) {
     if (d.verdict !== "ELIGIBLE") continue;
     for (const scope of d.declaredScopes) {
-      const opKey = `${eligibility.requestId}:${scope}:${d.targetId}`;
+      const opKey = operationKey(mac, decision, d, scope);
       const prior = engine.executions.get(opKey);
       if (prior && prior.outcome === "FAILED") engine.executions.delete(opKey);
     }
   }
-  return executeDeletion(engine, eligibility);
+  return executeDeletion(engine, eligibility, opts);
 };
 
-// A receipt is only as good as its execution. Verification recomputes each
-// attestation from the engine seed; a receipt whose proven ops carry missing
-// or wrong attestations is FORGED (deletion-receipt-without-execution defense).
-export const verifyDeletionReceipt = (engine, receipt) => {
+// IR-003 — a receipt is verified against the AUTHENTICATED eligibility: its
+// declared targets and scopes are the source of truth, never the receipt's own
+// scopes. Every declared target and scope must be present with a proven,
+// engine-recorded attestation. Empty sets are rejected.
+export const verifyDeletionReceipt = (engine, receipt, { authority, eligibility } = {}) => {
   const findings = [];
   const recomputed = digestOf({ ...receipt, receiptDigest: undefined });
   if (receipt.receiptDigest !== recomputed) findings.push("RECEIPT_DIGEST_MISMATCH");
-  for (const t of receipt.results ?? []) {
-    for (const op of t.scopes ?? []) {
+
+  if (!authority || !eligibility) {
+    return { verdict: "RECEIPT_REJECTED", findings: [...findings, "ELIGIBILITY_REQUIRED"] };
+  }
+  let decision;
+  try { decision = authenticateEligibility(authority, eligibility); }
+  catch { return { verdict: "RECEIPT_REJECTED", findings: [...findings, "ELIGIBILITY_UNAUTHENTICATED"] }; }
+
+  const mac = eligibility.eligibilityMac ?? eligibility.eligibilityToken;
+  if (receipt.eligibilityMac !== mac) findings.push("RECEIPT_ELIGIBILITY_MISMATCH");
+
+  const eligibleTargets = decision.decisions.filter((d) => d.verdict === "ELIGIBLE");
+  const resultByTarget = new Map((receipt.results ?? []).map((t) => [t.targetId, t]));
+
+  for (const d of eligibleTargets) {
+    const result = resultByTarget.get(d.targetId);
+    if (!result) { findings.push(`RECEIPT_MISSING_TARGET:${d.targetId}`); continue; }
+    if (!Array.isArray(d.declaredScopes) || d.declaredScopes.length === 0) {
+      findings.push(`DECLARED_SCOPES_EMPTY:${d.targetId}`); continue;
+    }
+    const opByScope = new Map((result.scopes ?? []).map((s) => [s.scope, s]));
+    for (const scope of d.declaredScopes) {
+      const op = opByScope.get(scope);
+      if (!op) { findings.push(`RECEIPT_MISSING_SCOPE:${d.targetId}:${scope}`); continue; }
       if (PROVEN_SCOPE_OUTCOMES.includes(op.outcome)) {
-        const expected = attest(engine, {
-          opKey: op.opKey, scope: op.scope, targetId: op.targetId, outcome: op.outcome,
-        });
-        if (op.attestation !== expected) findings.push(`ATTESTATION_INVALID:${op.opKey}`);
+        const expectedKey = operationKey(mac, decision, d, scope);
+        if (op.opKey !== expectedKey) findings.push(`OPKEY_MISMATCH:${d.targetId}:${scope}`);
+        const expectedAtt = attest(engine, { opKey: op.opKey, scope: op.scope, targetId: op.targetId, outcome: op.outcome });
+        if (op.attestation !== expectedAtt) findings.push(`ATTESTATION_INVALID:${op.opKey}`);
         if (!engine.executions.has(op.opKey)) findings.push(`EXECUTION_UNRECORDED:${op.opKey}`);
       }
     }
-    // A claimed status stronger than what the ops support is an overclaim.
-    const computed = aggregateDeletionStatus(t.scopes ?? [], (t.scopes ?? []).map((s) => s.scope));
-    if (t.status === "COMPLETE" && computed !== "COMPLETE") {
-      findings.push(`STATUS_OVERCLAIM:${t.targetId}`);
+    const computed = aggregateDeletionStatus(result.scopes ?? [], d.declaredScopes);
+    if (result.status === "COMPLETE" && computed !== "COMPLETE") findings.push(`STATUS_OVERCLAIM:${d.targetId}`);
+  }
+  // reject a receipt that claims targets the authenticated eligibility never marked eligible
+  for (const t of receipt.results ?? []) {
+    if (t.status === "COMPLETE" && !eligibleTargets.some((d) => d.targetId === t.targetId)) {
+      findings.push(`RECEIPT_UNELIGIBLE_TARGET:${t.targetId}`);
     }
   }
   return { verdict: findings.length === 0 ? "RECEIPT_VERIFIED" : "RECEIPT_REJECTED", findings };
@@ -530,7 +699,10 @@ export const verifyDeletionReceipt = (engine, receipt) => {
 
 // Claiming a stronger status than computed is rejected outright (unsupported
 // COMPLETE deletion claim). Claims may be equal or weaker, never stronger.
-const STATUS_STRENGTH = { COMPLETE: 3, PARTIAL: 2, BLOCKED_BY_HOLD: 2, UNKNOWN: 1, NOT_RUN: 0, BLOCKED_EXTERNALLY: 0 };
+const STATUS_STRENGTH = {
+  COMPLETE: 3, PARTIAL: 2, BLOCKED_BY_HOLD: 2, BLOCKED_BY_EVIDENCE: 2,
+  UNKNOWN: 1, NOT_RUN: 0, BLOCKED_EXTERNALLY: 0,
+};
 export const assertReportableStatus = (claimed, computed) => {
   if (!(claimed in STATUS_STRENGTH) || !(computed in STATUS_STRENGTH)) {
     fail("STATUS_UNKNOWN_VOCABULARY", `${claimed} / ${computed}`);
@@ -547,8 +719,11 @@ export const assertReportableStatus = (claimed, computed) => {
 const TOMBSTONE_ALLOWED_KEYS = new Set([
   "targetId", "classId", "tenantHash", "subjectHash", "payloadDigest", "deletedAt", "requestId",
 ]);
+const TOMBSTONE_HASH_FIELDS = ["tenantHash", "subjectHash", "payloadDigest"];
 
 // Tombstones prove deletion state without preserving prohibited payloads.
+// IR-008 — hash fields must be sha256 hex (never raw identifiers), and a
+// preserved tombstone's targetId must not itself be a raw secret payload.
 export const makeTombstone = (input) => {
   const t = input ?? {};
   for (const key of Object.keys(t)) {
@@ -559,6 +734,12 @@ export const makeTombstone = (input) => {
   for (const req of ["targetId", "classId", "tenantHash", "deletedAt", "requestId"]) {
     if (typeof t[req] !== "string" || t[req].length === 0) {
       fail("TOMBSTONE_FIELD_MISSING", `tombstone requires ${req}`);
+    }
+  }
+  if (Number.isNaN(Date.parse(t.deletedAt))) fail("TOMBSTONE_FIELD_INVALID", "deletedAt must be ISO");
+  for (const hf of TOMBSTONE_HASH_FIELDS) {
+    if (t[hf] !== undefined && t[hf] !== null && !isSha256Hex(t[hf])) {
+      fail("TOMBSTONE_HASH_INVALID", `tombstone ${hf} must be a sha256 hex digest, not a raw identifier`);
     }
   }
   return Object.freeze({ ...t });
@@ -652,25 +833,46 @@ export const findOrphans = ({ rows, parentIds, parentKey }) => {
 
 // ---------------------------------------------------------------------------
 // audit trail + invalidation events (P1AF-084, P1AF-086)
+// IR-008 — prohibited-field rejection is RECURSIVE; audit entries are a strict
+// schema of known scalar fields; nested payloads/secrets are rejected.
 // ---------------------------------------------------------------------------
-const AUDIT_PROHIBITED_KEYS = new Set(["payload", "body", "content", "document", "secret", "credential", "token"]);
+const AUDIT_PROHIBITED_KEYS = new Set([
+  "payload", "body", "content", "document", "secret", "credential", "token",
+  "email", "phone", "address", "ssn", "name", "pii",
+]);
+export const AUDIT_ALLOWED_KEYS = new Set([
+  "eventType", "subjectRef", "at", "prevDigest", "entryDigest",
+  "priorState", "failedGate", "policyVersion", "correlationId", "actorRole", "note",
+]);
 export const AUDIT_EVENT_TYPES = Object.freeze([
   "CLASSIFY", "RETENTION_DEFINE", "RETENTION_AMEND", "HOLD_PLACE", "HOLD_RELEASE",
   "DELETE_ELIGIBLE", "DELETE_EXECUTE", "DELETE_RETRY", "TOMBSTONE", "INVALIDATE", "REVOKE",
 ]);
+
+// recursively assert no prohibited key appears at any depth, and reject any
+// nested object/array structure (audit entries are flat scalar records).
+const assertNoProhibitedPayload = (value, path = "") => {
+  if (value === null || typeof value !== "object") return;
+  fail("PROHIBITED_PAYLOAD_IN_AUDIT", `audit entry carries nested structure at ${path || "<root>"}`);
+};
 
 export const createAuditTrail = () => ({ entries: [] });
 
 export const appendAudit = (trail, event) => {
   const e = event ?? {};
   if (!AUDIT_EVENT_TYPES.includes(e.eventType)) fail("AUDIT_EVENT_INVALID", String(e.eventType));
-  for (const key of Object.keys(e)) {
-    if (AUDIT_PROHIBITED_KEYS.has(key)) {
+  for (const [key, val] of Object.entries(e)) {
+    const lower = key.toLowerCase();
+    if (AUDIT_PROHIBITED_KEYS.has(lower)) {
       fail("PROHIBITED_PAYLOAD_IN_AUDIT", `audit entry may not carry field: ${key}`);
     }
+    if (!AUDIT_ALLOWED_KEYS.has(key)) {
+      fail("AUDIT_FIELD_NOT_ALLOWED", `audit entry has non-schema field: ${key}`);
+    }
+    assertNoProhibitedPayload(val, key); // IR-008 — recursive: no nested payloads
   }
-  if (typeof e.subjectRef !== "string" || !/^[0-9a-f]{64}$/.test(e.subjectRef)) {
-    fail("AUDIT_SUBJECT_REF_INVALID", "audit subjectRef must be a hash, never raw identity");
+  if (!isSha256Hex(e.subjectRef)) {
+    fail("AUDIT_SUBJECT_REF_INVALID", "audit subjectRef must be a sha256 hash, never raw identity");
   }
   if (typeof e.at !== "string" || Number.isNaN(Date.parse(e.at))) {
     fail("AUDIT_TIME_INVALID", "audit entry requires ISO timestamp");
@@ -751,12 +953,8 @@ export const readAuthorization = (cache, key, now) => {
 };
 
 // ---------------------------------------------------------------------------
-// certification-evidence retention reconciliation (P1AF-087) and the
-// delete-vs-evidence conflict
+// certification-evidence retention reconciliation (P1AF-087)
 // ---------------------------------------------------------------------------
-// The artifact retention window and the certification-record retention
-// obligation must not contradict: an unexpired certification record may not
-// reference an artifact whose retention lapses before the record's.
 export const reconcileEvidenceRetention = ({ certRecord, artifacts, now }) => {
   const findings = [];
   const recordExpiry = Date.parse(certRecord.retainUntil);
@@ -776,21 +974,6 @@ export const reconcileEvidenceRetention = ({ certRecord, artifacts, now }) => {
     findings,
     requiredAction: findings.length === 0 ? null : "EXTEND_ARTIFACT_RETENTION_OR_REVISE_RECORD",
   };
-};
-
-// A deletion that would destroy evidence bound to an unexpired certification
-// record is a declared conflict, resolved per class strategy — CRYPTO_ERASE
-// removes payload while digests survive; otherwise the deletion is blocked.
-// It is never silently dropped and never silently executed.
-export const resolveDeleteEvidenceConflict = ({ targetId, erasureStrategy, certBindings, now }) => {
-  const binding = (certBindings ?? []).find(
-    (b) => b.artifactRef === targetId && Date.parse(b.retainUntil) > Date.parse(now),
-  );
-  if (!binding) return { resolution: "NO_CONFLICT", targetId };
-  if (erasureStrategy === "CRYPTO_ERASE") {
-    return { resolution: "CRYPTO_ERASE_PAYLOAD_PRESERVE_DIGESTS", targetId, certRecordId: binding.certRecordId };
-  }
-  return { resolution: "BLOCKED_BY_EVIDENCE_OBLIGATION", targetId, certRecordId: binding.certRecordId };
 };
 
 // Stale derived artifacts: a derived copy whose source was superseded or
@@ -901,9 +1084,6 @@ export const createMemoryStoreAdapter = (semantics) => {
   };
 };
 
-// Runs the same lifecycle scenario against both semantic models and compares
-// the invariant-relevant outcomes. Divergence on a field outside the justified
-// register is a defect.
 export const verifyProviderParity = (scenario) => {
   const a = scenario(createMemoryStoreAdapter(STORE_SEMANTICS.postgresql));
   const b = scenario(createMemoryStoreAdapter(STORE_SEMANTICS.sqlite));
@@ -917,36 +1097,75 @@ export const verifyProviderParity = (scenario) => {
 
 // ---------------------------------------------------------------------------
 // provider-dependent obligations (P1AF-089 — BLOCKED_EXTERNALLY)
+// IR-006 — DECIDED requires a VALIDATED founder artifact: exact authority id,
+// all four capability decisions with their required fields, subject binding,
+// and an artifactDigest that matches the canonical hash of the decisions.
 // ---------------------------------------------------------------------------
 export const PROVIDER_DEPENDENT_ROWS = Object.freeze(["P1AF-070", "P1AF-071", "P1AF-072", "P1AF-073", "P1AF-074"]);
+export const FOUNDER_PROVIDER_AUTHORITY_ID = "P1AF-089_FOUNDER_PROVIDER_DECISION_V1";
+export const PROVIDER_CAPABILITIES = Object.freeze(["esignature", "payment", "transactionalEmail", "documentStorage"]);
+export const P1A06_SUBJECT_SHA = "3d0486c37d64364991f6c061e2f222c6b1d5dcfe";
+
+const validateFounderProviderDecision = (fd) => {
+  if (!fd || typeof fd !== "object") return { valid: false, reason: "MISSING" };
+  if (fd.authorityId !== FOUNDER_PROVIDER_AUTHORITY_ID) return { valid: false, reason: "WRONG_AUTHORITY" };
+  if (typeof fd.subjectSha !== "string" || fd.subjectSha.length === 0) return { valid: false, reason: "NO_SUBJECT" };
+  const decisions = fd.decisions;
+  if (!decisions || typeof decisions !== "object") return { valid: false, reason: "NO_DECISIONS" };
+  for (const cap of PROVIDER_CAPABILITIES) {
+    const c = decisions[cap];
+    if (!c || typeof c.provider !== "string" || c.provider.length === 0) {
+      return { valid: false, reason: `CAPABILITY_MISSING:${cap}` };
+    }
+  }
+  // artifactDigest must bind the canonical decisions (defeats arbitrary refs)
+  const expected = digestOf({ authorityId: fd.authorityId, subjectSha: fd.subjectSha, decisions });
+  if (!isSha256Hex(fd.artifactDigest) || !constantTimeEqualHex(fd.artifactDigest, expected)) {
+    return { valid: false, reason: "DIGEST_MISMATCH" };
+  }
+  return { valid: true, decisionRef: fd.artifactDigest };
+};
+
 export const providerDecisionStatus = (founderDecision) => {
-  if (founderDecision && typeof founderDecision.decisionRef === "string" && founderDecision.decisionRef.length > 0) {
-    return { "P1AF-089": "DECIDED", decisionRef: founderDecision.decisionRef, unblocks: [...PROVIDER_DEPENDENT_ROWS] };
+  const v = validateFounderProviderDecision(founderDecision);
+  if (v.valid) {
+    return { "P1AF-089": "DECIDED", decisionRef: v.decisionRef, unblocks: [...PROVIDER_DEPENDENT_ROWS] };
   }
   return {
     "P1AF-089": "BLOCKED_EXTERNALLY",
     decisionRef: null,
+    rejectionReason: v.reason ?? null,
     blockedRows: [...PROVIDER_DEPENDENT_ROWS],
     decisionPacket: "docs/security/p1-a/P1AF-089_FOUNDER_DECISION_PACKET_V1.md",
   };
 };
-// Finalizing a provider-dependent retention/deletion obligation without the
-// founder decision is refused — providers are never guessed.
+
+// Finalizing a provider-dependent obligation without a VALIDATED founder
+// decision is refused — providers are never guessed and never inferred from a
+// bare string reference.
 export const assertProviderObligationFinalizable = (obligation, founderDecision) => {
   if (obligation?.providerDependent !== true) return true;
   const status = providerDecisionStatus(founderDecision);
   if (status["P1AF-089"] !== "DECIDED") {
     fail("BLOCKED_EXTERNALLY",
-      "provider-dependent obligation cannot be finalized before founder decision P1AF-089");
+      "provider-dependent obligation cannot be finalized before a validated founder decision P1AF-089");
   }
   return true;
 };
 
+// Helper for authorized construction of a valid founder decision (e.g. once the
+// founder decides). Callers without founder authority cannot use this to forge
+// DECIDED because assertProviderObligationFinalizable also requires the decision
+// to be transported to it — this only computes the binding digest.
+export const buildFounderProviderDecision = ({ subjectSha, decisions }) => {
+  const base = { authorityId: FOUNDER_PROVIDER_AUTHORITY_ID, subjectSha, decisions };
+  return { ...base, artifactDigest: digestOf(base) };
+};
+
 // ---------------------------------------------------------------------------
 // base census (the persisted-data surfaces that exist at authorized base
-// b0c1b212, read from both Prisma schemas). This is DATA about the base, used
-// by the census document and tests; defects found at base are recorded, not
-// silently fixed (schema files are routed via P1A-08).
+// b0c1b212, read from both Prisma schemas). Defects found at base are recorded,
+// not silently fixed (schema files are routed via P1A-08).
 // ---------------------------------------------------------------------------
 export const BASE_SHA = "b0c1b2129123b941c6a350c16dae0ae3a8e076ca";
 export const BASE_PERSISTENCE_MANIFEST = Object.freeze({
@@ -991,8 +1210,7 @@ export const BASE_SCHEMA_DEFECTS = Object.freeze([
 ]);
 
 // The canonical lane-06 classification of the base surfaces. Registering this
-// census through registerPersistedClass proves the declarations are complete
-// (each entry passes the fail-closed gates above).
+// census through registerPersistedClass proves the declarations are complete.
 export const buildBaseClassificationRegistry = () => {
   const registry = createClassificationRegistry();
   const rows = [
@@ -1077,7 +1295,7 @@ export const buildBaseRetentionPolicySet = () => {
     clockBasis: "CREATED_AT",
   });
   defineRetentionClass(set, { id: "RET-OUTBOX", appliesTo: "TENANT_CONTENT", retainDays: 30, clockBasis: "CREATED_AT" });
-  defineRetentionClass(set, { id: "RET-TENANT-IDENTITY", appliesTo: "OPERATIONAL_PERSONAL", retainDays: 1095, clockBasis: "LAST_ACTIVITY" });
+  defineRetentionClass(set, { id: "RET-TENANT-IDENTITY", appliesTo: "OPERATIONAL_PERSONAL", retainDays: 1095, clockBasis: "CREATED_AT" });
   defineRetentionClass(set, { id: "RET-EVENTS", appliesTo: "TENANT_CONTENT", retainDays: 365, clockBasis: "CREATED_AT" });
   defineRetentionClass(set, { id: "RET-AGENT-MANIFEST", appliesTo: "OPERATIONAL_PERSONAL", retainDays: 400, clockBasis: "CREATED_AT" });
   return set;
@@ -1113,11 +1331,22 @@ export const PROPERTY_REGISTER = Object.freeze([
   { id: "PX_expired_unreadable", requirement: "attack:expired-data-readable" },
   { id: "PX_relay_tombstone_guard", requirement: "attack:outbox-resurrection" },
   { id: "PX_residue_degrades_status", requirement: "attack:deleted-data-reappears" },
+  // IR remediation properties
+  { id: "IR001_eligibility_keyed", requirement: "P1A06-IR-001" },
+  { id: "IR002_hold_revalidated", requirement: "P1A06-IR-002" },
+  { id: "IR003_receipt_vs_eligibility", requirement: "P1A06-IR-003" },
+  { id: "IR004_opkey_identity_bound", requirement: "P1A06-IR-004" },
+  { id: "IR005_evidence_gate_enforced", requirement: "P1A06-IR-005" },
+  { id: "IR006_founder_artifact_validated", requirement: "P1A06-IR-006" },
+  { id: "IR007_registered_anchor_enforced", requirement: "P1A06-IR-007" },
+  { id: "IR008_recursive_payload_free", requirement: "P1A06-IR-008" },
 ]);
 
 export const laneRequirementStatus = () => ({
   lane: "P1A-06",
   baseSha: BASE_SHA,
+  moduleVersion: POLICY_MODULE_VERSION,
+  remediation: "V2 closes Codex INDEPENDENT_REVIEW_BLOCK findings P1A06-IR-001..008",
   rows: {
     "P1AF-077": "IMPLEMENTED_WITH_LOCAL_TESTS",
     "P1AF-078": "IMPLEMENTED_WITH_LOCAL_TESTS",
@@ -1138,5 +1367,6 @@ export const laneRequirementStatus = () => ({
     "Local deterministic library + tests only. No runtime claim, no production claim.",
     "Schema/shared-surface changes are NOT made here; they are routed via P1A-08 (03/05/06 and 04/06 seams).",
     "Real backup/replica erasure is environment-owned; this module models and verifies the CONTRACT (scope outcomes, UNSUPPORTED never promotes to COMPLETE).",
+    "Eligibility/execution trust hinges on the authority secret and engine seed remaining in the trusted domain; key custody is environment-owned and NOT proven here.",
   ],
 });

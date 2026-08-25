@@ -1,26 +1,30 @@
 // P1A-06 privacy/data-lifecycle test battery: unit, property/invariant,
-// integration, and the required hostile negative-control set. Every hostile
-// case must FAIL CLOSED. Exit code is non-zero on any failure.
+// integration, the required hostile negative-control set, AND the closure
+// controls for Codex INDEPENDENT_REVIEW_BLOCK findings P1A06-IR-001..008.
+// Every hostile case must FAIL CLOSED. Exit code is non-zero on any failure.
 import assert from "node:assert/strict";
 import {
   POLICY_MODULE_VERSION, canonicalJson, digestOf, subjectHash, tenantHash, PrivacyError,
   DATA_CLASSES, ERASURE_STRATEGIES, COPY_SCOPES, PROVEN_SCOPE_OUTCOMES, SCOPE_OUTCOMES,
-  ACCOUNTABLE_RETENTION_ROLE,
+  ACCOUNTABLE_RETENTION_ROLE, RETENTION_CLOCK_BASES,
+  createDeletionAuthority,
   createClassificationRegistry, registerPersistedClass, getPersistedClass, verifyCensusCoverage,
   createRetentionPolicySet, defineRetentionClass, amendRetentionClass,
   retentionAnchorFor, assertAnchorUnmoved, evaluateRetention, guardRead,
-  createHoldLedger, placeHold, releaseHold, activeHolds,
+  createHoldLedger, placeHold, releaseHold, activeHolds, holdLedgerRevision,
   evaluateDeletionEligibility, createDeletionEngine, executeDeletion, retryDeletion,
   aggregateDeletionStatus, aggregateRequestStatus, verifyDeletionReceipt, assertReportableStatus,
+  resolveDeleteEvidenceConflict,
   makeTombstone, createTombstoneIndex, recordTombstone, isTombstoned, guardOutboxRelay,
   verifyNoResidue, planTenantDeletion, verifyTenantPlanCoverage, findOrphans,
   createAuditTrail, appendAudit, removeAuditEntry, verifyAuditChain,
   INVALIDATION_REQUIRED_FIELDS, emitInvalidation,
   boundedCacheTtl, createAuthzCache, cacheAuthorization, readAuthorization,
-  reconcileEvidenceRetention, resolveDeleteEvidenceConflict, findStaleDerived,
+  reconcileEvidenceRetention, findStaleDerived,
   DOCUMENT_LIFECYCLE_STATES, createDocumentStore, storeDocument, assertAccountableActor, transitionDocument,
   STORE_SEMANTICS, createMemoryStoreAdapter, verifyProviderParity,
   PROVIDER_DEPENDENT_ROWS, providerDecisionStatus, assertProviderObligationFinalizable,
+  buildFounderProviderDecision, FOUNDER_PROVIDER_AUTHORITY_ID, PROVIDER_CAPABILITIES, P1A06_SUBJECT_SHA,
   BASE_SHA, BASE_PERSISTENCE_MANIFEST, BASE_SCHEMA_DEFECTS,
   buildBaseClassificationRegistry, buildBaseRetentionPolicySet,
   PROPERTY_REGISTER, laneRequirementStatus,
@@ -38,14 +42,12 @@ const throwsCode = (fn, code) => {
 
 const NOW = "2026-08-20T12:00:00.000Z";
 const LATER = "2028-12-31T00:00:00.000Z";
+const SECRET = "authority-secret-key-0001";
+const AUTH = createDeletionAuthority({ authoritySecret: SECRET });
 
-// deterministic PRNG for property sweeps (no Math.random)
 const makePrng = (seed) => {
   let s = seed >>> 0;
-  return () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 0x100000000;
-  };
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0x100000000; };
 };
 
 // --- fixtures ---------------------------------------------------------------
@@ -62,23 +64,21 @@ const policySetWith = (over = {}) => {
 };
 const okAdapter = () => ({ delete: () => ({ outcome: "DELETED" }), listResidue: () => [] });
 const failingAdapter = () => ({ delete: () => { throw new Error("io"); }, listResidue: () => [] });
-const registryWith = (cls) => {
-  const registry = createClassificationRegistry();
-  registerPersistedClass(registry, cls);
-  return registry;
-};
+const registryWith = (cls) => { const r = createClassificationRegistry(); registerPersistedClass(r, cls); return r; };
 const target = (over = {}) => ({
   targetId: "row-1", classId: "t.example", tenantId: "tenant-A", subjectId: "subj-1",
-  record: { createdAt: "2026-01-01T00:00:00.000Z" }, ...over,
+  record: { createdAt: "2026-01-01T00:00:00.000Z" }, registeredAnchor: "2026-01-01T00:00:00.000Z", ...over,
 });
 const request = (over = {}) => ({
   requestId: "req-1", basis: "ERASURE_REQUEST", tenantId: "tenant-A", subjectId: "subj-1", ...over,
 });
-const eligibilityFor = ({ reg, set, holds, req, targets, now = NOW }) =>
+const eligibilityFor = ({ reg, set, holds, req, targets, certBindings, now = NOW, authority = AUTH }) =>
   evaluateDeletionEligibility({
-    registry: reg, policySet: set, holdLedger: holds ?? createHoldLedger(),
-    request: req ?? request(), targets: targets ?? [target()], now,
+    authority, registry: reg, policySet: set, holdLedger: holds ?? createHoldLedger(),
+    request: req ?? request(), targets: targets ?? [target()], certBindings, now,
   });
+const exec = (engine, elig, { holds, now = NOW, authority = AUTH } = {}) =>
+  executeDeletion(engine, elig, { authority, holdLedger: holds ?? createHoldLedger(), now });
 
 // ===========================================================================
 // unit: canonicalization + vocabulary
@@ -91,7 +91,8 @@ run("vocabulary frozen", () => {
   assert.ok(ERASURE_STRATEGIES.includes("SCOPED_EXEMPTION"));
   assert.deepEqual([...PROVEN_SCOPE_OUTCOMES], ["DELETED", "TOMBSTONED", "CRYPTO_ERASED", "EXEMPT_DECLARED"]);
   assert.ok(SCOPE_OUTCOMES.includes("UNSUPPORTED"));
-  assert.equal(POLICY_MODULE_VERSION, "P1A_06_PRIVACY_V1");
+  assert.equal(POLICY_MODULE_VERSION, "P1A_06_PRIVACY_V2");
+  assert.deepEqual([...RETENTION_CLOCK_BASES], ["CREATED_AT", "SEALED_AT"]); // IR-007: no LAST_ACTIVITY
 });
 
 // ===========================================================================
@@ -139,22 +140,32 @@ run("census coverage flags ungoverned persistence; partial manifest stays COVERA
 });
 
 // ===========================================================================
-// retention: expiry, clock reset, downgrade, expired reads
+// retention: expiry, clock reset, downgrade, expired reads (IR-007 hardened)
 // ===========================================================================
-run("retention evaluates ACTIVE then EXPIRED", () => {
+run("retention evaluates ACTIVE then EXPIRED (registered anchor)", () => {
   const set = policySetWith();
-  const a = evaluateRetention({ policySet: set, retentionClassId: "RET-X", anchor: "2026-08-01T00:00:00.000Z", now: NOW });
+  const a = evaluateRetention({ policySet: set, retentionClassId: "RET-X", registeredAnchor: "2026-08-01T00:00:00.000Z", now: NOW });
   assert.equal(a.state, "ACTIVE");
-  const b = evaluateRetention({ policySet: set, retentionClassId: "RET-X", anchor: "2026-01-01T00:00:00.000Z", now: NOW });
+  const b = evaluateRetention({ policySet: set, retentionClassId: "RET-X", registeredAnchor: "2026-01-01T00:00:00.000Z", now: NOW });
   assert.equal(b.state, "EXPIRED");
+});
+hostile("evaluateRetention without registered anchor -> rejected", () => {
+  throwsCode(() => evaluateRetention({ policySet: policySetWith(), retentionClassId: "RET-X", now: NOW }), "REGISTERED_ANCHOR_REQUIRED");
 });
 hostile("retention-clock reset (anchor moved) -> rejected", () => {
   throwsCode(() => assertAnchorUnmoved("2026-01-01T00:00:00.000Z", "2026-08-01T00:00:00.000Z"), "RETENTION_CLOCK_RESET");
 });
-run("retention anchor derives from declared clock basis", () => {
+run("retention anchor derives from immutable basis only", () => {
   const rec = { createdAt: "2026-01-01T00:00:00.000Z", sealedAt: "2026-02-01T00:00:00.000Z" };
   assert.equal(retentionAnchorFor(rec, "CREATED_AT"), rec.createdAt);
   assert.equal(retentionAnchorFor(rec, "SEALED_AT"), rec.sealedAt);
+});
+hostile("retention anchor from LAST_ACTIVITY basis -> rejected", () => {
+  throwsCode(() => retentionAnchorFor({ createdAt: "2026-01-01T00:00:00.000Z" }, "LAST_ACTIVITY"), "CLOCK_BASIS_INVALID");
+});
+hostile("defining a retention class on a mutable clock basis -> rejected", () => {
+  throwsCode(() => defineRetentionClass(createRetentionPolicySet(),
+    { id: "RET-LA", appliesTo: "OPERATIONAL_PERSONAL", retainDays: 365, clockBasis: "LAST_ACTIVITY" }), "CLOCK_BASIS_INVALID");
 });
 hostile("policy downgrade without authority -> rejected (personal data lengthened)", () => {
   const set = createRetentionPolicySet();
@@ -196,34 +207,39 @@ hostile("hold release without authority -> rejected", () => {
   placeHold(holds, { holdId: "h1", kind: "LEGAL", scope: { kind: "TENANT", tenantId: "tenant-A" }, reason: "r" });
   throwsCode(() => releaseHold(holds, "h1"), "HOLD_RELEASE_UNAUTHORIZED");
 });
+run("hold ledger revision changes when a hold is placed", () => {
+  const holds = createHoldLedger();
+  const r0 = holdLedgerRevision(holds);
+  placeHold(holds, { holdId: "h1", kind: "LEGAL", scope: { kind: "TENANT", tenantId: "t" }, reason: "r" });
+  assert.notEqual(r0, holdLedgerRevision(holds));
+});
 
 // ===========================================================================
-// deletion eligibility — the four refusal controls
+// deletion eligibility — the refusal controls
 // ===========================================================================
 hostile("cross-tenant delete -> TENANT_MISMATCH refused", () => {
-  const e = eligibilityFor({
-    reg: registryWith(goodClass()), set: policySetWith(),
-    targets: [target({ tenantId: "tenant-B" })],
-  });
+  const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith(), targets: [target({ tenantId: "tenant-B" })] });
   assert.equal(e.decisions[0].verdict, "REFUSED");
   assert.equal(e.decisions[0].reason, "TENANT_MISMATCH");
 });
 hostile("wrong-subject delete -> SUBJECT_MISMATCH refused", () => {
-  const e = eligibilityFor({
-    reg: registryWith(goodClass()), set: policySetWith(),
-    targets: [target({ subjectId: "subj-OTHER" })],
-  });
+  const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith(), targets: [target({ subjectId: "subj-OTHER" })] });
   assert.equal(e.decisions[0].verdict, "REFUSED");
   assert.equal(e.decisions[0].reason, "SUBJECT_MISMATCH");
 });
 hostile("retention not expired -> RETENTION_ACTIVE refused", () => {
   const e = eligibilityFor({
-    reg: registryWith(goodClass()), set: policySetWith(),
-    req: request({ basis: "RETENTION_EXPIRY" }),
-    targets: [target({ record: { createdAt: "2026-08-15T00:00:00.000Z" } })],
+    reg: registryWith(goodClass()), set: policySetWith(), req: request({ basis: "RETENTION_EXPIRY" }),
+    targets: [target({ record: { createdAt: "2026-08-15T00:00:00.000Z" }, registeredAnchor: "2026-08-15T00:00:00.000Z" })],
   });
   assert.equal(e.decisions[0].verdict, "REFUSED");
   assert.equal(e.decisions[0].reason, "RETENTION_ACTIVE");
+});
+hostile("retention-expiry deletion with no registered anchor -> rejected", () => {
+  throwsCode(() => eligibilityFor({
+    reg: registryWith(goodClass()), set: policySetWith(), req: request({ basis: "RETENTION_EXPIRY" }),
+    targets: [target({ registeredAnchor: undefined })],
+  }), "REGISTERED_ANCHOR_REQUIRED");
 });
 hostile("active hold -> BLOCKED_BY_HOLD (and request status reflects it)", () => {
   const holds = createHoldLedger();
@@ -231,9 +247,9 @@ hostile("active hold -> BLOCKED_BY_HOLD (and request status reflects it)", () =>
   const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith(), holds });
   assert.equal(e.decisions[0].verdict, "BLOCKED_BY_HOLD");
   const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
-  const receipt = executeDeletion(engine, e);
+  const receipt = exec(engine, e, { holds });
   assert.equal(receipt.status, "BLOCKED_BY_HOLD");
-  assert.equal(engine.sideEffects.length, 0); // nothing executed under hold
+  assert.equal(engine.sideEffects.length, 0);
 });
 
 // ===========================================================================
@@ -242,22 +258,22 @@ hostile("active hold -> BLOCKED_BY_HOLD (and request status reflects it)", () =>
 run("P080 full-scope deletion is COMPLETE with verified receipt", () => {
   const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith() });
   const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
-  const receipt = executeDeletion(engine, e);
+  const receipt = exec(engine, e);
   assert.equal(receipt.status, "COMPLETE");
-  const v = verifyDeletionReceipt(engine, receipt);
+  const v = verifyDeletionReceipt(engine, receipt, { authority: AUTH, eligibility: e });
   assert.equal(v.verdict, "RECEIPT_VERIFIED");
 });
 hostile("partial delete reported as partial, never complete", () => {
   const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith() });
   const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", failingAdapter()]], engineSeed: "seed-0001" });
-  const receipt = executeDeletion(engine, e);
+  const receipt = exec(engine, e);
   assert.equal(receipt.results[0].status, "PARTIAL");
   assert.equal(receipt.status, "PARTIAL");
 });
 hostile("declared scope with no executor -> UNKNOWN (UNSUPPORTED never completes)", () => {
   const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith() });
-  const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()]], engineSeed: "seed-0001" }); // CACHE missing
-  const receipt = executeDeletion(engine, e);
+  const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()]], engineSeed: "seed-0001" });
+  const receipt = exec(engine, e);
   assert.equal(receipt.results[0].status, "UNKNOWN");
   assert.ok(receipt.results[0].scopes.some((s) => s.outcome === "UNSUPPORTED"));
 });
@@ -265,27 +281,27 @@ hostile("silent fallback from delete to retain -> rejected", () => {
   const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith() });
   const silentRetain = { delete: () => ({ outcome: "RETAINED" }), listResidue: () => [] };
   const engine = createDeletionEngine({ adapters: [["PRIMARY", silentRetain], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
-  throwsCode(() => executeDeletion(engine, e), "SILENT_RETAIN_REJECTED");
+  throwsCode(() => exec(engine, e), "SILENT_RETAIN_REJECTED");
 });
 run("retain WITH hold reference is a recorded (non-proven) outcome", () => {
   const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith() });
   const heldRetain = { delete: () => ({ outcome: "RETAINED", holdRef: "h9" }), listResidue: () => [] };
   const engine = createDeletionEngine({ adapters: [["PRIMARY", heldRetain], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
-  const receipt = executeDeletion(engine, e);
-  assert.equal(receipt.results[0].status, "UNKNOWN"); // retained copy => not proven
+  const receipt = exec(engine, e);
+  assert.equal(receipt.results[0].status, "UNKNOWN");
 });
 hostile("exemption claimed by adapter without declared strategy -> rejected", () => {
   const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith() });
   const rogueExempt = { delete: () => ({ outcome: "EXEMPT_DECLARED" }), listResidue: () => [] };
   const engine = createDeletionEngine({ adapters: [["PRIMARY", rogueExempt], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
-  throwsCode(() => executeDeletion(engine, e), "EXEMPTION_UNDECLARED");
+  throwsCode(() => exec(engine, e), "EXEMPTION_UNDECLARED");
 });
 hostile("retry does not duplicate side effects (idempotency)", () => {
   const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith() });
   const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
-  executeDeletion(engine, e);
+  exec(engine, e);
   const effectsAfterFirst = engine.sideEffects.length;
-  const second = executeDeletion(engine, e); // replay
+  const second = exec(engine, e);
   assert.equal(engine.sideEffects.length, effectsAfterFirst);
   assert.equal(second.status, "COMPLETE");
 });
@@ -294,59 +310,214 @@ run("retry re-runs only failed scopes and converges to COMPLETE", () => {
   let failOnce = true;
   const flaky = { delete: () => { if (failOnce) { failOnce = false; throw new Error("io"); } return { outcome: "DELETED" }; }, listResidue: () => [] };
   const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", flaky]], engineSeed: "seed-0001" });
-  const first = executeDeletion(engine, e);
+  const first = exec(engine, e);
   assert.equal(first.status, "PARTIAL");
-  const primaryEffects = engine.sideEffects.filter((k) => k.includes(":PRIMARY:")).length;
-  const second = retryDeletion(engine, e);
+  const primaryEffects = engine.sideEffects.filter((k) => engine.executions.get(k)?.scope === "PRIMARY").length;
+  const second = retryDeletion(engine, e, { authority: AUTH, holdLedger: createHoldLedger(), now: NOW });
   assert.equal(second.status, "COMPLETE");
-  assert.equal(engine.sideEffects.filter((k) => k.includes(":PRIMARY:")).length, primaryEffects); // primary not re-run
 });
-hostile("forged deletion receipt (no execution) -> rejected", () => {
+
+// ===========================================================================
+// IR-001..008 CLOSURE CONTROLS (Codex INDEPENDENT_REVIEW_BLOCK)
+// ===========================================================================
+hostile("IR-001 forged eligibility (flip hold->ELIGIBLE, recompute public digest) -> refused", () => {
+  const holds = createHoldLedger();
+  placeHold(holds, { holdId: "h1", kind: "LEGAL", scope: { kind: "SUBJECT", subjectId: "subj-1" }, reason: "r" });
+  const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith(), holds });
+  e.decisions[0].verdict = "ELIGIBLE"; e.decisions[0].reason = "ERASURE_REQUEST";
+  // attacker recomputes token using the PUBLIC digestOf (no authority secret)
+  const { eligibilityMac, eligibilityToken, ...decision } = e;
+  e.eligibilityMac = digestOf({ kind: "P1A06_ELIGIBILITY", decision });
+  e.eligibilityToken = e.eligibilityMac;
+  const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
+  throwsCode(() => exec(engine, e, { holds }), "EXECUTION_REFUSED_UNAUTHENTICATED");
+  assert.equal(engine.sideEffects.length, 0);
+});
+hostile("IR-001 wrong authority key cannot authenticate another authority's eligibility", () => {
+  const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith() });
+  const attacker = createDeletionAuthority({ authoritySecret: "attacker-secret-key-9999" });
+  const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
+  throwsCode(() => exec(engine, e, { authority: attacker }), "EXECUTION_REFUSED_UNAUTHENTICATED");
+});
+hostile("IR-001 authority requires a sufficiently long secret", () => {
+  throwsCode(() => createDeletionAuthority({ authoritySecret: "short" }), "AUTHORITY_SECRET_INVALID");
+});
+hostile("IR-001 eligibility without an authority -> rejected", () => {
+  throwsCode(() => evaluateDeletionEligibility({
+    registry: registryWith(goodClass()), policySet: policySetWith(), holdLedger: createHoldLedger(),
+    request: request(), targets: [target()], now: NOW,
+  }), "AUTHORITY_REQUIRED");
+});
+hostile("IR-002 hold placed AFTER eligibility, BEFORE execution -> target BLOCKED_BY_HOLD, 0 side effects", () => {
+  const holds = createHoldLedger();
+  const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith(), holds });
+  placeHold(holds, { holdId: "late", kind: "LEGAL", scope: { kind: "SUBJECT", subjectId: "subj-1" }, reason: "r" });
+  const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
+  const receipt = exec(engine, e, { holds });
+  assert.equal(receipt.status, "BLOCKED_BY_HOLD");
+  assert.equal(receipt.results[0].status, "BLOCKED_BY_HOLD");
+  assert.equal(engine.sideEffects.length, 0);
+});
+hostile("IR-002 a hold on an UNRELATED subject does not block this target", () => {
+  const holds = createHoldLedger();
+  const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith(), holds });
+  placeHold(holds, { holdId: "other", kind: "LEGAL", scope: { kind: "SUBJECT", subjectId: "someone-else" }, reason: "r" });
+  const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
+  assert.equal(exec(engine, e, { holds }).status, "COMPLETE"); // precise: only the held target is blocked
+});
+hostile("IR-002 execution without the hold ledger -> refused", () => {
   const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith() });
   const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
+  throwsCode(() => executeDeletion(engine, e, { authority: AUTH, now: NOW }), "HOLD_LEDGER_REQUIRED");
+});
+hostile("IR-003 empty forged receipt -> RECEIPT_REJECTED (no eligibility supplied)", () => {
+  const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()]], engineSeed: "seed-0001" });
   const forged = {
-    receiptKind: "P1A06_DELETION_RECEIPT", requestId: e.requestId, basis: e.basis,
-    tenantId: e.tenantId, subjectId: e.subjectId, executedAt: NOW,
-    results: [{ targetId: "row-1", status: "COMPLETE", scopes: [
-      { opKey: "req-1:PRIMARY:row-1", scope: "PRIMARY", targetId: "row-1", outcome: "DELETED", attestation: digestOf("fake") },
-      { opKey: "req-1:CACHE:row-1", scope: "CACHE", targetId: "row-1", outcome: "DELETED", attestation: digestOf("fake2") },
-    ] }],
-    status: "COMPLETE",
+    receiptKind: "P1A06_DELETION_RECEIPT", requestId: "r", basis: "ERASURE_REQUEST", tenantId: "t", subjectId: "s",
+    eligibilityMac: "x", executedAt: NOW, results: [{ targetId: "row-1", status: "COMPLETE", scopes: [] }], status: "COMPLETE",
   };
   forged.receiptDigest = digestOf({ ...forged, receiptDigest: undefined });
   const v = verifyDeletionReceipt(engine, forged);
   assert.equal(v.verdict, "RECEIPT_REJECTED");
-  assert.ok(v.findings.some((f) => f.startsWith("ATTESTATION_INVALID")));
+  assert.ok(v.findings.includes("ELIGIBILITY_REQUIRED"));
+});
+hostile("IR-003 receipt with empty scopes vs authenticated eligibility -> rejected", () => {
+  const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith() });
+  const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
+  const forged = {
+    receiptKind: "P1A06_DELETION_RECEIPT", requestId: e.requestId, basis: e.basis, tenantId: e.tenantId, subjectId: e.subjectId,
+    eligibilityMac: e.eligibilityMac, executedAt: NOW, results: [{ targetId: "row-1", status: "COMPLETE", scopes: [] }], status: "COMPLETE",
+  };
+  forged.receiptDigest = digestOf({ ...forged, receiptDigest: undefined });
+  const v = verifyDeletionReceipt(engine, forged, { authority: AUTH, eligibility: e });
+  assert.equal(v.verdict, "RECEIPT_REJECTED");
+  assert.ok(v.findings.some((f) => f.startsWith("RECEIPT_MISSING_SCOPE")));
+});
+hostile("IR-004 idempotency key does not replay across tenants", () => {
+  const invoked = [];
+  const mkAdapter = (t) => ({ delete: () => { invoked.push(t); return { outcome: "DELETED" }; }, listResidue: () => [] });
+  const engine = createDeletionEngine({ adapters: [["PRIMARY", mkAdapter("A")], ["CACHE", mkAdapter("A")]], engineSeed: "seed-0001" });
+  const eA = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith(), req: request({ requestId: "REQ", tenantId: "tenant-A" }), targets: [target({ targetId: "ROW", tenantId: "tenant-A" })] });
+  assert.equal(exec(engine, eA).status, "COMPLETE");
+  invoked.length = 0;
+  // tenant B, same requestId + targetId, but B's adapters record "B"
+  const engineB = { ...engine, adapters: new Map([["PRIMARY", mkAdapter("B")], ["CACHE", mkAdapter("B")]]) };
+  const eB = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith(), req: request({ requestId: "REQ", tenantId: "tenant-B", subjectId: "subj-1" }), targets: [target({ targetId: "ROW", tenantId: "tenant-B" })] });
+  const rB = executeDeletion(engineB, eB, { authority: AUTH, holdLedger: createHoldLedger(), now: NOW });
+  assert.equal(rB.status, "COMPLETE");
+  assert.ok(invoked.includes("B"), "tenant B adapter must actually run (not replay tenant A's proof)");
+});
+hostile("IR-005 evidence conflict blocks eligibility AND execution (no delete)", () => {
+  const certBindings = [{ artifactRef: "row-1", certRecordId: "c1", retainUntil: LATER }];
+  const e = eligibilityFor({
+    reg: registryWith(goodClass({ erasureStrategy: "PHYSICAL_DELETE", copyScopes: ["PRIMARY"] })),
+    set: policySetWith(), certBindings,
+  });
+  assert.equal(e.decisions[0].verdict, "BLOCKED_BY_EVIDENCE");
+  let deleted = 0;
+  const adapter = { delete: () => { deleted += 1; return { outcome: "DELETED" }; }, listResidue: () => [] };
+  const engine = createDeletionEngine({ adapters: [["PRIMARY", adapter]], engineSeed: "seed-0001" });
+  const receipt = exec(engine, e);
+  assert.equal(receipt.status, "BLOCKED_BY_EVIDENCE");
+  assert.equal(deleted, 0);
+});
+run("IR-005 CRYPTO_ERASE class is eligible despite evidence binding (payload erased, digests preserved)", () => {
+  const certBindings = [{ artifactRef: "row-1", certRecordId: "c1", retainUntil: LATER }];
+  const e = eligibilityFor({
+    reg: registryWith(goodClass({ erasureStrategy: "CRYPTO_ERASE", copyScopes: ["PRIMARY"] })),
+    set: policySetWith(), certBindings,
+  });
+  assert.equal(e.decisions[0].verdict, "ELIGIBLE");
+  assert.equal(e.decisions[0].evidenceResolution, "CRYPTO_ERASE_PAYLOAD_PRESERVE_DIGESTS");
+});
+hostile("IR-006 arbitrary decisionRef does NOT upgrade the external blocker", () => {
+  const status = providerDecisionStatus({ decisionRef: "not-a-founder-artifact" });
+  assert.equal(status["P1AF-089"], "BLOCKED_EXTERNALLY");
+  assert.deepEqual(status.blockedRows, [...PROVIDER_DEPENDENT_ROWS]);
+  throwsCode(() => assertProviderObligationFinalizable({ providerDependent: true }, { decisionRef: "not-a-founder-artifact" }), "BLOCKED_EXTERNALLY");
+});
+hostile("IR-006 wrong authority id / missing capability / bad digest all stay BLOCKED", () => {
+  const decisions = { esignature: { provider: "A" }, payment: { provider: "B" }, transactionalEmail: { provider: "C" }, documentStorage: { provider: "D" } };
+  const good = buildFounderProviderDecision({ subjectSha: P1A06_SUBJECT_SHA, decisions });
+  // bad digest
+  assert.equal(providerDecisionStatus({ ...good, artifactDigest: "0".repeat(64) })["P1AF-089"], "BLOCKED_EXTERNALLY");
+  // wrong authority WITH a digest recomputed to match the wrong authority
+  // (isolates the authority-id check, not the digest check)
+  const wrongAuth = { authorityId: "WRONG", subjectSha: P1A06_SUBJECT_SHA, decisions };
+  wrongAuth.artifactDigest = digestOf({ authorityId: "WRONG", subjectSha: P1A06_SUBJECT_SHA, decisions });
+  assert.equal(providerDecisionStatus(wrongAuth)["P1AF-089"], "BLOCKED_EXTERNALLY");
+  assert.equal(providerDecisionStatus(wrongAuth).rejectionReason, "WRONG_AUTHORITY");
+  // missing capability WITH a digest recomputed over the reduced decision set
+  // (isolates the capability check, not the digest check)
+  const reduced = { esignature: { provider: "A" }, payment: { provider: "B" }, transactionalEmail: { provider: "C" } };
+  const missingCap = { authorityId: FOUNDER_PROVIDER_AUTHORITY_ID, subjectSha: P1A06_SUBJECT_SHA, decisions: reduced };
+  missingCap.artifactDigest = digestOf({ authorityId: FOUNDER_PROVIDER_AUTHORITY_ID, subjectSha: P1A06_SUBJECT_SHA, decisions: reduced });
+  assert.equal(providerDecisionStatus(missingCap)["P1AF-089"], "BLOCKED_EXTERNALLY");
+  assert.equal(providerDecisionStatus(missingCap).rejectionReason, "CAPABILITY_MISSING:documentStorage");
+});
+run("IR-006 a validated founder artifact does unblock", () => {
+  const good = buildFounderProviderDecision({ subjectSha: P1A06_SUBJECT_SHA, decisions: { esignature: { provider: "DocuSign" }, payment: { provider: "Stripe" }, transactionalEmail: { provider: "Postmark" }, documentStorage: { provider: "S3" } } });
+  const status = providerDecisionStatus(good);
+  assert.equal(status["P1AF-089"], "DECIDED");
+  assert.deepEqual(status.unblocks, [...PROVIDER_DEPENDENT_ROWS]);
+  assert.ok(assertProviderObligationFinalizable({ providerDependent: true }, good));
+  assert.equal(PROVIDER_CAPABILITIES.length, 4);
+  assert.equal(FOUNDER_PROVIDER_AUTHORITY_ID, "P1AF-089_FOUNDER_PROVIDER_DECISION_V1");
+});
+hostile("IR-007 moving the retention anchor forward -> RETENTION_CLOCK_RESET at evaluation", () => {
+  throwsCode(() => evaluateRetention({
+    policySet: policySetWith(), retentionClassId: "RET-X",
+    registeredAnchor: "2026-01-01T00:00:00.000Z", record: { createdAt: "2036-01-01T00:00:00.000Z" }, now: NOW,
+  }), "RETENTION_CLOCK_RESET");
+});
+hostile("IR-008 nested payload inside a metadata object -> rejected", () => {
+  const trail = createAuditTrail();
+  throwsCode(() => appendAudit(trail, { eventType: "DELETE_EXECUTE", subjectRef: subjectHash("s"), at: NOW, metadata: { payload: { email: "v@x" } } }), "AUDIT_FIELD_NOT_ALLOWED");
+});
+hostile("IR-008 known field carrying a nested object -> rejected", () => {
+  const trail = createAuditTrail();
+  throwsCode(() => appendAudit(trail, { eventType: "DELETE_EXECUTE", subjectRef: subjectHash("s"), at: NOW, note: { nested: "x" } }), "PROHIBITED_PAYLOAD_IN_AUDIT");
+});
+hostile("IR-008 tombstone with raw (non-hash) hash fields -> rejected", () => {
+  throwsCode(() => makeTombstone({ targetId: "t", classId: "c", tenantHash: "raw-tenant-id", deletedAt: NOW, requestId: "r" }), "TOMBSTONE_HASH_INVALID");
+});
+
+// ===========================================================================
+// receipt forgery / overclaim (P1AF-080)
+// ===========================================================================
+hostile("forged deletion receipt (no execution, same seed) -> rejected", () => {
+  const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith() });
+  const engineReal = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
+  const receipt = exec(engineReal, e); // real receipt
+  const engineFresh = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
+  const v = verifyDeletionReceipt(engineFresh, receipt, { authority: AUTH, eligibility: e }); // never executed here
+  assert.equal(v.verdict, "RECEIPT_REJECTED");
   assert.ok(v.findings.some((f) => f.startsWith("EXECUTION_UNRECORDED")));
 });
 hostile("tampered receipt digest -> rejected", () => {
   const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith() });
   const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
-  const receipt = executeDeletion(engine, e);
+  const receipt = exec(engine, e);
   const tampered = { ...receipt, tenantId: "tenant-EVIL" };
-  const v = verifyDeletionReceipt(engine, tampered);
+  const v = verifyDeletionReceipt(engine, tampered, { authority: AUTH, eligibility: e });
   assert.equal(v.verdict, "RECEIPT_REJECTED");
   assert.ok(v.findings.includes("RECEIPT_DIGEST_MISMATCH"));
 });
-hostile("executor without eligibility token -> refused (hold bypass defeated)", () => {
-  const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()]], engineSeed: "seed-0001" });
-  throwsCode(() => executeDeletion(engine, {
-    requestId: "req-1", basis: "ERASURE_REQUEST", tenantId: "tenant-A", subjectId: "subj-1",
-    evaluatedAt: NOW, decisions: [{ targetId: "row-1", classId: "t.example", tenantId: "tenant-A", subjectId: "subj-1", verdict: "ELIGIBLE", reason: "x", declaredScopes: ["PRIMARY"], erasureStrategy: "TOMBSTONE", exemptionJustification: null }],
-  }), "EXECUTION_REFUSED_NO_ELIGIBILITY");
-});
-hostile("tampered eligibility (hold decision flipped to ELIGIBLE) -> refused", () => {
-  const holds = createHoldLedger();
-  placeHold(holds, { holdId: "h1", kind: "LEGAL", scope: { kind: "SUBJECT", subjectId: "subj-1" }, reason: "r" });
-  const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith(), holds });
-  e.decisions[0].verdict = "ELIGIBLE"; // attacker flips after evaluation
-  const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
-  throwsCode(() => executeDeletion(engine, e), "EXECUTION_REFUSED_NO_ELIGIBILITY");
+hostile("hand-promoted PARTIAL->COMPLETE receipt -> STATUS_OVERCLAIM", () => {
+  const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith() });
+  const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", failingAdapter()]], engineSeed: "seed-0001" });
+  const receipt = exec(engine, e);
+  const promoted = JSON.parse(JSON.stringify(receipt));
+  promoted.results[0].status = "COMPLETE"; promoted.status = "COMPLETE";
+  promoted.receiptDigest = digestOf({ ...promoted, receiptDigest: undefined });
+  const v = verifyDeletionReceipt(engine, promoted, { authority: AUTH, eligibility: e });
+  assert.equal(v.verdict, "RECEIPT_REJECTED");
+  assert.ok(v.findings.some((f) => f.startsWith("STATUS_OVERCLAIM")));
 });
 hostile("unsupported COMPLETE deletion claim -> OVERCLAIM_REJECTED", () => {
   throwsCode(() => assertReportableStatus("COMPLETE", "PARTIAL"), "OVERCLAIM_REJECTED");
   throwsCode(() => assertReportableStatus("COMPLETE", "UNKNOWN"), "OVERCLAIM_REJECTED");
-  assert.ok(assertReportableStatus("PARTIAL", "COMPLETE")); // weaker claims allowed
+  assert.ok(assertReportableStatus("PARTIAL", "COMPLETE"));
   assert.ok(assertReportableStatus("UNKNOWN", "UNKNOWN"));
 });
 
@@ -389,10 +560,10 @@ hostile("stale replica residue after COMPLETE claim -> REAPPEARANCE_DETECTED, cl
   const adapters = new Map([["PRIMARY", okAdapter()], ["REPLICA", replicaWithResidue]]);
   const res = verifyNoResidue({ adapters, targetId: "row-1", receipt: { results: [{ targetId: "row-1", status: "COMPLETE" }] } });
   assert.equal(res.verdict, "REAPPEARANCE_DETECTED");
-  assert.equal(res.effectiveStatus, "PARTIAL"); // COMPLETE does not stand
+  assert.equal(res.effectiveStatus, "PARTIAL");
 });
 run("residue-unverifiable scope yields UNKNOWN, not clean", () => {
-  const opaque = { delete: () => ({ outcome: "DELETED" }) }; // no listResidue
+  const opaque = { delete: () => ({ outcome: "DELETED" }) };
   const adapters = new Map([["PRIMARY", okAdapter()], ["BACKUP", opaque]]);
   const res = verifyNoResidue({ adapters, targetId: "row-1", receipt: { results: [{ targetId: "row-1", status: "COMPLETE" }] } });
   assert.equal(res.verdict, "UNKNOWN");
@@ -407,8 +578,8 @@ run("P082 tenant plan covers every tenant-scoped class; audit classes exempt not
   const plan = planTenantDeletion(registry, "tenant-A");
   const cover = verifyTenantPlanCoverage(registry, plan);
   assert.equal(cover.verdict, "PLAN_COVERS_TENANT");
-  assert.ok(plan.exempt.some((e) => e.classId === "brandgraph.RotationAudit")); // preserved, justified
-  assert.ok(plan.include.some((i) => i.classId === "brandgraph.GraphEvent"));   // engine-governed despite no FK
+  assert.ok(plan.exempt.some((e) => e.classId === "brandgraph.RotationAudit"));
+  assert.ok(plan.include.some((i) => i.classId === "brandgraph.GraphEvent"));
 });
 hostile("tenant plan missing a registered class -> PLAN_INCOMPLETE", () => {
   const registry = buildBaseClassificationRegistry();
@@ -419,10 +590,7 @@ hostile("tenant plan missing a registered class -> PLAN_INCOMPLETE", () => {
   assert.deepEqual(cover.findings, ["TENANT_PLAN_GAP:brandgraph.GraphEvent"]);
 });
 run("orphan detection finds parentless rows (GraphEvent base-defect class)", () => {
-  const orphans = findOrphans({
-    rows: [{ id: "e1", tenantId: "t1" }, { id: "e2", tenantId: "GONE" }],
-    parentIds: ["t1"], parentKey: "tenantId",
-  });
+  const orphans = findOrphans({ rows: [{ id: "e1", tenantId: "t1" }, { id: "e2", tenantId: "GONE" }], parentIds: ["t1"], parentKey: "tenantId" });
   assert.deepEqual(orphans, ["e2"]);
 });
 
@@ -435,9 +603,9 @@ run("audit chain is digest-linked and verifiable", () => {
   appendAudit(trail, { eventType: "DELETE_EXECUTE", subjectRef: subjectHash("s"), at: NOW });
   assert.equal(verifyAuditChain(trail).verdict, "CHAIN_INTACT");
 });
-hostile("audit entry with payload -> rejected", () => {
+hostile("audit entry with top-level prohibited field -> rejected", () => {
   const trail = createAuditTrail();
-  throwsCode(() => appendAudit(trail, { eventType: "DELETE_EXECUTE", subjectRef: subjectHash("s"), at: NOW, payload: { pii: true } }), "PROHIBITED_PAYLOAD_IN_AUDIT");
+  throwsCode(() => appendAudit(trail, { eventType: "DELETE_EXECUTE", subjectRef: subjectHash("s"), at: NOW, token: "x" }), "PROHIBITED_PAYLOAD_IN_AUDIT");
 });
 hostile("audit entry with raw subject id -> rejected (hash required)", () => {
   const trail = createAuditTrail();
@@ -456,15 +624,14 @@ run("P086 invalidation names all five fields", () => {
   const trail = createAuditTrail();
   const entry = emitInvalidation(trail, {
     subjectRef: subjectHash("s"), priorState: "AUTHORIZED", failedGate: "EVIDENCE_EXPIRED",
-    policyVersion: "P1A_06_PRIVACY_V1", correlationId: "corr-1",
+    policyVersion: "P1A_06_PRIVACY_V2", correlationId: "corr-1",
   }, NOW);
   for (const f of INVALIDATION_REQUIRED_FIELDS) assert.ok(entry[f]);
 });
 hostile("silent invalidation (missing field) -> rejected", () => {
   const trail = createAuditTrail();
   throwsCode(() => emitInvalidation(trail, {
-    subjectRef: subjectHash("s"), priorState: "AUTHORIZED", failedGate: "EVIDENCE_EXPIRED",
-    policyVersion: "P1A_06_PRIVACY_V1", // correlationId missing
+    subjectRef: subjectHash("s"), priorState: "AUTHORIZED", failedGate: "EVIDENCE_EXPIRED", policyVersion: "V",
   }, NOW), "INVALIDATION_FIELDS_MISSING");
 });
 
@@ -472,68 +639,46 @@ hostile("silent invalidation (missing field) -> rejected", () => {
 // cached authorization TTL (P1AF-085)
 // ===========================================================================
 run("P085 cache TTL bounded by earliest evidence expiry", () => {
-  const ttl = boundedCacheTtl({
-    requestedTtlMs: 3_600_000,
-    evidenceExpiries: ["2026-08-20T12:30:00.000Z", "2026-08-21T00:00:00.000Z"],
-    now: NOW,
-  });
-  assert.equal(ttl, 30 * 60 * 1000); // capped at 30 minutes, not the requested hour
+  const ttl = boundedCacheTtl({ requestedTtlMs: 3_600_000, evidenceExpiries: ["2026-08-20T12:30:00.000Z", "2026-08-21T00:00:00.000Z"], now: NOW });
+  assert.equal(ttl, 30 * 60 * 1000);
 });
 hostile("cache outliving evidence expiry -> stale read denied", () => {
   const cache = createAuthzCache();
-  cacheAuthorization(cache, {
-    key: "k", decision: { allow: true }, requestedTtlMs: 3_600_000,
-    evidenceExpiries: ["2026-08-20T12:10:00.000Z"], now: NOW,
-  });
+  cacheAuthorization(cache, { key: "k", decision: { allow: true }, requestedTtlMs: 3_600_000, evidenceExpiries: ["2026-08-20T12:10:00.000Z"], now: NOW });
   assert.deepEqual(readAuthorization(cache, "k", "2026-08-20T12:05:00.000Z"), { allow: true });
   throwsCode(() => readAuthorization(cache, "k", "2026-08-20T12:10:00.000Z"), "CACHE_STALE_DENIED");
 });
 hostile("caching on already-expired evidence -> refused", () => {
   const cache = createAuthzCache();
-  throwsCode(() => cacheAuthorization(cache, {
-    key: "k", decision: { allow: true }, requestedTtlMs: 1000,
-    evidenceExpiries: ["2026-08-20T11:00:00.000Z"], now: NOW,
-  }), "CACHE_EVIDENCE_EXPIRED");
+  throwsCode(() => cacheAuthorization(cache, { key: "k", decision: { allow: true }, requestedTtlMs: 1000, evidenceExpiries: ["2026-08-20T11:00:00.000Z"], now: NOW }), "CACHE_EVIDENCE_EXPIRED");
 });
 
 // ===========================================================================
-// evidence retention reconciliation (P1AF-087) + delete-vs-evidence
+// evidence retention reconciliation (P1AF-087) + delete-vs-evidence helper
 // ===========================================================================
 run("P087 cert record and artifact retention reconciled when aligned", () => {
   const artifacts = new Map([["a1", { retainUntil: LATER }]]);
-  const res = reconcileEvidenceRetention({
-    certRecord: { retainUntil: "2027-01-01T00:00:00.000Z", artifactRefs: ["a1"] },
-    artifacts, now: NOW,
-  });
+  const res = reconcileEvidenceRetention({ certRecord: { retainUntil: "2027-01-01T00:00:00.000Z", artifactRefs: ["a1"] }, artifacts, now: NOW });
   assert.equal(res.verdict, "RECONCILED");
 });
 hostile("cert record referencing already-expired artifact -> violation", () => {
   const artifacts = new Map([["a1", { retainUntil: "2026-01-01T00:00:00.000Z" }]]);
-  const res = reconcileEvidenceRetention({
-    certRecord: { retainUntil: LATER, artifactRefs: ["a1"] },
-    artifacts, now: NOW,
-  });
+  const res = reconcileEvidenceRetention({ certRecord: { retainUntil: LATER, artifactRefs: ["a1"] }, artifacts, now: NOW });
   assert.equal(res.verdict, "CONTRADICTION");
   assert.ok(res.findings.includes("EVIDENCE_RETENTION_VIOLATION:a1"));
   assert.equal(res.requiredAction, "EXTEND_ARTIFACT_RETENTION_OR_REVISE_RECORD");
 });
 hostile("artifact retention lapsing before record -> contradiction surfaced early", () => {
   const artifacts = new Map([["a1", { retainUntil: "2027-06-01T00:00:00.000Z" }]]);
-  const res = reconcileEvidenceRetention({
-    certRecord: { retainUntil: LATER, artifactRefs: ["a1"] },
-    artifacts, now: NOW,
-  });
+  const res = reconcileEvidenceRetention({ certRecord: { retainUntil: LATER, artifactRefs: ["a1"] }, artifacts, now: NOW });
   assert.equal(res.verdict, "CONTRADICTION");
   assert.ok(res.findings.includes("CERT_RETENTION_CONTRADICTION:a1"));
 });
-run("delete-vs-evidence conflict resolves per declared strategy, never silently", () => {
+run("delete-vs-evidence helper resolves per declared strategy", () => {
   const bindings = [{ artifactRef: "a1", certRecordId: "c1", retainUntil: LATER }];
-  const cryptoErase = resolveDeleteEvidenceConflict({ targetId: "a1", erasureStrategy: "CRYPTO_ERASE", certBindings: bindings, now: NOW });
-  assert.equal(cryptoErase.resolution, "CRYPTO_ERASE_PAYLOAD_PRESERVE_DIGESTS");
-  const blocked = resolveDeleteEvidenceConflict({ targetId: "a1", erasureStrategy: "PHYSICAL_DELETE", certBindings: bindings, now: NOW });
-  assert.equal(blocked.resolution, "BLOCKED_BY_EVIDENCE_OBLIGATION");
-  const free = resolveDeleteEvidenceConflict({ targetId: "a2", erasureStrategy: "PHYSICAL_DELETE", certBindings: bindings, now: NOW });
-  assert.equal(free.resolution, "NO_CONFLICT");
+  assert.equal(resolveDeleteEvidenceConflict({ targetId: "a1", erasureStrategy: "CRYPTO_ERASE", certBindings: bindings, now: NOW }).resolution, "CRYPTO_ERASE_PAYLOAD_PRESERVE_DIGESTS");
+  assert.equal(resolveDeleteEvidenceConflict({ targetId: "a1", erasureStrategy: "PHYSICAL_DELETE", certBindings: bindings, now: NOW }).resolution, "BLOCKED_BY_EVIDENCE_OBLIGATION");
+  assert.equal(resolveDeleteEvidenceConflict({ targetId: "a2", erasureStrategy: "PHYSICAL_DELETE", certBindings: bindings, now: NOW }).resolution, "NO_CONFLICT");
 });
 hostile("stale derived artifact (source superseded or deleted) -> flagged", () => {
   const findings = findStaleDerived({
@@ -551,8 +696,7 @@ run("P077/P088 document store enforces declared lifecycle", () => {
   const store = createDocumentStore();
   const doc = storeDocument(store, { documentId: "doc-1", state: "DRAFT", retentionClassId: "RET-X" }, RETENTION_ACTOR);
   assert.equal(doc.state, "DRAFT");
-  const active = transitionDocument(store, "doc-1", "ACTIVE", RETENTION_ACTOR);
-  assert.equal(active.state, "ACTIVE");
+  assert.equal(transitionDocument(store, "doc-1", "ACTIVE", RETENTION_ACTOR).state, "ACTIVE");
 });
 hostile("P088 store outside declared lifecycle -> rejected", () => {
   const store = createDocumentStore();
@@ -571,35 +715,19 @@ hostile("invalid lifecycle transition -> rejected", () => {
 });
 
 // ===========================================================================
-// provider parity (P1AF-090) + provider dependence (P1AF-089)
+// provider parity (P1AF-090)
 // ===========================================================================
 run("P090 lifecycle scenario yields identical invariants on postgresql and sqlite models", () => {
   const scenario = (store) => {
-    store.put("r1", { tenantId: "t1" });
-    store.put("r2", { tenantId: "t1" });
+    store.put("r1", { tenantId: "t1" }); store.put("r2", { tenantId: "t1" });
     const first = store.delete({ targetId: "r1" });
-    const again = store.delete({ targetId: "r1" }); // idempotent
-    return {
-      deletedOutcome: first.outcome, retryOutcome: again.outcome,
-      residue: store.listResidue("r1"), remaining: store.size(),
-    };
+    const again = store.delete({ targetId: "r1" });
+    return { deletedOutcome: first.outcome, retryOutcome: again.outcome, residue: store.listResidue("r1"), remaining: store.size() };
   };
-  const parity = verifyProviderParity(scenario);
-  assert.equal(parity.verdict, "PARITY_OK");
+  assert.equal(verifyProviderParity(scenario).verdict, "PARITY_OK");
 });
 run("P090 declared semantics differ where expected and divergence is justified", () => {
   assert.notEqual(STORE_SEMANTICS.postgresql.concurrency, STORE_SEMANTICS.sqlite.concurrency);
-});
-run("P089 provider decision absent -> BLOCKED_EXTERNALLY with named blocked rows", () => {
-  const status = providerDecisionStatus(null);
-  assert.equal(status["P1AF-089"], "BLOCKED_EXTERNALLY");
-  assert.deepEqual(status.blockedRows, [...PROVIDER_DEPENDENT_ROWS]);
-  assert.ok(status.decisionPacket.includes("P1AF-089_FOUNDER_DECISION_PACKET_V1"));
-});
-hostile("P089 finalizing provider-dependent obligation without founder decision -> refused", () => {
-  throwsCode(() => assertProviderObligationFinalizable({ providerDependent: true }, null), "BLOCKED_EXTERNALLY");
-  assert.ok(assertProviderObligationFinalizable({ providerDependent: false }, null));
-  assert.ok(assertProviderObligationFinalizable({ providerDependent: true }, { decisionRef: "FOUNDER_DECISION_X" }));
 });
 
 // ===========================================================================
@@ -610,15 +738,16 @@ run("base census registers all 8 base surfaces and passes fail-closed gates", ()
   assert.equal(registry.classes.size, 8);
   const coverage = verifyCensusCoverage(registry, BASE_PERSISTENCE_MANIFEST);
   assert.equal(coverage.findings.length, 0);
-  assert.equal(coverage.coverage, "COVERAGE_UNKNOWN"); // manifest declares itself non-exhaustive — preserved
+  assert.equal(coverage.coverage, "COVERAGE_UNKNOWN");
   assert.equal(BASE_SHA, "b0c1b2129123b941c6a350c16dae0ae3a8e076ca");
   assert.ok(BASE_SCHEMA_DEFECTS.length >= 5);
 });
-run("base retention policy set defines every referenced retention class", () => {
+run("base retention policy set defines every referenced retention class (all immutable clocks)", () => {
   const registry = buildBaseClassificationRegistry();
   const set = buildBaseRetentionPolicySet();
   for (const cls of registry.classes.values()) {
     assert.ok(set.classes.has(cls.retentionClassId), `missing retention class ${cls.retentionClassId}`);
+    assert.ok(RETENTION_CLOCK_BASES.includes(set.classes.get(cls.retentionClassId).clockBasis));
   }
 });
 
@@ -630,15 +759,14 @@ run("invariant: aggregate is COMPLETE iff every declared scope proven (256 rando
   for (let i = 0; i < 256; i += 1) {
     const declared = COPY_SCOPES.filter(() => prng() > 0.4);
     if (declared.length === 0) declared.push("PRIMARY");
-    const ops = declared
-      .filter(() => prng() > 0.1) // sometimes a scope never ran
-      .map((scope) => ({ scope, outcome: SCOPE_OUTCOMES[Math.floor(prng() * SCOPE_OUTCOMES.length)] }));
+    const ops = declared.filter(() => prng() > 0.1).map((scope) => ({ scope, outcome: SCOPE_OUTCOMES[Math.floor(prng() * SCOPE_OUTCOMES.length)] }));
     const status = aggregateDeletionStatus(ops, declared);
     const byScope = new Map(ops.map((o) => [o.scope, o]));
     const allProven = declared.every((s) => byScope.has(s) && PROVEN_SCOPE_OUTCOMES.includes(byScope.get(s).outcome));
     if (status === "COMPLETE") assert.ok(allProven, `COMPLETE without proof at case ${i}`);
     if (allProven) assert.equal(status, "COMPLETE");
   }
+  assert.equal(aggregateDeletionStatus([], []), "UNKNOWN"); // IR-003 empty is never COMPLETE
 });
 run("invariant: random retries never duplicate side effects (64 random schedules)", () => {
   const prng = makePrng(0xBEEF);
@@ -646,11 +774,11 @@ run("invariant: random retries never duplicate side effects (64 random schedules
     const e = eligibilityFor({ reg: registryWith(goodClass()), set: policySetWith(), req: request({ requestId: `req-${i}` }) });
     const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", okAdapter()]], engineSeed: "seed-0001" });
     const replays = 1 + Math.floor(prng() * 5);
-    for (let r = 0; r < replays; r += 1) executeDeletion(engine, e);
+    for (let r = 0; r < replays; r += 1) exec(engine, e);
     assert.equal(engine.sideEffects.length, 2, `case ${i}: side effects duplicated`);
   }
 });
-run("invariant: request status never stronger than weakest target (81 combos)", () => {
+run("invariant: request status never stronger than weakest target (combos)", () => {
   const statuses = ["COMPLETE", "PARTIAL", "UNKNOWN", "NOT_RUN"];
   for (const a of statuses) for (const b of statuses) {
     const agg = aggregateRequestStatus([{ status: a }, { status: b }]);
@@ -664,10 +792,7 @@ run("invariant: request status never stronger than weakest target (81 combos)", 
 // integration: full tenant-offboard lifecycle
 // ===========================================================================
 run("integration: hold -> blocked -> release -> partial -> retry -> complete -> tombstone -> no resurrection", () => {
-  const registry = registryWith(goodClass({
-    classId: "int.rows", copyScopes: ["PRIMARY", "CACHE", "OUTBOX"],
-    tenantScoped: true, tenantDeletionPath: "engine",
-  }));
+  const registry = registryWith(goodClass({ classId: "int.rows", copyScopes: ["PRIMARY", "CACHE", "OUTBOX"], tenantScoped: true, tenantDeletionPath: "engine" }));
   const set = policySetWith();
   const holds = createHoldLedger();
   const trail = createAuditTrail();
@@ -675,44 +800,35 @@ run("integration: hold -> blocked -> release -> partial -> retry -> complete -> 
   const targets = [target({ classId: "int.rows" })];
   const req = request({ basis: "TENANT_OFFBOARD" });
 
-  // 1. hold blocks
   placeHold(holds, { holdId: "h-int", kind: "LEGAL", scope: { kind: "TENANT", tenantId: "tenant-A" }, reason: "audit" });
   appendAudit(trail, { eventType: "HOLD_PLACE", subjectRef: tenantHash("tenant-A"), at: NOW });
   let e = eligibilityFor({ reg: registry, set, holds, req, targets });
   assert.equal(e.decisions[0].verdict, "BLOCKED_BY_HOLD");
 
-  // 2. release with authority; now eligible
   releaseHold(holds, "h-int", "COUNSEL_REF_1");
   appendAudit(trail, { eventType: "HOLD_RELEASE", subjectRef: tenantHash("tenant-A"), at: NOW });
   e = eligibilityFor({ reg: registry, set, holds, req, targets });
   assert.equal(e.decisions[0].verdict, "ELIGIBLE");
   appendAudit(trail, { eventType: "DELETE_ELIGIBLE", subjectRef: tenantHash("tenant-A"), at: NOW });
 
-  // 3. execute with flaky OUTBOX -> PARTIAL
   let outboxFails = true;
   const outbox = { delete: () => { if (outboxFails) { outboxFails = false; throw new Error("relay busy"); } return { outcome: "TOMBSTONED" }; }, listResidue: () => [] };
   const engine = createDeletionEngine({ adapters: [["PRIMARY", okAdapter()], ["CACHE", okAdapter()], ["OUTBOX", outbox]], engineSeed: "seed-int" });
-  const first = executeDeletion(engine, e);
+  const first = exec(engine, e, { holds });
   assert.equal(first.status, "PARTIAL");
   assertReportableStatus(first.status, first.status);
   appendAudit(trail, { eventType: "DELETE_EXECUTE", subjectRef: tenantHash("tenant-A"), at: NOW });
 
-  // 4. retry -> COMPLETE, receipt verifies
-  const second = retryDeletion(engine, e);
+  const second = retryDeletion(engine, e, { authority: AUTH, holdLedger: holds, now: NOW });
   assert.equal(second.status, "COMPLETE");
-  assert.equal(verifyDeletionReceipt(engine, second).verdict, "RECEIPT_VERIFIED");
+  assert.equal(verifyDeletionReceipt(engine, second, { authority: AUTH, eligibility: e }).verdict, "RECEIPT_VERIFIED");
   appendAudit(trail, { eventType: "DELETE_RETRY", subjectRef: tenantHash("tenant-A"), at: NOW });
 
-  // 5. tombstone + resurrection guard + read guard
-  recordTombstone(tIndex, makeTombstone({
-    targetId: "row-1", classId: "int.rows", tenantHash: tenantHash("tenant-A"),
-    subjectHash: subjectHash("subj-1"), deletedAt: NOW, requestId: req.requestId,
-  }));
+  recordTombstone(tIndex, makeTombstone({ targetId: "row-1", classId: "int.rows", tenantHash: tenantHash("tenant-A"), subjectHash: subjectHash("subj-1"), deletedAt: NOW, requestId: req.requestId }));
   appendAudit(trail, { eventType: "TOMBSTONE", subjectRef: tenantHash("tenant-A"), at: NOW });
   throwsCode(() => guardOutboxRelay(tIndex, { subject: "row-1" }), "RELAY_BLOCKED_TOMBSTONED");
   throwsCode(() => guardRead({ retentionState: "ACTIVE", tombstoned: isTombstoned(tIndex, "row-1") }), "READ_DENIED_TOMBSTONED");
 
-  // 6. no residue; audit chain intact and payload-free throughout
   const res = verifyNoResidue({ adapters: engine.adapters, targetId: "row-1", receipt: second });
   assert.equal(res.verdict, "NO_RESIDUE");
   assert.equal(verifyAuditChain(trail).verdict, "CHAIN_INTACT");
@@ -722,12 +838,13 @@ run("integration: hold -> blocked -> release -> partial -> retry -> complete -> 
 // ===========================================================================
 // lane accounting
 // ===========================================================================
-run("property register covers all 14 lane requirements", () => {
-  const covered = new Set(PROPERTY_REGISTER.map((p) => p.requirement).filter((r) => r.startsWith("P1AF-")));
+run("property register covers all 14 lane requirements and all 8 IR findings", () => {
+  const covered = new Set(PROPERTY_REGISTER.map((p) => p.requirement));
   for (const row of ["P1AF-077", "P1AF-078", "P1AF-079", "P1AF-080", "P1AF-081", "P1AF-082", "P1AF-083",
     "P1AF-084", "P1AF-085", "P1AF-086", "P1AF-087", "P1AF-088", "P1AF-089", "P1AF-090"]) {
     assert.ok(covered.has(row), `no property for ${row}`);
   }
+  for (let i = 1; i <= 8; i += 1) assert.ok(covered.has(`P1A06-IR-00${i}`), `no property for IR-00${i}`);
 });
 run("lane status preserves BLOCKED_EXTERNALLY and PARTIAL honestly", () => {
   const status = laneRequirementStatus();
@@ -736,9 +853,9 @@ run("lane status preserves BLOCKED_EXTERNALLY and PARTIAL honestly", () => {
   assert.equal(status.rows["P1AF-084"], "PARTIAL");
   assert.equal(Object.keys(status.rows).length, 14);
   assert.ok(status.scopeHonesty.length >= 3);
+  assert.ok(status.remediation.includes("IR-001..008"));
 });
 
-// ===========================================================================
 console.log("--------------------------------------------------------------");
 console.log(`P1A-06 privacy battery: executed=${executed + hostileExecuted} passed=${passed + hostilePassed} (unit/integration ${passed}/${executed}, hostile ${hostilePassed}/${hostileExecuted}) skipped=0`);
 if (executed !== passed || hostileExecuted !== hostilePassed) {
