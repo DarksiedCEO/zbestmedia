@@ -4,6 +4,7 @@
 /.github/workflows/p1a-certify.yml @DarksiedCEO
 /docs/security/p1-a/trusted-certification-bootstrap.md @DarksiedCEO
 /scripts/detect-p1a-ordinary-ci-secrets.mjs @DarksiedCEO
+/scripts/p1a-attestation-core.mjs @DarksiedCEO
 /scripts/test-p1a-authority-root-mutation.mjs @DarksiedCEO
 /scripts/test-p1a-authority-root.mjs @DarksiedCEO
 /scripts/test-p1a-certification-accounting.mjs @DarksiedCEO

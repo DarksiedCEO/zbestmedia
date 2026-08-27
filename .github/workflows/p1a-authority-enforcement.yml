@@ -15,6 +15,7 @@ on:
       - ".github/CODEOWNERS"
       - ".github/workflows/p1a-authority-enforcement.yml"
       - "scripts/validate-p1a-authority-root.mjs"
+      - "scripts/p1a-attestation-core.mjs"
       - "scripts/test-p1a-authority-root.mjs"
       - "scripts/test-p1a-authority-root-mutation.mjs"
   push:

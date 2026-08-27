@@ -4,10 +4,11 @@
 // cannot create its own authority and label it independent. Every verdict here fails
 // closed: unknown, missing, or caller-supplied authority is rejected, never defaulted.
 
-import { createHash, verify as cryptoVerify, createPublicKey } from "node:crypto";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { openSync, readSync, fstatSync, lstatSync, closeSync, constants } from "node:fs";
+import { openSync, readSync, fstatSync, lstatSync, closeSync, constants, existsSync } from "node:fs";
 import { resolve, sep, isAbsolute, normalize } from "node:path";
+import { verifyAttestationCore, makeFsReplayStore } from "./p1a-attestation-core.mjs";
 
 export const POLICY_VERSION = "P1A_AUTHORITY_POLICY_V1";
 
@@ -16,63 +17,53 @@ const HEX64 = /^[0-9a-f]{64}$/u;
 const HEX40 = /^[0-9a-f]{40}$/u;
 
 // ---------------------------------------------------------------------------
-// V3 remediation (Codex INDEPENDENT_REVIEW_BLOCK H1–H4): signed external
-// attestation boundary. Findings H1–H4 all shared one root cause — local code
-// treating caller-supplied labels, source strings, digests, and plans as
-// evidence. None of those are proof. The only thing that can prove an external
-// event (a protected GitHub run, a human gate, a rollback execution) is a
-// signature from an authenticated external principal, verified against a trust
-// anchor local code does NOT get to choose.
+// V4 remediation (Codex INDEPENDENT_REVIEW_BLOCK F1/F2/F3). Signed external
+// attestation boundary with SEALED trust custody, freshness/replay enforcement,
+// repository binding, and canonical encoding. The verification primitive lives
+// in the separate injectable module p1a-attestation-core; production resolves
+// anchors and the replay ledger from this sealed boundary only.
 //
-// The production trust anchors are UNPROVISIONED here: no external signer key
-// exists in this repository. Therefore every external-proof path fails closed
-// to *_UNPROVEN / EXTERNAL_AUTHORITY_UNPROVISIONED. The verification mechanism
-// is real Ed25519 (proven by tests with an ephemeral key); the honest local
-// outcome is simply that nothing external can be proven from local bytes.
-function canonicalJson(value) {
-  if (Array.isArray(value)) return value.map(canonicalJson);
-  if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map((k) => [k, canonicalJson(value[k])]));
-  return value;
-}
-
-// Default (production) trust anchors: every external producer is UNPROVISIONED.
-// Provisioning a real public key is an EXTERNAL act, never a local edit.
-export const EXTERNAL_AUTHORITY_TRUST_ANCHORS = Object.freeze({
-  GITHUB_ACTIONS_PROTECTED_RUN: Object.freeze({ status: "UNPROVISIONED", publicKeyPem: null }),
-  FOUNDER_DARKSIEDCEO: Object.freeze({ status: "UNPROVISIONED", publicKeyPem: null }),
-  CODEX: Object.freeze({ status: "UNPROVISIONED", publicKeyPem: null }),
+// F1: no caller-facing anchor argument on any production entrypoint — not a
+// parameter, env var, imported mutable object, or payload field. Every sealed
+// anchor is UNPROVISIONED (no external signer key exists locally), so every
+// external-proof path fails closed. The crypto positive path is provable only
+// through the test-only core with an ephemeral key, which no production entry
+// point can reach.
+const SEALED_TRUST_ANCHORS = Object.freeze({
+  "github-actions-protected-run": Object.freeze({ status: "UNPROVISIONED", publicKeyPem: null, keyId: "github-actions-protected-run", producer: "GITHUB_ACTIONS_PROTECTED_RUN" }),
+  "founder-darksiedceo": Object.freeze({ status: "UNPROVISIONED", publicKeyPem: null, keyId: "founder-darksiedceo", producer: "FOUNDER_DARKSIEDCEO" }),
+  "codex": Object.freeze({ status: "UNPROVISIONED", publicKeyPem: null, keyId: "codex", producer: "CODEX" }),
 });
-
-// The signed message binds producer + exact subject + claim type + control/gate
-// scope + a monotonic issuedAt, so a signature cannot be replayed across
-// subjects, controls, or claim types. The `signature` field is excluded from
-// the signed message.
-export function attestationMessage(att) {
-  return Buffer.from(JSON.stringify(canonicalJson({
-    producer: att?.producer,
-    subjectBaseSha: att?.subjectBaseSha,
-    claimType: att?.claimType,
-    scope: att?.scope ?? null,
-    issuedAt: att?.issuedAt ?? null,
-    body: att?.body ?? null,
-  })), "utf8");
+// The sealed replay-ledger directory is not provisioned in this repository, so
+// the authoritative store is absent and consume() fails closed with
+// MISSING_REPLAY_STORE — the honest local state. Resolved here, never supplied.
+function sealedReplayDir() {
+  try { return resolve(new URL("../.p1a-authority-replay-ledger", import.meta.url).pathname); }
+  catch { return resolve(sep, "nonexistent-p1a-authority-replay-ledger"); }
 }
 
-export function verifyExternalAttestation(attestation, expectedClaimType, expectedScope, trustAnchors = EXTERNAL_AUTHORITY_TRUST_ANCHORS) {
-  if (!attestation || typeof attestation !== "object" || Array.isArray(attestation)) {
-    return { verified: false, reason: "ATTESTATION_MALFORMED" };
-  }
-  if (attestation.claimType !== expectedClaimType) return { verified: false, reason: "ATTESTATION_WRONG_CLAIM_TYPE" };
-  if (attestation.subjectBaseSha !== AUTHORIZED_REBUILD_BASE.sha) return { verified: false, reason: "ATTESTATION_WRONG_SUBJECT" };
-  if (expectedScope !== undefined && attestation.scope !== expectedScope) return { verified: false, reason: "ATTESTATION_WRONG_SCOPE" };
-  const anchor = trustAnchors?.[attestation.producer];
-  if (!anchor || anchor.publicKeyPem == null) return { verified: false, reason: "EXTERNAL_AUTHORITY_UNPROVISIONED" };
-  if (typeof attestation.signature !== "string" || attestation.signature.length === 0) return { verified: false, reason: "ATTESTATION_UNSIGNED" };
-  let key;
-  try { key = createPublicKey(anchor.publicKeyPem); } catch { return { verified: false, reason: "TRUST_ANCHOR_KEY_INVALID" }; }
-  let ok = false;
-  try { ok = cryptoVerify(null, attestationMessage(attestation), key, Buffer.from(attestation.signature, "base64")); } catch { ok = false; }
-  return ok ? { verified: true, reason: null } : { verified: false, reason: "ATTESTATION_SIGNATURE_INVALID" };
+function sealedResolveAnchor(keyId) {
+  return Object.prototype.hasOwnProperty.call(SEALED_TRUST_ANCHORS, keyId) ? SEALED_TRUST_ANCHORS[keyId] : null;
+}
+function sealedReplayStore() {
+  const dir = sealedReplayDir();
+  return makeFsReplayStore(existsSync(dir) ? dir : resolve(dir, "__absent__"));
+}
+
+// Production verification: NO anchor/replay/clock argument. rawText is the exact
+// on-disk attestation bytes (read through the trusted reader). The anchor is
+// resolved from the sealed set keyed by the attestation's own keyId, which the
+// core independently re-checks against status and key-id.
+export function verifyExternalAttestation(rawText, expectedClaimType, expectedScope, expectedSubject) {
+  let keyId = null;
+  try { keyId = JSON.parse(rawText)?.keyId; } catch { /* core rejects malformed */ }
+  const anchor = typeof keyId === "string" ? sealedResolveAnchor(keyId) : null;
+  return verifyAttestationCore(
+    typeof rawText === "string" ? rawText : "",
+    { claimType: expectedClaimType, scope: expectedScope, subject: expectedSubject },
+    anchor,
+    { nowMs: Date.now(), replayStore: sealedReplayStore() },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -298,6 +289,7 @@ export const TRUSTED_SURFACE_FILES = Object.freeze([
   ".github/workflows/p1a-certify.yml",
   "docs/security/p1-a/trusted-certification-bootstrap.md",
   "scripts/detect-p1a-ordinary-ci-secrets.mjs",
+  "scripts/p1a-attestation-core.mjs",
   "scripts/test-p1a-authority-root-mutation.mjs",
   "scripts/test-p1a-authority-root.mjs",
   "scripts/test-p1a-certification-accounting.mjs",
@@ -308,13 +300,14 @@ export const TRUSTED_SURFACE_FILES = Object.freeze([
   "scripts/validate-p1a-certification-accounting.mjs",
   "scripts/validate-p1a-threat-model.mjs",
 ]);
-export const TRUSTED_SURFACE_DENOMINATOR = 15;
+export const TRUSTED_SURFACE_DENOMINATOR = 16;
 
 // The set of changed enforcement/hostile-test files whose CODEOWNERS coverage
 // must be verified on every change (H6). Any file here that a change touches
 // must be covered by the PRIOR CODEOWNERS, or the change fails closed.
 export const ENFORCEMENT_TEST_SURFACE = Object.freeze([
   "scripts/validate-p1a-authority-root.mjs",
+  "scripts/p1a-attestation-core.mjs",
   "scripts/test-p1a-authority-root.mjs",
   "scripts/test-p1a-authority-root-mutation.mjs",
   ".github/workflows/p1a-authority-enforcement.yml",
@@ -484,7 +477,7 @@ export const CANONICAL_OBSERVATION_PRODUCERS = Object.freeze({
 // digest. Each artifact must additionally bind the execution SUBJECT and a
 // canonical PRODUCER; a receipt for another subject or from an unknown
 // principal is not evidence.
-export function classifyExecutionEvidence(evidenceRoot, claim, trustAnchors = EXTERNAL_AUTHORITY_TRUST_ANCHORS) {
+export function classifyExecutionEvidence(evidenceRoot, claim) {
   if (typeof evidenceRoot !== "string" || evidenceRoot.length === 0 || !claim || typeof claim !== "object" || Array.isArray(claim)) {
     return { verdict: "EXECUTION_UNPROVEN", findings: ["EXECUTION_CLAIM_MISSING"] };
   }
@@ -512,10 +505,11 @@ export function classifyExecutionEvidence(evidenceRoot, claim, trustAnchors = EX
       findings.push(read.findings.includes("ARTIFACT_DIGEST_MISMATCH") ? "FABRICATED_EXECUTION_ARTIFACT" : "EXECUTION_ARTIFACT_UNREADABLE");
       continue;
     }
+    const rawText = read.bytes.toString("utf8");
     let attestation;
-    try { attestation = JSON.parse(read.bytes.toString("utf8")); } catch { findings.push("EXECUTION_ATTESTATION_NOT_JSON"); continue; }
+    try { attestation = JSON.parse(rawText); } catch { findings.push("EXECUTION_ATTESTATION_NOT_JSON"); continue; }
     if (attestation?.producer !== artifact.producer) { findings.push("EXECUTION_ATTESTATION_PRODUCER_MISMATCH"); continue; }
-    const v = verifyExternalAttestation(attestation, "OBSERVED_EXECUTION", claim.subjectSha, trustAnchors);
+    const v = verifyExternalAttestation(rawText, "OBSERVED_EXECUTION", claim.subjectSha, claim.subjectSha);
     if (!v.verified) { findings.push(`EXECUTION_ATTESTATION_UNVERIFIED_${v.reason}`); continue; }
   }
   return findings.length
@@ -621,12 +615,7 @@ export const LOCAL_CUSTODY_AUTHORIZATION_CEILING = Object.freeze({
   externalVerdictAuthority: "EXTERNAL_EVALUATION_PER_EXTERNAL_CUSTODY_CONTRACT_ONLY",
 });
 
-const CUSTODY_AUTHORITY_DIGESTS = Object.freeze([
-  CANONICAL_AUTHORITY_ANCHORS.founderFreezeSha256,
-  CANONICAL_AUTHORITY_ANCHORS.releaseAuthoritySha256,
-]);
-
-export function assessExternalCustody(evidenceRoot, receiptRefs, trustAnchors = EXTERNAL_AUTHORITY_TRUST_ANCHORS) {
+export function assessExternalCustody(evidenceRoot, receiptRefs) {
   const findings = [];
   const byControl = new Map();
   if (typeof evidenceRoot !== "string" || evidenceRoot.length === 0) {
@@ -634,23 +623,18 @@ export function assessExternalCustody(evidenceRoot, receiptRefs, trustAnchors = 
   } else {
     const refs = Array.isArray(receiptRefs) ? receiptRefs : [];
     for (const ref of refs) {
-      if (!ref || typeof ref !== "object" || !ref.path || !HEX64.test(ref.sha256 ?? "")) { findings.push("CUSTODY_RECEIPT_REF_MALFORMED"); continue; }
+      if (!ref || typeof ref !== "object" || !ref.path || !HEX64.test(ref.sha256 ?? "") || typeof ref.controlId !== "string") { findings.push("CUSTODY_RECEIPT_REF_MALFORMED"); continue; }
+      if (!CUSTODY_CONTROLS.some((c) => c.id === ref.controlId)) { findings.push("CUSTODY_RECEIPT_UNKNOWN_CONTROL"); continue; }
       const read = readAuthorityArtifact(evidenceRoot, ref.path, ref.sha256);
-      if (read.verdict !== "ARTIFACT_VERIFIED") { findings.push(`CUSTODY_RECEIPT_UNREADABLE_${ref.controlId ?? "UNKNOWN"}`); continue; }
-      let receipt;
-      try { receipt = JSON.parse(read.bytes.toString("utf8")); } catch { findings.push("CUSTODY_RECEIPT_NOT_JSON"); continue; }
-      if (!receipt || typeof receipt !== "object" || receipt.controlId !== ref.controlId) { findings.push("CUSTODY_RECEIPT_CONTROL_MISMATCH"); continue; }
-      if (!CUSTODY_CONTROLS.some((c) => c.id === receipt.controlId)) { findings.push("CUSTODY_RECEIPT_UNKNOWN_CONTROL"); continue; }
-      if (!(receipt.producer in CANONICAL_OBSERVATION_PRODUCERS)) { findings.push(`CUSTODY_PRODUCER_UNKNOWN_${receipt.controlId}`); continue; }
-      if (receipt.subjectBaseSha !== AUTHORIZED_REBUILD_BASE.sha) { findings.push(`CUSTODY_WRONG_SUBJECT_${receipt.controlId}`); continue; }
-      if (!CUSTODY_AUTHORITY_DIGESTS.includes(receipt.authoritySha256)) { findings.push(`CUSTODY_AUTHORITY_UNBOUND_${receipt.controlId}`); continue; }
-      // H2 fix: source:"GITHUB_OBSERVATION" as a caller STRING is meaningless.
-      // Require a signature over (producer, subject, claimType, control) verified
-      // against the producer's external trust anchor. Scope is bound to the
-      // control id so a receipt cannot be replayed across controls.
-      const v = verifyExternalAttestation(receipt, "GITHUB_CUSTODY_OBSERVATION", receipt.controlId, trustAnchors);
-      if (!v.verified) { findings.push(`CUSTODY_ATTESTATION_UNVERIFIED_${receipt.controlId}_${v.reason}`); continue; }
-      byControl.set(receipt.controlId, receipt);
+      if (read.verdict !== "ARTIFACT_VERIFIED") { findings.push(`CUSTODY_RECEIPT_UNREADABLE_${ref.controlId}`); continue; }
+      // H2/F2 fix: the receipt is a signed GITHUB_CUSTODY_OBSERVATION attestation.
+      // The core binds repository + commit (=authorized base) + claimType +
+      // scope (=controlId) + producer + keyId, and enforces freshness + one-time
+      // consumption, all against the SEALED anchor. Caller strings and caller
+      // anchors are structurally impossible here.
+      const v = verifyExternalAttestation(read.bytes.toString("utf8"), "GITHUB_CUSTODY_OBSERVATION", ref.controlId, AUTHORIZED_REBUILD_BASE.sha);
+      if (!v.verified) { findings.push(`CUSTODY_ATTESTATION_UNVERIFIED_${ref.controlId}_${v.reason}`); continue; }
+      byControl.set(ref.controlId, true);
     }
   }
   const unproven = CUSTODY_CONTROLS.filter((control) => !byControl.has(control.id));
@@ -666,7 +650,7 @@ export function assessExternalCustody(evidenceRoot, receiptRefs, trustAnchors = 
   };
 }
 
-export function assessGateCompleteness(gateEvidenceRoot, gateRefs, trustAnchors = EXTERNAL_AUTHORITY_TRUST_ANCHORS) {
+export function assessGateCompleteness(gateEvidenceRoot, gateRefs) {
   // H3 fix: a gate "digest" that the caller authored proves nothing. Each gate
   // must present a signed HUMAN_GATE attestation (scope = gate name) read from
   // disk through the trusted reader and verified against the gate authority's
@@ -683,9 +667,7 @@ export function assessGateCompleteness(gateEvidenceRoot, gateRefs, trustAnchors 
       if (!ref || typeof ref !== "object" || !ref.path || !HEX64.test(ref.sha256 ?? "")) { findings.push(`GATE_REF_MALFORMED_${gate}`); continue; }
       const read = readAuthorityArtifact(gateEvidenceRoot, ref.path, ref.sha256);
       if (read.verdict !== "ARTIFACT_VERIFIED") { findings.push(`GATE_UNREADABLE_${gate}`); continue; }
-      let att;
-      try { att = JSON.parse(read.bytes.toString("utf8")); } catch { findings.push(`GATE_NOT_JSON_${gate}`); continue; }
-      const v = verifyExternalAttestation(att, "HUMAN_GATE", gate, trustAnchors);
+      const v = verifyExternalAttestation(read.bytes.toString("utf8"), "HUMAN_GATE", gate, AUTHORIZED_REBUILD_BASE.sha);
       if (!v.verified) { findings.push(`GATE_UNVERIFIED_${gate}_${v.reason}`); continue; }
       verified.add(gate);
     }
@@ -730,7 +712,7 @@ export function assessRollbackAction(action) {
 // attestation (scope = rollback kind) verified against the executor's external
 // trust anchor. Absent provisioning this is unreachable: an unexecuted
 // descriptor yields ROLLBACK_EXECUTION_UNPROVEN, never AUTHORIZED.
-export function authorizeRollback(action, evidenceRoot, executionRef, trustAnchors = EXTERNAL_AUTHORITY_TRUST_ANCHORS) {
+export function authorizeRollback(action, evidenceRoot, executionRef) {
   const plan = assessRollbackAction(action);
   if (plan.verdict !== "ROLLBACK_PLAN_VALIDATED") {
     return { verdict: "ROLLBACK_REJECTED", findings: plan.findings };
@@ -740,9 +722,7 @@ export function authorizeRollback(action, evidenceRoot, executionRef, trustAncho
   }
   const read = readAuthorityArtifact(evidenceRoot, executionRef.path, executionRef.sha256);
   if (read.verdict !== "ARTIFACT_VERIFIED") return { verdict: "ROLLBACK_EXECUTION_UNPROVEN", findings: ["ROLLBACK_EXECUTION_ARTIFACT_UNREADABLE"] };
-  let att;
-  try { att = JSON.parse(read.bytes.toString("utf8")); } catch { return { verdict: "ROLLBACK_EXECUTION_UNPROVEN", findings: ["ROLLBACK_EXECUTION_NOT_JSON"] }; }
-  const v = verifyExternalAttestation(att, "ROLLBACK_EXECUTION", action.kind, trustAnchors);
+  const v = verifyExternalAttestation(read.bytes.toString("utf8"), "ROLLBACK_EXECUTION", action.kind, AUTHORIZED_REBUILD_BASE.sha);
   if (!v.verified) return { verdict: "ROLLBACK_EXECUTION_UNPROVEN", findings: [`ROLLBACK_EXECUTION_UNVERIFIED_${v.reason}`] };
   return { verdict: "ROLLBACK_AUTHORIZED", findings: [] };
 }
@@ -946,6 +926,20 @@ export const PROPERTY_REGISTER = Object.freeze([
   "ENFORCEMENT_SURFACE_WORKFLOW_WIRED",           // H5: validator invoked by enforcement workflow
   "ENFORCEMENT_REQUIRED_CHECK_NOT_ASSERTED",      // H5: GitHub required-check enforcement bounded NOT_OBSERVED
   "PARENT_CODEOWNERS_GAP_FAILS_CLOSED",           // H6: uncovered-at-parent enforcement file blocks
+  // V4 remediation (INDEPENDENT_REVIEW_BLOCK F1/F2/F3):
+  "TRUST_ANCHORS_SEALED_NOT_CALLER_SUPPLIED",     // F1: no anchor argument on production entrypoints
+  "UNPROVISIONED_ANCHOR_FAILS_CLOSED",            // F1: status checked; a key on UNPROVISIONED never verifies
+  "UNKNOWN_KEY_ID_FAILS_CLOSED",                  // F1: keyId must resolve in the sealed set and match the anchor
+  "ATTESTATION_REPOSITORY_BINDING_REQUIRED",      // F2: signed repository must equal canonical remote
+  "ATTESTATION_COMMIT_BINDING_REQUIRED",          // F2: signed commit must equal expected subject
+  "ATTESTATION_ISSUED_AT_ENFORCED",               // F2: not-before enforced with skew
+  "ATTESTATION_EXPIRY_ENFORCED",                  // F2: not-after enforced with skew
+  "ATTESTATION_VALIDITY_WINDOW_BOUNDED",          // F2: expiry-issued must be within max window
+  "ATTESTATION_ONE_TIME_CONSUMPTION",             // F2: authoritative atomic replay ledger consumes the id
+  "MISSING_REPLAY_STORE_FAILS_CLOSED",            // F2: absent authoritative ledger => fail closed
+  "ATTESTATION_STRICT_FIELD_SET",                 // F3: exact field set, no missing/extra
+  "ATTESTATION_DUPLICATE_KEY_REJECTED",           // F3: duplicate top-level keys rejected (parser differential)
+  "SIGNATURE_CANONICAL_BASE64_ENFORCED",          // F3: strict base64 + 64-byte len + encode-back equality
 ]);
 
 // ---------------------------------------------------------------------------
