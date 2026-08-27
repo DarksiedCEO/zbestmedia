@@ -42,16 +42,23 @@ export function canonicalAttestationMessage(att) {
   return Buffer.from(JSON.stringify(canonical(picked)), "utf8");
 }
 
-// Detects duplicate top-level keys in the RAW json text (parser-differential /
-// duplicate-field attacks). JSON.parse silently keeps the last duplicate; we
-// reject instead of normalizing attacker input.
-function hasDuplicateTopLevelKey(rawText) {
-  for (const field of ATTESTATION_FIELDS) {
-    const re = new RegExp(`"${field}"\\s*:`, "gu");
-    let count = 0; while (re.exec(rawText) !== null) count += 1;
-    if (count > 1) return field;
-  }
-  return null;
+// V5 remediation (Codex INDEPENDENT_REVIEW_BLOCK, LOW): exactly one canonical
+// byte representation of the signed envelope. The envelope is a FLAT object of
+// exactly ATTESTATION_FIELDS, every value a string (no numbers, no nesting). Its
+// canonical serialization is JSON with keys in a fixed sorted order and no
+// insignificant whitespace. Requiring the received bytes to EQUAL this canonical
+// serialization is a single structural boundary — not literal-text/regex
+// scanning — that rejects: duplicate member names (escaped OR literal: JSON.parse
+// collapses them, so any duplicate makes raw ≠ canonical), key reordering,
+// insignificant whitespace, alternate escape spellings (they decode then
+// re-serialize to canonical, ≠ raw), BOMs and non-ASCII (canonical is ASCII),
+// leading/trailing whitespace, trailing tokens, and concatenated documents.
+export const CANONICAL_ENVELOPE_FIELD_ORDER = Object.freeze([...ATTESTATION_FIELDS].sort());
+
+export function canonicalEnvelopeText(att) {
+  const ordered = {};
+  for (const f of CANONICAL_ENVELOPE_FIELD_ORDER) ordered[f] = att[f];
+  return JSON.stringify(ordered);
 }
 
 export function isCanonicalEd25519Signature(sig) {
@@ -99,8 +106,13 @@ export function verifyAttestationCore(rawText, expected, anchor, opts) {
   if (keys.length !== ATTESTATION_FIELDS.length || !ATTESTATION_FIELDS.every((f) => Object.prototype.hasOwnProperty.call(att, f))) {
     return { verified: false, reason: "ATTESTATION_FIELD_SET_INVALID" };
   }
-  const dup = hasDuplicateTopLevelKey(rawText);
-  if (dup) return { verified: false, reason: `ATTESTATION_DUPLICATE_FIELD_${dup}` };
+  // Every envelope value is a string; no numbers/nesting are permitted, so no
+  // number-format or nested-structure variants can exist.
+  if (!ATTESTATION_FIELDS.every((f) => typeof att[f] === "string")) return { verified: false, reason: "ENVELOPE_VALUE_NOT_STRING" };
+  // Exactly one canonical byte representation. This subsumes duplicate keys
+  // (escaped or literal), reordering, whitespace, alternate escapes, BOM,
+  // trailing bytes/tokens, and non-ASCII — before any trust-state evaluation.
+  if (rawText !== canonicalEnvelopeText(att)) return { verified: false, reason: "DOCUMENT_NOT_CANONICAL" };
 
   // Types / lengths / character sets.
   if (!HEX_ID.test(att.attestationId ?? "")) return { verified: false, reason: "ATTESTATION_ID_INVALID" };

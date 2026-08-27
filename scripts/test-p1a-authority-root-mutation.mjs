@@ -53,7 +53,21 @@ const CORE_PROBES = {
   bad_time: (c) => { const { pem, privateKey } = makeKey(); assert.equal(c.verifyAttestationCore(JSON.stringify(makeAtt(c, privateKey, { attestationId: HEXID("4"), issuedAt: "nope" })), expect(c, "OBSERVED_EXECUTION", BASE), anchor(pem), { nowMs: NOW, replayStore: tempStore(c) }).reason, "TIMESTAMP_INVALID"); },
   expiry_not_after: (c) => { const { pem, privateKey } = makeKey(); assert.equal(c.verifyAttestationCore(JSON.stringify(makeAtt(c, privateKey, { attestationId: HEXID("5"), issuedAt: "2026-08-26T12:00:00Z", expiresAt: "2026-08-26T12:00:00Z" })), expect(c, "OBSERVED_EXECUTION", BASE), anchor(pem), { nowMs: NOW, replayStore: tempStore(c) }).reason, "EXPIRY_NOT_AFTER_ISSUED"); },
   field_set: (c) => { const { pem, privateKey } = makeKey(); const att = makeAtt(c, privateKey); assert.equal(c.verifyAttestationCore(JSON.stringify({ ...att, extra: 1 }), expect(c, "OBSERVED_EXECUTION", BASE), anchor(pem), { nowMs: NOW, replayStore: tempStore(c) }).reason, "ATTESTATION_FIELD_SET_INVALID"); },
-  dup_key: (c) => { const { pem, privateKey } = makeKey(); const s = JSON.stringify(makeAtt(c, privateKey)); const dup = `${s.slice(0, -1)},"scope":"${BASE}"}`; assert.notEqual(c.verifyAttestationCore(dup, expect(c, "OBSERVED_EXECUTION", BASE), anchor(pem), { nowMs: NOW, replayStore: tempStore(c) }).verified, true); },
+  doc_canonical: (c) => {
+    const { pem, privateKey } = makeKey(); const att = makeAtt(c, privateKey);
+    const canon = JSON.stringify(att);
+    const chk = (raw) => c.verifyAttestationCore(raw, expect(c, "OBSERVED_EXECUTION", BASE), anchor(pem), { nowMs: NOW, replayStore: tempStore(c) });
+    assert.equal(chk(canon).verified, true);
+    // literal duplicate key
+    assert.equal(chk(`${canon.slice(0, -1)},"scope":"${BASE}"}`).reason, "DOCUMENT_NOT_CANONICAL");
+    // escaped duplicate key
+    assert.equal(chk(`${canon.slice(0, -1)},"\\u0073cope":"${BASE}"}`).reason, "DOCUMENT_NOT_CANONICAL");
+    // reordered fields
+    const reordered = JSON.stringify({ signature: att.signature, scope: att.scope, repository: att.repository, producer: att.producer, keyId: att.keyId, issuedAt: att.issuedAt, expiresAt: att.expiresAt, commit: att.commit, claimType: att.claimType, attestationId: att.attestationId });
+    assert.equal(chk(reordered).reason, "DOCUMENT_NOT_CANONICAL");
+    // insignificant whitespace
+    assert.equal(chk(canon.replace(/,/gu, ", ")).reason, "DOCUMENT_NOT_CANONICAL");
+  },
   sig_canonical: (c) => { const { pem, privateKey } = makeKey(); const att = makeAtt(c, privateKey); assert.equal(c.verifyAttestationCore(JSON.stringify({ ...att, signature: `${att.signature.slice(0, 8)}\n${att.signature.slice(8)}` }), expect(c, "OBSERVED_EXECUTION", BASE), anchor(pem), { nowMs: NOW, replayStore: tempStore(c) }).reason, "SIGNATURE_ENCODING_NON_CANONICAL"); assert.equal(c.verifyAttestationCore(JSON.stringify({ ...att, signature: `${att.signature}xx` }), expect(c, "OBSERVED_EXECUTION", BASE), anchor(pem), { nowMs: NOW, replayStore: tempStore(c) }).reason, "SIGNATURE_ENCODING_NON_CANONICAL"); },
   sig_noncanonical_padding: (c) => {
     // The final base64 data char of a canonical 64-byte signature carries 4
@@ -147,7 +161,7 @@ const PROD_PROBES = {
 
 const CORE_MUTANTS = [
   { p: "FIELD_SET", find: `  if (keys.length !== ATTESTATION_FIELDS.length || !ATTESTATION_FIELDS.every((f) => Object.prototype.hasOwnProperty.call(att, f))) {\n    return { verified: false, reason: "ATTESTATION_FIELD_SET_INVALID" };\n  }`, r: `` },
-  { p: "DUP_KEY", find: `  const dup = hasDuplicateTopLevelKey(rawText);\n  if (dup) return { verified: false, reason: \`ATTESTATION_DUPLICATE_FIELD_\${dup}\` };`, r: `` },
+  { p: "DOCUMENT_CANONICAL", find: `  if (rawText !== canonicalEnvelopeText(att)) return { verified: false, reason: "DOCUMENT_NOT_CANONICAL" };`, r: `` },
   { p: "ID_INVALID", find: `  if (!HEX_ID.test(att.attestationId ?? "")) return { verified: false, reason: "ATTESTATION_ID_INVALID" };`, r: `` },
   { p: "PRODUCER", find: `  if (!CANONICAL_PRODUCERS.includes(att.producer)) return { verified: false, reason: "PRODUCER_UNKNOWN" };`, r: `` },
   { p: "REPO", find: `  if (att.repository !== CANONICAL_REPOSITORY) return { verified: false, reason: "REPOSITORY_BINDING_INVALID" };`, r: `` },

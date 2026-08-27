@@ -938,8 +938,11 @@ export const PROPERTY_REGISTER = Object.freeze([
   "ATTESTATION_ONE_TIME_CONSUMPTION",             // F2: authoritative atomic replay ledger consumes the id
   "MISSING_REPLAY_STORE_FAILS_CLOSED",            // F2: absent authoritative ledger => fail closed
   "ATTESTATION_STRICT_FIELD_SET",                 // F3: exact field set, no missing/extra
-  "ATTESTATION_DUPLICATE_KEY_REJECTED",           // F3: duplicate top-level keys rejected (parser differential)
   "SIGNATURE_CANONICAL_BASE64_ENFORCED",          // F3: strict base64 + 64-byte len + encode-back equality
+  // V5 remediation (INDEPENDENT_REVIEW_BLOCK, LOW):
+  "ENVELOPE_EXACTLY_ONE_CANONICAL_BYTE_FORM",     // V5: received bytes must equal the canonical envelope
+  "ENVELOPE_ALL_STRING_VALUES",                   // V5: no numbers/nesting => no format variants
+  "DUP_KEY_REJECTED_STRUCTURALLY",                // V5: escaped+literal dup keys rejected via canonical equality (no regex)
 ]);
 
 // ---------------------------------------------------------------------------

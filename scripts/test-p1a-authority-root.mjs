@@ -158,15 +158,40 @@ hostile("F3_non_canonical_signature_rejected", () => {
   const suffix = { ...att, signature: `${att.signature}junk` };
   assert.equal(verifyAttestationCore(JSON.stringify(suffix), expect("OBSERVED_EXECUTION", BASE), anchor(pem), { nowMs: NOW, replayStore: tempStore() }).reason, "SIGNATURE_ENCODING_NON_CANONICAL");
 });
-hostile("F3_strict_field_set_and_duplicate_keys_rejected", () => {
+hostile("F3_strict_field_set_rejected", () => {
   const { pem, privateKey } = makeKey();
   const att = makeAtt(privateKey);
   const extra = JSON.stringify({ ...att, extraField: 1 });
   assert.equal(verifyAttestationCore(extra, expect("OBSERVED_EXECUTION", BASE), anchor(pem), { nowMs: NOW, replayStore: tempStore() }).reason, "ATTESTATION_FIELD_SET_INVALID");
-  // duplicate top-level key (parser differential): raw text has two "scope" keys
-  const s = JSON.stringify(att);
-  const dupRaw = `${s.slice(0, -1)},"scope":"${BASE}"}`;
-  assert.ok(verifyAttestationCore(dupRaw, expect("OBSERVED_EXECUTION", BASE), anchor(pem), { nowMs: NOW, replayStore: tempStore() }).reason.startsWith("ATTESTATION_"));
+});
+hostile("V5_whole_document_canonicalization_enforced", () => {
+  // The canonical form is JSON.stringify(att) with alphabetical keys; makeAtt
+  // already emits that. Any other byte representation of the same attestation
+  // must be rejected with DOCUMENT_NOT_CANONICAL, before trust evaluation.
+  const { pem, privateKey } = makeKey();
+  const att = makeAtt(privateKey);
+  const canonical = JSON.stringify(att);
+  const chk = (raw) => verifyAttestationCore(raw, expect("OBSERVED_EXECUTION", BASE), anchor(pem), { nowMs: NOW, replayStore: tempStore() });
+  assert.equal(chk(canonical).verified, true); // baseline canonical still verifies
+  // literal duplicate key (JSON.parse last-wins): raw has two "scope"
+  assert.equal(chk(`${canonical.slice(0, -1)},"scope":"${BASE}"}`).reason, "DOCUMENT_NOT_CANONICAL");
+  // escaped duplicate key: "\u0073cope" decodes to "scope" — literal-text scan would miss it
+  assert.equal(chk(`${canonical.slice(0, -1)},"\\u0073cope":"${BASE}"}`).reason, "DOCUMENT_NOT_CANONICAL");
+  // reordered fields (same object)
+  const reordered = JSON.stringify({ signature: att.signature, scope: att.scope, repository: att.repository, producer: att.producer, keyId: att.keyId, issuedAt: att.issuedAt, expiresAt: att.expiresAt, commit: att.commit, claimType: att.claimType, attestationId: att.attestationId });
+  assert.equal(chk(reordered).reason, "DOCUMENT_NOT_CANONICAL");
+  // insignificant whitespace
+  assert.equal(chk(canonical.replace(/,/gu, ", ")).reason, "DOCUMENT_NOT_CANONICAL");
+  // alternate escape spelling of a value character (repository 'h' -> \u0068)
+  assert.equal(chk(canonical.replace("https://", "\\u0068ttps://")).reason, "DOCUMENT_NOT_CANONICAL");
+  // BOM prefix (JSON.parse rejects a leading BOM outright; either fail-closed reason is fine)
+  assert.ok(["DOCUMENT_NOT_CANONICAL", "ATTESTATION_MALFORMED"].includes(chk(`\uFEFF${canonical}`).reason));
+  // trailing whitespace / token / concatenated document
+  assert.equal(chk(`${canonical} `).reason, "DOCUMENT_NOT_CANONICAL");
+  assert.ok(["DOCUMENT_NOT_CANONICAL", "ATTESTATION_MALFORMED"].includes(chk(`${canonical}${canonical}`).reason));
+  // non-string value (number where a string is required)
+  const numRaw = canonical.replace(`"scope":"${BASE}"`, `"scope":123`);
+  assert.ok(["ENVELOPE_VALUE_NOT_STRING", "DOCUMENT_NOT_CANONICAL", "COMMIT_BINDING_INVALID", "CLAIM_OR_SCOPE_INVALID"].includes(chk(numRaw).reason));
 });
 hostile("F2_missing_authoritative_storage_fails_closed_end_to_end", () => {
   // Even a perfectly signed attestation cannot verify without an authoritative store.
