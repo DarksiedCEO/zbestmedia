@@ -4,7 +4,7 @@
 // cannot create its own authority and label it independent. Every verdict here fails
 // closed: unknown, missing, or caller-supplied authority is rejected, never defaulted.
 
-import { createHash } from "node:crypto";
+import { createHash, verify as cryptoVerify, createPublicKey } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { openSync, readSync, fstatSync, lstatSync, closeSync, constants } from "node:fs";
 import { resolve, sep, isAbsolute, normalize } from "node:path";
@@ -14,6 +14,66 @@ export const POLICY_VERSION = "P1A_AUTHORITY_POLICY_V1";
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const HEX64 = /^[0-9a-f]{64}$/u;
 const HEX40 = /^[0-9a-f]{40}$/u;
+
+// ---------------------------------------------------------------------------
+// V3 remediation (Codex INDEPENDENT_REVIEW_BLOCK H1–H4): signed external
+// attestation boundary. Findings H1–H4 all shared one root cause — local code
+// treating caller-supplied labels, source strings, digests, and plans as
+// evidence. None of those are proof. The only thing that can prove an external
+// event (a protected GitHub run, a human gate, a rollback execution) is a
+// signature from an authenticated external principal, verified against a trust
+// anchor local code does NOT get to choose.
+//
+// The production trust anchors are UNPROVISIONED here: no external signer key
+// exists in this repository. Therefore every external-proof path fails closed
+// to *_UNPROVEN / EXTERNAL_AUTHORITY_UNPROVISIONED. The verification mechanism
+// is real Ed25519 (proven by tests with an ephemeral key); the honest local
+// outcome is simply that nothing external can be proven from local bytes.
+function canonicalJson(value) {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map((k) => [k, canonicalJson(value[k])]));
+  return value;
+}
+
+// Default (production) trust anchors: every external producer is UNPROVISIONED.
+// Provisioning a real public key is an EXTERNAL act, never a local edit.
+export const EXTERNAL_AUTHORITY_TRUST_ANCHORS = Object.freeze({
+  GITHUB_ACTIONS_PROTECTED_RUN: Object.freeze({ status: "UNPROVISIONED", publicKeyPem: null }),
+  FOUNDER_DARKSIEDCEO: Object.freeze({ status: "UNPROVISIONED", publicKeyPem: null }),
+  CODEX: Object.freeze({ status: "UNPROVISIONED", publicKeyPem: null }),
+});
+
+// The signed message binds producer + exact subject + claim type + control/gate
+// scope + a monotonic issuedAt, so a signature cannot be replayed across
+// subjects, controls, or claim types. The `signature` field is excluded from
+// the signed message.
+export function attestationMessage(att) {
+  return Buffer.from(JSON.stringify(canonicalJson({
+    producer: att?.producer,
+    subjectBaseSha: att?.subjectBaseSha,
+    claimType: att?.claimType,
+    scope: att?.scope ?? null,
+    issuedAt: att?.issuedAt ?? null,
+    body: att?.body ?? null,
+  })), "utf8");
+}
+
+export function verifyExternalAttestation(attestation, expectedClaimType, expectedScope, trustAnchors = EXTERNAL_AUTHORITY_TRUST_ANCHORS) {
+  if (!attestation || typeof attestation !== "object" || Array.isArray(attestation)) {
+    return { verified: false, reason: "ATTESTATION_MALFORMED" };
+  }
+  if (attestation.claimType !== expectedClaimType) return { verified: false, reason: "ATTESTATION_WRONG_CLAIM_TYPE" };
+  if (attestation.subjectBaseSha !== AUTHORIZED_REBUILD_BASE.sha) return { verified: false, reason: "ATTESTATION_WRONG_SUBJECT" };
+  if (expectedScope !== undefined && attestation.scope !== expectedScope) return { verified: false, reason: "ATTESTATION_WRONG_SCOPE" };
+  const anchor = trustAnchors?.[attestation.producer];
+  if (!anchor || anchor.publicKeyPem == null) return { verified: false, reason: "EXTERNAL_AUTHORITY_UNPROVISIONED" };
+  if (typeof attestation.signature !== "string" || attestation.signature.length === 0) return { verified: false, reason: "ATTESTATION_UNSIGNED" };
+  let key;
+  try { key = createPublicKey(anchor.publicKeyPem); } catch { return { verified: false, reason: "TRUST_ANCHOR_KEY_INVALID" }; }
+  let ok = false;
+  try { ok = cryptoVerify(null, attestationMessage(attestation), key, Buffer.from(attestation.signature, "base64")); } catch { ok = false; }
+  return ok ? { verified: true, reason: null } : { verified: false, reason: "ATTESTATION_SIGNATURE_INVALID" };
+}
 
 // ---------------------------------------------------------------------------
 // P1AF-116 / P1AF-117 — immutable rebuild base, prohibited bases.
@@ -228,9 +288,13 @@ export function verifyPolicyRoot(claimed) {
 // authority-root validator and its two test harnesses: local authority code that
 // guards the surface must itself be on the surface it guards.
 export const FROZEN_BASE_TRUSTED_SURFACE_DENOMINATOR = 11;
+// H5 fix: the enforcement workflow is itself a trusted surface — it is what
+// invokes the authority validator. It must be code-owner protected too.
+export const AUTHORITY_ENFORCEMENT_WORKFLOW = ".github/workflows/p1a-authority-enforcement.yml";
 export const TRUSTED_SURFACE_FILES = Object.freeze([
   ".github/CODEOWNERS",
   ".github/workflows/ci.yml",
+  ".github/workflows/p1a-authority-enforcement.yml",
   ".github/workflows/p1a-certify.yml",
   "docs/security/p1-a/trusted-certification-bootstrap.md",
   "scripts/detect-p1a-ordinary-ci-secrets.mjs",
@@ -244,7 +308,17 @@ export const TRUSTED_SURFACE_FILES = Object.freeze([
   "scripts/validate-p1a-certification-accounting.mjs",
   "scripts/validate-p1a-threat-model.mjs",
 ]);
-export const TRUSTED_SURFACE_DENOMINATOR = 14;
+export const TRUSTED_SURFACE_DENOMINATOR = 15;
+
+// The set of changed enforcement/hostile-test files whose CODEOWNERS coverage
+// must be verified on every change (H6). Any file here that a change touches
+// must be covered by the PRIOR CODEOWNERS, or the change fails closed.
+export const ENFORCEMENT_TEST_SURFACE = Object.freeze([
+  "scripts/validate-p1a-authority-root.mjs",
+  "scripts/test-p1a-authority-root.mjs",
+  "scripts/test-p1a-authority-root-mutation.mjs",
+  ".github/workflows/p1a-authority-enforcement.yml",
+]);
 
 // --- GitHub-faithful CODEOWNERS evaluation (finding 4) ----------------------
 // Semantics modeled: gitignore-style patterns, LAST match wins, an empty owner
@@ -344,16 +418,53 @@ export function assessTrustedSurfaceChange(change) {
     const independent = approvers.filter((a) => owners.includes(a) && a !== author);
     if (independent.length === 0) findings.push(`INDEPENDENT_CODE_OWNER_APPROVAL_MISSING_${file}`);
   }
+  // H6 fix: a changed enforcement/hostile-test file that the PARENT CODEOWNERS
+  // did not cover is a bootstrap gap that must fail closed — that is exactly how
+  // the mutation harness slipped through at 8dee4dd. Coverage is checked against
+  // the PRIOR CODEOWNERS so the change cannot self-grant its own protection.
+  for (const file of change.files) {
+    if (!ENFORCEMENT_TEST_SURFACE.includes(file)) continue;
+    const prior = codeownersOwnersFor(change.priorCodeowners ?? "", file);
+    if (prior.owners === null || prior.owners.length === 0) findings.push(`PARENT_CODEOWNERS_GAP_${file}`);
+  }
   if (touched.length === TRUSTED_SURFACE_FILES.length) findings.push("COORDINATED_FULL_SURFACE_REWRITE");
   if (author && approvers.length > 0 && approvers.every((a) => a === author)) findings.push("SELF_APPROVAL_REJECTED");
   const blocking = findings.some((f) => f.startsWith("INDEPENDENT_CODE_OWNER_APPROVAL_MISSING_")
     || f.startsWith("PRIOR_OWNERSHIP_ABSENT_")
     || f.startsWith("PRIOR_OWNERSHIP_UNPARSEABLE_")
+    || f.startsWith("PARENT_CODEOWNERS_GAP_")
     || f === "SELF_APPROVAL_REJECTED"
     || f === "CHANGE_AUTHOR_MISSING");
   if (blocking) return { verdict: "AUTHORITY_ROOT_COORDINATED_REWRITE_BLOCK", findings };
   if (findings.length) return { verdict: "CHANGE_FLAGGED", findings };
   return { verdict: "CHANGE_AUTHORIZED", findings: [] };
+}
+
+// H5 fix: the authority validator must be invoked by an enforced execution
+// surface, not merely defined. This checks the enforcement WORKFLOW exists in
+// the repo and actually invokes the validator + test harnesses. It bounds the
+// claim honestly: local code can confirm the workflow is WIRED, but cannot
+// confirm GitHub REQUIRES it as a status check — that is external and reported
+// as NOT_OBSERVED, never asserted.
+export function verifyEnforcementSurface(repoRoot, workflowSha256) {
+  if (typeof repoRoot !== "string" || repoRoot.length === 0) {
+    return { verdict: "ENFORCEMENT_SURFACE_ABSENT", findings: ["REPO_ROOT_MISSING"], requiredStatusCheckEnforced: "EXTERNAL_NOT_OBSERVED" };
+  }
+  if (!HEX64.test(workflowSha256 ?? "")) {
+    return { verdict: "ENFORCEMENT_SURFACE_ABSENT", findings: ["WORKFLOW_DIGEST_MISSING"], requiredStatusCheckEnforced: "EXTERNAL_NOT_OBSERVED" };
+  }
+  const read = readAuthorityArtifact(repoRoot, AUTHORITY_ENFORCEMENT_WORKFLOW, workflowSha256);
+  if (read.verdict !== "ARTIFACT_VERIFIED") {
+    return { verdict: "ENFORCEMENT_SURFACE_ABSENT", findings: ["WORKFLOW_UNREADABLE_OR_DIGEST_MISMATCH"], requiredStatusCheckEnforced: "EXTERNAL_NOT_OBSERVED" };
+  }
+  const text = read.bytes.toString("utf8");
+  const findings = [];
+  if (!text.includes("scripts/validate-p1a-authority-root.mjs")) findings.push("WORKFLOW_DOES_NOT_INVOKE_VALIDATOR");
+  if (!text.includes("scripts/test-p1a-authority-root.mjs")) findings.push("WORKFLOW_DOES_NOT_INVOKE_BATTERY");
+  if (!text.includes("scripts/test-p1a-authority-root-mutation.mjs")) findings.push("WORKFLOW_DOES_NOT_INVOKE_MUTATION");
+  return findings.length
+    ? { verdict: "ENFORCEMENT_SURFACE_INCOMPLETE", findings, requiredStatusCheckEnforced: "EXTERNAL_NOT_OBSERVED" }
+    : { verdict: "ENFORCEMENT_SURFACE_DEFINED", findings: [], requiredStatusCheckEnforced: "EXTERNAL_NOT_OBSERVED" };
 }
 
 // ---------------------------------------------------------------------------
@@ -373,7 +484,7 @@ export const CANONICAL_OBSERVATION_PRODUCERS = Object.freeze({
 // digest. Each artifact must additionally bind the execution SUBJECT and a
 // canonical PRODUCER; a receipt for another subject or from an unknown
 // principal is not evidence.
-export function classifyExecutionEvidence(evidenceRoot, claim) {
+export function classifyExecutionEvidence(evidenceRoot, claim, trustAnchors = EXTERNAL_AUTHORITY_TRUST_ANCHORS) {
   if (typeof evidenceRoot !== "string" || evidenceRoot.length === 0 || !claim || typeof claim !== "object" || Array.isArray(claim)) {
     return { verdict: "EXECUTION_UNPROVEN", findings: ["EXECUTION_CLAIM_MISSING"] };
   }
@@ -389,12 +500,23 @@ export function classifyExecutionEvidence(evidenceRoot, claim) {
   const findings = [];
   for (const artifact of artifacts) {
     if (!artifact?.path || !HEX64.test(artifact?.sha256 ?? "")) { findings.push("ARTIFACT_NOT_DIGEST_BOUND"); continue; }
+    // H1 fix: a producer LABEL is not identity. The producer must be a canonical
+    // one AND the artifact must be a signed attestation verified against that
+    // producer's external trust anchor. Absent a provisioned anchor this is
+    // unreachable — a caller-written file with a caller-chosen label can never
+    // become OBSERVED_EXECUTION.
     if (!(artifact.producer in CANONICAL_OBSERVATION_PRODUCERS)) { findings.push("ARTIFACT_PRODUCER_UNKNOWN"); continue; }
     if (artifact.subjectSha !== claim.subjectSha) { findings.push("ARTIFACT_WRONG_SUBJECT"); continue; }
     const read = readAuthorityArtifact(evidenceRoot, artifact.path, artifact.sha256);
     if (read.verdict !== "ARTIFACT_VERIFIED") {
       findings.push(read.findings.includes("ARTIFACT_DIGEST_MISMATCH") ? "FABRICATED_EXECUTION_ARTIFACT" : "EXECUTION_ARTIFACT_UNREADABLE");
+      continue;
     }
+    let attestation;
+    try { attestation = JSON.parse(read.bytes.toString("utf8")); } catch { findings.push("EXECUTION_ATTESTATION_NOT_JSON"); continue; }
+    if (attestation?.producer !== artifact.producer) { findings.push("EXECUTION_ATTESTATION_PRODUCER_MISMATCH"); continue; }
+    const v = verifyExternalAttestation(attestation, "OBSERVED_EXECUTION", claim.subjectSha, trustAnchors);
+    if (!v.verified) { findings.push(`EXECUTION_ATTESTATION_UNVERIFIED_${v.reason}`); continue; }
   }
   return findings.length
     ? { verdict: "EXECUTION_UNPROVEN", findings }
@@ -490,7 +612,12 @@ export const NAMED_HUMAN_GATES = Object.freeze([
 // module. AEGIS cannot be the root of its own authority; neither can we.
 export const LOCAL_CUSTODY_AUTHORIZATION_CEILING = Object.freeze({
   trustedCertificationAuthorized: false,
-  strongestLocalVerdict: "CUSTODY_EVIDENCE_RECORDED_LOCALLY",
+  // H2 fix: local code cannot even "record" a GitHub observation from a caller
+  // label. The strongest locally reachable verdict requires a SIGNATURE verified
+  // against an external trust anchor; absent provisioning, the only honest
+  // verdict is NOT_PROVEN. Even a signature-verified set stays below trusted
+  // certification, which only the external evaluation renders.
+  strongestLocalVerdict: "CUSTODY_SIGNATURE_VERIFIED",
   externalVerdictAuthority: "EXTERNAL_EVALUATION_PER_EXTERNAL_CUSTODY_CONTRACT_ONLY",
 });
 
@@ -499,7 +626,7 @@ const CUSTODY_AUTHORITY_DIGESTS = Object.freeze([
   CANONICAL_AUTHORITY_ANCHORS.releaseAuthoritySha256,
 ]);
 
-export function assessExternalCustody(evidenceRoot, receiptRefs) {
+export function assessExternalCustody(evidenceRoot, receiptRefs, trustAnchors = EXTERNAL_AUTHORITY_TRUST_ANCHORS) {
   const findings = [];
   const byControl = new Map();
   if (typeof evidenceRoot !== "string" || evidenceRoot.length === 0) {
@@ -514,37 +641,58 @@ export function assessExternalCustody(evidenceRoot, receiptRefs) {
       try { receipt = JSON.parse(read.bytes.toString("utf8")); } catch { findings.push("CUSTODY_RECEIPT_NOT_JSON"); continue; }
       if (!receipt || typeof receipt !== "object" || receipt.controlId !== ref.controlId) { findings.push("CUSTODY_RECEIPT_CONTROL_MISMATCH"); continue; }
       if (!CUSTODY_CONTROLS.some((c) => c.id === receipt.controlId)) { findings.push("CUSTODY_RECEIPT_UNKNOWN_CONTROL"); continue; }
-      if (receipt.source !== "GITHUB_OBSERVATION") { findings.push("SIMULATED_INDEPENDENCE_REJECTED"); continue; }
-      const producer = CANONICAL_OBSERVATION_PRODUCERS[receipt.producer];
-      if (!producer) { findings.push(`CUSTODY_PRODUCER_UNKNOWN_${receipt.controlId}`); continue; }
+      if (!(receipt.producer in CANONICAL_OBSERVATION_PRODUCERS)) { findings.push(`CUSTODY_PRODUCER_UNKNOWN_${receipt.controlId}`); continue; }
       if (receipt.subjectBaseSha !== AUTHORIZED_REBUILD_BASE.sha) { findings.push(`CUSTODY_WRONG_SUBJECT_${receipt.controlId}`); continue; }
       if (!CUSTODY_AUTHORITY_DIGESTS.includes(receipt.authoritySha256)) { findings.push(`CUSTODY_AUTHORITY_UNBOUND_${receipt.controlId}`); continue; }
+      // H2 fix: source:"GITHUB_OBSERVATION" as a caller STRING is meaningless.
+      // Require a signature over (producer, subject, claimType, control) verified
+      // against the producer's external trust anchor. Scope is bound to the
+      // control id so a receipt cannot be replayed across controls.
+      const v = verifyExternalAttestation(receipt, "GITHUB_CUSTODY_OBSERVATION", receipt.controlId, trustAnchors);
+      if (!v.verified) { findings.push(`CUSTODY_ATTESTATION_UNVERIFIED_${receipt.controlId}_${v.reason}`); continue; }
       byControl.set(receipt.controlId, receipt);
     }
   }
   const unproven = CUSTODY_CONTROLS.filter((control) => !byControl.has(control.id));
   for (const control of unproven) findings.push(`CUSTODY_NOT_PROVEN_${control.id}`);
-  const allRecorded = unproven.length === 0 && !findings.length;
+  const allVerified = unproven.length === 0 && !findings.length;
   return {
-    verdict: allRecorded ? "CUSTODY_EVIDENCE_RECORDED_LOCALLY" : "NOT_PROVEN",
+    verdict: allVerified ? "CUSTODY_SIGNATURE_VERIFIED" : "NOT_PROVEN",
     trustedCertificationAuthorized: false,
     findings,
     controlDenominator: CUSTODY_CONTROLS.length,
-    controlsRecorded: CUSTODY_CONTROLS.length - unproven.length,
+    controlsVerified: CUSTODY_CONTROLS.length - unproven.length,
     ceiling: LOCAL_CUSTODY_AUTHORIZATION_CEILING,
   };
 }
 
-export function assessGateCompleteness(gateEvidence) {
+export function assessGateCompleteness(gateEvidenceRoot, gateRefs, trustAnchors = EXTERNAL_AUTHORITY_TRUST_ANCHORS) {
+  // H3 fix: a gate "digest" that the caller authored proves nothing. Each gate
+  // must present a signed HUMAN_GATE attestation (scope = gate name) read from
+  // disk through the trusted reader and verified against the gate authority's
+  // external trust anchor. Fabricated 64-hex strings can no longer complete a gate.
   const findings = [];
-  const evidence = gateEvidence && typeof gateEvidence === "object" ? gateEvidence : {};
-  for (const gate of NAMED_HUMAN_GATES) {
-    const record = evidence[gate];
-    if (!record) { findings.push(`GATE_MISSING_${gate}`); continue; }
-    if (validateReceiptBinding(record).verdict !== "RECEIPT_BOUND") findings.push(`GATE_UNBOUND_${gate}`);
+  const verified = new Set();
+  if (typeof gateEvidenceRoot !== "string" || gateEvidenceRoot.length === 0) {
+    findings.push("GATE_EVIDENCE_ROOT_MISSING");
+  } else {
+    const refs = gateRefs && typeof gateRefs === "object" && !Array.isArray(gateRefs) ? gateRefs : {};
+    for (const gate of NAMED_HUMAN_GATES) {
+      const ref = refs[gate];
+      if (ref === undefined) continue; // absence handled by the GATE_MISSING sweep below
+      if (!ref || typeof ref !== "object" || !ref.path || !HEX64.test(ref.sha256 ?? "")) { findings.push(`GATE_REF_MALFORMED_${gate}`); continue; }
+      const read = readAuthorityArtifact(gateEvidenceRoot, ref.path, ref.sha256);
+      if (read.verdict !== "ARTIFACT_VERIFIED") { findings.push(`GATE_UNREADABLE_${gate}`); continue; }
+      let att;
+      try { att = JSON.parse(read.bytes.toString("utf8")); } catch { findings.push(`GATE_NOT_JSON_${gate}`); continue; }
+      const v = verifyExternalAttestation(att, "HUMAN_GATE", gate, trustAnchors);
+      if (!v.verified) { findings.push(`GATE_UNVERIFIED_${gate}_${v.reason}`); continue; }
+      verified.add(gate);
+    }
   }
+  for (const gate of NAMED_HUMAN_GATES) if (!verified.has(gate)) findings.push(`GATE_MISSING_${gate}`);
   return findings.length
-    ? { verdict: "GATES_INCOMPLETE", findings, gateDenominator: NAMED_HUMAN_GATES.length }
+    ? { verdict: "GATES_INCOMPLETE", findings: [...new Set(findings)], gateDenominator: NAMED_HUMAN_GATES.length }
     : { verdict: "GATES_COMPLETE", findings: [], gateDenominator: NAMED_HUMAN_GATES.length };
 }
 
@@ -558,6 +706,9 @@ export const ROLLBACK_CONTRACT = Object.freeze({
 
 const AUTHORIZED_ROLLBACK_KINDS = Object.freeze(["DISABLE_DISPATCH", "REVOKE_APP_KEY", "BOOTSTRAP_ROLLBACK"]);
 
+// H4 fix: split plan-validity from authorization. A well-formed descriptor is a
+// PLAN, never an authorization. assessRollbackAction now returns at most
+// ROLLBACK_PLAN_VALIDATED and can NEVER return ROLLBACK_AUTHORIZED.
 export function assessRollbackAction(action) {
   if (!action || typeof action !== "object" || Array.isArray(action)) {
     return { verdict: "ROLLBACK_REJECTED", findings: ["ROLLBACK_ACTION_MISSING"] };
@@ -572,7 +723,28 @@ export function assessRollbackAction(action) {
   }
   return findings.length
     ? { verdict: "ROLLBACK_REJECTED", findings }
-    : { verdict: "ROLLBACK_AUTHORIZED", findings: [] };
+    : { verdict: "ROLLBACK_PLAN_VALIDATED", findings: [] };
+}
+
+// Authorization requires the plan to be valid AND a signed ROLLBACK_EXECUTION
+// attestation (scope = rollback kind) verified against the executor's external
+// trust anchor. Absent provisioning this is unreachable: an unexecuted
+// descriptor yields ROLLBACK_EXECUTION_UNPROVEN, never AUTHORIZED.
+export function authorizeRollback(action, evidenceRoot, executionRef, trustAnchors = EXTERNAL_AUTHORITY_TRUST_ANCHORS) {
+  const plan = assessRollbackAction(action);
+  if (plan.verdict !== "ROLLBACK_PLAN_VALIDATED") {
+    return { verdict: "ROLLBACK_REJECTED", findings: plan.findings };
+  }
+  if (typeof evidenceRoot !== "string" || evidenceRoot.length === 0 || !executionRef || typeof executionRef !== "object" || !executionRef.path || !HEX64.test(executionRef.sha256 ?? "")) {
+    return { verdict: "ROLLBACK_EXECUTION_UNPROVEN", findings: ["ROLLBACK_EXECUTION_EVIDENCE_MISSING"] };
+  }
+  const read = readAuthorityArtifact(evidenceRoot, executionRef.path, executionRef.sha256);
+  if (read.verdict !== "ARTIFACT_VERIFIED") return { verdict: "ROLLBACK_EXECUTION_UNPROVEN", findings: ["ROLLBACK_EXECUTION_ARTIFACT_UNREADABLE"] };
+  let att;
+  try { att = JSON.parse(read.bytes.toString("utf8")); } catch { return { verdict: "ROLLBACK_EXECUTION_UNPROVEN", findings: ["ROLLBACK_EXECUTION_NOT_JSON"] }; }
+  const v = verifyExternalAttestation(att, "ROLLBACK_EXECUTION", action.kind, trustAnchors);
+  if (!v.verified) return { verdict: "ROLLBACK_EXECUTION_UNPROVEN", findings: [`ROLLBACK_EXECUTION_UNVERIFIED_${v.reason}`] };
+  return { verdict: "ROLLBACK_AUTHORIZED", findings: [] };
 }
 
 // ---------------------------------------------------------------------------
@@ -584,12 +756,12 @@ export function computeClaimCeiling(custodyAssessment, localImplementationGreen)
   // places in custodyAssessment. The maximum honest local claim is bounded.
   // External custody may only be declared by the external evaluation named in
   // EXTERNAL_CUSTODY_CONTRACT; this function is total and fail-closed. P1AF-008/019.
-  const evidenceRecorded = custodyAssessment?.verdict === "CUSTODY_EVIDENCE_RECORDED_LOCALLY";
+  const custodySignatureVerified = custodyAssessment?.verdict === "CUSTODY_SIGNATURE_VERIFIED";
   return {
     claim: localImplementationGreen === true
       ? "LOCAL_IMPLEMENTATION_GREEN/EXTERNAL_ASSURANCE_AUTHORITY_PENDING"
       : "EXTERNAL_ASSURANCE_AUTHORITY_PENDING",
-    custodyEvidenceRecorded: evidenceRecorded === true,
+    custodySignatureVerified: custodySignatureVerified === true,
     trustedCertificationAuthorized: false,
   };
 }
@@ -758,4 +930,67 @@ export const PROPERTY_REGISTER = Object.freeze([
   "CODEOWNERS_LAST_MATCH_WINS_MODELED",           // F4: GitHub precedence semantics
   "CODEOWNERS_GLOB_SEMANTICS_MODELED",            // F4: * / ** / ? / dir patterns
   "CODEOWNERS_UNSUPPORTED_SYNTAX_FAIL_CLOSED",    // F4: ! [ ] \# rejected, not mis-modeled
+  // V3 remediation (INDEPENDENT_REVIEW_BLOCK H1–H6):
+  "EXECUTION_REQUIRES_SIGNED_ATTESTATION",        // H1: producer label alone is not OBSERVED_EXECUTION
+  "PRODUCER_LABEL_IS_NOT_IDENTITY",               // H1: unauthenticated label fails closed
+  "EXTERNAL_AUTHORITY_UNPROVISIONED_FAILS_CLOSED",// H1/H2: no anchor => nothing external provable
+  "CUSTODY_REQUIRES_SIGNED_ATTESTATION",          // H2: caller source string cannot record observation
+  "CUSTODY_SIGNATURE_SCOPE_BOUND_TO_CONTROL",     // H2: signature bound per control, no cross-control replay
+  "GATE_COMPLETION_REQUIRES_SIGNED_ARTIFACT",     // H3: fabricated digests cannot complete a gate
+  "GATE_ATTESTATION_SCOPE_BOUND_TO_GATE",         // H3: signature bound to the named gate
+  "ROLLBACK_PLAN_IS_NOT_AUTHORIZATION",           // H4: assessRollbackAction never returns AUTHORIZED
+  "ROLLBACK_AUTHORIZATION_REQUIRES_EXECUTION",    // H4: authorizeRollback needs signed execution attestation
+  "ATTESTATION_SIGNATURE_VERIFIED_ED25519",       // H1-H4: real crypto positive control
+  "ATTESTATION_CROSS_SUBJECT_REPLAY_REJECTED",    // H1-H4: subject bound in signed message
+  "ATTESTATION_WRONG_CLAIM_TYPE_REJECTED",        // H1-H4: claim type bound in signed message
+  "ENFORCEMENT_SURFACE_WORKFLOW_WIRED",           // H5: validator invoked by enforcement workflow
+  "ENFORCEMENT_REQUIRED_CHECK_NOT_ASSERTED",      // H5: GitHub required-check enforcement bounded NOT_OBSERVED
+  "PARENT_CODEOWNERS_GAP_FAILS_CLOSED",           // H6: uncovered-at-parent enforcement file blocks
 ]);
+
+// ---------------------------------------------------------------------------
+// H5 — CLI self-check. The enforcement workflow invokes this entrypoint; it
+// re-verifies the live base identity and that the repository CODEOWNERS closes
+// the trusted surface, exiting nonzero on any finding. "Defined" is not
+// "enforced": required-status-check enforcement is external and NOT asserted.
+// ---------------------------------------------------------------------------
+export function selfCheck(repoRoot) {
+  const findings = [];
+  let observed;
+  try { observed = observeGitBase(repoRoot); } catch { return { verdict: "SELF_CHECK_FAILED", findings: ["BASE_OBSERVATION_FAILED"] }; }
+  const base = verifyRebuildBase(observed);
+  if (base.verdict !== "BASE_VERIFIED") findings.push(...base.findings.map((f) => `BASE_${f}`));
+  let codeowners = null;
+  // The self-check reads CODEOWNERS through a containment-checked, symlink-free
+  // reader (no external digest to bind against at self-check time).
+  try { codeowners = readRepoTextFile(repoRoot, ".github/CODEOWNERS"); } catch { findings.push("CODEOWNERS_UNREADABLE"); }
+  if (codeowners !== null) {
+    const surface = verifyTrustedSurfaceCoverage(codeowners);
+    if (surface.verdict !== "SURFACE_CLOSED") findings.push(...surface.findings.map((f) => `SURFACE_${f}`));
+  }
+  return findings.length
+    ? { verdict: "SELF_CHECK_FAILED", findings }
+    : { verdict: "SELF_CHECK_PASSED", findings: [], requiredStatusCheckEnforced: "EXTERNAL_NOT_OBSERVED" };
+}
+
+function readRepoTextFile(rootDir, relPath) {
+  if (typeof relPath !== "string" || isAbsolute(relPath) || relPath.split(/[\\/]/u).includes("..")) throw new Error("PATH_ESCAPE");
+  const root = resolve(rootDir);
+  const full = resolve(root, normalize(relPath));
+  if (full !== root && !full.startsWith(root + sep)) throw new Error("PATH_ESCAPE");
+  const fd = openSync(full, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const stat = fstatSync(fd);
+    const bytes = Buffer.alloc(stat.size);
+    let offset = 0;
+    while (offset < stat.size) { const r = readSync(fd, bytes, offset, stat.size - offset, offset); if (r <= 0) break; offset += r; }
+    return bytes.toString("utf8");
+  } finally { closeSync(fd); }
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const repoRoot = process.argv[2] ?? resolve(new URL("..", import.meta.url).pathname);
+  const result = selfCheck(repoRoot);
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+  process.exitCode = result.verdict === "SELF_CHECK_PASSED" ? 0 : 1;
+}

@@ -1,5 +1,6 @@
 /.github/CODEOWNERS @DarksiedCEO
 /.github/workflows/ci.yml @DarksiedCEO
+/.github/workflows/p1a-authority-enforcement.yml @DarksiedCEO
 /.github/workflows/p1a-certify.yml @DarksiedCEO
 /docs/security/p1-a/trusted-certification-bootstrap.md @DarksiedCEO
 /scripts/detect-p1a-ordinary-ci-secrets.mjs @DarksiedCEO
