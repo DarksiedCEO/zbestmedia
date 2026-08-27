@@ -5,7 +5,7 @@ import {
   HeaderRequiredError,
   ServiceAuthError,
   authenticateBearerToken,
-  authorizeTenant,
+  authorizeServiceRequest,
   extractBearerToken,
   readTenantHeader,
   type ServiceAuthConfig,
@@ -39,12 +39,21 @@ function requireWorkspaceHeader(request: FastifyRequest): string {
 // Authorization step, shared by all handlers: the identity was already
 // authenticated in the onRequest hook (so it is present here), we just check
 // it is allowed to act on this workspace.
-function authorize(request: FastifyRequest, workspaceId: string): void {
+function authorize(request: FastifyRequest, workspaceId: string, requiredScope: "artifact:read" | "artifact:write", authorizedPrincipalIds: ReadonlySet<string>): void {
   // Defensive: the hook guarantees this, but never trust an absent identity.
   if (!request.serviceIdentity) {
     throw new ServiceAuthError(401, "UNAUTHENTICATED", "Missing authenticated identity");
   }
-  authorizeTenant(request.serviceIdentity, workspaceId);
+  if (!authorizedPrincipalIds.has(request.serviceIdentity.principalId)) {
+    throw new ServiceAuthError(403, "PRINCIPAL_FORBIDDEN", "Credential principal is not authorized");
+  }
+  authorizeServiceRequest(request.serviceIdentity, {
+    principalId: request.serviceIdentity.principalId,
+    subject: `service:${request.serviceIdentity.principalId}`,
+    audience: "artifact-registry",
+    tenantId: workspaceId,
+    requiredScopes: [requiredScope]
+  });
 }
 
 // Structural auth: registering this onRequest hook on an (encapsulated)
@@ -60,11 +69,21 @@ export function registerServiceAuthHook(instance: FastifyInstance, authConfig: S
   instance.setErrorHandler(handleError);
 }
 
+export function registerArtifactAuthorizationHook(instance: FastifyInstance, authorizedPrincipalIds: ReadonlySet<string>): void {
+  instance.addHook("preHandler", async (request) => {
+    const bodyWorkspaceId = (request.body as { workspaceId?: unknown } | undefined)?.workspaceId;
+    const workspaceId = request.method === "GET"
+      ? requireWorkspaceHeader(request)
+      : readTenantHeader(typeof bodyWorkspaceId === "string" ? bodyWorkspaceId : undefined, { code: "WORKSPACE_ID_REQUIRED" });
+    authorize(request, workspaceId, request.method === "GET" ? "artifact:read" : "artifact:write", authorizedPrincipalIds);
+  });
+}
+
 export async function registerRoutes(
   app: FastifyInstance,
   nc: NatsConnection,
   authConfig: ServiceAuthConfig,
-  deps?: { prisma?: PrismaClient }
+  deps?: { prisma?: PrismaClient; authorizedPrincipalIds?: ReadonlySet<string> }
 ) {
   const prisma = deps?.prisma ?? defaultPrisma;
 
@@ -73,11 +92,12 @@ export async function registerRoutes(
   // stays open). New routes added here inherit auth automatically.
   await app.register(async (instance) => {
     registerServiceAuthHook(instance, authConfig);
+    if (!deps?.authorizedPrincipalIds) throw new Error("Artifact registry principal policy is required");
+    registerArtifactAuthorizationHook(instance, deps.authorizedPrincipalIds);
 
     instance.post("/registry/store", async (request, reply) => {
       const start = Date.now();
       const body = StoreRequestSchema.parse(request.body);
-      authorize(request, body.workspaceId);
 
       const log = withContext({
         requestId: body.requestId,
@@ -107,7 +127,6 @@ export async function registerRoutes(
     instance.post("/registry/seal", async (request, reply) => {
       const start = Date.now();
       const body = SealRequestSchema.parse(request.body);
-      authorize(request, body.workspaceId);
 
       const log = withContext({ artifactId: body.artifactId, operation: "seal" });
       const artifact = await sealArtifact(prisma, nc, body);
@@ -117,7 +136,6 @@ export async function registerRoutes(
 
     instance.get("/registry/artifacts/:id", async (request, reply) => {
       const workspaceId = requireWorkspaceHeader(request);
-      authorize(request, workspaceId);
 
       const id = (request.params as { id: string }).id;
       const artifact = await getArtifact(prisma, workspaceId, id);
@@ -126,7 +144,6 @@ export async function registerRoutes(
 
     instance.get("/registry/lineage/:id", async (request, reply) => {
       const workspaceId = requireWorkspaceHeader(request);
-      authorize(request, workspaceId);
 
       const id = (request.params as { id: string }).id;
       const lineage = await getLineage(prisma, workspaceId, id, 10);

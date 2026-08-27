@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   HeaderRequiredError,
   ServiceAuthError,
+  authenticateAndAuthorize,
   authenticateAndAuthorizeServiceRequest,
   authenticateBearerToken,
   authorizeTenant,
+  extractBearerToken,
   extractHeaderValue,
   readTenantHeader,
   revokeServiceCredential,
   rotateServiceCredential,
+  resolveAuthorizedPrincipalIds,
   resolveServiceAuthConfig,
   tenantIdSchema
 } from "../src/index";
@@ -26,6 +29,11 @@ const VALID_ENV = JSON.stringify([
 ]);
 
 describe("resolveServiceAuthConfig — fail-closed config parsing", () => {
+  it("requires an explicit, unique server-owned principal allowlist", () => {
+    expect(() => resolveAuthorizedPrincipalIds(undefined)).toThrow(/SERVICE_AUTH_ALLOWED_PRINCIPALS/);
+    expect(() => resolveAuthorizedPrincipalIds("brandgraph,brandgraph")).toThrow(/unique/);
+    expect([...resolveAuthorizedPrincipalIds("brandgraph, artifact-worker")]).toEqual(["brandgraph", "artifact-worker"]);
+  });
   it("throws when the env value is missing", () => {
     expect(() => resolveServiceAuthConfig(undefined)).toThrow(/SERVICE_AUTH_TOKENS/);
   });
@@ -48,6 +56,20 @@ describe("resolveServiceAuthConfig — fail-closed config parsing", () => {
       { keyId: "b", token: "tok-duplicate", principalId: "b", subject: "b", audiences: ["svc"], scopes: ["read"], tenants: ["beta-corp"], ...ACTIVE_WINDOW }
     ]);
     expect(() => resolveServiceAuthConfig(dup)).toThrow(/duplicate/i);
+  });
+
+  it("throws on duplicate key ids even when tokens differ", () => {
+    const dup = JSON.stringify([
+      { keyId: "same", token: "tok-duplicate-a", principalId: "a", subject: "a", audiences: ["svc"], scopes: ["read"], tenants: ["acme"], ...ACTIVE_WINDOW },
+      { keyId: "same", token: "tok-duplicate-b", principalId: "b", subject: "b", audiences: ["svc"], scopes: ["read"], tenants: ["beta-corp"], ...ACTIVE_WINDOW }
+    ]);
+    expect(() => resolveServiceAuthConfig(dup)).toThrow(/duplicate keyId/);
+  });
+
+  it("rejects inverted validity windows and revoked records without revocation provenance", () => {
+    const base = JSON.parse(VALID_ENV)[0];
+    expect(() => resolveServiceAuthConfig(JSON.stringify([{ ...base, expiresAt: base.notBefore }]))).toThrow(/expiresAt/);
+    expect(() => resolveServiceAuthConfig(JSON.stringify([{ ...base, status: "REVOKED" }]))).toThrow(/revokedAt/);
   });
 
   it("parses a valid config into a lookup map", () => {
@@ -183,6 +205,27 @@ describe("credential lifetime, revocation, and audited rotation", () => {
     }, { actorId: "custodian", reason: "test", now: new Date("2026-06-01T00:00:00.000Z") }, { append: () => undefined }))
       .toThrow(/escalate/);
   });
+
+  it("never rotates revoked or superseded credentials and reports the real lifecycle class", () => {
+    const revoked = resolveServiceAuthConfig(VALID_ENV);
+    revokeServiceCredential(revoked, "tok-brandgraph", { actorId: "custodian", reason: "incident" }, { append: () => undefined });
+    const replacement = { keyId: "brandgraph-v2", token: "tok-brandgraph-v2", tenants: ["acme"], issuedAt: "2026-06-01T00:00:00.000Z", expiresAt: "2026-07-01T00:00:00.000Z" };
+    expect(() => rotateServiceCredential(revoked, "tok-brandgraph", replacement, { actorId: "custodian", reason: "probe", now: new Date("2026-06-01T00:00:00.000Z") }, { append: () => undefined }))
+      .toThrowError(expect.objectContaining({ code: "CREDENTIAL_REVOKED" }));
+
+    const superseded = resolveServiceAuthConfig(JSON.stringify([{ ...JSON.parse(VALID_ENV)[0], status: "SUPERSEDED" }]));
+    expect(() => rotateServiceCredential(superseded, "tok-brandgraph", replacement, { actorId: "custodian", reason: "probe", now: new Date("2026-06-01T00:00:00.000Z") }, { append: () => undefined }))
+      .toThrowError(expect.objectContaining({ code: "CREDENTIAL_NOT_ACTIVE" }));
+  });
+
+  it("revocation is idempotent and emits exactly one provenance event", () => {
+    const config = resolveServiceAuthConfig(VALID_ENV);
+    const events: unknown[] = [];
+    const audit = { append: (event: unknown) => events.push(event) };
+    revokeServiceCredential(config, "tok-brandgraph", { actorId: "custodian", reason: "incident" }, audit);
+    revokeServiceCredential(config, "tok-brandgraph", { actorId: "custodian", reason: "duplicate" }, audit);
+    expect(events).toHaveLength(1);
+  });
 });
 
 describe("service identity claim binding — hostile authorization", () => {
@@ -211,6 +254,7 @@ describe("service identity claim binding — hostile authorization", () => {
       .toThrowError(expect.objectContaining({ code: "SCOPE_FORBIDDEN" }));
     try {
       authenticateAndAuthorizeServiceRequest("forged-secret-token", requirement, config);
+      throw new Error("forged credential was accepted");
     } catch (error) {
       expect(String(error)).not.toContain("forged-secret-token");
       expect(error).toMatchObject({ code: "UNAUTHENTICATED" });
@@ -226,6 +270,28 @@ describe("service identity claim binding — hostile authorization", () => {
         if (shouldAllow) expect(operation).not.toThrow(); else expect(operation).toThrow(ServiceAuthError);
       }
     }
+  });
+
+  it("supports bounded namespace scopes but rejects unrelated namespaces", () => {
+    const raw = JSON.stringify([{ ...JSON.parse(VALID_ENV)[0], scopes: ["artifact:*"] }]);
+    const config = resolveServiceAuthConfig(raw);
+    expect(() => authenticateAndAuthorizeServiceRequest("tok-brandgraph", requirement, config, new Date("2026-06-01T00:00:00.000Z"))).not.toThrow();
+    expect(() => authenticateAndAuthorizeServiceRequest("tok-brandgraph", { ...requirement, requiredScopes: ["admin:write"] }, config, new Date("2026-06-01T00:00:00.000Z")))
+      .toThrowError(expect.objectContaining({ code: "SCOPE_FORBIDDEN" }));
+  });
+});
+
+describe("exported bearer and convenience boundaries", () => {
+  it("rejects non-Bearer authorization schemes", () => {
+    expect(extractBearerToken("Basic tok-brandgraph")).toBeNull();
+    expect(extractBearerToken("Token tok-brandgraph")).toBeNull();
+    expect(extractBearerToken("Bearer tok-brandgraph")).toBe("tok-brandgraph");
+  });
+
+  it("authenticateAndAuthorize cannot skip tenant enforcement", () => {
+    const config = resolveServiceAuthConfig(VALID_ENV);
+    expect(() => authenticateAndAuthorize("tok-brandgraph", "other-tenant", config, new Date("2026-06-01T00:00:00.000Z")))
+      .toThrowError(expect.objectContaining({ code: "TENANT_FORBIDDEN" }));
   });
 });
 

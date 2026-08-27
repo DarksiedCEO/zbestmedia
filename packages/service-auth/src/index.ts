@@ -122,6 +122,15 @@ export type ServiceAuthConfig = {
   maximumGenerationByPrincipal: Map<string, number>;
 };
 
+export function resolveAuthorizedPrincipalIds(raw: string | undefined): ReadonlySet<string> {
+  if (!raw) throw new Error("Missing SERVICE_AUTH_ALLOWED_PRINCIPALS — service cannot start without a principal policy");
+  const principalIds = raw.split(",").map((value) => value.trim()).filter(Boolean);
+  if (principalIds.length === 0 || new Set(principalIds).size !== principalIds.length) {
+    throw new Error("SERVICE_AUTH_ALLOWED_PRINCIPALS must contain unique comma-separated principal IDs");
+  }
+  return new Set(principalIds);
+}
+
 export class ServiceAuthError extends Error {
   public readonly statusCode: 401 | 403;
   public readonly code:
@@ -239,6 +248,11 @@ export type ServiceAuthorizationRequirement = {
   requiredScopes: string[];
 };
 
+function grantsScope(grantedScope: string, requiredScope: string): boolean {
+  if (grantedScope === WILDCARD_SCOPE || grantedScope === requiredScope) return true;
+  return grantedScope.endsWith(":*") && requiredScope.startsWith(grantedScope.slice(0, -1));
+}
+
 export function authorizeServiceRequest(
   identity: ServiceIdentity,
   requirement: ServiceAuthorizationRequirement
@@ -253,7 +267,7 @@ export function authorizeServiceRequest(
     throw new ServiceAuthError(403, "AUDIENCE_FORBIDDEN", "Credential audience is not authorized");
   }
   authorizeTenant(identity, requirement.tenantId);
-  if (!identity.scopes.includes(WILDCARD_SCOPE) && requirement.requiredScopes.some((scope) => !identity.scopes.includes(scope))) {
+  if (requirement.requiredScopes.some((scope) => !identity.scopes.some((granted) => grantsScope(granted, scope)))) {
     throw new ServiceAuthError(403, "SCOPE_FORBIDDEN", "Credential scope is not authorized");
   }
 }
@@ -363,8 +377,11 @@ export function rotateServiceCredential(
 ): ServiceIdentity {
   const current = config.principalsByToken.get(currentToken);
   if (!current) throw new ServiceAuthError(401, "UNAUTHENTICATED", "Unknown credential");
-  if (current.status !== "ACTIVE") {
+  if (current.status === "REVOKED") {
     throw new ServiceAuthError(401, "CREDENTIAL_REVOKED", "Revoked credential cannot be rotated");
+  }
+  if (current.status !== "ACTIVE") {
+    throw new ServiceAuthError(401, "CREDENTIAL_NOT_ACTIVE", "Credential is not active and cannot be rotated");
   }
   if (config.principalsByToken.has(replacement.token)) {
     throw new Error("Replacement token is already registered");

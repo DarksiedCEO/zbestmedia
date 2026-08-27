@@ -1,6 +1,6 @@
 import Fastify from "fastify";
 import type { AgentManifest } from "@zbest/agent-lifecycle";
-import { resolveServiceAuthConfig, type ServiceAuthConfig } from "@zbest/service-auth";
+import { resolveAuthorizedPrincipalIds, resolveServiceAuthConfig, type ServiceAuthConfig } from "@zbest/service-auth";
 import { brandRoutes } from "./http/routes.js";
 import { createBrandGraphRepo } from "./domain/repo.js";
 import type { BrandGraphRepo } from "./domain/repo.js";
@@ -16,17 +16,19 @@ export function buildServer(deps?: {
   // Omitted (production path): resolved from SERVICE_AUTH_TOKENS — fail-closed,
   // the server will not boot without a configured auth store.
   authConfig?: ServiceAuthConfig;
+  authorizedPrincipalIds?: ReadonlySet<string>;
 }) {
   const app = Fastify({ logger: true });
   const repo = deps?.repo ?? createBrandGraphRepo();
   const workflowRunner = deps?.workflowRunner ?? new WorkflowRunner(repo);
   const authConfig = deps?.authConfig ?? resolveServiceAuthConfig(process.env.SERVICE_AUTH_TOKENS);
+  const authorizedPrincipalIds = deps?.authorizedPrincipalIds ?? resolveAuthorizedPrincipalIds(process.env.SERVICE_AUTH_ALLOWED_PRINCIPALS);
 
   assertBrandTrinityAgentsActive(app.log, deps?.agentManifests);
 
   app.get("/health", async () => ({ ok: true }));
 
-  app.register(brandRoutes, { prefix: "/brandgraph", repo, workflowRunner, authConfig });
+  app.register(brandRoutes, { prefix: "/brandgraph", repo, workflowRunner, authConfig, authorizedPrincipalIds });
 
   return app;
 }

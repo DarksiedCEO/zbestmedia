@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import Fastify, { FastifyInstance } from "fastify";
 import { resolveServiceAuthConfig } from "@zbest/service-auth";
-import { registerRoutes, registerServiceAuthHook } from "../src/http/routes";
+import { registerArtifactAuthorizationHook, registerRoutes, registerServiceAuthHook } from "../src/http/routes";
 import { createMemoryPrisma } from "./helpers";
 
 // Closes: "zero authentication on any route" and "artifact reads are a
@@ -11,9 +11,10 @@ import { createMemoryPrisma } from "./helpers";
 // never reaches it.
 
 const AUTH_ENV = JSON.stringify([
-  { keyId: "workspace-a-service", token: "tok-workspace-a", principalId: "workspace-a-service", subject: "service:workspace-a", audiences: ["artifact-registry"], scopes: ["artifact:*"], tenants: ["workspace-a"], issuedAt: "2026-01-01T00:00:00.000Z", notBefore: "2026-01-01T00:00:00.000Z", expiresAt: "2099-01-01T00:00:00.000Z", status: "ACTIVE", generation: 1 },
-  { keyId: "workspace-b-service", token: "tok-workspace-b", principalId: "workspace-b-service", subject: "service:workspace-b", audiences: ["artifact-registry"], scopes: ["artifact:*"], tenants: ["workspace-b"], issuedAt: "2026-01-01T00:00:00.000Z", notBefore: "2026-01-01T00:00:00.000Z", expiresAt: "2099-01-01T00:00:00.000Z", status: "ACTIVE", generation: 1 }
+  { keyId: "workspace-a-service", token: "tok-workspace-a", principalId: "workspace-a", subject: "service:workspace-a", audiences: ["artifact-registry"], scopes: ["artifact:*"], tenants: ["workspace-a"], issuedAt: "2026-01-01T00:00:00.000Z", notBefore: "2026-01-01T00:00:00.000Z", expiresAt: "2099-01-01T00:00:00.000Z", status: "ACTIVE", generation: 1 },
+  { keyId: "workspace-b-service", token: "tok-workspace-b", principalId: "workspace-b", subject: "service:workspace-b", audiences: ["artifact-registry"], scopes: ["artifact:*"], tenants: ["workspace-b"], issuedAt: "2026-01-01T00:00:00.000Z", notBefore: "2026-01-01T00:00:00.000Z", expiresAt: "2099-01-01T00:00:00.000Z", status: "ACTIVE", generation: 1 }
 ]);
+const AUTHORIZED_PRINCIPALS = new Set(["workspace-a", "workspace-b"]);
 
 function buildMeta(args: { artifactId: string; artifactType: string; requestId: string; attempt: number }) {
   return {
@@ -55,12 +56,12 @@ function storePayload(overrides: { requestId: string; workspaceId: string; artif
   };
 }
 
-async function buildTestApp() {
+async function buildTestApp(authEnv = AUTH_ENV) {
   const app = Fastify();
-  const authConfig = resolveServiceAuthConfig(AUTH_ENV);
+  const authConfig = resolveServiceAuthConfig(authEnv);
   const prisma = createMemoryPrisma();
   const nc = { publish: vi.fn() } as any;
-  await registerRoutes(app, nc, authConfig, { prisma });
+  await registerRoutes(app, nc, authConfig, { prisma, authorizedPrincipalIds: AUTHORIZED_PRINCIPALS });
   return app;
 }
 
@@ -255,6 +256,51 @@ describe("artifact-registry HTTP — authentication and tenant authorization", (
     });
     expect(res.statusCode).toBe(401);
   });
+
+  it.each([
+    ["expired", { expiresAt: "2026-02-01T00:00:00.000Z" }, "CREDENTIAL_EXPIRED"],
+    ["not-yet-valid", { issuedAt: "2098-01-01T00:00:00.000Z", notBefore: "2099-01-01T00:00:00.000Z", expiresAt: "2100-01-01T00:00:00.000Z" }, "CREDENTIAL_NOT_YET_VALID"],
+    ["revoked", { status: "REVOKED", revokedAt: "2026-02-01T00:00:00.000Z" }, "CREDENTIAL_REVOKED"]
+  ] as const)("rejects an %s credential at the HTTP boundary", async (_label, overrides, code) => {
+    const identity = { ...JSON.parse(AUTH_ENV)[0], ...overrides };
+    const lifecycleApp = await buildTestApp(JSON.stringify([identity]));
+    const res = await lifecycleApp.inject({
+      method: "POST",
+      url: "/registry/store",
+      headers: { authorization: "Bearer tok-workspace-a" },
+      payload: storePayload({ requestId: `req-${code}`, workspaceId: "workspace-a", artifactId: "placeholder" })
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ error: code });
+    await lifecycleApp.close();
+  });
+
+  it("rejects stale-generation credential reuse at the HTTP boundary", async () => {
+    const oldIdentity = JSON.parse(AUTH_ENV)[0];
+    const nextIdentity = { ...oldIdentity, keyId: "workspace-a-v2", token: "tok-workspace-a-v2", generation: 2 };
+    const lifecycleApp = await buildTestApp(JSON.stringify([oldIdentity, nextIdentity]));
+    const res = await lifecycleApp.inject({ method: "GET", url: "/registry/artifacts/any", headers: { authorization: "Bearer tok-workspace-a", "x-workspace-id": "workspace-a" } });
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ error: "CREDENTIAL_ROLLBACK" });
+    await lifecycleApp.close();
+  });
+
+  it.each([
+    ["wrong audience", { audiences: ["brandgraph"] }, "AUDIENCE_FORBIDDEN"],
+    ["missing write scope", { scopes: ["artifact:read"] }, "SCOPE_FORBIDDEN"],
+    ["wrong subject", { subject: "service:forged" }, "SUBJECT_FORBIDDEN"],
+    ["self-consistent but unauthorized principal", { principalId: "forged", subject: "service:forged" }, "PRINCIPAL_FORBIDDEN"]
+  ] as const)("rejects %s at the HTTP authorization boundary", async (_label, overrides, code) => {
+    const identity = { ...JSON.parse(AUTH_ENV)[0], ...overrides };
+    const policyApp = await buildTestApp(JSON.stringify([identity]));
+    const res = await policyApp.inject({
+      method: "POST", url: "/registry/store", headers: { authorization: "Bearer tok-workspace-a" },
+      payload: storePayload({ requestId: `req-${code}`, workspaceId: "workspace-a", artifactId: "placeholder" })
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ error: code });
+    await policyApp.close();
+  });
 });
 
 describe("artifact-registry HTTP — structural auth guarantee (future routes)", () => {
@@ -266,6 +312,7 @@ describe("artifact-registry HTTP — structural auth guarantee (future routes)",
     const authConfig = resolveServiceAuthConfig(AUTH_ENV);
     await app.register(async (instance) => {
       registerServiceAuthHook(instance, authConfig);
+      registerArtifactAuthorizationHook(instance, AUTHORIZED_PRINCIPALS);
       // A brand-new route the original PR never wrote, added AFTER the hook.
       instance.get("/registry/some-future-route", async (_request, reply) => {
         return reply.send({ ok: true });
@@ -297,7 +344,7 @@ describe("artifact-registry HTTP — structural auth guarantee (future routes)",
     const res = await app.inject({
       method: "GET",
       url: "/registry/some-future-route",
-      headers: { authorization: "Bearer tok-workspace-a" }
+      headers: { authorization: "Bearer tok-workspace-a", "x-workspace-id": "workspace-a" }
     });
     expect(res.statusCode).toBe(200);
   });

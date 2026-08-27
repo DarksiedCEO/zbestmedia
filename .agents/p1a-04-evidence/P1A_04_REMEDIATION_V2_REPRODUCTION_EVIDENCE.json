@@ -1,0 +1,48 @@
+{
+  "artifactId": "P1A_04_REMEDIATION_V2_REPRODUCTION_EVIDENCE",
+  "controllingReceipt": {
+    "path": "/Users/andrelove/Documents/zbestmedia-p1a-claude-bootstrap/P1A_04_INDEPENDENT_REVIEW_RECEIPT_CLAUDE_V1.md",
+    "sha256": "06e8da7a903776eff6ea1a2c43deb78bb3c7bb6d837e78be90dcf16628e0f3e9"
+  },
+  "reviewedSubject": {
+    "commit": "24e21d73e5a0cc993cee1375794071d8868c84bd",
+    "tree": "7b8e6843840bf2a4506c853b9de3958060542e4f",
+    "orderedParents": ["b0c1b2129123b941c6a350c16dae0ae3a8e076ca"],
+    "evidenceHead": "e13b02fd7c2f1c2dbb33cd9052ea7f7ad622c760",
+    "evidenceTree": "ae0dd9398729273c66be9da314838fd7363cf118",
+    "evidenceHeadAddsOnlyAgentsFiles": true
+  },
+  "reviewedFileGitBlobDigests": {
+    "packages/service-auth/src/index.ts": "b0de7893550e4936fe5d68e41db21ee13592d5b9",
+    "packages/service-auth/test/serviceAuth.test.ts": "5ede9c5b9f9d4e9aa406976a6b1791bf19725840",
+    "scripts/test-p1a-04-credential-mutations.mjs": "1ecc419b7aef14b8a954b6c112c4f0be20c87732",
+    "services/artifact-registry/test/registry.http-auth.test.ts": "4bb90b4a14ccdd40c66b327f6c7f6690d8c4e38e",
+    "services/brandgraph/test/brands.test.ts": "15d6c2a02b53b5b3bdc6ff4479bf01f5fc34ec5e"
+  },
+  "findings": [
+    {"id":"F1","status":"REPRODUCED","evidence":"authorizeServiceRequest and authenticateAndAuthorizeServiceRequest had zero non-test service callers"},
+    {"id":"F2","status":"REPRODUCED","evidence":"seven reviewer decision-point mutants survived the service-auth suite; wildcard tenant negative control was killed"},
+    {"id":"F3","status":"REPRODUCED","evidence":"ledger digest f1010f1b... existed only as an untracked main-checkout file and in no commit"},
+    {"id":"F4","status":"REPRODUCED","evidence":"forged-token try/catch had no fail sentinel"},
+    {"id":"F5","status":"REPRODUCED","evidence":"no service HTTP test exercised expired, revoked, not-before, or stale-generation credentials"},
+    {"id":"F6","status":"REPRODUCED","evidence":"all non-ACTIVE rotation states returned CREDENTIAL_REVOKED"}
+  ],
+  "preRemediationMutationReproduction": {
+    "subject": "24e21d73e5a0cc993cee1375794071d8868c84bd",
+    "results": [
+      {"id":"rotate-revoked-guard","status":"SURVIVED"},
+      {"id":"schema-window-inverted","status":"SURVIVED"},
+      {"id":"bearer-scheme-any","status":"SURVIVED"},
+      {"id":"convenience-skip-tenant","status":"SURVIVED"},
+      {"id":"duplicate-keyid-allowed","status":"SURVIVED"},
+      {"id":"revoke-not-idempotent","status":"SURVIVED"},
+      {"id":"revoked-requires-revokedat-dropped","status":"SURVIVED"},
+      {"id":"wildcard-tenant-always","status":"KILLED_NEGATIVE_CONTROL"}
+    ]
+  },
+  "failedReproductions": [],
+  "remoteMutation": "NONE",
+  "push": false,
+  "merge": false,
+  "certified": false
+}
