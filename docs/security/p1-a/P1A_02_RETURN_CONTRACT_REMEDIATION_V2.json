@@ -1,0 +1,31 @@
+{
+  "artifactId": "P1A_02_RETURN_CONTRACT_REMEDIATION_V2",
+  "schemaVersion": "1.0.0",
+  "parentSubject": "2f0133d9a501c77305024b901373babe88a798f7",
+  "authorizedBase": "b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+  "contracts": {
+    "RC-02-A": "IMPLEMENTED_IN_P1A02_CONSUMER",
+    "RC-02-B": "IMPLEMENTED_SHARED_CI_HUNK_REMOVED_TO_BASE_BLOB",
+    "RC-02-C": "IMPLEMENTED_IN_ACTUAL_NESTED_PRODUCER",
+    "RC-02-D": "BLOCKED_PENDING_P1A08_21_CONTROL_COMPOSITION_AND_CLEAN_LINEAGE_DATA",
+    "RC-02-E": "UNRESOLVED_NON_BLOCKING_NOT_EXPANDED",
+    "RC-02-F": "SUPERSEDED_WITH_EXPLICIT_EQUIVALENT_CONTROLS"
+  },
+  "rc02FDisposition": {
+    "dualBase": {
+      "historicalControl": "The abandoned evidence/reconciliation dual-base pair is not active clean-lineage authority.",
+      "currentEquivalent": "A single founder-authorized clean base is bound by validateIdentityTuple; candidate must differ from it; exact workflow/verifier and candidate ancestry are independently checked by the hermetic preflight.",
+      "failureMode": "Wrong base, candidate-equals-base, verifier/workflow mismatch, wrong repository/remote, and candidate ancestry substitution reject before suite accounting."
+    },
+    "crossRepositoryAuthentication": {
+      "historicalControl": "The removed summary string was self-asserted producer output and was not cryptographic authentication.",
+      "currentEquivalent": "Canonical repository and remote are validated by the accounting identity; protected workflow identity binds repository/path/ref/SHA/blob/environment; GitHub OIDC verifies repository, owner ID, ref, workflow and environment cryptographically.",
+      "runtimeBoundary": "LIVE_OIDC_NOT_RUN; protected remote execution NOT_RUN. Local protocol evidence does not upgrade those states."
+    }
+  },
+  "sharedOwnership": {
+    ".github/workflows/ci.yml": "P1A-08 composition owner; P1A-02 undocumented five-line hunk removed",
+    "scripts/test-p1a-trusted-verifier.mjs": "P1A-08 producer owner; unchanged by this remediation"
+  },
+  "certification": "NOT_CLAIMED"
+}

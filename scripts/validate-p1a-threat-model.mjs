@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { bindCandidateDataRoot, readCandidateArtifact } from "./p1a-candidate-data-root.mjs";
 import { hermeticGit } from "./p1a-hermetic-git.mjs";
+import { buildNestedSummaryV2 } from "./p1a-nested-summary-v2.mjs";
 
 const moduleRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const protectedCandidateBinding = process.env.P1A_TRUSTED_EXECUTION_ROOT
@@ -2302,28 +2303,26 @@ function main() {
       }
     }
   }
-  const verifierBytes = readFileSync(fileURLToPath(import.meta.url));
-  console.log(
-    JSON.stringify({
-      suite: "p1-a-trusted-certification",
-      workflowSha,
-      verifierSha,
-      verifierBlobSha,
-      verifierDigest: sha256(verifierBytes),
-      candidateSha,
-      baseSha: AUTHORIZED_BASE,
-      evidenceBaseSha: AUTHORIZED_BASE,
-      reconciliationBaseSha: TRUSTED_RECONCILIATION_BASE,
-      originalCandidateSha: ORIGINAL_CANDIDATE,
-      runtimePin: AUTHORIZED_RUNTIME,
-      evidenceDigest: evidenceDigest(),
-      crossRepositoryCiAuthentication: context.authenticationState,
-      ...totals,
-      authorityRules: model.authorityPolicy.rules.length,
-      threats: model.threats.length,
-      controls: model.controls.length,
-    }),
-  );
+  const requiredEnv = (name) => {
+    const value = process.env[name];
+    assert.ok(value, `${name} absent`);
+    return value;
+  };
+  const producerBytes = readFileSync(fileURLToPath(import.meta.url));
+  const consumerBytes = readFileSync(path.join(moduleRoot, "scripts/validate-p1a-certification-accounting.mjs"));
+  console.log(JSON.stringify(buildNestedSummaryV2({
+    candidateSha,
+    workflowSha,
+    verifierSha,
+    authorizedBaseSha: requiredEnv("P1A_AUTHORIZED_BASE_SHA"),
+    runtimePin: requiredEnv("P1A_TRUST_RUNTIME_PIN"),
+    verifierDigest: sha256(consumerBytes),
+    producerDigest: sha256(producerBytes),
+    scopeDigest: requiredEnv("P1A_SCOPE_DIGEST"),
+    evidencePackageDigest: requiredEnv("P1A_EVIDENCE_PACKAGE_DIGEST"),
+    evidenceDigest: evidenceDigest(),
+    ...totals,
+  })));
   if (
     totals.executed !== totals.required ||
     totals.passed !== totals.required ||

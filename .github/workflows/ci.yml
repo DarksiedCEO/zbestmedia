@@ -640,11 +640,6 @@ jobs:
       - name: P1-A trusted-bootstrap secret-detector tests
         run: node scripts/test-p1a-ci-secret-detector.mjs
 
-      - name: P1-A candidate data only validation
-        env:
-          P1A_CANDIDATE_SHA: ${{ github.sha }}
-        run: node scripts/validate-p1a-candidate-data.mjs --candidate-data-only
-
       - name: P1-A trusted-bootstrap secret-exposure scan
         run: |
           node scripts/detect-p1a-ordinary-ci-secrets.mjs \
