@@ -5,7 +5,7 @@ import { EvalReportSchema } from "@zbest/eval-gates-schemas";
 import { canonicalize, deterministicArtifactId, sha256Hex } from "@zbest/id-core";
 import { Errors } from "./errors";
 import { makeEventId } from "../events/eventId.js";
-import { publishOutboxOnce } from "../events/outbox.js";
+import { enqueueOutbox } from "../events/outbox.js";
 import type { NatsConnection } from "nats";
 
 const SupersedesEdge = "supersedes";
@@ -69,7 +69,7 @@ export type SealArgs = {
   sealedReason: string;
 };
 
-export async function storeArtifact(prisma: PrismaClient, nc: NatsConnection, args: StoreArgs) {
+export async function storeArtifact(prisma: PrismaClient, _nc: NatsConnection, args: StoreArgs) {
   const artifactId = deterministicArtifactId({
     workspaceId: args.workspaceId,
     requestId: args.requestId,
@@ -140,8 +140,32 @@ export async function storeArtifact(prisma: PrismaClient, nc: NatsConnection, ar
     return existing;
   }
 
-  const created = await prisma.artifact.create({
+  const occurredAt = new Date().toISOString();
+  const subject = "zbest.artifacts.stored.v1";
+  const eventId = makeEventId({
+    schemaVersion: 1,
+    eventName: "ArtifactStored",
+    artifactId,
+    requestId: args.requestId,
+    attempt: args.attempt,
+  });
+  const payload = {
+    schemaVersion: 1 as const,
+    eventId,
+    eventName: "ArtifactStored" as const,
+    occurredAt,
+    trace: { requestId: args.requestId, artifactId },
     data: {
+      artifactType: args.artifactType,
+      attempt: args.attempt,
+      sha256: inputHash,
+      sizeBytes: (args.payload as any)?.sizeBytes ?? 1,
+      supersedesArtifactId: args.supersedesArtifactId,
+    },
+  };
+
+  const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const artifact = await tx.artifact.create({ data: {
       artifactId,
       workspaceId: args.workspaceId,
       brandId: args.brandId,
@@ -154,43 +178,15 @@ export async function storeArtifact(prisma: PrismaClient, nc: NatsConnection, ar
       meta: meta as Prisma.InputJsonValue,
       evalReport: (evalReport ?? undefined) as Prisma.InputJsonValue,
       supersedesArtifactId: args.supersedesArtifactId ?? undefined
-    }
-  });
-
-  const subject = "zbest.artifacts.stored.v1";
-  const eventId = makeEventId({
-    schemaVersion: 1,
-    eventName: "ArtifactStored",
-    artifactId,
-    requestId: args.requestId,
-    attempt: args.attempt,
-  });
-
-  await publishOutboxOnce({
-    prisma,
-    nc,
-    subject,
-    eventId,
-    payload: {
-      schemaVersion: 1,
-      eventId,
-      eventName: "ArtifactStored",
-      occurredAt: new Date().toISOString(),
-      trace: { requestId: args.requestId, artifactId },
-      data: {
-        artifactType: args.artifactType,
-        attempt: args.attempt,
-        sha256: inputHash,
-        sizeBytes: (args.payload as any)?.sizeBytes ?? 1, // fallback if not present
-        supersedesArtifactId: args.supersedesArtifactId,
-      },
-    },
+    } });
+    await enqueueOutbox(tx as unknown as Parameters<typeof enqueueOutbox>[0], { eventId, subject, payload });
+    return artifact;
   });
 
   return created;
 }
 
-export async function sealArtifact(prisma: PrismaClient, nc: NatsConnection, args: SealArgs) {
+export async function sealArtifact(prisma: PrismaClient, _nc: NatsConnection, args: SealArgs) {
   // Scoped by workspaceId, not just artifactId: a wrong-workspace caller
   // must see the same NotFound as a nonexistent id — no existence oracle.
   const existing = await prisma.artifact.findFirst({
@@ -228,33 +224,17 @@ export async function sealArtifact(prisma: PrismaClient, nc: NatsConnection, arg
       });
     }
 
-    return updated;
-  });
-
-  const subject = "zbest.artifacts.sealed.v1";
-  const eventId = makeEventId({
-    schemaVersion: 1,
-    eventName: "ArtifactSealed",
-    artifactId: sealed.artifactId,
-    requestId: sealed.requestId,
-  });
-
-  await publishOutboxOnce({
-    prisma,
-    nc,
-    subject,
-    eventId,
-    payload: {
+    const subject = "zbest.artifacts.sealed.v1";
+    const eventId = makeEventId({ schemaVersion: 1, eventName: "ArtifactSealed", artifactId: updated.artifactId, requestId: updated.requestId });
+    await enqueueOutbox(tx as unknown as Parameters<typeof enqueueOutbox>[0], { eventId, subject, payload: {
       schemaVersion: 1,
       eventId,
       eventName: "ArtifactSealed",
       occurredAt: new Date().toISOString(),
-      trace: { requestId: sealed.requestId, artifactId: sealed.artifactId },
-      data: {
-        sealedBy: args.sealedBy,
-        sealReason: args.sealedReason,
-      },
-    },
+      trace: { requestId: updated.requestId, artifactId: updated.artifactId },
+      data: { sealedBy: args.sealedBy, sealReason: args.sealedReason },
+    } });
+    return updated;
   });
 
   return sealed;

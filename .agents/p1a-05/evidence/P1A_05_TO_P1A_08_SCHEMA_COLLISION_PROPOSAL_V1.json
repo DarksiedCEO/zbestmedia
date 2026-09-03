@@ -1,0 +1,18 @@
+{
+  "artifactId": "P1A_05_TO_P1A_08_SCHEMA_COLLISION_PROPOSAL_V1",
+  "returnContract": "RC-05-A",
+  "classification": "CROSS_LANE_COLLISION",
+  "owner": "P1A-08",
+  "producer": "P1A-05 transactional outbox relay",
+  "consumers": ["artifact-registry Prisma client", "P1A-05 relay", "P1A-03 evidence", "P1A-06 retention/deletion"],
+  "sharedSurface": "services/artifact-registry/prisma/schema.prisma",
+  "proposedMigration": "services/artifact-registry/prisma/migrations/20260818113000_transactional_outbox_relay/migration.sql",
+  "versioning": "additive EventOutbox relay-state columns and replacement indexes; migration ordering must be assigned by P1A-08",
+  "schemaSha256": "df4ce8c34df273a78dcec49906c1afaa1f84a6d191f60c54230bf9d4338d341e",
+  "migrationSha256": "52cce1f2d66c3bb355c3a242cfd75d30d0f3e981e0f13bb899690f8547881118",
+  "combinedDiffSha256": "09f9055fbdadca74ee1076f8a9c7110957daeb1048999d4d5b1b9bdbfbc948ee",
+  "integrationState": "PROPOSED_NOT_LANDED",
+  "failureMode": "Competing schema or migration ordering can conflict with P1A-06 lifecycle changes and can resurrect terminal/deleted data.",
+  "preservation": "The pre-existing uncommitted schema and migration remain byte-preserved in the P1A-05 worktree. P1A-05 does not claim integration ownership.",
+  "strayDuplicateTest": "REMOVED_PER_RC-05-A"
+}

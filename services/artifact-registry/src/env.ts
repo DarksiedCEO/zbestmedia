@@ -6,7 +6,10 @@ const EnvSchema = z.object({
   SERVICE_NAME: z.literal("artifact-registry"),
   NATS_URL: z.string().min(1).optional(),
   SERVICE_AUTH_TOKENS: z.string().min(1),
-  SERVICE_AUTH_ALLOWED_PRINCIPALS: z.string().min(1)
+  SERVICE_AUTH_ALLOWED_PRINCIPALS: z.string().min(1),
+  OUTBOX_RELAY_INTERVAL_MS: z.coerce.number().int().min(100).default(1000),
+  OUTBOX_RELAY_BATCH_SIZE: z.coerce.number().int().min(1).max(1000).default(100),
+  OUTBOX_RELAY_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(100).default(8)
 });
 
 export type Env = z.infer<typeof EnvSchema>;
