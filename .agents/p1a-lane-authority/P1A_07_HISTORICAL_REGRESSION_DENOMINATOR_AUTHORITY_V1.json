@@ -1,0 +1,53 @@
+{
+  "artifactId": "P1A_07_HISTORICAL_REGRESSION_DENOMINATOR_AUTHORITY_V1",
+  "schemaVersion": "1.0.0",
+  "status": "FOUNDER_AUTHORIZED",
+  "authoritySource": {
+    "kind": "EXPLICIT_CURRENT_HUMAN_INSTRUCTION",
+    "codexThreadId": "01a0150f-5c34-7773-97b3-15bb7dec6185"
+  },
+  "project": "Z Best Media",
+  "lane": "P1A-07",
+  "frozenLedger": {
+    "artifactId": "P1A_MASTER_REQUIREMENT_LEDGER_V1",
+    "sha256": "f1010f1be105d05ea93bf6dc79a84ae09cee7d9470d024bd5d2b3d4948195fcf",
+    "canonicalRequirementDenominator": 124,
+    "controllingRequirement": "P1AF-095"
+  },
+  "topologyState": {
+    "artifactId": "P1A_TOPOLOGY_8_OF_8_V1",
+    "path": "/Users/andrelove/Documents/zbestmedia-p1a-bootstrap-safety/.agents/assurance-safety/continuity/canonical-state-topology-8-v1.json",
+    "sha256": "b739fca778841d94f7a9885656907536b6b095df31f1a2bf18c1b3844be6397b"
+  },
+  "historicalRegressionClassDenominator": 27,
+  "classes": [
+    {"ordinal":1,"id":"AUTHORITY_ROOT_COORDINATED_REWRITE"},
+    {"ordinal":2,"id":"REVIEWER_REGISTRY_REPLACEMENT"},
+    {"ordinal":3,"id":"FABRICATED_EXECUTION"},
+    {"ordinal":4,"id":"POLICY_ROOT_SUBSTITUTION"},
+    {"ordinal":5,"id":"VACUOUS_TRAVERSAL"},
+    {"ordinal":6,"id":"UNPARSED_EXCLUSIONS"},
+    {"ordinal":7,"id":"RECEIPT_UNDER_BINDING"},
+    {"ordinal":8,"id":"SUPERSESSION_WEAKNESS"},
+    {"ordinal":9,"id":"HERMETIC_GIT_BYPASS"},
+    {"ordinal":10,"id":"AMBIENT_GIT_CONFIG_AUTHORITY"},
+    {"ordinal":11,"id":"OIDC_VERIFICATION_BYPASS"},
+    {"ordinal":12,"id":"PROTECTED_CERTIFICATION_ORCHESTRATION_DRIFT"},
+    {"ordinal":13,"id":"ACQUISITION_INVENTORY_DRIFT"},
+    {"ordinal":14,"id":"TRANSACTION_OUTBOX_STRANDING"},
+    {"ordinal":15,"id":"TRANSACTION_OUTBOX_DUPLICATION"},
+    {"ordinal":16,"id":"CREDENTIAL_EXPIRY_WEAKNESS"},
+    {"ordinal":17,"id":"CREDENTIAL_ROTATION_WEAKNESS"},
+    {"ordinal":18,"id":"CREDENTIAL_REVOCATION_WEAKNESS"},
+    {"ordinal":19,"id":"PRIVACY_RETENTION_GAP"},
+    {"ordinal":20,"id":"PRIVACY_DELETION_GAP"},
+    {"ordinal":21,"id":"PERSISTED_JSON_LIFECYCLE_GAP"},
+    {"ordinal":22,"id":"MONEY_Z_FLAMING_Z_SEMANTIC_CONFLICT"},
+    {"ordinal":23,"id":"FOUNDING_DATE_SEMANTIC_CONFLICT"},
+    {"ordinal":24,"id":"MUTATION_DENOMINATOR_INCOMPLETENESS"},
+    {"ordinal":25,"id":"RUNTIME_OVERCLAIM"},
+    {"ordinal":26,"id":"PRODUCTION_OVERCLAIM"},
+    {"ordinal":27,"id":"HISTORICAL_EVIDENCE_FABRICATION"}
+  ],
+  "changeControl": "NO_ADD_REMOVE_RENAME_MERGE_OR_INFERENCE_WITHOUT_EXPLICIT_VERSIONED_AUTHORITY"
+}
