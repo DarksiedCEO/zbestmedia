@@ -7,13 +7,18 @@ import {
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { bindCandidateDataRoot, readCandidateArtifact } from "./p1a-candidate-data-root.mjs";
+import { hermeticGit } from "./p1a-hermetic-git.mjs";
+import { buildNestedSummaryV2 } from "./p1a-nested-summary-v2.mjs";
 
 const moduleRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const candidateRoot = process.env.P1A_PACKAGE_ROOT
-  ? path.resolve(process.env.P1A_PACKAGE_ROOT)
-  : moduleRoot;
+const protectedCandidateBinding = process.env.P1A_TRUSTED_EXECUTION_ROOT
+  ? bindCandidateDataRoot(process.env.P1A_CANDIDATE_DATA_ROOT, process.env.P1A_CANDIDATE_SHA, process.env.P1A_CANONICAL_REMOTE)
+  : null;
+const candidateRoot = protectedCandidateBinding?.root ?? (process.env.P1A_PACKAGE_ROOT ? path.resolve(process.env.P1A_PACKAGE_ROOT) : moduleRoot);
+const candidateBytes = (file) => protectedCandidateBinding ? readCandidateArtifact(protectedCandidateBinding, file).bytes : readFileSync(path.join(candidateRoot, file));
 const load = (file) =>
-  JSON.parse(readFileSync(path.join(candidateRoot, file), "utf8"));
+  JSON.parse(candidateBytes(file).toString("utf8"));
 const unique = (items, label) =>
   assert.equal(new Set(items).size, items.length, `${label}: duplicate`);
 const exists = (items, id, label) =>
@@ -3128,11 +3133,7 @@ export function validateDualBaseScope({
 }
 
 function validateGitScope(manifest, candidateSha) {
-  const git = (...args) =>
-    execFileSync("git", args, {
-      cwd: candidateRoot,
-      encoding: "utf8",
-    }).trim();
+  const git = (...args) => hermeticGit(candidateRoot, args);
   assert.equal(git("rev-parse", "HEAD"), candidateSha);
   validateDualBaseScope({
     git,
@@ -3144,8 +3145,11 @@ function validateGitScope(manifest, candidateSha) {
     ancestryAuthorityRoot: process.env.P1A_ANCESTRY_AUTHORITY_ROOT,
   });
   for (const file of CANDIDATE_OWNED_FILES) {
-    const stat = lstatSync(path.join(candidateRoot, file));
-    assert.ok(stat.isFile() && !stat.isSymbolicLink(), `${file}: unsafe`);
+    if (protectedCandidateBinding) readCandidateArtifact(protectedCandidateBinding, file);
+    else {
+      const stat = lstatSync(path.join(candidateRoot, file));
+      assert.ok(stat.isFile() && !stat.isSymbolicLink(), `${file}: unsafe`);
+    }
   }
   assert.equal(git("status", "--porcelain"), "", "candidate worktree dirty");
 }
@@ -3161,7 +3165,7 @@ function evidenceDigest() {
   for (const file of files) {
     hash.update(file);
     hash.update("\0");
-    hash.update(readFileSync(path.join(candidateRoot, file)));
+    hash.update(candidateBytes(file));
     hash.update("\0");
   }
   return hash.digest("hex");
@@ -3315,10 +3319,7 @@ function main() {
   const model = load("docs/security/p1-a/model.json");
   const evidence = load("docs/security/p1-a/evidence-register.json");
   const manifest = load("docs/security/p1-a/validation-manifest.json");
-  const markdown = readFileSync(
-    path.join(candidateRoot, "docs/security/p1-a/threat-model.md"),
-    "utf8",
-  );
+  const markdown = candidateBytes("docs/security/p1-a/threat-model.md").toString("utf8");
   const context = {
     model,
     evidence,
@@ -3355,28 +3356,26 @@ function main() {
       }
     }
   }
-  const verifierBytes = readFileSync(fileURLToPath(import.meta.url));
-  console.log(
-    JSON.stringify({
-      suite: "p1-a-trusted-certification",
-      workflowSha,
-      verifierSha,
-      verifierBlobSha,
-      verifierDigest: sha256(verifierBytes),
-      candidateSha,
-      baseSha: AUTHORIZED_BASE,
-      evidenceBaseSha: AUTHORIZED_BASE,
-      reconciliationBaseSha: TRUSTED_RECONCILIATION_BASE,
-      originalCandidateSha: ORIGINAL_CANDIDATE,
-      runtimePin: AUTHORIZED_RUNTIME,
-      evidenceDigest: evidenceDigest(),
-      crossRepositoryCiAuthentication: context.authenticationState,
-      ...totals,
-      authorityRules: model.authorityPolicy.rules.length,
-      threats: model.threats.length,
-      controls: model.controls.length,
-    }),
-  );
+  const requiredEnv = (name) => {
+    const value = process.env[name];
+    assert.ok(value, `${name} absent`);
+    return value;
+  };
+  const producerBytes = readFileSync(fileURLToPath(import.meta.url));
+  const consumerBytes = readFileSync(path.join(moduleRoot, "scripts/validate-p1a-certification-accounting.mjs"));
+  console.log(JSON.stringify(buildNestedSummaryV2({
+    candidateSha,
+    workflowSha,
+    verifierSha,
+    authorizedBaseSha: requiredEnv("P1A_AUTHORIZED_BASE_SHA"),
+    runtimePin: requiredEnv("P1A_TRUST_RUNTIME_PIN"),
+    verifierDigest: sha256(consumerBytes),
+    producerDigest: sha256(producerBytes),
+    scopeDigest: requiredEnv("P1A_SCOPE_DIGEST"),
+    evidencePackageDigest: requiredEnv("P1A_EVIDENCE_PACKAGE_DIGEST"),
+    evidenceDigest: evidenceDigest(),
+    ...totals,
+  })));
   if (
     totals.executed !== totals.required ||
     totals.passed !== totals.required ||

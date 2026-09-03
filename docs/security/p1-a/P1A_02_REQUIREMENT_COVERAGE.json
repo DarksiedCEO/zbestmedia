@@ -1,0 +1,68 @@
+{
+  "artifactId": "P1A_02_REQUIREMENT_COVERAGE",
+  "version": 2,
+  "lane": "P1A-02",
+  "baseSha": "b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+  "frozenLedgerSha256": "f1010f1be105d05ea93bf6dc79a84ae09cee7d9470d024bd5d2b3d4948195fcf",
+  "canonicalRequirementDenominator": 124,
+  "laneRequirementDenominator": 17,
+  "statusVocabulary": ["CLOSED_LOCAL", "PARTIALLY_CLOSED", "BLOCKED_EXTERNALLY"],
+  "requirementStatus": {
+    "P1AF-014": "CLOSED_LOCAL",
+    "P1AF-015": "CLOSED_LOCAL",
+    "P1AF-022": "PARTIALLY_CLOSED",
+    "P1AF-023": "CLOSED_LOCAL",
+    "P1AF-024": "PARTIALLY_CLOSED",
+    "P1AF-025": "CLOSED_LOCAL",
+    "P1AF-026": "CLOSED_LOCAL",
+    "P1AF-027": "CLOSED_LOCAL",
+    "P1AF-028": "BLOCKED_EXTERNALLY",
+    "P1AF-029": "CLOSED_LOCAL",
+    "P1AF-030": "BLOCKED_EXTERNALLY",
+    "P1AF-031": "PARTIALLY_CLOSED",
+    "P1AF-032": "CLOSED_LOCAL",
+    "P1AF-033": "CLOSED_LOCAL",
+    "P1AF-034": "PARTIALLY_CLOSED",
+    "P1AF-035": "CLOSED_LOCAL",
+    "P1AF-036": "PARTIALLY_CLOSED"
+  },
+  "externalBlockers": [
+    {
+      "id": "P1A08-AUTHORITY-ROOTS",
+      "requirements": ["P1AF-024", "P1AF-030"],
+      "disposition": "P1A-08 must supply current-lineage authority acquisition and bindings accepted by the shared integration producer; abandoned legacy roots are prohibited."
+    },
+    {
+      "id": "P1A08-SUMMARY-SCHEMA",
+      "requirements": ["P1AF-022", "P1AF-028", "P1AF-031", "P1AF-034", "P1AF-036"],
+      "disposition": "P1A-08 must make the shared producer emit P1A_TRUSTED_VERIFIER_SUMMARY_V2 with exact consumer-compatible authority fields."
+    }
+  ],
+  "implementation": [
+    ".github/workflows/p1a-certify-clean.yml",
+    "scripts/p1a-certification-core.mjs",
+    "scripts/validate-p1a-certification-preflight.mjs",
+    "scripts/validate-p1a-certification-accounting.mjs",
+    "scripts/p1a-hermetic-git.mjs",
+    "scripts/p1a-candidate-data-root.mjs",
+    "scripts/p1a-evidence-package.mjs",
+    "scripts/p1a-oidc-verifier.mjs",
+    "scripts/p1a-workflow-identity.mjs",
+    "scripts/p1a-authority-inventory.mjs"
+  ],
+  "localBehaviorTestDenominator": 85,
+  "localBehaviorTestResult": "PASS",
+  "mutationDenominator": 4,
+  "mutationKilled": 4,
+  "mutationSurvivors": 0,
+  "remoteProtectedExecution": "NOT_RUN",
+  "liveOidc": "NOT_RUN",
+  "liveEvidenceAcquisition": "NOT_RUN",
+  "nested15": "BLOCKED_EXTERNALLY",
+  "realObject21": "BLOCKED_EXTERNALLY",
+  "externalCertification": "NOT_RUN",
+  "dependencyChanges": "NONE",
+  "push": false,
+  "merge": false,
+  "remoteMutation": "NONE"
+}

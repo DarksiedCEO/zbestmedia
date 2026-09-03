@@ -1,0 +1,16 @@
+{
+  "artifactId": "P1A_02_STALE_ACCOUNTING_ARTIFACT_CLASSIFICATION_V1",
+  "schemaVersion": "1.0.0",
+  "path": "scripts/validate-p1a-certification-accounting 2.mjs",
+  "sha256": "68e35a91d363a37ac6ef9e5c0807a8be454beeb44440cdd8b42caff7cb24baf1",
+  "authoritativePath": "scripts/validate-p1a-certification-accounting.mjs",
+  "authoritativeSha256": "40f5b0b4c742020ab878574339cbd60fd209b3d4f4fc67dcd584e83786e89a0a",
+  "classification": "CONFLICTING_IMPLEMENTATION",
+  "differences": [
+    "Untracked file expects legacy dual/nested/integration authority fields.",
+    "Authoritative file expects clean candidate/workflow/verifier/scope/evidence-package identities.",
+    "Untracked file permits output overwrite; authoritative file uses exclusive creation."
+  ],
+  "reachability": "No package script, workflow, import, or exact-path command references the filename containing space-2; active execution cannot reach it by normal module resolution.",
+  "cleanup": "PRESERVED_NOT_REMOVED"
+}
