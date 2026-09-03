@@ -41,7 +41,8 @@ const baseEvidence=load("docs/security/p1-a/evidence-register.json");
 const baseManifest=load("docs/security/p1-a/validation-manifest.json");
 const baseMarkdown=readFileSync(path.join(root,"docs/security/p1-a/threat-model.md"),"utf8");
 const unprivilegedWorkflow=readFileSync(path.join(root,".github/workflows/ci.yml"),"utf8");
-const trustedWorkflow=readFileSync(path.join(root,".github/workflows/p1a-certify.yml"),"utf8");
+const legacyTrustedWorkflow=readFileSync(path.join(root,".github/workflows/p1a-certify.yml"),"utf8");
+const cleanTrustedWorkflow=readFileSync(path.join(root,".github/workflows/p1a-certify-clean.yml"),"utf8");
 const head=execFileSync("git",["rev-parse","HEAD"],{cwd:root,encoding:"utf8"}).trim();
 
 validateData(baseModel,baseEvidence,baseManifest,baseMarkdown);
@@ -59,10 +60,14 @@ const positives=[
     assert.ok(!unprivilegedWorkflow.includes("P1A_RUNTIME_APP_PRIVATE_KEY"),"unprivileged CI references App private key");
     assert.ok(!unprivilegedWorkflow.includes("create-github-app-token"),"unprivileged CI mints a privileged token");
     assert.ok(!unprivilegedWorkflow.includes("zbestmedia-ui"),"unprivileged CI fetches runtime repository");
-    assert.ok(!trustedWorkflow.includes("pull_request_target"),"trusted workflow uses pull_request_target");
-    assert.ok(trustedWorkflow.includes("environment: p1a-certification"),"trusted workflow lacks protected environment");
-    assert.ok(trustedWorkflow.includes("github.event.repository.default_branch"),"trusted verifier is not sourced from default branch");
-    assert.ok(trustedWorkflow.includes("persist-credentials: false"),"trusted checkout persists credentials");
+    assert.ok(!legacyTrustedWorkflow.includes("pull_request_target"),"legacy trusted workflow uses pull_request_target");
+    assert.ok(legacyTrustedWorkflow.includes("environment: p1a-certification"),"legacy trusted workflow lacks protected environment");
+    assert.ok(legacyTrustedWorkflow.includes("ref: ${{ github.workflow_sha }}"),"legacy trusted verifier is not pinned to the workflow commit");
+    assert.ok(legacyTrustedWorkflow.includes("persist-credentials: false"),"legacy trusted checkout persists credentials");
+    assert.ok(!cleanTrustedWorkflow.includes("pull_request_target"),"clean trusted workflow uses pull_request_target");
+    assert.ok(cleanTrustedWorkflow.includes("environment: p1a-certification"),"clean trusted workflow lacks protected environment");
+    assert.ok(cleanTrustedWorkflow.includes("ref: ${{ github.workflow_sha }}"),"clean trusted verifier is not pinned to the workflow commit");
+    assert.ok(cleanTrustedWorkflow.includes("persist-credentials: false"),"clean trusted checkout persists credentials");
   }]
 ];
 const mutations=[

@@ -3,10 +3,11 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { CANONICAL_REPOSITORY, CLEAN_BASE_SHA, sha256 } from "./p1a-certification-core.mjs";
 import { runPreflight } from "./validate-p1a-certification-preflight.mjs";
 
-const source = path.resolve(new URL("..", import.meta.url).pathname);
+const source = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const temporary = mkdtempSync(path.join(os.tmpdir(), "p1a-certification-preflight-"));
 const trusted = path.join(temporary, "trusted"), candidate = path.join(temporary, "candidate");
 function git(root, args) { return execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim(); }
