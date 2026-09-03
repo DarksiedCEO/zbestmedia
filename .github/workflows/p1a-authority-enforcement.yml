@@ -1,0 +1,43 @@
+# P1A-01 authority-root enforcement (H5 remediation).
+# Invokes the authority validator self-check, the hostile battery, and the
+# mutation harness on every change touching the P1A-01 enforcement surface.
+#
+# NOTE ON ENFORCEMENT SCOPE: the presence of this workflow makes the checks
+# RUNNABLE. Whether GitHub REQUIRES them as a passing status check before merge
+# is a branch-protection setting that is EXTERNAL to this repository content and
+# is NOT asserted by P1A-01. Local evidence proves the surface is defined and
+# wired; it does not prove GitHub enforces it.
+name: p1a-authority-enforcement
+
+on:
+  pull_request:
+    paths:
+      - ".github/CODEOWNERS"
+      - ".github/workflows/p1a-authority-enforcement.yml"
+      - "scripts/validate-p1a-authority-root.mjs"
+      - "scripts/p1a-attestation-core.mjs"
+      - "scripts/test-p1a-authority-root.mjs"
+      - "scripts/test-p1a-authority-root-mutation.mjs"
+  push:
+    branches:
+      - codex/bt-1
+
+permissions:
+  contents: read
+
+jobs:
+  authority-root:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Syntax check
+        run: node --check scripts/validate-p1a-authority-root.mjs
+      - name: Authority validator self-check
+        run: node scripts/validate-p1a-authority-root.mjs "$GITHUB_WORKSPACE"
+      - name: Hostile battery
+        run: node scripts/test-p1a-authority-root.mjs
+      - name: Mutation harness
+        run: node scripts/test-p1a-authority-root-mutation.mjs

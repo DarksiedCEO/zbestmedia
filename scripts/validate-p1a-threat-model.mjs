@@ -278,6 +278,7 @@ export const TRUSTED_INFRASTRUCTURE_FILES = [
   "scripts/detect-p1a-ordinary-ci-secrets.mjs",
   "scripts/test-p1a-certification-accounting.mjs",
   "scripts/test-p1a-ci-secret-detector.mjs",
+  "scripts/test-p1a-dual-base-verifier.mjs",
   "scripts/test-p1a-trusted-verifier.mjs",
   "scripts/validate-p1a-certification-accounting.mjs",
   "scripts/validate-p1a-threat-model.mjs",
