@@ -20,6 +20,9 @@ import {
   AUTHORIZED_BASE,
   AUTHORIZED_RUNTIME,
   COMPOSED_CI_BASE,
+  composeGeneration2CandidateCi,
+  CURRENT_TRUSTED_TARGET,
+  CURRENT_TRUSTED_TARGET_CI_BLOB,
   CURRENT_TRUSTED_WORKFLOW_BLOB,
   CURRENT_TRUSTED_WORKFLOW_SHA,
   ORIGINAL_CANDIDATE,
@@ -104,6 +107,28 @@ assert.equal(
 assert.ok(!/x-access-token|authorization:|http\..*extraheader/i.test(
   readFileSync(path.join(currentWorkflowAuthorityRoot, "config"), "utf8")),
   "current trusted workflow authority persisted credentials");
+const currentTrustedTargetRoot = process.env.P1A_CURRENT_TRUSTED_TARGET_ROOT
+  ? path.resolve(root, process.env.P1A_CURRENT_TRUSTED_TARGET_ROOT)
+  : null;
+assert.ok(currentTrustedTargetRoot, "current trusted target authority root absent");
+assert.notEqual(currentTrustedTargetRoot, root,
+  "primary checkout cannot be current trusted target authority");
+assert.notEqual(currentTrustedTargetRoot, currentWorkflowAuthorityRoot,
+  "current workflow authority cannot substitute for current trusted target authority");
+assert.equal(execFileSync("git", ["-C", currentTrustedTargetRoot, "rev-parse", "HEAD"],
+  { encoding: "utf8" }).trim(), CURRENT_TRUSTED_TARGET,
+"current trusted target HEAD mismatch");
+assert.equal(execFileSync("git", ["-C", currentTrustedTargetRoot, "rev-parse",
+  `${CURRENT_TRUSTED_TARGET}:.github/workflows/ci.yml`], { encoding: "utf8" }).trim(),
+CURRENT_TRUSTED_TARGET_CI_BLOB, "current trusted target workflow blob mismatch");
+assert.equal(execFileSync("git", ["-C", currentTrustedTargetRoot, "remote", "get-url", "origin"],
+  { encoding: "utf8" }).trim(), "https://github.com/DarksiedCEO/zbestmedia",
+"current trusted target repository identity mismatch");
+assert.equal(execFileSync("git", ["-C", currentTrustedTargetRoot, "status", "--porcelain=v1"],
+  { encoding: "utf8" }).trim(), "", "current trusted target authority dirty");
+assert.ok(!/x-access-token|authorization:|http\..*extraheader/i.test(
+  readFileSync(path.join(currentTrustedTargetRoot, ".git/config"), "utf8")),
+"current trusted target authority persisted credentials");
 assert.equal(
   execFileSync("git", ["-C", currentWorkflowAuthorityRoot, "show",
     `${CURRENT_TRUSTED_WORKFLOW_SHA}:.github/workflows/ci.yml`],
@@ -130,6 +155,7 @@ const CURRENT_TRUSTED_VERIFIER_CONTROL_STEP = `      - name: P1-A trusted verifi
           P1A_CURRENT_WORKFLOW_FETCH_TOKEN: \${{ github.token }}
           P1A_ORIGINAL_REPOSITORY_ROOT: .p1a-original-candidate
           P1A_BASELINE_REPOSITORY_ROOT: .p1a-trusted-baseline
+          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority
         run: |
           set -euo pipefail
           trusted_sha=94941bbf6afbd0073f6619b2c63b0e6c5c6ca4e8
@@ -266,7 +292,9 @@ function validateCurrentTrustedWorkflow(source, {
   assert.equal(authorityRoot, currentWorkflowAuthorityRoot,
     "current workflow authority root is candidate-selected");
   assert.notEqual(authorityRoot, root, "primary checkout fallback forbidden");
-  assert.equal(source, composeCurrentTrustedWorkflow(currentTrustedCi),
+  const currentTargetCi = execFileSync("git", ["-C", currentTrustedTargetRoot, "show",
+    `${CURRENT_TRUSTED_TARGET}:.github/workflows/ci.yml`], { encoding: "utf8" });
+  assert.equal(source, composeGeneration2CandidateCi(currentTargetCi),
     "current trusted workflow composition mismatch");
 }
 
@@ -414,6 +442,25 @@ const baselineNegativeCases = [
   )), true],
   ["wrong_current_workflow_blob", () => validateCurrentTrustedWorkflow(mutateBaseline(
     CURRENT_TRUSTED_WORKFLOW_BLOB, "f".repeat(40),
+  )), true],
+  ["missing_current_target_root_binding", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority\n",
+    "",
+  )), true],
+  ["wrong_current_target_root_binding", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority",
+    "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-original-candidate",
+  )), true],
+  ["candidate_selected_current_target_root", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority",
+    "          P1A_CURRENT_TRUSTED_TARGET_ROOT: ${{ github.event.inputs.current_target_root }}",
+  )), true],
+  ["current_workflow_authority_substituted_for_target", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    "          P1A_CURRENT_TRUSTED_TARGET_ROOT: .p1a-current-trusted-target-authority",
+    "          P1A_CURRENT_TRUSTED_TARGET_ROOT: $authority",
+  )), true],
+  ["current_target_workflow_blob_mismatch", () => validateCurrentTrustedWorkflow(mutateBaseline(
+    CURRENT_TRUSTED_TARGET_CI_BLOB, "f".repeat(40),
   )), true],
   ["missing_current_workflow_object", () => validateCurrentTrustedWorkflow(mutateBaseline(
     "          test \"$(git -C \"$authority\" cat-file -t \"$trusted_sha\")\" = commit\n",
