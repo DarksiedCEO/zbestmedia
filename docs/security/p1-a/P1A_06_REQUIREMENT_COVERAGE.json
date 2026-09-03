@@ -1,0 +1,86 @@
+{
+  "artifactId": "P1A_06_REQUIREMENT_COVERAGE",
+  "version": 2,
+  "moduleVersion": "P1A_06_PRIVACY_V2",
+  "remediationOf": {
+    "reviewVerdict": "INDEPENDENT_REVIEW_BLOCK",
+    "reviewer": "CODEX",
+    "priorSubject": "3d0486c37d64364991f6c061e2f222c6b1d5dcfe",
+    "findings": "P1A06-IR-001..008",
+    "record": "docs/security/p1-a/P1A_06_IR_REMEDIATION_V2.md"
+  },
+  "lane": "P1A-06",
+  "owner": "CLAUDE",
+  "baseSha": "b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+  "frozenLedgerSha256": "f1010f1be105d05ea93bf6dc79a84ae09cee7d9470d024bd5d2b3d4948195fcf",
+  "frozenLedgerVerification": "UNKNOWN — the ledger digest is asserted, not independently re-derivable within P1A-06 scope (ledger evidence lives in the base checkout, not this lane's tree)",
+  "canonicalRequirementDenominator": 124,
+  "laneRequirementDenominator": 14,
+  "statusVocabulary": ["IMPLEMENTED_WITH_LOCAL_TESTS", "PARTIAL", "UNKNOWN", "NOT_RUN", "BLOCKED_EXTERNALLY"],
+  "requirementStatus": {
+    "P1AF-077": { "status": "IMPLEMENTED_WITH_LOCAL_TESTS", "surface": "document lifecycle capability (createDocumentStore/storeDocument/transitionDocument)" },
+    "P1AF-078": { "status": "IMPLEMENTED_WITH_LOCAL_TESTS", "surface": "ACCOUNTABLE_RETENTION_ROLE enforcement (assertAccountableActor)" },
+    "P1AF-079": { "status": "IMPLEMENTED_WITH_LOCAL_TESTS", "surface": "fail-closed classification registry; CLASS_WITHOUT_RETENTION; census coverage check" },
+    "P1AF-080": { "status": "IMPLEMENTED_WITH_LOCAL_TESTS", "surface": "deletion engine: eligibility binding, per-scope proof, aggregation, receipts+attestations, residue verification" },
+    "P1AF-081": { "status": "IMPLEMENTED_WITH_LOCAL_TESTS", "surface": "JSON field-level classification; payload-free tombstones; base JSON surfaces censused" },
+    "P1AF-082": { "status": "PARTIAL", "surface": "tenant plan coverage + cross-tenant refusal implemented; base defect BD-06-001 (GraphEvent no FK) fix routed via P1A-08 (CLC-06-C)", "blockedOn": "P1A-08 schema integration" },
+    "P1AF-083": { "status": "IMPLEMENTED_WITH_LOCAL_TESTS", "surface": "SEALED_WITHOUT_ERASURE_RECONCILIATION gate; CRYPTO_ERASE/TOMBSTONE/SCOPED_EXEMPTION strategies; sealed artifacts declared CRYPTO_ERASE" },
+    "P1AF-084": { "status": "PARTIAL", "surface": "append-only digest-chained audit; AUDIT_APPEND_ONLY refusal; SCOPED_EXEMPTION preservation in tenant plans; base defect BD-06-002 (RotationAudit cascade) fix routed via P1A-08 (CLC-06-C)", "blockedOn": "P1A-08 schema integration" },
+    "P1AF-085": { "status": "IMPLEMENTED_WITH_LOCAL_TESTS", "surface": "boundedCacheTtl + createAuthzCache; cache cannot outlive earliest evidence expiry" },
+    "P1AF-086": { "status": "IMPLEMENTED_WITH_LOCAL_TESTS", "surface": "emitInvalidation: subject, priorState, failedGate, policyVersion, correlationId all mandatory" },
+    "P1AF-087": { "status": "IMPLEMENTED_WITH_LOCAL_TESTS", "surface": "reconcileEvidenceRetention + resolveDeleteEvidenceConflict (delete-vs-evidence declared, never silent)" },
+    "P1AF-088": { "status": "IMPLEMENTED_WITH_LOCAL_TESTS", "surface": "LIFECYCLE_UNDECLARED gates on state and retention class; transition matrix" },
+    "P1AF-089": { "status": "BLOCKED_EXTERNALLY", "surface": "providerDecisionStatus/assertProviderObligationFinalizable fail closed; decision packet docs/security/p1-a/P1AF-089_FOUNDER_DECISION_PACKET_V1.md", "blockedOn": "founder provider decision (also blocks P1AF-070..074, lane P1A-05)" },
+    "P1AF-090": { "status": "IMPLEMENTED_WITH_LOCAL_TESTS", "surface": "STORE_SEMANTICS declaration + verifyProviderParity against postgresql-like and sqlite-like models; JUSTIFIED_DIVERGENCES register" }
+  },
+  "externalBlockers": [
+    { "id": "P1AF-089", "kind": "FOUNDER_DECISION", "packet": "docs/security/p1-a/P1AF-089_FOUNDER_DECISION_PACKET_V1.md" },
+    { "id": "CLC-06-A/C", "kind": "CROSS_LANE_COLLISION", "detail": "schema.prisma changes routed via P1A-08; RC-05-A (P1A-05 uncommitted edit) still open" }
+  ],
+  "implementation": {
+    "files": [
+      "scripts/validate-p1a-privacy.mjs",
+      "scripts/test-p1a-privacy.mjs",
+      "scripts/test-p1a-privacy-mutation.mjs",
+      "docs/security/p1-a/P1A_06_DATA_CLASSIFICATION_CENSUS_V1.md",
+      "docs/security/p1-a/P1AF-089_FOUNDER_DECISION_PACKET_V1.md",
+      "docs/security/p1-a/P1A_06_CROSS_LANE_COLLISION_CONTRACTS_V1.md",
+      "docs/security/p1-a/P1A_06_REQUIREMENT_COVERAGE.json"
+    ],
+    "sharedSurfaceEdits": "NONE (routed via P1A-08 per CLC-06-A..E)"
+  },
+  "localBehaviorTestDenominator": 99,
+  "localBehaviorTestResult": { "executed": 99, "passed": 99, "failed": 0, "skipped": 0, "unitIntegration": "34/34", "hostileNegativeControls": "65/65" },
+  "mutationDenominator": 63,
+  "mutationKilled": 63,
+  "mutationSurvivors": 0,
+  "mutationProbes": 43,
+  "irClosureControls": {
+    "P1A06-IR-001": "keyed-authority MAC; forged/attacker-key eligibility -> EXECUTION_REFUSED_UNAUTHENTICATED",
+    "P1A06-IR-002": "per-target hold re-check at execution -> BLOCKED_BY_HOLD, 0 side effects; HOLD_LEDGER_REQUIRED",
+    "P1A06-IR-003": "receipt verified vs authenticated eligibility; empty scopes/no-eligibility -> RECEIPT_REJECTED",
+    "P1A06-IR-004": "identity-bound opKey; cross-tenant replay invokes tenant B adapter (no proof reuse)",
+    "P1A06-IR-005": "evidence conflict gates eligibility+execution -> BLOCKED_BY_EVIDENCE, 0 deletes",
+    "P1A06-IR-006": "founder artifact validated (authority id, 4 capabilities, digest); junk ref -> BLOCKED_EXTERNALLY",
+    "P1A06-IR-007": "immutable registered anchor enforced; moved anchor / LAST_ACTIVITY basis -> fail closed",
+    "P1A06-IR-008": "recursive audit payload rejection + strict schema; tombstone hash-format validation"
+  },
+  "negativeControlsCovered": [
+    "wrong tenant", "wrong subject", "retention not expired", "hold active",
+    "partial delete", "stale cache", "stale replica", "forged deletion receipt",
+    "retry/idempotency failure", "deleted data reappears", "unsupported COMPLETE deletion claim",
+    "legal-hold bypass via direct executor", "retention clock reset", "policy downgrade",
+    "expired data readable", "outbox resurrection", "silent delete-to-retain fallback",
+    "silent invalidation", "cache outliving evidence", "cert record referencing expired artifact",
+    "stale derived artifact", "secret unbounded retention", "payload in tombstone/audit"
+  ],
+  "repoSuiteStatus": {
+    "pnpm ci:all": "NOT_RUN",
+    "reason": "worktree has no node_modules install; lane deliverables are dependency-free node scripts by design (P1A-03 precedent); CI wiring routed via P1A-08 (CLC-06-E)"
+  },
+  "scopeHonesty": [
+    "Local deterministic library + local test/mutation executions only. No runtime claim, no production claim, no live-provider claim.",
+    "Backup/replica erasure is modeled at the contract level (scope outcomes; UNSUPPORTED never promotes to COMPLETE); real backup-cycle erasure is environment-owned and NOT claimed.",
+    "Partial deletion is never reported complete anywhere in this lane; UNKNOWN/PARTIAL/NOT_RUN/BLOCKED_EXTERNALLY are preserved verbatim."
+  ]
+}
