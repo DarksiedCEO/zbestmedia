@@ -34,7 +34,7 @@ export function assertAgentActive(manifest: AgentManifest, now = new Date(), log
     throw new AgentLifecycleError("AGENT_NOT_ACTIVE", "Agent is not ACTIVE");
   }
 
-  if (now.getTime() > expiresAt.getTime()) {
+  if (now.getTime() >= expiresAt.getTime()) {
     log?.warn(
       { agentId: manifest.agentId, expiresAt: manifest.expiresAt, now: now.toISOString() },
       "agent expired"

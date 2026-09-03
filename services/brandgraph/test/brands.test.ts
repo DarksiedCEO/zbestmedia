@@ -12,14 +12,15 @@ import { generateBrandId } from '../src/domain/ids.js';
 // dedicated "authentication and authorization" describe block below proves
 // the 401/403 boundaries with tenant-scoped identities instead.
 const TEST_AUTH_ENV = JSON.stringify([
-  { keyId: 'test-suite-caller', token: 'test-token', tenants: ['*'] },
-  { keyId: 'scoped-caller', token: 'scoped-token', tenants: ['only-allowed-tenant'] }
+  { keyId: 'test-suite-caller', token: 'test-token', principalId: 'test-suite', subject: 'service:test-suite', audiences: ['brandgraph'], scopes: ['*'], tenants: ['*'], issuedAt: '2026-01-01T00:00:00.000Z', notBefore: '2026-01-01T00:00:00.000Z', expiresAt: '2099-01-01T00:00:00.000Z', status: 'ACTIVE', generation: 1 },
+  { keyId: 'scoped-caller', token: 'scoped-token', principalId: 'scoped', subject: 'service:scoped', audiences: ['brandgraph'], scopes: ['brand:read', 'brand:write'], tenants: ['only-allowed-tenant'], issuedAt: '2026-01-01T00:00:00.000Z', notBefore: '2026-01-01T00:00:00.000Z', expiresAt: '2099-01-01T00:00:00.000Z', status: 'ACTIVE', generation: 1 }
 ]);
 const testAuthConfig = resolveServiceAuthConfig(TEST_AUTH_ENV);
+const authorizedPrincipalIds = new Set(['test-suite', 'scoped']);
 
 describe('BrandGraph CRUD', () => {
   const repo = createInMemoryRepo();
-  const app = buildServer({ repo, authConfig: testAuthConfig });
+  const app = buildServer({ repo, authConfig: testAuthConfig, authorizedPrincipalIds });
   const tenant = (id: string) => ({ 'x-tenant-id': id, authorization: 'Bearer test-token' });
 
   beforeAll(async () => {
@@ -270,6 +271,43 @@ describe('BrandGraph CRUD', () => {
       // body tenantId.
       expect(response.statusCode).toBe(400);
     });
+
+    it.each([
+      ['expired', { expiresAt: '2026-02-01T00:00:00.000Z' }, 'CREDENTIAL_EXPIRED'],
+      ['not-yet-valid', { issuedAt: '2098-01-01T00:00:00.000Z', notBefore: '2099-01-01T00:00:00.000Z', expiresAt: '2100-01-01T00:00:00.000Z' }, 'CREDENTIAL_NOT_YET_VALID'],
+      ['revoked', { status: 'REVOKED', revokedAt: '2026-02-01T00:00:00.000Z' }, 'CREDENTIAL_REVOKED']
+    ] as const)('rejects an %s credential at the HTTP boundary', async (_label, overrides, code) => {
+      const identity = { ...JSON.parse(TEST_AUTH_ENV)[0], ...overrides };
+      const fresh = buildServer({ repo: createInMemoryRepo(), authConfig: resolveServiceAuthConfig(JSON.stringify([identity])), authorizedPrincipalIds });
+      const response = await fresh.inject({ method: 'GET', url: '/brandgraph/brands/any-id', headers: { 'x-tenant-id': 'tenant-test', authorization: 'Bearer test-token' } });
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toMatchObject({ error: code });
+      await fresh.close();
+    });
+
+    it('rejects stale-generation credential reuse at the HTTP boundary', async () => {
+      const oldIdentity = JSON.parse(TEST_AUTH_ENV)[0];
+      const nextIdentity = { ...oldIdentity, keyId: 'test-suite-v2', token: 'test-token-v2', generation: 2 };
+      const fresh = buildServer({ repo: createInMemoryRepo(), authConfig: resolveServiceAuthConfig(JSON.stringify([oldIdentity, nextIdentity])), authorizedPrincipalIds });
+      const response = await fresh.inject({ method: 'GET', url: '/brandgraph/brands/any-id', headers: { 'x-tenant-id': 'tenant-test', authorization: 'Bearer test-token' } });
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toMatchObject({ error: 'CREDENTIAL_ROLLBACK' });
+      await fresh.close();
+    });
+
+    it.each([
+      ['wrong audience', { audiences: ['artifact-registry'] }, 'AUDIENCE_FORBIDDEN'],
+      ['missing read scope', { scopes: ['brand:write'] }, 'SCOPE_FORBIDDEN'],
+      ['wrong subject', { subject: 'service:forged' }, 'SUBJECT_FORBIDDEN'],
+      ['self-consistent but unauthorized principal', { principalId: 'forged', subject: 'service:forged' }, 'PRINCIPAL_FORBIDDEN']
+    ] as const)('rejects %s at the HTTP authorization boundary', async (_label, overrides, code) => {
+      const identity = { ...JSON.parse(TEST_AUTH_ENV)[0], ...overrides };
+      const fresh = buildServer({ repo: createInMemoryRepo(), authConfig: resolveServiceAuthConfig(JSON.stringify([identity])), authorizedPrincipalIds });
+      const response = await fresh.inject({ method: 'GET', url: '/brandgraph/brands/any-id', headers: { 'x-tenant-id': 'tenant-test', authorization: 'Bearer test-token' } });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ error: code });
+      await fresh.close();
+    });
   });
 
   describe('Structural auth guarantee (future routes)', () => {
@@ -281,7 +319,7 @@ describe('BrandGraph CRUD', () => {
       const fresh = Fastify();
       await fresh.register(
         async (instance) => {
-          registerBrandGraphAuthHook(instance, testAuthConfig);
+          registerBrandGraphAuthHook(instance, testAuthConfig, authorizedPrincipalIds);
           instance.get('/some-future-route', async (_request, reply) => reply.send({ ok: true }));
         },
         { prefix: '/brandgraph' }

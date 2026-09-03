@@ -5,7 +5,8 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().positive(),
   SERVICE_NAME: z.literal("artifact-registry"),
   NATS_URL: z.string().min(1).optional(),
-  SERVICE_AUTH_TOKENS: z.string().min(1)
+  SERVICE_AUTH_TOKENS: z.string().min(1),
+  SERVICE_AUTH_ALLOWED_PRINCIPALS: z.string().min(1)
 });
 
 export type Env = z.infer<typeof EnvSchema>;

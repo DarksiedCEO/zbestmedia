@@ -1,0 +1,46 @@
+{
+  "artifactId": "P1A_04_REMEDIATION_V2_VERIFICATION_EVIDENCE",
+  "lane": "P1A-04",
+  "branch": "codex/p1a-04-identity",
+  "authorizedBase": "b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+  "immutableReviewedSubject": "24e21d73e5a0cc993cee1375794071d8868c84bd",
+  "controllingReceiptSha256": "06e8da7a903776eff6ea1a2c43deb78bb3c7bb6d837e78be90dcf16628e0f3e9",
+  "remediation": [
+    {"finding":"F1","status":"FIXED_LOCALLY","implementation":["packages/service-auth/src/index.ts","services/artifact-registry/src/http/routes.ts","services/brandgraph/src/http/routes.ts"],"tests":["packages/service-auth/test/serviceAuth.test.ts","services/artifact-registry/test/registry.http-auth.test.ts","services/brandgraph/test/brands.test.ts"]},
+    {"finding":"F2","status":"FIXED_LOCALLY","implementation":["scripts/test-p1a-04-credential-mutations.mjs"],"tests":["packages/service-auth/test/serviceAuth.test.ts"],"result":"17/17 killed; 0 survivors"},
+    {"finding":"F3","status":"FIXED_LOCALLY_WITH_AUTHORITY_LIMITATION","implementation":[".agents/p1a-04-evidence/authority/P1A_MASTER_REQUIREMENT_LEDGER_V1_FREEZE_CANDIDATE_V2.json"],"sha256":"f1010f1be105d05ea93bf6dc79a84ae09cee7d9470d024bd5d2b3d4948195fcf","limitation":"Exact external bytes are repository-contained evidence. The source artifact self-identifies as an unfrozen candidate; this remediation does not upgrade or alter that authority status and does not claim ownership of non-P1A-04 rows."},
+    {"finding":"F4","status":"FIXED_LOCALLY","implementation":["packages/service-auth/test/serviceAuth.test.ts"],"evidence":"Explicit fail sentinel makes forged-token acceptance fail the test."},
+    {"finding":"F5","status":"FIXED_LOCALLY","implementation":["services/artifact-registry/test/registry.http-auth.test.ts","services/brandgraph/test/brands.test.ts"],"evidence":"Both HTTP consumers reject expired, not-yet-valid, revoked, stale-generation, wrong-audience, wrong-scope, and wrong-subject credentials."},
+    {"finding":"F6","status":"FIXED_LOCALLY","implementation":["packages/service-auth/src/index.ts"],"tests":["packages/service-auth/test/serviceAuth.test.ts"],"evidence":"REVOKED maps to CREDENTIAL_REVOKED; other non-ACTIVE states map to CREDENTIAL_NOT_ACTIVE."}
+  ],
+  "verification": {
+    "focused": {"serviceAuth":"50/50","artifactRegistry":"34/34","brandgraph":"42/42"},
+    "p1a04AffectedSuites": {"serviceAuth":50,"agentLifecycle":4,"artifactRegistry":34,"brandgraph":42,"total":130},
+    "repositoryDenominator": {"vitestCases":148,"reconciliationChecks":51,"total":199},
+    "mutation": {"operators":17,"killed":17,"survived":0},
+    "syntax": ["git diff --check","node --check scripts/test-p1a-04-credential-mutations.mjs","jq empty evidence JSON"],
+    "failedReproductions": [],
+    "preservedPreRemediationSurvivors": ".agents/p1a-04-evidence/P1A_04_REMEDIATION_V2_REPRODUCTION_EVIDENCE.json"
+  },
+  "scope": {
+    "p1a06Modified": false,
+    "p1a08Modified": false,
+    "crossLaneCollision": false
+  },
+  "gates": {
+    "continuity": "CONTINUITY_READY",
+    "continuityAuthority": ".agents/p1a-lane-start/P1A_04_LANE_START_RECEIPT_V2.json",
+    "drift": "ON_TASK",
+    "hallucination": "ACCEPT",
+    "verificationGate": "SATISFIED_FOR_LOCAL_REMEDIATION_FREEZE"
+  },
+  "notRun": [
+    "protected GitHub workflow execution",
+    "protected threat-model trusted-verifier execution",
+    "distributed multi-process revocation-cache propagation"
+  ],
+  "remoteMutation": "NONE",
+  "push": false,
+  "merge": false,
+  "certified": false
+}

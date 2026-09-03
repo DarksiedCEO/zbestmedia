@@ -4,7 +4,7 @@ import {
   HeaderRequiredError,
   ServiceAuthError,
   authenticateBearerToken,
-  authorizeTenant,
+  authorizeServiceRequest,
   extractBearerToken,
   type ServiceAuthConfig
 } from '@zbest/service-auth';
@@ -107,13 +107,23 @@ function parseGraphQueryOptions(query: unknown): GraphQueryOptions {
 // automatically; a new route cannot ship unauthenticated by forgetting a call.
 export function registerBrandGraphAuthHook(
   app: FastifyInstance,
-  authConfig: ServiceAuthConfig
+  authConfig: ServiceAuthConfig,
+  authorizedPrincipalIds: ReadonlySet<string>
 ): void {
   app.addHook('onRequest', async (request) => {
     const token = extractBearerToken(request.headers.authorization);
     const identity = authenticateBearerToken(token, authConfig); // 401
     const tenantId = getTenantId(request); // 400 (HeaderRequiredError)
-    authorizeTenant(identity, tenantId); // 403
+    if (!authorizedPrincipalIds.has(identity.principalId)) {
+      throw new ServiceAuthError(403, 'PRINCIPAL_FORBIDDEN', 'Credential principal is not authorized');
+    }
+    authorizeServiceRequest(identity, {
+      principalId: identity.principalId,
+      subject: `service:${identity.principalId}`,
+      audience: 'brandgraph',
+      tenantId,
+      requiredScopes: [request.method === 'GET' ? 'brand:read' : 'brand:write'],
+    }); // 403
     request.tenantId = tenantId;
   });
 
@@ -134,12 +144,12 @@ function authErrorHandler(error: unknown, _request: FastifyRequest, reply: Fasti
 
 export async function brandRoutes(
   app: FastifyInstance,
-  deps: { repo: BrandGraphRepo; workflowRunner?: WorkflowRunner; authConfig: ServiceAuthConfig }
+  deps: { repo: BrandGraphRepo; workflowRunner?: WorkflowRunner; authConfig: ServiceAuthConfig; authorizedPrincipalIds: ReadonlySet<string> }
 ) {
-  const { repo, authConfig } = deps;
+  const { repo, authConfig, authorizedPrincipalIds } = deps;
   const workflowRunner = deps.workflowRunner ?? new WorkflowRunner(repo);
 
-  registerBrandGraphAuthHook(app, authConfig);
+  registerBrandGraphAuthHook(app, authConfig, authorizedPrincipalIds);
 
   // POST /brandgraph/brands
   app.post('/brands', async (request, reply) => {

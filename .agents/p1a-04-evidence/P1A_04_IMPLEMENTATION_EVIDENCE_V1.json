@@ -1,0 +1,84 @@
+{
+  "artifactId": "P1A_04_IMPLEMENTATION_EVIDENCE_V1",
+  "lane": "P1A-04",
+  "owner": "CODEX",
+  "scope": "Credentials / Identity Lifecycle",
+  "repository": "DarksiedCEO/zbestmedia",
+  "branch": "codex/p1a-04-identity",
+  "baseSha": "b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+  "baseTree": "c8fe6f31288bffcf1b8c35a825c60c6a5d31703d",
+  "topologyStateSha256": "b739fca778841d94f7a9885656907536b6b095df31f1a2bf18c1b3844be6397b",
+  "frozenLedgerSha256": "f1010f1be105d05ea93bf6dc79a84ae09cee7d9470d024bd5d2b3d4948195fcf",
+  "frozenLedgerDenominator": 124,
+  "laneRequirementIds": [
+    "P1AF-016",
+    "P1AF-057",
+    "P1AF-058",
+    "P1AF-059",
+    "P1AF-060",
+    "P1AF-061",
+    "P1AF-062",
+    "P1AF-063",
+    "P1AF-064",
+    "P1AF-065",
+    "P1AF-066"
+  ],
+  "implementationDiffSha256BeforeEvidence": "4be672f2c626f284675be149decb25af64bac5eec818f9e831cdde4e87af7242",
+  "dependencyLockSha256": "00890b9a4f7aff5db0f67d827ab1d6ce82da7bb352060375cdca046469b6e4bc",
+  "dependencyChange": "NONE",
+  "controlsImplemented": [
+    "service credentials require issuedAt, expiresAt, ACTIVE/REVOKED status, and positive generation",
+    "authentication rejects credentials at and after the exact expiry instant",
+    "revocation invalidates credentials immediately in the active authorization state",
+    "rotation creates generation+1 credentials and invalidates the predecessor",
+    "rotation and revocation require successful audit append before authorization state mutation",
+    "credential tokens are excluded from lifecycle audit events",
+    "agent manifests fail closed at the exact expiry instant",
+    "existing shared tenant/workspace schema and per-principal tenant authorization remain enforced"
+  ],
+  "verification": [
+    {
+      "command": "pnpm --filter @zbest/service-auth test",
+      "result": "PASS",
+      "tests": 28
+    },
+    {
+      "command": "pnpm --filter @zbest/agent-lifecycle test",
+      "result": "PASS",
+      "tests": 4
+    },
+    {
+      "command": "pnpm --filter @zbest/artifact-registry test",
+      "result": "PASS",
+      "tests": 26
+    },
+    {
+      "command": "pnpm --filter @zbest/brandgraph test",
+      "result": "PASS",
+      "tests": 34
+    },
+    {
+      "command": "typecheck and lint for service-auth, agent-lifecycle, artifact-registry, and brandgraph",
+      "result": "PASS"
+    }
+  ],
+  "negativeControls": [
+    "missing lifetime rejected",
+    "exact-boundary and post-boundary expiry rejected",
+    "revoked credential rejected",
+    "audit sink failure prevents revocation",
+    "rotated predecessor rejected",
+    "cross-tenant identity remains rejected",
+    "exact-boundary expired agent manifest rejected"
+  ],
+  "knownVerificationLimit": {
+    "command": "node scripts/validate-p1a-threat-model.mjs",
+    "status": "NOT_EXECUTABLE_FOR_RELEASED_BASE",
+    "reason": "The base-tree verifier requires workflow identity environment and its candidate-data-only path hard-codes historical first parent 365c59757756f3f91480d3bfeb841b543010201f, while the founder-authorized base first parent is 94941bbf6afbd0073f6619b2c63b0e6c5c6ca4e8. This lane did not weaken or rewrite that independent verifier."
+  },
+  "remoteMutation": "NONE",
+  "push": "NONE",
+  "merge": "NONE",
+  "certificationClaim": "NONE",
+  "status": "IMPLEMENTED_LOCAL_VERIFICATION_PASS_WITH_DISCLOSED_EXTERNAL_VERIFIER_LIMIT"
+}

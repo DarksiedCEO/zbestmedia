@@ -1,0 +1,2713 @@
+{
+  "artifactId": "P1A_MASTER_REQUIREMENT_LEDGER_V1_FREEZE_CANDIDATE_V2",
+  "authorityStatus": "SUPERSEDING_CANDIDATE_NOT_FROZEN_REQUIRES_INDEPENDENT_FREEZE_VERIFICATION",
+  "producedBy": "CODEX_LEDGER_CORRECTION_STRIKE",
+  "frozen": false,
+  "implementationAuthorized": false,
+  "worktreesAuthorized": false,
+  "supersedes": {
+    "path": "/Users/andrelove/Documents/zbestmedia-p1a-claude-bootstrap/P1A_MASTER_REQUIREMENT_LEDGER_V1_FREEZE_CANDIDATE.json",
+    "sha256": "4cf41664bfc670b968146efd03da588630e99eee5fd0d5346f284103aa85ab69",
+    "status": "UNAPPROVED_HISTORICAL_RECONCILIATION_EVIDENCE"
+  },
+  "founderRuling": {
+    "path": "/Users/andrelove/.codex/attachments/70a04f17-0ecd-4b30-9a65-e8fa37744948/pasted-text.txt",
+    "sha256": "77805c43c10ab9d649ac49f8660934d9b8844548ce4125b404bade5465bf028d"
+  },
+  "baseIdentity": {
+    "repository": "DarksiedCEO/zbestmedia",
+    "ref": "codex/bt-1",
+    "sha": "b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+    "tree": "c8fe6f31288bffcf1b8c35a825c60c6a5d31703d",
+    "parents": [
+      "94941bbf6afbd0073f6619b2c63b0e6c5c6ca4e8",
+      "03eeb8bd04850fc211ca61d1c591b8c6cec905b1"
+    ]
+  },
+  "inputs": {
+    "claudeBootstrap": {
+      "sha256": "4acf1c41c311aea507e12205638e13049062faf11b403884df4619e08ba0e331",
+      "rows": 113
+    },
+    "codexBootstrap": {
+      "sha256": "f0c480a46a6e21eb383b55d40b011f4300c8bef0fe3e9310d8646c2648f04570",
+      "rows": 60
+    },
+    "codexReconciliation": {
+      "sha256": "8d3c69648e3843b51835fae6f2b377501b348cab29bc67aebdcf87298dc1293b",
+      "usedFor": "cross-check only"
+    }
+  },
+  "accounting": {
+    "CODEX_ROWS_ACCOUNTED": "60/60",
+    "CLAUDE_ROWS_ACCOUNTED": "113/113",
+    "CANONICAL_DENOMINATOR": 124,
+    "UNEXPLAINED_DISAPPEARANCE": 0,
+    "UNEXPLAINED_ADDITION": 0,
+    "DUPLICATE_CANONICAL_REQUIREMENTS": 0,
+    "UNASSIGNED": 0,
+    "MULTIPLE_PRIMARY_OWNERS": 0,
+    "LANE_08_ROWS": "23/23",
+    "LANE_08_SINGLE_PRIMARY_OWNER": "23/23",
+    "OWNERSHIP_DISPUTES": 0
+  },
+  "correctionAdjudications": {
+    "REQ-02-011": "CANONICAL_INVARIANT_REWRITTEN",
+    "REQ-04-006": "CANONICAL_INVARIANT_REWRITTEN",
+    "REQ-04-008": "CANONICAL_INVARIANT_REWRITTEN",
+    "GOV-004": "OPEN_PENDING_EXACT_FOUNDER_FREEZE_THEN_CLOSED",
+    "HS-REG-001": "CANONICAL",
+    "P1AF-026": "SUPERSEDED_BY_CLEAN_ARCHITECTURE_EQUIVALENT",
+    "P1AF-113": "SUPERSEDED_BY_CLEAN_ARCHITECTURE_EQUIVALENT",
+    "365c59757756f3f91480d3bfeb841b543010201f": "HISTORICAL_REGRESSION_EVIDENCE_NOT_ACTIVE_AUTHORITY_NOT_ACTIVE_TRUST_ANCHOR_NOT_CLEAN_REBUILD_DEPENDENCY"
+  },
+  "codeowners": {
+    "trustedDenominator": 11,
+    "currentlyUnprotected": 6,
+    "status": "PRESERVED_CONVERGED_NOT_REMEDIATED"
+  },
+  "sourceStatusTotals": {
+    "AVAILABLE_TO_BOTH": 98,
+    "CURRENT_FOUNDER_AUTHORITY": 1,
+    "EXTERNAL_STATE_UNVERIFIABLE_FROM_SESSION": 8,
+    "FOUNDER_DECISION_PENDING": 3,
+    "UNAVAILABLE_TO_BOTH": 14
+  },
+  "freezeRecommendation": "DO_NOT_FREEZE_PENDING_INDEPENDENT_FREEZE_VERIFICATION",
+  "requirements": [
+    {
+      "FINAL_REQ_ID": "P1AF-001",
+      "FINAL_CANONICAL_TEXT": "Bootstrap merged through independent review onto protected branch codex/bt-1.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-001"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "custody observation test",
+      "MUTATION_OBLIGATION": "attempt merge without independent review",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "EXTERNAL_STATE_UNVERIFIABLE_FROM_SESSION",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-002",
+      "FINAL_CANONICAL_TEXT": "Branch protection requires code-owner review for workflow, verifier, verifier tests, CODEOWNERS, and the custody record.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-002"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "protected-path change test",
+      "MUTATION_OBLIGATION": "modify each protected path without code-owner review",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "EXTERNAL_STATE_UNVERIFIABLE_FROM_SESSION",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-003",
+      "FINAL_CANONICAL_TEXT": "Environment p1a-certification exists with required reviewer DarksiedCEO.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-003"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "environment identity test",
+      "MUTATION_OBLIGATION": "dispatch without approval",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "EXTERNAL_STATE_UNVERIFIABLE_FROM_SESSION",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-004",
+      "FINAL_CANONICAL_TEXT": "Environment deployment branches restricted to codex/bt-1.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-004"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "branch-restriction test",
+      "MUTATION_OBLIGATION": "dispatch from non-protected branch",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "EXTERNAL_STATE_UNVERIFIABLE_FROM_SESSION",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-005",
+      "FINAL_CANONICAL_TEXT": "P1A_RUNTIME_APP_PRIVATE_KEY stored only in the p1a-certification environment; repository-level copy removed after proven environment acquisition.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-005"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "secret-scope test",
+      "MUTATION_OBLIGATION": "request key from a candidate-branch workflow",
+      "AEGIS_COVERAGE": "credential-custody",
+      "SOURCE_STATUS": "EXTERNAL_STATE_UNVERIFIABLE_FROM_SESSION",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-006",
+      "FINAL_CANONICAL_TEXT": "Environment secret existence confirmed by name without exposing its value.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-006"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "name-only confirmation test",
+      "MUTATION_OBLIGATION": "attempt value echo",
+      "AEGIS_COVERAGE": "credential-custody",
+      "SOURCE_STATUS": "EXTERNAL_STATE_UNVERIFIABLE_FROM_SESSION",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-007",
+      "FINAL_CANONICAL_TEXT": "One approved dry certification or token acquisition proves the environment copy works before repository-level removal.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-007"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "ordered-proof test",
+      "MUTATION_OBLIGATION": "remove repo copy before proof",
+      "AEGIS_COVERAGE": "credential-custody",
+      "SOURCE_STATUS": "EXTERNAL_STATE_UNVERIFIABLE_FROM_SESSION",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-008",
+      "FINAL_CANONICAL_TEXT": "Until all custody controls are observed in GitHub, protected environment custody is NOT_PROVEN and trusted certification must not run.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-008"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "NOT_PROVEN default test",
+      "MUTATION_OBLIGATION": "run certification with unobserved custody",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-009",
+      "FINAL_CANONICAL_TEXT": "GitHub App least privilege: installed only on DarksiedCEO/zbestmedia-ui, Contents read-only + mandatory Metadata read-only; webhooks, user authorization, and all write permissions disabled.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-009"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "permission inventory test",
+      "MUTATION_OBLIGATION": "add write scope / second installation",
+      "AEGIS_COVERAGE": "credential-custody",
+      "SOURCE_STATUS": "EXTERNAL_STATE_UNVERIFIABLE_FROM_SESSION",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-010",
+      "FINAL_CANONICAL_TEXT": "Every file in the union of TRUSTED_INFRASTRUCTURE_FILES and AMENDMENT_CONTROLLED_FILES (11 files at base, including scripts/test-p1a-dual-base-verifier.mjs) is code-owner protected, and TRUSTED_INFRASTRUCTURE_FILES itself is amended to include every amendment-controlled file.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-010"
+      ],
+      "SOURCE_EVIDENCE": ".github/CODEOWNERS @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_WITH_CANONICAL_CORRECTION",
+      "DISPOSITION_REASON": "CODEOWNERS denominator adjudicated 6, not 5: union of both trusted sets is 11; CODEOWNERS covers 5; test-p1a-dual-base-verifier.mjs is amendment-controlled but absent from TRUSTED_INFRASTRUCTURE_FILES, so both bootstraps' 'unprotected' sets under-counted differently. Codex's own prose required exactly this coverage.",
+      "TEST_OBLIGATION": "CODEOWNERS-vs-TRUSTED_INFRASTRUCTURE_FILES parity test",
+      "MUTATION_OBLIGATION": "remove an entry; edit an uncovered trusted file",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-011",
+      "FINAL_CANONICAL_TEXT": "Authority root must resist COORDINATED rewrite: one actor changing verifier + workflow + tests + CODEOWNERS together must not be able to self-authorize.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-001"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-011"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "coordinated-rewrite attack test",
+      "MUTATION_OBLIGATION": "rewrite all trusted files in one commit",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-012",
+      "FINAL_CANONICAL_TEXT": "Reviewer registry must not be replaceable by candidate-controlled data.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-002"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-012"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "reviewer-registry substitution test",
+      "MUTATION_OBLIGATION": "substitute reviewer list from candidate",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-013",
+      "FINAL_CANONICAL_TEXT": "Policy-root substitution must fail closed.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-004"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-013"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "policy-root substitution test",
+      "MUTATION_OBLIGATION": "swap policy root",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-014",
+      "FINAL_CANONICAL_TEXT": "Hermetic Git: trusted and candidate roots are passed separately, must not overlap, and are verified before any dependent control executes; hermetic-Git bypass fails closed.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-009"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-014"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "SPLIT_ADOPTED_CODEX_GRANULARITY_CODEX",
+      "DISPOSITION_REASON": "Root separation is enforced by the execution environment (02); 01 defines which roots are trusted.",
+      "TEST_OBLIGATION": "root-overlap test",
+      "MUTATION_OBLIGATION": "overlap roots; inject ambient git config",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-015",
+      "FINAL_CANONICAL_TEXT": "No ambient Git or configuration authority: environment git config, default remotes, hooks, or mutable branch names must never confer authority; ambient-authority injection fails closed.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-010"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-014"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "SPLIT_ADOPTED_CODEX_GRANULARITY_CODEX",
+      "DISPOSITION_REASON": "Ambient-authority hardening is an execution-environment property (02). Codex granularity adopted.",
+      "TEST_OBLIGATION": "root-overlap test",
+      "MUTATION_OBLIGATION": "overlap roots; inject ambient git config",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-016",
+      "FINAL_CANONICAL_TEXT": "Installation token is short-lived, least-privileged, and revoked in post-job cleanup; askpass helper and object store removed in always() cleanup.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-005",
+        "P1A-REG-011"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-015"
+      ],
+      "SOURCE_EVIDENCE": ".github/workflows/p1a-certify.yml @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-04",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED_LANE_ADJUDICATED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation). LANE: Token mint/scope/revocation/cleanup is credential lifecycle (04). Environment-secret custody stays in 01 via REQ-01-005/006/007. Resolves RC-018 and RC-039 (OIDC bypass defends the credential path).",
+      "TEST_OBLIGATION": "token lifecycle test",
+      "MUTATION_OBLIGATION": "skip cleanup; leak token to artifact",
+      "AEGIS_COVERAGE": "credential-custody",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-017",
+      "FINAL_CANONICAL_TEXT": "Rollback: disable dispatch by removing environment approval or secret; revoke App key on suspected compromise; bootstrap rollback requires a separately reviewed revert commit; historical evidence is retained.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-016"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "rollback drill",
+      "MUTATION_OBLIGATION": "rewrite history instead of revert",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-018",
+      "FINAL_CANONICAL_TEXT": "All named human gates are enforced: bootstrap review, founder push authorization, merge authorization, environment configuration/custody verification, dispatch approval, independent Security/Reliability/Test-Verification/Release-Guardian/AEGIS review, founder decision.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-017"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "gate-completeness test",
+      "MUTATION_OBLIGATION": "skip any gate",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-019",
+      "FINAL_CANONICAL_TEXT": "External authority may not be simulated locally. Until genuinely provisioned the maximum honest state is LOCAL_IMPLEMENTATION_GREEN / EXTERNAL_ASSURANCE_AUTHORITY_PENDING.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-018"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "claim-ceiling test",
+      "MUTATION_OBLIGATION": "assert EXTERNAL_ASSURED with local-only evidence",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-020",
+      "FINAL_CANONICAL_TEXT": "Search Intelligence and Master Sentinel remain outside the Z Best Media trust boundary in separate, not-yet-authorized repositories; no local substitute and no self-certification.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-019"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/repository-runtime-authority-map.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "boundary test",
+      "MUTATION_OBLIGATION": "implement either inside an existing repo",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-021",
+      "FINAL_CANONICAL_TEXT": "zbestmedia is specification/construction authority; zbestmedia-ui is runtime authority. A specification is never an operational agent.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-013"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-01-020"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/repository-runtime-authority-map.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "authority-separation test",
+      "MUTATION_OBLIGATION": "claim runtime status from a spec",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-022",
+      "FINAL_CANONICAL_TEXT": "Certification binds workflow commit SHA, verifier commit SHA, verifier content digest, candidate SHA, authorized base SHA, runtime pin, and evidence-package digest.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-002"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-02-001"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED_LANE_ADJUDICATED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation). LANE: Binding is performed by the certification run (02); the tuple schema is an 03 contract input.",
+      "TEST_OBLIGATION": "binding-completeness test",
+      "MUTATION_OBLIGATION": "drop any one binding",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-023",
+      "FINAL_CANONICAL_TEXT": "Dispatch identity validation: candidate_sha exactly 40 lowercase hex; github.workflow_sha exact; repository equals DarksiedCEO/zbestmedia.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-02-002"
+      ],
+      "SOURCE_EVIDENCE": ".github/workflows/p1a-certify.yml @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "input validation test",
+      "MUTATION_OBLIGATION": "short/uppercase/non-hex sha; wrong repository",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-024",
+      "FINAL_CANONICAL_TEXT": "The verifier executes only from the github.workflow_sha checkout, never from a script path inside the candidate checkout.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-001"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-02-003"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "trusted-execution-path test",
+      "MUTATION_OBLIGATION": "point node at candidate script path",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-025",
+      "FINAL_CANONICAL_TEXT": "Candidate is checked out as data only; job permissions are contents:read; persist-credentials false on both checkouts.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-001"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-02-004"
+      ],
+      "SOURCE_EVIDENCE": ".github/workflows/p1a-certify.yml @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "least-privilege test",
+      "MUTATION_OBLIGATION": "execute candidate-controlled credentialed code",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-026",
+      "FINAL_CANONICAL_TEXT": "Clean-rebuild ancestry gates must bind the founder-authorized clean base, protected workflow/verifier authority, and exact candidate within the new clean-build authority chain; abandoned-lineage ancestry is neither required nor accepted as active authority.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-02-005"
+      ],
+      "SOURCE_EVIDENCE": ".github/workflows/p1a-certify.yml @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "SUPERSEDED_BY_CLEAN_ARCHITECTURE_EQUIVALENT",
+      "DISPOSITION_REASON": "Founder ruling makes 365c5975 historical regression evidence only; the underlying exact-identity and ancestry security property is rebuilt against the clean authority chain.",
+      "TEST_OBLIGATION": "ancestry test matrix",
+      "MUTATION_OBLIGATION": "break each ancestry edge",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "HISTORICAL_ANCHOR_DEPENDENCY": false,
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-027",
+      "FINAL_CANONICAL_TEXT": "Candidate delta may contain only the declared candidate-owned paths; expanded file scope fails closed.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-02-006"
+      ],
+      "SOURCE_EVIDENCE": "scripts/validate-p1a-threat-model.mjs @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "file-scope test",
+      "MUTATION_OBLIGATION": "add an eighth changed path",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-028",
+      "FINAL_CANONICAL_TEXT": "Ordinary ci.yml is candidate-owned for exactly one trusted-owned --candidate-data-only validation step; any other changed byte, removal of trusted bootstrap tests, or introduction of protected secrets fails closed.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-02-007"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "ci-delta test",
+      "MUTATION_OBLIGATION": "change any other ci.yml byte",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-029",
+      "FINAL_CANONICAL_TEXT": "The historical command pnpm test:p1a-threat-model is prohibited from the reconciled root and valid only inside the isolated exact-original checkout.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-02-008"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "prohibited-command test",
+      "MUTATION_OBLIGATION": "invoke from reconciled root",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-030",
+      "FINAL_CANONICAL_TEXT": "Both the 15-check nested verifier and the distinct 21-check real-object integration harness run from the trusted checkout.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-004"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-02-009"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED_LANE_ADJUDICATED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation). LANE: Suite completeness/identity is a certification-gate property; 07 supplies the suites as builder evidence.",
+      "TEST_OBLIGATION": "suite identity + count test",
+      "MUTATION_OBLIGATION": "run one suite; run from candidate root",
+      "AEGIS_COVERAGE": "test-truth",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-031",
+      "FINAL_CANONICAL_TEXT": "Accounting validator rejects absent, skipped, incomplete, or identity-mismatched suites and requires failed, skipped, cancelled, neutral, stale, notVerified, and notRun to all equal zero.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-004"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-02-010"
+      ],
+      "SOURCE_EVIDENCE": "scripts/validate-p1a-certification-accounting.mjs @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED_LANE_ADJUDICATED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation). LANE: Zero-counter accounting is the certification gate's acceptance rule.",
+      "TEST_OBLIGATION": "accounting fail-closed test",
+      "MUTATION_OBLIGATION": "set each counter non-zero",
+      "AEGIS_COVERAGE": "test-truth",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-032",
+      "FINAL_CANONICAL_TEXT": "Duplicate or concurrent execution of the same governed operation must not produce conflicting, duplicated, replayed, or unauthorized consequential effects; the enforcement mechanism remains replaceable.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-02-011"
+      ],
+      "SOURCE_EVIDENCE": ".github/workflows/p1a-certify.yml @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "CANONICAL_INVARIANT_REWRITTEN",
+      "DISPOSITION_REASON": "Founder ruling preserves duplicate/concurrent execution safety while removing the workflow concurrency-group mechanism from the constitutional requirement.",
+      "TEST_OBLIGATION": "concurrency test",
+      "MUTATION_OBLIGATION": "concurrent dispatch same candidate",
+      "AEGIS_COVERAGE": "reliability",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "IMPLEMENTATION_MECHANISM_STATUS": "REPLACEABLE",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-033",
+      "FINAL_CANONICAL_TEXT": "Third-party actions are pinned to immutable commit SHAs.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-02-012"
+      ],
+      "SOURCE_EVIDENCE": ".github/workflows/p1a-certify.yml @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "action-pin test",
+      "MUTATION_OBLIGATION": "float a tag",
+      "AEGIS_COVERAGE": "supply-chain",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-034",
+      "FINAL_CANONICAL_TEXT": "Counts are evidence summaries, not policy: path classification and blob identity are the enforcing controls.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-02-013"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "anti-Goodhart test",
+      "MUTATION_OBLIGATION": "satisfy counts with wrong blobs",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-035",
+      "FINAL_CANONICAL_TEXT": "Mutable default-branch, branch, tag, candidate, historical-candidate, wrong-repository, wrong-object, wrong-blob, stale-workflow, and candidate-root substitutions all fail closed.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-012"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-02-014"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "substitution matrix test",
+      "MUTATION_OBLIGATION": "each substitution class",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-036",
+      "FINAL_CANONICAL_TEXT": "Ordinary pull-request CI remains unprivileged; no protected secrets are reachable from candidate-branch workflows; a secret-exposure scan runs.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-02-015"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-02",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "secret-exposure test",
+      "MUTATION_OBLIGATION": "reference a protected secret in ordinary CI",
+      "AEGIS_COVERAGE": "credential-custody",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-037",
+      "FINAL_CANONICAL_TEXT": "Only an allowlisted JSON summary and its SHA-256 digest are uploaded; raw logs, askpass helper, and runtime object store are excluded from artifacts and removed in an always() cleanup step.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-006"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-001"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "artifact allowlist test",
+      "MUTATION_OBLIGATION": "add a raw log to the artifact",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-038",
+      "FINAL_CANONICAL_TEXT": "The environment approval, run ID, job ID, workflow SHA, candidate SHA, artifact digest, and reviewer identity are retained with the certification record.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-002"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "receipt-completeness test",
+      "MUTATION_OBLIGATION": "omit each field",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-039",
+      "FINAL_CANONICAL_TEXT": "Every cited repository path, blob identity, line count, and range is checked against immutable Git objects.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-003"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "object-binding test",
+      "MUTATION_OBLIGATION": "cite a path with a wrong blob or impossible range",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-040",
+      "FINAL_CANONICAL_TEXT": "Missing anchors, missing objects, contradictory status, expanded file scope, unsafe paths, impossible ranges, or any non-pass accounting state fail closed.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-003"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-004"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED_LANE_ADJUDICATED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation). LANE: Fail-closed states are evidence-semantics rules the verifier module (03 deliverable) enforces; 02 merely executes it.",
+      "TEST_OBLIGATION": "fail-closed matrix test",
+      "MUTATION_OBLIGATION": "each failure class",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-041",
+      "FINAL_CANONICAL_TEXT": "Execution receipts must bind the full identity tuple (repository, subject SHA, tree, ordered parents, workflow SHA, verifier digest, artifact digest); filename-only or partial binding is prohibited.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-007"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-005"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "receipt-binding test",
+      "MUTATION_OBLIGATION": "two receipts distinguished only by filename",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-042",
+      "FINAL_CANONICAL_TEXT": "Revocation records are append-only and identify revoked evidence/approval ID, exact subject SHA, artifact IDs, issuer, revoking authority, reason, timestamp, and replacement ID when one exists.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-006"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/rollback-evidence-invalidation.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "revocation record test",
+      "MUTATION_OBLIGATION": "mutate or delete a revocation record",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-043",
+      "FINAL_CANONICAL_TEXT": "Schema supersession is explicit: a superseding version makes the older ineligible for new decisions without erasing the older record; supersession must be unambiguous.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-008"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-007"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/rollback-evidence-invalidation.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "supersession-ambiguity test",
+      "MUTATION_OBLIGATION": "two candidates claiming to supersede the same record",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-044",
+      "FINAL_CANONICAL_TEXT": "Fabricated execution must be detectable: evidence must prove real execution, never asserted status.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-003"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-008"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "fabricated-execution test",
+      "MUTATION_OBLIGATION": "assert a pass with no execution record",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-045",
+      "FINAL_CANONICAL_TEXT": "Vacuous traversal is prohibited: a traversal that visits nothing must not report pass; every check needs a non-zero denominator.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-005"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-009"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED_LANE_ADJUDICATED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation). LANE: Traversal denominator is a property of the evidence-verification component; 07 owns the attack proving it.",
+      "TEST_OBLIGATION": "empty-denominator test",
+      "MUTATION_OBLIGATION": "empty input set reports pass",
+      "AEGIS_COVERAGE": "test-truth",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-046",
+      "FINAL_CANONICAL_TEXT": "Unparsed or unrecognised exclusions fail closed rather than silently skipping.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-006"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-010"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED_LANE_ADJUDICATED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation). LANE: Exclusion parsing is evidence-verification logic; 07 attacks it.",
+      "TEST_OBLIGATION": "malformed-exclusion test",
+      "MUTATION_OBLIGATION": "unparseable exclusion entry",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-047",
+      "FINAL_CANONICAL_TEXT": "Historical certification evidence remains evidence only for its exact workflow and candidate SHAs; historical-evidence fabrication is prohibited.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-027"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-011"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "historical-scope test",
+      "MUTATION_OBLIGATION": "reuse an old verdict for a new SHA",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-048",
+      "FINAL_CANONICAL_TEXT": "Runtime overclaim is prohibited: no runtime claim without runtime execution evidence.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-025"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-012"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "runtime-claim test",
+      "MUTATION_OBLIGATION": "claim runtime proof from configuration",
+      "AEGIS_COVERAGE": "runtime-governance",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-049",
+      "FINAL_CANONICAL_TEXT": "Production overclaim is prohibited: no production health claim without deployment evidence, no live-data truth without database evidence.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-013",
+        "P1A-REG-026"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-013"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/repository-runtime-authority-map.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "production-claim test",
+      "MUTATION_OBLIGATION": "claim production from a spec",
+      "AEGIS_COVERAGE": "runtime-governance",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-050",
+      "FINAL_CANONICAL_TEXT": "Every evidence envelope must exactly match its authenticated trust-store record and bind the same subject SHA, agent, tenant, workspace, artifact, issuer, system, and validity window; duplicate, revoked, expired, failed, foreign, future-dated, or pre-subject evidence is rejected.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-009"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-014"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/trusted-promotion-verification.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED_LANE_ADJUDICATED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation). LANE: Evidence-envelope rejection classes are evidence-lifecycle semantics.",
+      "TEST_OBLIGATION": "evidence-envelope matrix test",
+      "MUTATION_OBLIGATION": "each rejection class",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-051",
+      "FINAL_CANONICAL_TEXT": "The CI candidate SHA is independently compared with the checked-out Git HEAD; an environment variable is never accepted as identity evidence by itself.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-008"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-015"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/trusted-promotion-verification.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "identity-source test",
+      "MUTATION_OBLIGATION": "spoof identity via env var",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-052",
+      "FINAL_CANONICAL_TEXT": "The producer cannot self-promote; schema validity alone returns STRUCTURALLY_VALID, never AUTHORIZED.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-010"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-016"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/trusted-promotion-verification.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "self-promotion test",
+      "MUTATION_OBLIGATION": "producer issues its own approval",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-053",
+      "FINAL_CANONICAL_TEXT": "Missing evidence produces BLOCKED, never inferred success.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-017"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/source-to-runtime-promotion-contract.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "missing-evidence test",
+      "MUTATION_OBLIGATION": "omit each required evidence class",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-054",
+      "FINAL_CANONICAL_TEXT": "Artifacts carry a deterministic ID plus input hash and become immutable when sealed; a sealed artifact cannot be updated.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-018"
+      ],
+      "SOURCE_EVIDENCE": "runtime source @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_BY_AUTHORITATIVE_OBLIGATION",
+      "DISPOSITION_REASON": "MASTER mandates immutable hashes; REQUIRED_THREATS includes 'artifact substitution'; PROMO requires immutable artifacts. KEEP.",
+      "TEST_OBLIGATION": "immutability test",
+      "MUTATION_OBLIGATION": "update a sealed artifact",
+      "AEGIS_COVERAGE": "data-integrity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-055",
+      "FINAL_CANONICAL_TEXT": "Lineage traversal is workspace-scoped, depth-bounded, and re-verifies every traversed id against the workspace before response.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-019"
+      ],
+      "SOURCE_EVIDENCE": "runtime source @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_BY_AUTHORITATIVE_OBLIGATION",
+      "DISPOSITION_REASON": "REQUIRED_THREATS includes 'cross-tenant access' and 'artifact enumeration'; workspace-scoped lineage defends both. KEEP.",
+      "TEST_OBLIGATION": "lineage scoping test",
+      "MUTATION_OBLIGATION": "cross-workspace supersedes link",
+      "AEGIS_COVERAGE": "tenant-isolation",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-056",
+      "FINAL_CANONICAL_TEXT": "Evidence references declare basis (DIRECT/INFERRED/UNRESOLVED) and confidence (HIGH/MEDIUM/LOW), and every reference resolves to a known repository for its SHA.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-03-020"
+      ],
+      "SOURCE_EVIDENCE": "scripts/validate-p1a-threat-model.mjs @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-03",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "basis/confidence test",
+      "MUTATION_OBLIGATION": "stale evidence SHA; repository/SHA mismatch",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "UNAVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-057",
+      "FINAL_CANONICAL_TEXT": "Agent manifests are schema-validated and expiry-enforced; expired, disabled, or non-ACTIVE agents fail closed.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-04-001"
+      ],
+      "SOURCE_EVIDENCE": "runtime source @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-04",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_BY_AUTHORITATIVE_OBLIGATION",
+      "DISPOSITION_REASON": "PROMO: 'Expired, missing, mismatched, or unsigned manifests cannot run.' Direct documentary obligation. KEEP.",
+      "TEST_OBLIGATION": "manifest gate test",
+      "MUTATION_OBLIGATION": "expired/disabled/invalid manifest",
+      "AEGIS_COVERAGE": "credential-custody",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-058",
+      "FINAL_CANONICAL_TEXT": "Four backend v1 manifests declaring ACTIVE but expired 2026-04-06 remain fail-closed; no expired-manifest bypass.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-04-002"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/repository-runtime-authority-map.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-04",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "expired-manifest test",
+      "MUTATION_OBLIGATION": "bypass expiry",
+      "AEGIS_COVERAGE": "credential-custody",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-059",
+      "FINAL_CANONICAL_TEXT": "Credential expiry weakness is a regression obligation.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-016"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-04-003"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-04",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "expiry boundary test",
+      "MUTATION_OBLIGATION": "clock skew, missing expiresAt",
+      "AEGIS_COVERAGE": "credential-custody",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-060",
+      "FINAL_CANONICAL_TEXT": "Credential rotation weakness is a regression obligation; rotation is audited.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-017"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-04-004"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-04",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "rotation audit test",
+      "MUTATION_OBLIGATION": "rotate without audit record",
+      "AEGIS_COVERAGE": "credential-custody",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-061",
+      "FINAL_CANONICAL_TEXT": "Credential revocation weakness is a regression obligation; revoked credentials must stop working immediately.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-018"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-04-005"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-04",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "revocation propagation test",
+      "MUTATION_OBLIGATION": "use a revoked credential",
+      "AEGIS_COVERAGE": "credential-custody",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-062",
+      "FINAL_CANONICAL_TEXT": "Service-to-service operations must use authenticated service identity, authorized tenant/workspace context, bounded credential lifetime where applicable, and enforceable invalidity and revocation semantics; no credential format is constitutionally mandated.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-04-006"
+      ],
+      "SOURCE_EVIDENCE": "runtime source @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-04",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "CANONICAL_INVARIANT_REWRITTEN",
+      "DISPOSITION_REASON": "Founder ruling preserves identity, tenant authorization, validity, and revocation properties while removing bearer-token-specific mechanism.",
+      "TEST_OBLIGATION": "auth floor test",
+      "MUTATION_OBLIGATION": "no token, unknown token, wrong tenant, empty config",
+      "AEGIS_COVERAGE": "tenant-isolation",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "IMPLEMENTATION_MECHANISM_STATUS": "REPLACEABLE",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-063",
+      "FINAL_CANONICAL_TEXT": "The runtime token is minted per run from the App, scoped to zbestmedia-ui with contents:read only.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-005"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-04-007"
+      ],
+      "SOURCE_EVIDENCE": ".github/workflows/p1a-certify.yml @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-04",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "token scope test",
+      "MUTATION_OBLIGATION": "broaden scope or repo set",
+      "AEGIS_COVERAGE": "credential-custody",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-064",
+      "FINAL_CANONICAL_TEXT": "All governed entry points must enforce semantically consistent tenant/workspace identity and authorization validation; one shared schema or multiple proven-equivalent schemas may implement the invariant.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-04-008"
+      ],
+      "SOURCE_EVIDENCE": "runtime source @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-04",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "CANONICAL_INVARIANT_REWRITTEN",
+      "DISPOSITION_REASON": "Founder ruling preserves cross-entry-point validation equivalence without mandating one schema implementation.",
+      "TEST_OBLIGATION": "schema parity test",
+      "MUTATION_OBLIGATION": "service-specific relaxation",
+      "AEGIS_COVERAGE": "tenant-isolation",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "IMPLEMENTATION_MECHANISM_STATUS": "REPLACEABLE",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-065",
+      "FINAL_CANONICAL_TEXT": "No implementer may approve or certify its own work.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-010"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-04-009"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/source-to-runtime-promotion-contract.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-04",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "self-certification test",
+      "MUTATION_OBLIGATION": "implementer issues approval",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-066",
+      "FINAL_CANONICAL_TEXT": "The credential-class denominator is exactly 10 and the credential_custody check is one of the 15 required checks.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-04-010"
+      ],
+      "SOURCE_EVIDENCE": "scripts/validate-p1a-threat-model.mjs @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-04",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "credential-class count test",
+      "MUTATION_OBLIGATION": "drop or duplicate a class",
+      "AEGIS_COVERAGE": "credential-custody",
+      "SOURCE_STATUS": "UNAVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-067",
+      "FINAL_CANONICAL_TEXT": "A transactional outbox is required for the client transaction, contract and confirmation foundation.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-011"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-05-001"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/new-master-plan-requirements.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-05",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "outbox contract test",
+      "MUTATION_OBLIGATION": "publish outside the outbox",
+      "AEGIS_COVERAGE": "reliability",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-068",
+      "FINAL_CANONICAL_TEXT": "Outbox stranding must be impossible: an unpublished row must be recoverable by a sweeper/relay, not left indefinitely.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-014"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-05-002"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-05",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "stranding test",
+      "MUTATION_OBLIGATION": "crash between insert and publish; assert eventual delivery",
+      "AEGIS_COVERAGE": "reliability",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-069",
+      "FINAL_CANONICAL_TEXT": "Outbox duplication must be impossible: deterministic event ID plus idempotent publish.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-015"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-05-003"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-05",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "duplication test",
+      "MUTATION_OBLIGATION": "replay same event; concurrent double publish",
+      "AEGIS_COVERAGE": "reliability",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-070",
+      "FINAL_CANONICAL_TEXT": "Payment webhooks are signed and replay-protected.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-011"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-05-004"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/new-master-plan-requirements.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-05",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "signature + replay test",
+      "MUTATION_OBLIGATION": "forged signature; replayed event",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-071",
+      "FINAL_CANONICAL_TEXT": "Billing duplication is a required fail-closed domain.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-011"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-05-005"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/new-master-plan-requirements.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-05",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "duplicate-billing test",
+      "MUTATION_OBLIGATION": "double-charge path",
+      "AEGIS_COVERAGE": "data-integrity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-072",
+      "FINAL_CANONICAL_TEXT": "A browser return page cannot prove payment.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-05-006"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/source-to-runtime-promotion-contract.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-05",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "return-page test",
+      "MUTATION_OBLIGATION": "confirm payment from redirect alone",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-073",
+      "FINAL_CANONICAL_TEXT": "No database field alone proves a signature or payment; signed provider events, immutable hashes, idempotency, reconciliation, and delivery evidence are mandatory.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-012"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-05-007"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/new-master-plan-requirements.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-05",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "field-only-proof test",
+      "MUTATION_OBLIGATION": "set a boolean to claim signed/paid",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-074",
+      "FINAL_CANONICAL_TEXT": "Automatic receipts and delivery evidence exist (Receipt and Confirmation role).",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-011"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-05-008"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/new-master-plan-requirements.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-05",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "receipt/delivery test",
+      "MUTATION_OBLIGATION": "suppress receipt; claim delivered without evidence",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-075",
+      "FINAL_CANONICAL_TEXT": "Retry policy classes are exactly PERMANENT, TRANSIENT, THROTTLED, UNKNOWN.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-05-009"
+      ],
+      "SOURCE_EVIDENCE": "scripts/validate-p1a-threat-model.mjs @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-05",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "retry-class test",
+      "MUTATION_OBLIGATION": "add/remove/reorder a class",
+      "AEGIS_COVERAGE": "reliability",
+      "SOURCE_STATUS": "UNAVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-076",
+      "FINAL_CANONICAL_TEXT": "Retry amplification, exhaustion, and permanent-failure loops are a required threat.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-05-010"
+      ],
+      "SOURCE_EVIDENCE": "scripts/validate-p1a-threat-model.mjs @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-05",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "amplification test",
+      "MUTATION_OBLIGATION": "unbounded retry storm",
+      "AEGIS_COVERAGE": "reliability",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-077",
+      "FINAL_CANONICAL_TEXT": "Document management and retention is a required capability of the transaction foundation.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-011"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-06-001"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/new-master-plan-requirements.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-06",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "retention policy test",
+      "MUTATION_OBLIGATION": "store a document with no retention class",
+      "AEGIS_COVERAGE": "data-lifecycle",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-078",
+      "FINAL_CANONICAL_TEXT": "A Document Retention single-task role exists and is accountable.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-011"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-06-002"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/new-master-plan-requirements.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-06",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "role accountability test",
+      "MUTATION_OBLIGATION": "retention action with no accountable role",
+      "AEGIS_COVERAGE": "data-lifecycle",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-079",
+      "FINAL_CANONICAL_TEXT": "Privacy retention gap is a regression obligation: every persisted class has an explicit retention class; no unbounded implicit retention.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-019"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-06-003"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-06",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "retention coverage test",
+      "MUTATION_OBLIGATION": "persist a class with no declared retention",
+      "AEGIS_COVERAGE": "data-lifecycle",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-080",
+      "FINAL_CANONICAL_TEXT": "Privacy deletion gap is a regression obligation: a deletion request must provably remove or tombstone every copy in scope.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-020"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-06-004"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-06",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "deletion completeness test",
+      "MUTATION_OBLIGATION": "delete then search every store for residue",
+      "AEGIS_COVERAGE": "data-lifecycle",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-081",
+      "FINAL_CANONICAL_TEXT": "Persisted JSON lifecycle gap is a regression obligation: JSON payload/meta/evalReport blobs are subject to the same classification, retention, and deletion rules as columns.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-021"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-06-005"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-06",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "JSON lifecycle test",
+      "MUTATION_OBLIGATION": "embed regulated data in a JSON blob and request deletion",
+      "AEGIS_COVERAGE": "data-lifecycle",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-082",
+      "FINAL_CANONICAL_TEXT": "Tenant deletion must provably govern every tenant-scoped table; a tenant-scoped table without a governed deletion path is a defect.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-06-006"
+      ],
+      "SOURCE_EVIDENCE": "runtime source @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-06",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_BY_AUTHORITATIVE_OBLIGATION",
+      "DISPOSITION_REASON": "Founder regression class 20 (privacy deletion gap) instantiated; observed GraphEvent cascade gap at base. KEEP.",
+      "TEST_OBLIGATION": "cascade coverage test",
+      "MUTATION_OBLIGATION": "delete a tenant and assert zero residue",
+      "AEGIS_COVERAGE": "data-lifecycle",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-083",
+      "FINAL_CANONICAL_TEXT": "The immutability/erasure conflict is resolved explicitly: sealed artifacts are immutable, yet deletion obligations exist; the reconciliation (tombstone, crypto-erase, or scoped exemption) is declared and enforced.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-06-007"
+      ],
+      "SOURCE_EVIDENCE": "runtime source @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-06",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "immutable-vs-erasure test",
+      "MUTATION_OBLIGATION": "request erasure of a sealed artifact",
+      "AEGIS_COVERAGE": "data-lifecycle",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-084",
+      "FINAL_CANONICAL_TEXT": "Deletion and retention must not destroy audit history required for rollback and downstream invalidation; revocation history is append-only and preserved.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-06-008"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/rollback-evidence-invalidation.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-06",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "audit-preservation test",
+      "MUTATION_OBLIGATION": "deletion that erases revocation history",
+      "AEGIS_COVERAGE": "data-lifecycle",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-085",
+      "FINAL_CANONICAL_TEXT": "Cached authorization has a bounded lifetime no longer than the earliest evidence or approval expiry.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-06-009"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/rollback-evidence-invalidation.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-06",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "cache TTL test",
+      "MUTATION_OBLIGATION": "cache outliving evidence expiry",
+      "AEGIS_COVERAGE": "data-lifecycle",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-086",
+      "FINAL_CANONICAL_TEXT": "On invalidation the consumer emits an event naming subject, prior state, failed gate, policy version, and correlation ID.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-06-010"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/rollback-evidence-invalidation.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-06",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "invalidation event test",
+      "MUTATION_OBLIGATION": "invalidate silently",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-087",
+      "FINAL_CANONICAL_TEXT": "Certification evidence retention is reconciled: the artifact retention window and the certification-record retention obligation must not contradict each other.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-06-011"
+      ],
+      "SOURCE_EVIDENCE": ".github/workflows/p1a-certify.yml @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-06",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "evidence-retention test",
+      "MUTATION_OBLIGATION": "record referencing an expired artifact",
+      "AEGIS_COVERAGE": "data-lifecycle",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-088",
+      "FINAL_CANONICAL_TEXT": "Client portal records and document storage follow a declared lifecycle.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-011"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-06-012"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/new-master-plan-requirements.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-06",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "lifecycle test",
+      "MUTATION_OBLIGATION": "store outside the declared lifecycle",
+      "AEGIS_COVERAGE": "data-lifecycle",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-089",
+      "FINAL_CANONICAL_TEXT": "Provider selection for e-signature, payment, transactional email, and document storage is a founder prerequisite; retention/deletion obligations that depend on the provider cannot be finalized before it.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-06-013"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/new-master-plan-requirements.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-06",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "n/a (blocked)",
+      "MUTATION_OBLIGATION": "n/a",
+      "AEGIS_COVERAGE": "data-lifecycle",
+      "SOURCE_STATUS": "FOUNDER_DECISION_PENDING",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-090",
+      "FINAL_CANONICAL_TEXT": "Persistence provider divergence is resolved or justified: artifact-registry targets postgresql while brandgraph targets sqlite, which changes durability, concurrency, and deletion semantics.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-06-014"
+      ],
+      "SOURCE_EVIDENCE": "runtime source @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-06",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "provider parity test",
+      "MUTATION_OBLIGATION": "assert lifecycle guarantees hold on both",
+      "AEGIS_COVERAGE": "data-lifecycle",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-091",
+      "FINAL_CANONICAL_TEXT": "Mutation denominator must be complete and declared: numerator, denominator, scope, inclusion rules, collection method.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-024"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-07-001"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-07",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "denominator declaration test",
+      "MUTATION_OBLIGATION": "report survivors with no denominator",
+      "AEGIS_COVERAGE": "test-truth",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-092",
+      "FINAL_CANONICAL_TEXT": "Fixture execution is not equivalent proof and must never be reported as the real 21/21 or 15/15 suites.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-07-002"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-07",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "fixture-vs-real test",
+      "MUTATION_OBLIGATION": "relabel fixture as real",
+      "AEGIS_COVERAGE": "test-truth",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-093",
+      "FINAL_CANONICAL_TEXT": "NOT_RUN pre-merge states are reported as NOT_RUN, never as pass.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-07-003"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-07",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "not-run honesty test",
+      "MUTATION_OBLIGATION": "coerce NOT_RUN to pass",
+      "AEGIS_COVERAGE": "test-truth",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-094",
+      "FINAL_CANONICAL_TEXT": "Negative controls are a required check: tests must be able to fail for the right reason.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-07-004"
+      ],
+      "SOURCE_EVIDENCE": "scripts/validate-p1a-threat-model.mjs @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-07",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "negative control test",
+      "MUTATION_OBLIGATION": "make a test unfalsifiable",
+      "AEGIS_COVERAGE": "test-truth",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-095",
+      "FINAL_CANONICAL_TEXT": "The adversarial harness covers all 27 named historical regression classes; each is a standing regression obligation with an executable attack.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-07-005"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-07",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "class coverage test",
+      "MUTATION_OBLIGATION": "remove any class",
+      "AEGIS_COVERAGE": "test-truth",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-096",
+      "FINAL_CANONICAL_TEXT": "Builder-side tests never certify builder output; certification requires an independent authority.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-07-006"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-07",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "self-certification test",
+      "MUTATION_OBLIGATION": "builder suite emits a verdict",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-097",
+      "FINAL_CANONICAL_TEXT": "The threat denominator is exactly 31 named threats and the actor denominator exactly 22, with the actor-by-action matrix exactly 616 cells over 28 actions.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-07-007"
+      ],
+      "SOURCE_EVIDENCE": "scripts/validate-p1a-threat-model.mjs @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-07",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "denominator identity test",
+      "MUTATION_OBLIGATION": "drop, duplicate, or rename any entry",
+      "AEGIS_COVERAGE": "test-truth",
+      "SOURCE_STATUS": "UNAVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-098",
+      "FINAL_CANONICAL_TEXT": "Tenant operations denominator is exactly 18.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-07-008"
+      ],
+      "SOURCE_EVIDENCE": "scripts/validate-p1a-threat-model.mjs @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-07",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "tenant-op count test",
+      "MUTATION_OBLIGATION": "drop or duplicate an operation",
+      "AEGIS_COVERAGE": "tenant-isolation",
+      "SOURCE_STATUS": "UNAVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-099",
+      "FINAL_CANONICAL_TEXT": "The cross-repository agent contract schema governs every zbestmedia to zbestmedia-ui binding.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-001"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/schemas/cross-repository-agent-contract.schema.json @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "contract validation test",
+      "MUTATION_OBLIGATION": "bind without a valid contract",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-100",
+      "FINAL_CANONICAL_TEXT": "Promotion history is the exact monotonic stage prefix; stages cannot be skipped or self-asserted.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-007"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-002"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/source-to-runtime-promotion-contract.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "stage prefix test",
+      "MUTATION_OBLIGATION": "skip a stage; self-assert",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-101",
+      "FINAL_CANONICAL_TEXT": "A runtime binding with a different contract hash is rejected.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-013"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-003"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/source-to-runtime-promotion-contract.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "contract hash test",
+      "MUTATION_OBLIGATION": "mismatched hash",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-102",
+      "FINAL_CANONICAL_TEXT": "The Money-Z / flaming-Z semantic conflict is resolved or explicitly quarantined; no silent reinterpretation.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-022"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-004"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "SPLIT_ADOPTED_CODEX_GRANULARITY_CODEX",
+      "DISPOSITION_REASON": "Codex granularity adopted: distinct conflicts need distinct closure evidence.",
+      "TEST_OBLIGATION": "semantic conflict test",
+      "MUTATION_OBLIGATION": "two authorities assert different values",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "UNAVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-103",
+      "FINAL_CANONICAL_TEXT": "The founding-date semantic conflict is resolved or explicitly quarantined; no silent reinterpretation.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-023"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-004"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "SPLIT_ADOPTED_CODEX_GRANULARITY_CODEX",
+      "DISPOSITION_REASON": "Codex granularity adopted.",
+      "TEST_OBLIGATION": "semantic conflict test",
+      "MUTATION_OBLIGATION": "two authorities assert different values",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "UNAVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-104",
+      "FINAL_CANONICAL_TEXT": "Acquisition inventory drift is a regression obligation.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-REG-013"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-005"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "inventory drift test",
+      "MUTATION_OBLIGATION": "inventory diverges from source",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "UNAVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-105",
+      "FINAL_CANONICAL_TEXT": "The canonical Z Best Media documentary census is 42 records (24 specialists + 18 department leads); Aaliyah is a separate founder system excluded from registry and count; the source observation of 43 is preserved.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-014"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-006"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/README.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "census identity test",
+      "MUTATION_OBLIGATION": "include Aaliyah; alter the count",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-106",
+      "FINAL_CANONICAL_TEXT": "Canonical display names are locked to Brandy, Kobe, Jordyn; Brandon, Brandyn, Jordan remain quarantined historical spellings and are never canonical display names.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-ARCH-015"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-007"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/founder-packet.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "name canonicalization test",
+      "MUTATION_OBLIGATION": "promote a quarantined spelling",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-107",
+      "FINAL_CANONICAL_TEXT": "The claimed 32 additional occurrences remain UNREPRODUCIBLE claim-only slots until provenance is supplied or the claim is retired.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-008"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/founder-packet.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "quarantine integrity test",
+      "MUTATION_OBLIGATION": "count the 32 as canonical",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "FOUNDER_DECISION_PENDING",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-108",
+      "FINAL_CANONICAL_TEXT": "Each of the six genuinely unresolved founder decisions is tracked to explicit closure and none is silently assumed.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-009"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/founder-packet.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "decision closure test",
+      "MUTATION_OBLIGATION": "proceed on an unclosed decision",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "FOUNDER_DECISION_PENDING",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-109",
+      "FINAL_CANONICAL_TEXT": "Cross-lane integration contracts (inputs, outputs, canonical schemas, state ownership, authority ownership, dependency direction, error contract, retry/idempotency, audit events, versioning, security invariants, integration test obligations) are defined before implementation diverges.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-010"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "contract completeness test",
+      "MUTATION_OBLIGATION": "implement a lane with an undefined seam",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-110",
+      "FINAL_CANONICAL_TEXT": "Shared authoritative files are identified and no two lanes independently edit the same authority.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-011"
+      ],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (chat) — USER_SUPPLIED_FACT, no repository artifact",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "collision detection test",
+      "MUTATION_OBLIGATION": "two lanes edit one authority file",
+      "AEGIS_COVERAGE": "architecture-boundary",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX",
+      "INDEPENDENT_REVIEWER": "CLAUDE_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation is mechanical repository/integration execution: shared-file coordination, evidence preservation, corpus materialization, or exact repository binding. Claude retains architecture review without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-111",
+      "FINAL_CANONICAL_TEXT": "No deletion, history rewrite, repository merge, blind file movement, agent activation, expired-manifest bypass, fabricated lineage, autonomous merge, production change, publishing, outreach, email, profile mutation, spending, or credential use is authorized.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-GOV-005"
+      ],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-012"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/README.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CONVERGED",
+      "DISPOSITION_REASON": "Present in both derivations (directly or via aggregation).",
+      "TEST_OBLIGATION": "prohibited-action test",
+      "MUTATION_OBLIGATION": "attempt each prohibited action",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-112",
+      "FINAL_CANONICAL_TEXT": "Existing branches, worktrees, SHAs, evidence, and untracked artifacts are preserved.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-013"
+      ],
+      "SOURCE_EVIDENCE": "docs/governance/p0-reconciliation/README.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "preservation test",
+      "MUTATION_OBLIGATION": "delete or rebase any existing ref",
+      "AEGIS_COVERAGE": "authority-root",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX",
+      "INDEPENDENT_REVIEWER": "CLAUDE_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation is mechanical repository/integration execution: shared-file coordination, evidence preservation, corpus materialization, or exact repository binding. Claude retains architecture review without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-113",
+      "FINAL_CANONICAL_TEXT": "Every active clean-rebuild authority anchor—founder-authorized base, protected workflow/verifier authority, and exact candidate—must be resolvable and identity-bound in the certification context; historical regression objects are optional evidence and never active trust anchors.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-014"
+      ],
+      "SOURCE_EVIDENCE": "docs/security/p1-a/trusted-certification-bootstrap.md @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "SUPERSEDED_BY_CLEAN_ARCHITECTURE_EQUIVALENT",
+      "DISPOSITION_REASON": "Preserves anchor resolvability without importing or requiring the abandoned 365c5975 lineage.",
+      "TEST_OBLIGATION": "anchor resolution test",
+      "MUTATION_OBLIGATION": "remove an anchor from the fetched objects",
+      "AEGIS_COVERAGE": "evidence-authenticity",
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "HISTORICAL_ANCHOR_DEPENDENCY": false,
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-114",
+      "FINAL_CANONICAL_TEXT": "The P1-A requirement corpus artifacts (model.json, threat-model.md, evidence-register.json, validation-manifest.json, known-limitations.md, test-p1a-threat-model.mjs) exist for the subject being certified.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [
+        "REQ-08-015"
+      ],
+      "SOURCE_EVIDENCE": "scripts/validate-p1a-threat-model.mjs @b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CLAUDE_ONLY_SOURCE_LINKED",
+      "DISPOSITION_REASON": "Derived from a base-tree source Codex did not read; AVAILABLE_TO_BOTH.",
+      "TEST_OBLIGATION": "corpus presence test",
+      "MUTATION_OBLIGATION": "certify with a missing corpus file",
+      "AEGIS_COVERAGE": "evidence-completeness",
+      "SOURCE_STATUS": "UNAVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX",
+      "INDEPENDENT_REVIEWER": "CLAUDE_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation is mechanical repository/integration execution: shared-file coordination, evidence preservation, corpus materialization, or exact repository binding. Claude retains architecture review without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-115",
+      "FINAL_CANONICAL_TEXT": "Use exactly DarksiedCEO/zbestmedia and https://github.com/DarksiedCEO/zbestmedia.git for this P1-A rebuild.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-GOV-001"
+      ],
+      "CLAUDE_SOURCE_ROW": [],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (Codex attachment 4c7765cf…)",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CODEX",
+      "DISPOSITION": "ADOPTED_CODEX_ONLY_BY_AUTHORITATIVE_OBLIGATION",
+      "DISPOSITION_REASON": "Repository identity contract; founder directive. Operationally verified by both, ledgered only by Codex.",
+      "TEST_OBLIGATION": "Exact repository and remote equality checks",
+      "MUTATION_OBLIGATION": "Substitute repository or remote and require rejection",
+      "AEGIS_COVERAGE": [
+        "AEGIS-SPEC",
+        "AEGIS-PROVENANCE"
+      ],
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CODEX",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX",
+      "INDEPENDENT_REVIEWER": "CLAUDE_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation is mechanical repository/integration execution: shared-file coordination, evidence preservation, corpus materialization, or exact repository binding. Claude retains architecture review without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-116",
+      "FINAL_CANONICAL_TEXT": "The immutable common rebuild root is codex/bt-1 at b0c1b2129123b941c6a350c16dae0ae3a8e076ca; no other base is permitted.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-GOV-002"
+      ],
+      "CLAUDE_SOURCE_ROW": [],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (Codex attachment 4c7765cf…)",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CODEX_ONLY_BY_AUTHORITATIVE_OBLIGATION",
+      "DISPOSITION_REASON": "Immutable rebuild-root binding; founder directive.",
+      "TEST_OBLIGATION": "Verify ref, commit, tree, parents, and object type",
+      "MUTATION_OBLIGATION": "Change ref tip or SHA and require drift stop",
+      "AEGIS_COVERAGE": [
+        "AEGIS-SPEC",
+        "AEGIS-SOURCE",
+        "AEGIS-PROVENANCE"
+      ],
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-117",
+      "FINAL_CANONICAL_TEXT": "Do not use main, dirty local HEAD, PR #8, remediation, historical RED, Strike-0, or a moved branch tip as the rebuild base.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-GOV-003"
+      ],
+      "CLAUDE_SOURCE_ROW": [],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (Codex attachment 4c7765cf…)",
+      "FINAL_LANE": "P1A-01",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CODEX_ONLY_BY_AUTHORITATIVE_OBLIGATION",
+      "DISPOSITION_REASON": "Forbidden-base enumeration; founder directive; governs the 365c5975 architecture decision.",
+      "TEST_OBLIGATION": "Each prohibited base is rejected",
+      "MUTATION_OBLIGATION": "Attempt each prohibited base substitution",
+      "AEGIS_COVERAGE": [
+        "AEGIS-SPEC",
+        "AEGIS-SECURITY",
+        "AEGIS-PROVENANCE"
+      ],
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-118",
+      "FINAL_CANONICAL_TEXT": "The Codex ledger is non-authoritative until independently reconciled with Claude Code and founder-approved.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-GOV-004"
+      ],
+      "CLAUDE_SOURCE_ROW": [],
+      "SOURCE_EVIDENCE": "FOUNDER DIRECTIVE (Codex attachment 4c7765cf…)",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CODEX_ONLY_BY_AUTHORITATIVE_OBLIGATION",
+      "DISPOSITION_REASON": "Bootstrap-process control remains open only until an exact founder freeze artifact is issued; that event deterministically closes it and prevents permanent active authority.",
+      "TEST_OBLIGATION": "Implementation gate rejects candidate-only ledger",
+      "MUTATION_OBLIGATION": "Mark candidate authoritative and require rejection",
+      "AEGIS_COVERAGE": [
+        "AEGIS-SPEC",
+        "AEGIS-CONTRACT",
+        "AEGIS-CONTINUITY"
+      ],
+      "SOURCE_STATUS": "AVAILABLE_TO_BOTH",
+      "STATUS": "OPEN_PENDING_EXACT_FOUNDER_FREEZE",
+      "CLOSED_BY": null,
+      "LIFECYCLE": {
+        "trigger": "EXACT_FOUNDER_LEDGER_FREEZE",
+        "terminalStatus": "CLOSED",
+        "closedByRequirement": "Exact founder freeze artifact identity and digest",
+        "postTerminalAuthority": "HISTORICAL_BOOTSTRAP_PROCESS_EVIDENCE_ONLY"
+      },
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-119",
+      "FINAL_CANONICAL_TEXT": "Frozen audit-subject requirement coverage is unavailable and must be reconciled from the exact expected artifact before ledger approval.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-SOURCE-GAP-001"
+      ],
+      "CLAUDE_SOURCE_ROW": [],
+      "SOURCE_EVIDENCE": "expected /private/tmp audit artifact (verified ABSENT in both environments)",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CODEX_ONLY_SOURCE_GAP",
+      "DISPOSITION_REASON": "Named authoritative artifact unavailable to both; coverage must be reconciled from recovered bytes or the gap formally retired by founder decision.",
+      "TEST_OBLIGATION": "Expected digest and complete requirement import",
+      "MUTATION_OBLIGATION": "Substitute or omit frozen subject",
+      "AEGIS_COVERAGE": [
+        "AEGIS-SPEC",
+        "AEGIS-PROVENANCE",
+        "AEGIS-CONTINUITY"
+      ],
+      "SOURCE_STATUS": "UNAVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-120",
+      "FINAL_CANONICAL_TEXT": "Approved-exclusion requirement coverage is unavailable and must be reconciled from the exact expected artifact before ledger approval.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-SOURCE-GAP-002"
+      ],
+      "CLAUDE_SOURCE_ROW": [],
+      "SOURCE_EVIDENCE": "expected /private/tmp audit artifact (verified ABSENT in both environments)",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CODEX_ONLY_SOURCE_GAP",
+      "DISPOSITION_REASON": "Named authoritative artifact unavailable to both; coverage must be reconciled from recovered bytes or the gap formally retired by founder decision.",
+      "TEST_OBLIGATION": "Expected digest and exclusion accounting",
+      "MUTATION_OBLIGATION": "Use unapproved or unparsed exclusions",
+      "AEGIS_COVERAGE": [
+        "AEGIS-SPEC",
+        "AEGIS-TEST",
+        "AEGIS-PROVENANCE"
+      ],
+      "SOURCE_STATUS": "UNAVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-121",
+      "FINAL_CANONICAL_TEXT": "Claim-boundary requirement coverage is unavailable and must be reconciled from the exact expected artifact before ledger approval.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-SOURCE-GAP-003"
+      ],
+      "CLAUDE_SOURCE_ROW": [],
+      "SOURCE_EVIDENCE": "expected /private/tmp audit artifact (verified ABSENT in both environments)",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CODEX_ONLY_SOURCE_GAP",
+      "DISPOSITION_REASON": "Named authoritative artifact unavailable to both; coverage must be reconciled from recovered bytes or the gap formally retired by founder decision.",
+      "TEST_OBLIGATION": "Expected digest and explicit claim-boundary import",
+      "MUTATION_OBLIGATION": "Expand claim beyond authorized boundary",
+      "AEGIS_COVERAGE": [
+        "AEGIS-SPEC",
+        "AEGIS-RUNTIME",
+        "AEGIS-RELEASE"
+      ],
+      "SOURCE_STATUS": "UNAVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-122",
+      "FINAL_CANONICAL_TEXT": "Full-Blast audit-result finding coverage is unavailable and must be reconciled from the exact expected artifact before ledger approval.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-SOURCE-GAP-004"
+      ],
+      "CLAUDE_SOURCE_ROW": [],
+      "SOURCE_EVIDENCE": "expected /private/tmp audit artifact (verified ABSENT in both environments)",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CODEX_ONLY_SOURCE_GAP",
+      "DISPOSITION_REASON": "Named authoritative artifact unavailable to both; coverage must be reconciled from recovered bytes or the gap formally retired by founder decision.",
+      "TEST_OBLIGATION": "Expected digest and finding-to-requirement traceability",
+      "MUTATION_OBLIGATION": "Drop an adverse finding",
+      "AEGIS_COVERAGE": [
+        "AEGIS-REGRESSION",
+        "AEGIS-PROVENANCE",
+        "AEGIS-CONTINUITY"
+      ],
+      "SOURCE_STATUS": "UNAVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-123",
+      "FINAL_CANONICAL_TEXT": "Remediation-matrix requirement coverage is unavailable and must be reconciled from the exact expected artifact before ledger approval.",
+      "CODEX_SOURCE_ROW": [
+        "P1A-SOURCE-GAP-005"
+      ],
+      "CLAUDE_SOURCE_ROW": [],
+      "SOURCE_EVIDENCE": "expected /private/tmp audit artifact (verified ABSENT in both environments)",
+      "FINAL_LANE": "P1A-08",
+      "FINAL_OWNER": "CLAUDE",
+      "DISPOSITION": "ADOPTED_CODEX_ONLY_SOURCE_GAP",
+      "DISPOSITION_REASON": "Named authoritative artifact unavailable to both; coverage must be reconciled from recovered bytes or the gap formally retired by founder decision.",
+      "TEST_OBLIGATION": "Expected digest and complete remediation-row traceability",
+      "MUTATION_OBLIGATION": "Drop or reclassify a remediation row",
+      "AEGIS_COVERAGE": [
+        "AEGIS-SPEC",
+        "AEGIS-REGRESSION",
+        "AEGIS-CONTINUITY"
+      ],
+      "SOURCE_STATUS": "UNAVAILABLE_TO_BOTH",
+      "PRIMARY_OWNER": "CLAUDE",
+      "ARCHITECTURAL_LEAD": "CLAUDE",
+      "IMPLEMENTATION_EXECUTOR": "CODEX_MECHANICAL_HANDOFF_WHEN_REQUIRED",
+      "INDEPENDENT_REVIEWER": "CODEX_INDEPENDENT_ATTACK_THEN_AEGIS_FINAL",
+      "OWNERSHIP_REASON": "Primary obligation defines architecture, contract semantics, governance, source resolution, or founder-decision closure. Codex may execute a bounded mechanical handoff without becoming co-owner.",
+      "OWNERSHIP_STATUS": "SINGLE_PRIMARY_OWNER",
+      "STATUS": "ACTIVE"
+    },
+    {
+      "FINAL_REQ_ID": "P1AF-124",
+      "FINAL_CANONICAL_TEXT": "PARTIAL_SEARCH_RESULT MUST NOT BE REPRESENTED AS EXHAUSTIVE_SEARCH. Truncated, bounded, capped, sampled, paginated, timed-out, early-terminated, or otherwise incomplete search output proves only the observed subset; unless exhaustive coverage is proven, COVERAGE_UNKNOWN is required and NO_MATCH_EXISTS is prohibited.",
+      "CODEX_SOURCE_ROW": [],
+      "CLAUDE_SOURCE_ROW": [],
+      "SOURCE_EVIDENCE": "Founder correction ruling /Users/andrelove/.codex/attachments/70a04f17-0ecd-4b30-9a65-e8fa37744948/pasted-text.txt sha256:77805c43c10ab9d649ac49f8660934d9b8844548ce4125b404bade5465bf028d",
+      "FINAL_LANE": "P1A-07",
+      "FINAL_OWNER": "CODEX",
+      "PRIMARY_OWNER": "CODEX",
+      "ARCHITECTURAL_LEAD": null,
+      "IMPLEMENTATION_EXECUTOR": "CODEX",
+      "INDEPENDENT_REVIEWER": "CLAUDE_INDEPENDENT_CHALLENGER_THEN_AEGIS_FINAL",
+      "DISPOSITION": "ADOPTED_CURRENT_FOUNDER_AUTHORITY",
+      "DISPOSITION_REASON": "Founder explicitly promoted HS-REG-001 from a seed case into the canonical denominator.",
+      "TEST_OBLIGATION": "Cover truncated grep/head search, capped result set, first-page-only pagination, sampled dataset, timeout/partial search, and early-terminated scan; each incomplete case must yield COVERAGE_UNKNOWN.",
+      "MUTATION_OBLIGATION": "Remove the completeness check and prove the suite kills the mutant before it can emit NO_MATCH_EXISTS.",
+      "AEGIS_COVERAGE": [
+        "AEGIS-SPEC",
+        "AEGIS-TEST",
+        "AEGIS-PROVENANCE",
+        "AEGIS-AI-SYSTEMS"
+      ],
+      "SOURCE_STATUS": "CURRENT_FOUNDER_AUTHORITY",
+      "STATUS": "ACTIVE",
+      "HS_CONTROL_ID": "HS-REG-001",
+      "HALLUCINATION_SENTINEL_CONSUMER_REQUIRED": true
+    }
+  ]
+}

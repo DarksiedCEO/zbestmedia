@@ -1,0 +1,79 @@
+{
+  "artifactId": "P1A_04_IMPLEMENTATION_EVIDENCE_V2",
+  "lane": "P1A-04",
+  "owner": "CODEX",
+  "scope": "Credentials / Identity Lifecycle",
+  "repository": "DarksiedCEO/zbestmedia",
+  "branch": "codex/p1a-04-identity",
+  "baseSha": "b0c1b2129123b941c6a350c16dae0ae3a8e076ca",
+  "subjectSha": "24e21d73e5a0cc993cee1375794071d8868c84bd",
+  "subjectTree": "7b8e6843840bf2a4506c853b9de3958060542e4f",
+  "orderedParents": ["b0c1b2129123b941c6a350c16dae0ae3a8e076ca"],
+  "baseIsAncestor": true,
+  "continuity": "CONTINUITY_READY",
+  "drift": "ON_TASK",
+  "hallucination": "ACCEPT",
+  "verificationGate": "SATISFIED_FOR_LOCAL_BUILDER_HANDOFF",
+  "frozenLedger": {
+    "sha256": "f1010f1be105d05ea93bf6dc79a84ae09cee7d9470d024bd5d2b3d4948195fcf",
+    "denominator": 124,
+    "p1a04Denominator": 11
+  },
+  "supersedesEvidence": {
+    "path": ".agents/p1a-04-evidence/P1A_04_IMPLEMENTATION_EVIDENCE_V1.json",
+    "classification": "STALE_PRE_FREEZE_WORKTREE_EVIDENCE_PRESERVED",
+    "reason": "V1 was not bound to a committed exact subject and its 92-test claim predates hostile expansion."
+  },
+  "verification": {
+    "static": ["pnpm run ci:lint", "pnpm run ci:typecheck", "git diff --check"],
+    "unitPropertyHostileIntegration": {
+      "command": "pnpm run ci:test",
+      "result": "PASS",
+      "vitestCases": 124,
+      "reconciliationChecks": 51,
+      "totalExecuted": 175
+    },
+    "p1a04AffectedSuites": {
+      "serviceAuth": 42,
+      "agentLifecycle": 4,
+      "artifactRegistry": 26,
+      "brandgraph": 34,
+      "total": 106
+    },
+    "mutation": {
+      "command": "node scripts/test-p1a-04-credential-mutations.mjs",
+      "operators": 8,
+      "killed": 8,
+      "survived": 0,
+      "scope": "targeted credential security decision points; not whole-repository exhaustive mutation"
+    },
+    "notRun": [
+      "protected GitHub workflow execution requiring workflow identity, App credentials, and runtime repository access",
+      "node scripts/validate-p1a-threat-model.mjs: workflow SHA absent",
+      "node scripts/test-p1a-trusted-verifier.mjs: current trusted workflow authority root absent",
+      "distributed multi-process revocation propagation; implementation and tests cover the shared in-process authorization state"
+    ]
+  },
+  "requirementBindings": [
+    {"requirement":"P1AF-016","implementation":".github/workflows/p1a-certify.yml","test":"scripts/test-p1a-trusted-verifier.mjs static assertions; protected execution NOT_RUN","evidence":"base workflow has per-run App token, contents:read, zbestmedia-ui-only, and always() cleanup","status":"PARTIAL"},
+    {"requirement":"P1AF-057","implementation":"packages/agent-lifecycle/src/gate.ts and packages/agent-lifecycle/src/manifest.ts","test":"packages/agent-lifecycle/test/gate.test.ts","evidence":"schema parsing plus exact-boundary expiry/non-ACTIVE fail-closed gate","status":"CLOSED_LOCALLY"},
+    {"requirement":"P1AF-058","implementation":"packages/agent-lifecycle/src/gate.ts","test":"packages/agent-lifecycle/test/gate.test.ts","evidence":"ACTIVE-but-expired manifests reject; no bypass path found","status":"CLOSED_LOCALLY"},
+    {"requirement":"P1AF-059","implementation":"packages/service-auth/src/index.ts and packages/agent-lifecycle/src/gate.ts","test":"serviceAuth lifetime table and agent exact-boundary tests","evidence":"not-before inclusive; expiry exclusive; missing/invalid lifetime rejected","status":"CLOSED_LOCALLY"},
+    {"requirement":"P1AF-060","implementation":"rotateServiceCredential","test":"rotation success, rollback, predecessor reuse, escalation and mutation tests","evidence":"audit-first atomic generation+1 rotation with SUPERSEDED predecessor and provenance","status":"CLOSED_LOCALLY"},
+    {"requirement":"P1AF-061","implementation":"revokeServiceCredential and authenticateBearerToken","test":"revocation reuse, audit rollback, mutation and integration consumer tests","evidence":"active shared authorization state rejects immediately after audit-backed revocation","status":"CLOSED_LOCALLY"},
+    {"requirement":"P1AF-062","implementation":"authenticateAndAuthorizeServiceRequest and shared tenantIdSchema","test":"wrong principal, subject, audience, tenant, scope, unknown token, forged evidence and property matrix","evidence":"verified credential claims bind server-required authorization context; unknown/unverified fails closed","status":"CLOSED_LOCALLY"},
+    {"requirement":"P1AF-063","implementation":".github/workflows/p1a-certify.yml","test":"static verifier assertions present; protected execution NOT_RUN","evidence":"repository and permission scope are textually bounded on frozen base workflow","status":"PARTIAL"},
+    {"requirement":"P1AF-064","implementation":"packages/service-auth/src/index.ts consumed by artifact-registry and brandgraph","test":"26 artifact-registry plus 34 brandgraph integration cases","evidence":"shared tenant/workspace parser and common authentication primitive compile and pass in both entry points","status":"CLOSED_LOCALLY"},
+    {"requirement":"P1AF-065","implementation":"builder handoff explicitly sets CERTIFIED=NO","test":"fresh independent review required; protected self-certification test NOT_RUN","evidence":"local builder does not approve or certify subject","status":"PARTIAL"},
+    {"requirement":"P1AF-066","implementation":"scripts/validate-p1a-threat-model.mjs","test":"protected verifier NOT_RUN; historical candidate object observes 10 classes and credential_custody string","evidence":"active candidate model is absent from authorized base and frozen row marks source unavailable to both","status":"BLOCKED_EXTERNALLY"}
+  ],
+  "knownLimitations": [
+    "No distributed invalidation bus is introduced in P1A-04; cross-process revocation cache propagation remains outside this local in-memory primitive.",
+    "The lifecycle enum represents ISSUED, ACTIVE, ROTATING, SUPERSEDED, EXPIRED, and REVOKED; unknown credentials have no trusted lifecycle record and return UNAUTHENTICATED/UNKNOWN-UNVERIFIED semantics.",
+    "Protected workflow and external runtime surfaces require independent execution authority unavailable in this worktree."
+  ],
+  "remoteMutation": "NONE",
+  "push": "NONE",
+  "merge": "NONE",
+  "certified": false
+}
