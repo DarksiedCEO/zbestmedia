@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 const root = resolve(__dirname, "..");
 
@@ -65,14 +65,25 @@ add({
     : "pnpm -C services/brandgraph prisma generate --schema prisma/schema.prisma"
 });
 
-const prismaArtifact = resolve(root, "services", "artifact-registry", "src", "generated", "prisma", "index.js");
+// Artifact Registry intentionally uses Prisma's default generated-client output
+// and imports @prisma/client. Resolve the package from that workspace, then
+// check the generated .prisma sibling rather than Brandgraph's custom output.
+const artifactWorkspace = resolve(root, "services", "artifact-registry");
+let prismaArtifact: string | undefined;
+try {
+  const clientPackage = require.resolve("@prisma/client/package.json", { paths: [artifactWorkspace] });
+  prismaArtifact = resolve(dirname(clientPackage), "..", "..", ".prisma", "client", "default.js");
+} catch {
+  prismaArtifact = undefined;
+}
+const prismaArtifactGenerated = prismaArtifact !== undefined && existsSync(prismaArtifact);
 add({
   name: "prisma:artifact-registry",
-  ok: existsSync(prismaArtifact),
-  details: existsSync(prismaArtifact) ? "generated" : "missing",
-  fix: existsSync(prismaArtifact)
+  ok: prismaArtifactGenerated,
+  details: prismaArtifactGenerated ? "generated" : "missing",
+  fix: prismaArtifactGenerated
     ? undefined
-    : "pnpm -C services/artifact-registry prisma generate --schema prisma/schema.prisma"
+    : "pnpm -C services/artifact-registry exec prisma generate --schema prisma/schema.prisma"
 });
 
 // Report

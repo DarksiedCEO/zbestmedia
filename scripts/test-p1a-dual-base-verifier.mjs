@@ -27,6 +27,7 @@ import {
 import { validateCertificationBundle } from "./validate-p1a-certification-accounting.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const CHILD_TIMEOUT_MS = 30_000;
 const EXACT_SHA = /^[0-9a-f]{40}$/;
 const OFFICIAL_REPOSITORY = "https://github.com/DarksiedCEO/zbestmedia";
 const OFFICIAL_REPOSITORY_URLS = new Set([OFFICIAL_REPOSITORY, `${OFFICIAL_REPOSITORY}.git`]);
@@ -164,7 +165,8 @@ const workspaceOptions = (expectedRelative) => process.env.GITHUB_WORKSPACE
   ? { workspaceRoot: process.env.GITHUB_WORKSPACE, expectedRelative }
   : {};
 const run = (cwd, args, options = {}) => execFileSync(args[0], args.slice(1), {
-  cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], ...options,
+  cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+  timeout: CHILD_TIMEOUT_MS, killSignal: "SIGKILL", ...options,
 }).trim();
 const gitAt = (cwd, ...args) => run(cwd, ["git", ...args]);
 
@@ -276,12 +278,23 @@ if (process.env.P1A_EVENT_AUTHORITY_ROOT) {
   }));
 }
 
+const eventTemporaryRoots = [];
+let temporary;
+function cleanupTemporaryResources() {
+  if (temporary) rmSync(temporary, { recursive: true, force: true });
+  for (const temporaryRoot of eventTemporaryRoots) {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+process.once("exit", cleanupTemporaryResources);
 function createEventAuthorityFixture(label, {
   includeBase = true, includeHead = true, extraFile, parentShape = "base",
   targetMerge = false, targetMergeMode = "valid", objectSource,
   amendmentFiles = EVENT_BOUND_AMENDMENT_FILES,
 } = {}) {
   const fixture = mkdtempSync(path.join(tmpdir(), `p1a-event-${label}-`));
+  eventTemporaryRoots.push(fixture);
+  console.log(`PROGRESS event_authority_fixture:${label}`);
   gitAt(fixture, "init", "-q");
   gitAt(fixture, "config", "user.email", "p1a-event@example.invalid");
   gitAt(fixture, "config", "user.name", "P1A event fixture");
@@ -332,27 +345,19 @@ function createEventAuthorityFixture(label, {
     }).trim()
     : amendment;
   const authority = mkdtempSync(path.join(tmpdir(), `p1a-event-authority-${label}-`));
+  eventTemporaryRoots.push(authority);
   gitAt(authority, "init", "--bare", "-q");
   gitAt(authority, "remote", "add", "origin", OFFICIAL_REPOSITORY);
-  const copyObject = (sha) => {
-    const type = gitAt(fixture, "cat-file", "-t", sha);
-    const body = execFileSync("git", ["cat-file", type, sha], {
-      cwd: fixture, maxBuffer: 128 * 1024 * 1024,
-    });
-    const imported = execFileSync("git", ["hash-object", "-w", "-t", type, "--stdin"], {
-      cwd: authority, input: body, encoding: "utf8", maxBuffer: 128 * 1024 * 1024,
-    }).trim();
-    assert.equal(imported, sha);
-  };
+  const pendingObjects = new Set();
   const importCommit = (sha) => {
-    copyObject(gitAt(fixture, "rev-parse", `${sha}^{tree}`));
+    pendingObjects.add(gitAt(fixture, "rev-parse", `${sha}^{tree}`));
     const objects = gitAt(fixture, "ls-tree", "-r", "-t", "--format=%(objectname) %(objecttype)", sha)
       .split("\n").filter(Boolean);
     for (const entry of objects) {
       const [object, type] = entry.split(" ");
-      if (type === "tree") copyObject(object);
+      if (type === "tree") pendingObjects.add(object);
     }
-    copyObject(sha);
+    pendingObjects.add(sha);
   };
   if (includeBase) importCommit(base);
   if (includeHead) {
@@ -361,6 +366,18 @@ function createEventAuthorityFixture(label, {
     }
     importCommit(amendment);
     if (head !== amendment) importCommit(head);
+  }
+  if (pendingObjects.size > 0) {
+    const input = `${[...pendingObjects].join("\n")}\n`;
+    const pack = execFileSync("git", ["pack-objects", "--stdout"], {
+      cwd: fixture, input, maxBuffer: 128 * 1024 * 1024,
+      timeout: CHILD_TIMEOUT_MS, killSignal: "SIGKILL",
+    });
+    execFileSync("git", ["unpack-objects", "-r"], {
+      cwd: authority, input: pack, maxBuffer: 128 * 1024 * 1024,
+      timeout: CHILD_TIMEOUT_MS, killSignal: "SIGKILL",
+    });
+    for (const sha of pendingObjects) assert.doesNotThrow(() => gitAt(authority, "cat-file", "-e", sha));
   }
   return { fixture, authority, base, head, secondParent: amendment, syntheticSibling };
 }
@@ -505,7 +522,7 @@ if (process.env.P1A_TRUSTED_EXECUTION_ROOT) {
     "candidate root cannot impersonate trusted dual-base checkout",
   );
 }
-const temporary = mkdtempSync(path.join(tmpdir(), "p1a-dual-base-"));
+temporary = mkdtempSync(path.join(tmpdir(), "p1a-dual-base-"));
 const repository = path.join(temporary, "repository");
 const boundedRepository = path.join(temporary, "bounded-ancestry-repository");
 function importExactCandidateObjectGraph(sourceRoot, destinationRoot, commitSha) {
@@ -3470,7 +3487,10 @@ try {
     if (rejected) console.log(`PASS composed_negative:${name}`);
     else console.error(`FAIL composed_negative:${name}: mutation survived`);
   }
-} finally { rmSync(temporary, { recursive: true, force: true }); }
+} finally {
+  cleanupTemporaryResources();
+  process.removeListener("exit", cleanupTemporaryResources);
+}
 const dualSummary = summarize(dualOutcomes, cases.length);
 const positiveSummary = summarize(positiveOutcomes, positiveCases.length);
 const negativeSummary = summarize(negativeOutcomes, negativeCases.length);

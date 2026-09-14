@@ -1,14 +1,15 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 
 const root = resolve(__dirname, "..");
 
-const commands = [
-  "pnpm -C services/brandgraph prisma generate --schema prisma/schema.prisma",
-  "pnpm -C services/artifact-registry prisma generate --schema prisma/schema.prisma"
+const projects = [
+  "services/brandgraph",
+  "services/artifact-registry"
 ];
 
-for (const command of commands) {
-  console.log(`> ${command}`);
-  execSync(command, { stdio: "inherit", cwd: root });
+for (const project of projects) {
+  const args = ["-C", project, "exec", "prisma", "generate", "--schema", "prisma/schema.prisma"];
+  console.log(`> pnpm ${args.join(" ")}`);
+  execFileSync("pnpm", args, { stdio: "inherit", cwd: root });
 }
