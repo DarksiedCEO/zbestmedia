@@ -1,0 +1,167 @@
+// SQL is authoritative for CHECKs, privileges, triggers, partial indexes and deferrable FKs.
+// Cross-B campaign/evidence references remain SQL-only: D does not own or model B tables.
+// Receipt circular identity links and additional scoped FKs are also enforced by SQL.
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+  schemas = ["zbm_simulation_runtime"]
+}
+
+model SimulationProbe {
+  tenant_id String
+  campaign_id String
+  id String
+  version BigInt @default(0)
+  payload_sha256 String
+  commands SimulationCommand[]
+  versions SimulationProbeVersion[]
+  @@id([tenant_id,campaign_id,id])
+  @@map("probes")
+  @@schema("zbm_simulation_runtime")
+}
+model SimulationCommand {
+  id String @id @db.Uuid
+  environment String
+  tenant_id String
+  campaign_id String
+  principal String
+  requester_login String
+  idempotency_key String
+  probe_id String
+  canonical String
+  identity_hash String
+  request Json
+  transition_hash String
+  approval_ids String[]
+  resulting_version BigInt
+  next_payload_sha256 String
+  evidence_id String
+  accepted_at DateTime @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  probe SimulationProbe @relation(fields:[tenant_id,campaign_id,probe_id],references:[tenant_id,campaign_id,id],onDelete:NoAction,onUpdate:NoAction)
+  versions SimulationProbeVersion[]
+  intents SimulationEffectIntent[]
+  @@unique([environment,tenant_id,campaign_id,principal,idempotency_key])
+  @@unique([tenant_id,campaign_id,id])
+  @@map("commands")
+  @@schema("zbm_simulation_runtime")
+}
+model SimulationProbeVersion {
+  tenant_id String
+  campaign_id String
+  probe_id String
+  version BigInt
+  previous_sha256 String
+  next_sha256 String
+  command_id String @unique @db.Uuid
+  probe SimulationProbe @relation(fields:[tenant_id,campaign_id,probe_id],references:[tenant_id,campaign_id,id],onDelete:NoAction,onUpdate:NoAction)
+  command SimulationCommand @relation(fields:[tenant_id,campaign_id,command_id],references:[tenant_id,campaign_id,id],onDelete:NoAction,onUpdate:NoAction)
+  @@id([tenant_id,campaign_id,probe_id,version])
+  @@map("probe_versions")
+  @@schema("zbm_simulation_runtime")
+}
+model SimulationEffectIntent {
+  operation_id String @id @db.Uuid
+  command_id String @unique @db.Uuid
+  tenant_id String
+  campaign_id String
+  kind String @default("FAKE_RECEIPT")
+  identity_hash String
+  canonical String
+  status String @default("PENDING")
+  dispatch_claims_used Int @default(0)
+  ownership_epoch BigInt @default(0)
+  owner_kind String @default("NONE")
+  owner_login String?
+  owner_token String? @db.Uuid
+  lease_until DateTime? @db.Timestamptz(6)
+  reconcile_slots_used Int @default(0)
+  unsuccessful_reconciliations Int @default(0)
+  expired_reconcile_claims Int @default(0)
+  total_reconcile_claims Int @default(0)
+  total_unsuccessful_reconciliations Int @default(0)
+  total_expired_reconcile_claims Int @default(0)
+  next_dispatch_at DateTime? @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  next_reconcile_at DateTime? @db.Timestamptz(6)
+  parked Boolean @default(false)
+  park_reason String?
+  reason String?
+  receipt_id String? @db.Uuid
+  command SimulationCommand @relation(fields:[tenant_id,campaign_id,command_id],references:[tenant_id,campaign_id,id],onDelete:NoAction,onUpdate:NoAction)
+  attempts SimulationEffectAttempt[]
+  events SimulationAttemptEvent[]
+  operations SimulationFakeOperation[]
+  receipts SimulationFakeReceipt[]
+  @@unique([tenant_id,campaign_id,operation_id])
+  @@map("effect_intents")
+  @@schema("zbm_simulation_runtime")
+}
+model SimulationEffectAttempt {
+  operation_id String @db.Uuid
+  dispatch_number Int
+  ownership_epoch BigInt
+  owner_login String
+  attempt_uuid String @unique @db.Uuid
+  claimed_at DateTime @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  intent SimulationEffectIntent @relation(fields:[operation_id],references:[operation_id],onDelete:NoAction,onUpdate:NoAction)
+  operations SimulationFakeOperation[]
+  @@id([operation_id,dispatch_number])
+  @@unique([operation_id,ownership_epoch])
+  @@unique([operation_id,ownership_epoch,attempt_uuid])
+  @@map("effect_attempts")
+  @@schema("zbm_simulation_runtime")
+}
+model SimulationAttemptEvent {
+  id BigInt @default(autoincrement())
+  tenant_id String
+  campaign_id String
+  operation_id String @db.Uuid
+  ownership_epoch BigInt
+  dispatch_generation Int
+  reconcile_slot Int
+  event_kind String
+  owner_login String
+  owner_token String? @db.Uuid
+  reason String?
+  evidence_id String
+  occurred_at DateTime @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  intent SimulationEffectIntent @relation(fields:[tenant_id,campaign_id,operation_id],references:[tenant_id,campaign_id,operation_id],onDelete:NoAction,onUpdate:NoAction)
+  @@id([operation_id,id])
+  @@unique([operation_id,ownership_epoch,event_kind])
+  @@map("attempt_events")
+  @@schema("zbm_simulation_runtime")
+}
+model SimulationFakeOperation {
+  operation_id String @id @db.Uuid
+  tenant_id String
+  campaign_id String
+  identity_hash String
+  canonical String
+  ownership_epoch BigInt
+  attempt_uuid String @db.Uuid
+  receipt_id String @unique @db.Uuid
+  intent SimulationEffectIntent @relation(fields:[tenant_id,campaign_id,operation_id],references:[tenant_id,campaign_id,operation_id],onDelete:NoAction,onUpdate:NoAction)
+  attempt SimulationEffectAttempt @relation(fields:[operation_id,ownership_epoch,attempt_uuid],references:[operation_id,ownership_epoch,attempt_uuid],onDelete:NoAction,onUpdate:NoAction)
+  receipt SimulationFakeReceipt?
+  @@unique([tenant_id,campaign_id,operation_id,receipt_id])
+  @@map("fake_operations")
+  @@schema("zbm_simulation_runtime")
+}
+model SimulationFakeReceipt {
+  id String @id @db.Uuid
+  operation_id String @unique @db.Uuid
+  tenant_id String
+  campaign_id String
+  identity_hash String
+  ownership_epoch BigInt
+  payload_sha256 String
+  created_at DateTime @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  operation SimulationFakeOperation @relation(fields:[operation_id],references:[operation_id],onDelete:NoAction,onUpdate:NoAction)
+  intent SimulationEffectIntent @relation(fields:[tenant_id,campaign_id,operation_id],references:[tenant_id,campaign_id,operation_id],onDelete:NoAction,onUpdate:NoAction)
+  @@unique([tenant_id,campaign_id,operation_id,id])
+  @@map("fake_receipts")
+  @@schema("zbm_simulation_runtime")
+}

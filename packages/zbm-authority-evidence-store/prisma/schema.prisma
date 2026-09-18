@@ -1,0 +1,149 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["zbm_authority_evidence"]
+}
+
+model ZbmTenant {
+  id              String            @id
+  status          String            @default("ACTIVE")
+  version         Int               @default(0)
+  changed_at      DateTime          @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  caller_bindings ZbmDatabaseCallerBinding[]
+  campaigns       ZbmCampaignAuthority[]
+  evidence        ZbmEvidenceEntry[]
+  grants          ZbmPrincipalGrant[]
+
+  @@map("tenants")
+  @@schema("zbm_authority_evidence")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ZbmApprovalRecord {
+  id              String
+  tenant_id       String
+  campaign_id     String
+  subject_type    String
+  subject_id      String
+  subject_version String
+  subject_hash    String
+  issuer          String
+  actor           String
+  custodial_login String
+  valid_from      DateTime        @db.Timestamptz(6)
+  expires_at      DateTime        @db.Timestamptz(6)
+  status          String          @default("ACTIVE")
+  version         Int             @default(0)
+  changed_at      DateTime?       @db.Timestamptz(6)
+  successor_id    String?
+  caller_bindings ZbmDatabaseCallerBinding @relation(fields: [custodial_login], references: [login], onDelete: NoAction, onUpdate: NoAction)
+  campaigns       ZbmCampaignAuthority       @relation(fields: [tenant_id, campaign_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction)
+  approvals       ZbmApprovalRecord?      @relation("approvalsToapprovals", fields: [tenant_id, campaign_id, successor_id], references: [tenant_id, campaign_id, id], onDelete: NoAction, onUpdate: NoAction)
+  other_approvals ZbmApprovalRecord[]     @relation("approvalsToapprovals")
+
+  @@id([tenant_id, campaign_id, id])
+  @@index([tenant_id, campaign_id, subject_id, subject_version, subject_hash, issuer, status, expires_at], map: "approvals_lookup")
+  @@schema("zbm_authority_evidence")
+  @@map("approvals")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ZbmDatabaseCallerBinding {
+  login        String      @id
+  principal    String
+  tenant_id    String
+  campaign_id  String?
+  purpose      String
+  capabilities String[]
+  issuers      String[]
+  active       Boolean     @default(true)
+  version      Int         @default(0)
+  approvals    ZbmApprovalRecord[]
+  campaigns    ZbmCampaignAuthority?  @relation(fields: [tenant_id, campaign_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction)
+  tenants      ZbmTenant   @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  evidence     ZbmEvidenceEntry[]
+
+  @@unique([tenant_id, principal])
+  @@schema("zbm_authority_evidence")
+  @@map("caller_bindings")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ZbmCampaignAuthority {
+  tenant_id       String
+  id              String
+  status          String            @default("ACTIVE")
+  environment     String            @default("SIMULATION")
+  version         Int               @default(0)
+  approvals       ZbmApprovalRecord[]
+  caller_bindings ZbmDatabaseCallerBinding[]
+  tenants         ZbmTenant         @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  evidence        ZbmEvidenceEntry[]
+  grants          ZbmPrincipalGrant[]
+
+  @@id([tenant_id, id])
+  @@index([tenant_id, status], map: "campaigns_status")
+  @@schema("zbm_authority_evidence")
+  @@map("campaigns")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ZbmEvidenceEntry {
+  id              String          @id @default(dbgenerated("(gen_random_uuid())::text"))
+  tenant_id       String
+  campaign_id     String?
+  stream          String
+  sequence        BigInt
+  operation       String
+  predecessor     String?         @unique
+  canonical       String
+  prior_hash      String
+  hash            String
+  custodial_login String
+  actor           String
+  appended_at     DateTime        @db.Timestamptz(6)
+  caller_bindings ZbmDatabaseCallerBinding @relation(fields: [custodial_login], references: [login], onDelete: NoAction, onUpdate: NoAction)
+  evidence        ZbmEvidenceEntry?       @relation("evidenceToevidence", fields: [predecessor], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  other_evidence  ZbmEvidenceEntry?       @relation("evidenceToevidence")
+  campaigns       ZbmCampaignAuthority?      @relation(fields: [tenant_id, campaign_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction)
+  tenants         ZbmTenant       @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([tenant_id, campaign_id, stream, sequence])
+  @@index([tenant_id, campaign_id, stream, appended_at], map: "evidence_scope")
+  @@schema("zbm_authority_evidence")
+  @@map("evidence")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ZbmPrincipalGrant {
+  scope_key String @default(dbgenerated("COALESCE(campaign_id, ''::text)"))
+  id           String
+  tenant_id    String
+  campaign_id  String?
+  scope_kind   String
+  principal    String
+  purpose      String
+  capability   String
+  valid_from   DateTime   @db.Timestamptz(6)
+  expires_at   DateTime   @db.Timestamptz(6)
+  status       String     @default("ACTIVE")
+  version      Int        @default(0)
+  changed_at   DateTime?  @db.Timestamptz(6)
+  successor_id String?
+  campaigns    ZbmCampaignAuthority? @relation(fields: [tenant_id, campaign_id], references: [tenant_id, id], onDelete: NoAction, onUpdate: NoAction)
+  tenants      ZbmTenant  @relation(fields: [tenant_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  grants       ZbmPrincipalGrant?    @relation("grantsTogrants", fields: [tenant_id, scope_key, successor_id], references: [tenant_id, scope_key, id], onDelete: NoAction, onUpdate: NoAction)
+  other_grants ZbmPrincipalGrant[]   @relation("grantsTogrants")
+
+  @@id([tenant_id, scope_key, id])
+  @@index([tenant_id, principal, purpose, capability, scope_kind, campaign_id, status, expires_at], map: "grants_lookup")
+  @@schema("zbm_authority_evidence")
+  @@map("grants")
+}
+
+
